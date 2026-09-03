@@ -272,7 +272,6 @@ describe("mergeDiscoveredSeats", () => {
     expect(result[0].spriteKey).toBeUndefined();
     expect(result[0].spritePath).toBeUndefined();
   });
-
 });
 
 // ── Reducer action tests ────────────────────────────────────

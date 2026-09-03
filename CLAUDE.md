@@ -49,11 +49,11 @@ must never be dropped. Don't merge them.
 
 ### The three layers
 
-| Layer      | Lives in                     | Rule                                                       |
-| ---------- | ---------------------------- | ---------------------------------------------------------- |
-| Game       | `components/game/`           | Phaser. No React imports, no JSX.                          |
-| HUD        | `components/hud/`, `panel/`  | React + pixel CSS. Never touches Phaser objects directly.  |
-| Server/lib | `lib/`, `lib/server/`        | Shared logic and state. `lib/server/` is server-only.      |
+| Layer      | Lives in                    | Rule                                                      |
+| ---------- | --------------------------- | --------------------------------------------------------- |
+| Game       | `components/game/`          | Phaser. No React imports, no JSX.                         |
+| HUD        | `components/hud/`, `panel/` | React + pixel CSS. Never touches Phaser objects directly. |
+| Server/lib | `lib/`, `lib/server/`       | Shared logic and state. `lib/server/` is server-only.     |
 
 Game and HUD talk **only** through the typed event bus in `lib/events.ts`
 (`gameEvents.on/emit`, with every event declared in `GameEventMap`). Adding a new
@@ -65,18 +65,18 @@ and not on `window`.
 
 `AGENT_PROVIDER` picks who actually runs an agent:
 
-| Value        | What runs the agent                                  |
-| ------------ | ---------------------------------------------------- |
+| Value        | What runs the agent                                   |
+| ------------ | ----------------------------------------------------- |
 | `claude`     | Local `claude` CLI, on the host's Claude subscription |
-| `claude-api` | The same CLI against an Anthropic API key            |
-| `auggie`     | Local `auggie` CLI                                   |
-| `mettara`    | Mettara Connect's hosted AI, over its SDK            |
+| `claude-api` | The same CLI against an Anthropic API key             |
+| `auggie`     | Local `auggie` CLI                                    |
+| `mettara`    | Mettara Connect's hosted AI, over its SDK             |
 
 Every provider emulates the gateway protocol in-process, so the app connects to
 itself on startup and needs no gateway URL or token. Provider definitions are
 in `lib/cli-providers.ts`; the run loop is `lib/cli-bridge.ts`.
 
-`AGENT_PROVIDER=mettara` only says Mettara is *wanted* — the server still boots on
+`AGENT_PROVIDER=mettara` only says Mettara is _wanted_ — the server still boots on
 the Claude implementation, and the HUD's connection panel is what actually switches.
 That choice is remembered in the room database (`lib/server/provider-choice.ts`), so
 a restart comes back on it. Mettara is refused, with the reason shown in the panel,
@@ -106,12 +106,12 @@ worker's bubble, not an opaque failure.
 
 **Limits**, applied to every run whether assigned directly or delegated:
 
-| Limit                  | Default | Env var                 |
-| ---------------------- | ------- | ----------------------- |
-| Agents running at once | 4       | `AGENT_MAX_CONCURRENT`  |
-| Run duration           | 180s    | `AGENT_RUN_TIMEOUT_MS`  |
-| Spend per room         | $50     | `ROOM_SPEND_LIMIT_USD`  |
-| Humans per room        | 4       | —                       |
+| Limit                  | Default | Env var                |
+| ---------------------- | ------- | ---------------------- |
+| Agents running at once | 4       | `AGENT_MAX_CONCURRENT` |
+| Run duration           | 180s    | `AGENT_RUN_TIMEOUT_MS` |
+| Spend per room         | $50     | `ROOM_SPEND_LIMIT_USD` |
+| Humans per room        | 4       | —                      |
 
 Spend is measured server-side from what each run reports, accumulated in the room's
 record, and shown in the HUD beside the occupancy pill. Hitting the ceiling is a hard
@@ -303,20 +303,20 @@ From `CONTRIBUTING.md`, and worth holding to when adding anything:
 
 ## Environment variables
 
-| Variable                                   | Default              | Purpose                                     |
-| ------------------------------------------ | -------------------- | ------------------------------------------- |
-| `AGENT_PROVIDER`                           | `claude`             | Which provider runs agents                  |
-| `PORT` / `HOSTNAME`                        | `3000` / `localhost` | Server bind; also builds auth callback URLs |
-| `ANTHROPIC_API_KEY`                        | —                    | Required by `claude-api`                    |
-| `CLAUDE_BIN` / `CLAUDE_PERMISSION_MODE` / `CLAUDE_ALLOWED_TOOLS` | — / `acceptEdits` / — | Claude CLI tuning       |
-| `AGENT_TOWN_MODEL`                         | CLI default          | `opus` \| `sonnet` \| `haiku`               |
-| `AGENT_MAX_CONCURRENT` / `AGENT_RUN_TIMEOUT_MS` / `ROOM_SPEND_LIMIT_USD` | 4 / 180000 / 50 | Run limits           |
-| `AGENT_WORKSPACE_ROOT`                     | `.agent-workspaces`  | Where seat sandboxes go                     |
-| `ERP_DB_PATH` / `UPLOADS_DIR`              | `.data/erp.sqlite` / beside the room db | Storage paths            |
-| `METTARA_API_SECRET` / `METTARA_PLATFORM_ID` | —                  | Required by the `mettara` provider           |
-| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*` | —    | Auth.js sign-in; off when absent            |
-| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL` | —          | TURN relay for voice behind strict NAT      |
-| `CSP_CONNECT_SRC`                          | —                    | Extra `connect-src` origins                 |
+| Variable                                                                 | Default                                 | Purpose                                     |
+| ------------------------------------------------------------------------ | --------------------------------------- | ------------------------------------------- |
+| `AGENT_PROVIDER`                                                         | `claude`                                | Which provider runs agents                  |
+| `PORT` / `HOSTNAME`                                                      | `3000` / `localhost`                    | Server bind; also builds auth callback URLs |
+| `ANTHROPIC_API_KEY`                                                      | —                                       | Required by `claude-api`                    |
+| `CLAUDE_BIN` / `CLAUDE_PERMISSION_MODE` / `CLAUDE_ALLOWED_TOOLS`         | — / `acceptEdits` / —                   | Claude CLI tuning                           |
+| `AGENT_TOWN_MODEL`                                                       | CLI default                             | `opus` \| `sonnet` \| `haiku`               |
+| `AGENT_MAX_CONCURRENT` / `AGENT_RUN_TIMEOUT_MS` / `ROOM_SPEND_LIMIT_USD` | 4 / 180000 / 50                         | Run limits                                  |
+| `AGENT_WORKSPACE_ROOT`                                                   | `.agent-workspaces`                     | Where seat sandboxes go                     |
+| `ERP_DB_PATH` / `UPLOADS_DIR`                                            | `.data/erp.sqlite` / beside the room db | Storage paths                               |
+| `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                             | —                                       | Required by the `mettara` provider          |
+| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`              | —                                       | Auth.js sign-in; off when absent            |
+| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT      |
+| `CSP_CONNECT_SRC`                                                        | —                                       | Extra `connect-src` origins                 |
 
 `README.md` covers the same ground as user-facing narrative, with setup walkthroughs
 and the feature tour (arcade, island, controller, playing together). Change behaviour

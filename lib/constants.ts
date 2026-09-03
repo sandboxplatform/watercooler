@@ -222,15 +222,7 @@ export function isVisibleChatMessage(msg: { role: string; content: string }) {
 
 // ── Formatters (shared across HUD components) ────────────
 
-export function formatCompact(value?: number) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "--";
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return `${Math.round(value)}`;
-}
-
-export function formatModelLabel(model?: string) {
-  if (!model) return "No model yet";
+export function formatModelLabel(model: string) {
   if (model.length <= 22) return model;
   const pieces = model.split(/[/:]/).filter(Boolean);
   const tail = pieces[pieces.length - 1];

@@ -7,7 +7,6 @@ import { useVoice } from "@/lib/hooks/useVoice";
 import { voiceChat } from "@/lib/voice/voice-chat";
 import { STATUS_LABELS, formatModelLabel } from "@/lib/constants";
 import type { ConnectionStatus, SessionMetrics, SeatState } from "@/types/game";
-import ContextMeter from "./ContextMeter";
 import ControllerCheck from "./ControllerCheck";
 import { buttonLabel } from "@/lib/gamepad/buttons";
 import { subscribeTalkButton, talkButton } from "@/lib/gamepad/bindings";
@@ -82,18 +81,15 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
         />
         <span>{STATUS_LABELS[connection]}</span>
       </div>
-      <div className="hud-pill hud-pill--model">
-        <Sparkles size={10} />
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-          {formatModelLabel(sessionMetrics.model)}
-        </span>
-      </div>
-      <ContextMeter
-        usedTokens={sessionMetrics.usedTokens}
-        maxTokens={sessionMetrics.maxContextTokens}
-        fresh={sessionMetrics.fresh}
-        inline
-      />
+      {/* Only once a run has reported one: an empty pill says nothing. */}
+      {sessionMetrics.model ? (
+        <div className="hud-pill hud-pill--model">
+          <Sparkles size={10} />
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+            {formatModelLabel(sessionMetrics.model)}
+          </span>
+        </div>
+      ) : null}
       <div className="hud-pill hud-pill--metric">
         <Users size={10} />
         <span>

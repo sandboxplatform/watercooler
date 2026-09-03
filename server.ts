@@ -196,8 +196,7 @@ app
       defaultId,
       active: () => getBridgeProvider().id,
       async switchTo(id) {
-        if (!offeredProviders(defaultId).includes(id))
-          return "That provider is not offered here.";
+        if (!offeredProviders(defaultId).includes(id)) return "That provider is not offered here.";
         const blocked = await providerBlocked(id);
         if (blocked) return blocked;
         if (getBridgeProvider().id !== id) setBridgeProvider(getCliProvider(id));

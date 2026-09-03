@@ -60,10 +60,7 @@ export default function ConnectionPanel() {
   };
 
   return (
-    <HudFlyout
-      title="Connection"
-      subtitle={`${STATUS_LABELS[state.connection]} (${activeLabel})`}
-    >
+    <HudFlyout title="Connection" subtitle={`${STATUS_LABELS[state.connection]} (${activeLabel})`}>
       <div className="hud-panel__stack">
         {providers && providers.choices.length > 1 && (
           <>

@@ -103,7 +103,7 @@ tool is allowed automatically whenever more than one seat is staffed.
 - **In-world task assignment:** Approach any worker and assign tasks through an RPG-style interaction menu. No forms, no dropdowns. You walk up and talk.
 - **Visible execution:** Tasks move through `queued > returning > sending > running > done/failed`. Worker bubbles show what's happening at each step. Tool calls are collapsible in the chat panel.
 - **Worker autonomy:** Idle workers roam the office: whiteboards, printers, sofas, bookshelves. They return to their seat before starting real work. Busy workers queue additional tasks.
-- **Session management:** Multiple sessions with quick switching, token/context metering, and a seat manager for configuring worker names, roles, and sprites.
+- **Session management:** Multiple sessions with quick switching, and a seat manager for configuring worker names, roles, and sprites.
 
 ## How it works
 
@@ -117,12 +117,12 @@ You approach a worker -> Press E -> Assign a task
 
 ## Tech stack
 
-| Layer         | Choice                                                                    |
-| ------------- | ------------------------------------------------------------------------- |
-| App           | Next.js 16, React 19, TypeScript                                          |
-| Game          | Phaser 3, Tiled maps, pixel sprite sheets                                 |
-| Agent runtime | Claude Code / Auggie CLI, or Mettara AI's hosted SDK                      |
-| State         | React context + reducer + typed event bus                                 |
+| Layer         | Choice                                               |
+| ------------- | ---------------------------------------------------- |
+| App           | Next.js 16, React 19, TypeScript                     |
+| Game          | Phaser 3, Tiled maps, pixel sprite sheets            |
+| Agent runtime | Claude Code / Auggie CLI, or Mettara AI's hosted SDK |
+| State         | React context + reducer + typed event bus            |
 
 ## Architecture
 
