@@ -1,7 +1,7 @@
 /**
  * Agent provider descriptors.
  *
- * A provider backs the emulated OpenClaw gateway (see cli-bridge.ts) by
+ * A provider backs the emulated gateway (see cli-bridge.ts) by
  * answering one run at a time. Two kinds exist:
  *
  *   "cli"     — spawns a local agent CLI. The descriptor owns exactly two

@@ -1,5 +1,5 @@
 /**
- * OpenClaw Gateway WebSocket client.
+ * Gateway WebSocket client.
  *
  * Protocol: frame-based RPC over WebSocket.
  *   - req/res for request-response

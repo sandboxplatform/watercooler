@@ -11,7 +11,7 @@ pnpm install
 pnpm dev
 ```
 
-You'll need Node.js 22+ and pnpm. For live agent execution, point `server.ts` at a running [OpenClaw](https://github.com/anthropics/openclaw) gateway.
+You'll need Node.js 22+ and pnpm. For live agent execution, install the `claude` or `auggie` CLI and sign in, or set `ANTHROPIC_API_KEY` for `AGENT_PROVIDER=claude-api`.
 
 ## Ground rules
 

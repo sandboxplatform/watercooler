@@ -22,7 +22,7 @@ export interface ProviderState {
   choices: ProviderChoice[];
 }
 
-/** Null when there is no bridge to ask — an OpenClaw gateway, say. */
+/** Null when there is no bridge to ask. */
 export async function fetchProviders(): Promise<ProviderState | null> {
   try {
     const res = await fetch("/api/provider");

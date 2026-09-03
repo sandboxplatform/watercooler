@@ -2,14 +2,13 @@
  * Production server for WaterCooler (npx / standalone).
  *
  * Reads the Next.js config from the standalone build output and creates
- * an HTTP server with Next.js request handler + WebSocket proxy.
+ * an HTTP server with the Next.js request handler + agent bridge.
  */
 
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { attachWsProxy } from "./lib/ws-proxy.mjs";
 import { attachAuggieBridge } from "./lib/auggie-bridge.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -31,8 +30,7 @@ const { default: next } = await import("next");
 const { WebSocket, WebSocketServer } = await import("ws");
 
 const port = parseInt(process.env.PORT ?? "3000", 10);
-const GATEWAY_URL = process.env.GATEWAY_URL ?? "ws://127.0.0.1:18789/";
-const AGENT_PROVIDER = process.env.AGENT_PROVIDER ?? "openclaw";
+const AGENT_PROVIDER = process.env.AGENT_PROVIDER ?? "auggie";
 
 process.chdir(__dirname);
 const app = next({ dev: false, dir: __dirname });
@@ -48,7 +46,10 @@ app
     if (AGENT_PROVIDER === "auggie") {
       attachAuggieBridge(server, WebSocket, WebSocketServer);
     } else {
-      attachWsProxy(server, WebSocket, WebSocketServer, GATEWAY_URL);
+      log.error(
+        `AGENT_PROVIDER=${AGENT_PROVIDER} is not wired into the published package yet — only "auggie" is. ` +
+          "The office will still load, but task assignment has no agent to connect to.",
+      );
     }
 
     server.listen(port, () => {
@@ -58,8 +59,6 @@ app
       log.info(`  > Local:   \x1b[4mhttp://localhost:${port}\x1b[0m`);
       if (AGENT_PROVIDER === "auggie") {
         log.info("  > Provider: Auggie (bridging via auggie CLI)");
-      } else {
-        log.info(`  > Gateway: ${GATEWAY_URL}`);
       }
       log.info("");
     });

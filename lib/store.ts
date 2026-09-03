@@ -39,7 +39,7 @@ import {
   syncSessions,
   syncTasks,
 } from "./room-sync";
-import { isCliProvider, getDefaultGatewayUrl } from "./utils";
+import { getDefaultGatewayUrl } from "./utils";
 
 // ── Context ────────────────────────────────────────────
 
@@ -221,16 +221,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         if (t.actorName && t.runId) gateway.runActorRef.current.set(t.runId, t.actorName);
       }
 
-      // Auto-connect: immediately for CLI providers (no config needed), or if
-      // config was saved for OpenClaw
-      if (isCliProvider()) {
-        connectTimer = setTimeout(
-          () => gateway.connectImpl({ url: getDefaultGatewayUrl(), token: "" }),
-          80,
-        );
-      } else if (savedConfig?.url) {
-        connectTimer = setTimeout(() => gateway.connectImpl(savedConfig), 80);
-      }
+      // Auto-connect immediately; every provider runs through the in-process
+      // CLI bridge, so there is no manual config to wait on.
+      connectTimer = setTimeout(
+        () => gateway.connectImpl({ url: getDefaultGatewayUrl(), token: "" }),
+        80,
+      );
     };
 
     void bootstrap();
@@ -318,12 +314,10 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     const configs: PersistedSeatConfig[] = state.seats.map((seat) => ({
       seatId: seat.seatId,
       label: seat.label,
-      seatType: seat.seatType,
       roleTitle: seat.roleTitle,
       assigned: seat.assigned,
       spriteKey: seat.spriteKey,
       spritePath: seat.spritePath,
-      agentConfig: seat.agentConfig,
     }));
     seatConfigRef.current = configs;
     if (hydratedRef.current) syncSeats(configs);

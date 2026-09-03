@@ -38,8 +38,7 @@ is load-bearing: Next alone cannot hold the WebSocket upgrades this app needs.
 ```
 server.ts
 ├── attachPresenceSocket()   people, positions, speech, voice signalling
-├── attachCliBridge()        agent runs, when the provider is a CLI/service
-│   └── or attachWsProxy()   ws://…/api/gateway → GATEWAY_URL, for OpenClaw
+├── attachCliBridge()        agent runs, over ws://…/api/gateway
 ├── /api/internal/dispatch   localhost + shared-secret, for the MCP dispatch tool
 ├── /api/mettara/tools       HMAC-signed inbound, mounted only when keys exist
 └── ensureErpData()          idempotent first-boot seed of the ERP database
@@ -72,11 +71,10 @@ and not on `window`.
 | `claude-api` | The same CLI against an Anthropic API key            |
 | `auggie`     | Local `auggie` CLI                                   |
 | `mettara`    | Mettara Connect's hosted AI, over its SDK            |
-| `openclaw`   | An OpenClaw gateway over WebSocket                   |
 
-Everything but `openclaw` emulates the gateway protocol in-process, so the app
-connects to itself on startup and needs no gateway URL or token. Provider
-definitions are in `lib/cli-providers.ts`; the run loop is `lib/cli-bridge.ts`.
+Every provider emulates the gateway protocol in-process, so the app connects to
+itself on startup and needs no gateway URL or token. Provider definitions are
+in `lib/cli-providers.ts`; the run loop is `lib/cli-bridge.ts`.
 
 `AGENT_PROVIDER=mettara` only says Mettara is *wanted* — the server still boots on
 the Claude implementation, and the HUD's connection panel is what actually switches.
@@ -309,7 +307,6 @@ From `CONTRIBUTING.md`, and worth holding to when adding anything:
 | ------------------------------------------ | -------------------- | ------------------------------------------- |
 | `AGENT_PROVIDER`                           | `claude`             | Which provider runs agents                  |
 | `PORT` / `HOSTNAME`                        | `3000` / `localhost` | Server bind; also builds auth callback URLs |
-| `GATEWAY_URL`                              | `ws://127.0.0.1:18789/` | OpenClaw gateway, `openclaw` provider only |
 | `ANTHROPIC_API_KEY`                        | —                    | Required by `claude-api`                    |
 | `CLAUDE_BIN` / `CLAUDE_PERMISSION_MODE` / `CLAUDE_ALLOWED_TOOLS` | — / `acceptEdits` / — | Claude CLI tuning       |
 | `AGENT_TOWN_MODEL`                         | CLI default          | `opus` \| `sonnet` \| `haiku`               |

@@ -18,16 +18,14 @@ if (args.includes("--help") || args.includes("-h")) {
     $ watercooler [options]
 
   Options
-    --port     <number>  Port to listen on             (default: 3000)
-    --gateway  <url>     Gateway WebSocket URL          (default: ws://127.0.0.1:18789/)
-    --provider <name>    Agent provider: openclaw|auggie (default: openclaw)
+    --port     <number>  Port to listen on   (default: 3000)
+    --provider <name>    Agent provider: auggie (default: auggie)
     -v, --version        Show version
     -h, --help           Show this help message
 
   Examples
     $ watercooler
     $ watercooler --port 8080
-    $ watercooler --gateway ws://192.168.1.100:18789/
     $ watercooler --provider auggie
 `);
   process.exit(0);
@@ -46,11 +44,9 @@ function getArg(flag) {
 }
 
 const port = getArg("--port");
-const gateway = getArg("--gateway");
 const provider = getArg("--provider");
 
 if (port) process.env.PORT = port;
-if (gateway) process.env.GATEWAY_URL = gateway;
 if (provider) {
   process.env.AGENT_PROVIDER = provider;
   process.env.NEXT_PUBLIC_AGENT_PROVIDER = provider;

@@ -103,7 +103,7 @@ export function registerProviderSwitch(sw: ProviderSwitch | null) {
   else delete g[SWITCH_KEY];
 }
 
-/** The running server's switch; null when no bridge is attached (an OpenClaw gateway). */
+/** The running server's switch; null when no bridge is attached. */
 export function providerSwitch(): ProviderSwitch | null {
   return (
     ((globalThis as Record<symbol, unknown>)[SWITCH_KEY] as ProviderSwitch | undefined) ?? null

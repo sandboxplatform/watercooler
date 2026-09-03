@@ -24,9 +24,9 @@ Your agents deserve more than a terminal. Give them an office, a town, and event
 
 ## What is this?
 
-WaterCooler is a pixel RPG built on top of [OpenClaw](https://github.com/openclaw/openclaw). You walk around an office as the boss, assign tasks face-to-face, and watch your AI agents work in real time. Not in a log, but in the room.
+WaterCooler is a pixel RPG for AI coding agents. You walk around an office as the boss, assign tasks face-to-face, and watch your AI agents work in real time. Not in a log, but in the room.
 
-Today it's a local office. The goal is a shared online world: agents from different users collaborating across the network, a skill marketplace, a task delegation economy, and spatial UX for everything OpenClaw can do.
+Today it's a local office. The goal is a shared online world: agents from different users collaborating across the network, a skill marketplace, a task delegation economy, and spatial UX for everything your agents can do.
 
 ## Quick Start
 
@@ -36,12 +36,12 @@ Run instantly with npx, no clone, no install:
 npx @geezerrrr/watercooler
 ```
 
-Open [http://localhost:3000](http://localhost:3000). You'll need an [OpenClaw](https://github.com/openclaw/openclaw) gateway running for live agent execution.
+Open [http://localhost:3000](http://localhost:3000). You'll need the `claude` or `auggie` CLI installed and signed in for live agent execution.
 
-Custom port or gateway:
+Custom port:
 
 ```bash
-npx @geezerrrr/watercooler --port 3000 --gateway ws://127.0.0.1:18789/
+npx @geezerrrr/watercooler --port 3000
 ```
 
 ## Development Setup
@@ -65,17 +65,15 @@ Agents can be executed several ways, selected with the `AGENT_PROVIDER` env var:
 | Claude (API key)      | `claude-api` | The same CLI against an Anthropic API key          |
 | Auggie                | `auggie`     | Local `auggie` CLI                                 |
 | Mettara AI            | `mettara`    | Mettara Connect's hosted AI, called over its SDK   |
-| OpenClaw              | `openclaw`   | An OpenClaw gateway over WebSocket                 |
 
-Every provider but OpenClaw needs no gateway, URL or token: the server emulates
-the gateway protocol in-process, so the app connects to itself on startup. The
-CLI providers spawn a binary per run; Mettara is a hosted service and answers in
-process. OpenClaw still works exactly as before.
+No provider needs a gateway, URL or token: the server emulates the gateway
+protocol in-process, so the app connects to itself on startup. The CLI
+providers spawn a binary per run; Mettara is a hosted service and answers in
+process.
 
 ```bash
 pnpm dev                          # Claude Code
 AGENT_PROVIDER=mettara pnpm dev   # Mettara AI
-AGENT_PROVIDER=openclaw pnpm dev  # OpenClaw gateway
 ```
 
 ### Claude Code provider
@@ -106,14 +104,13 @@ tool is allowed automatically whenever more than one seat is staffed.
 - **Visible execution:** Tasks move through `queued > returning > sending > running > done/failed`. Worker bubbles show what's happening at each step. Tool calls are collapsible in the chat panel.
 - **Worker autonomy:** Idle workers roam the office: whiteboards, printers, sofas, bookshelves. They return to their seat before starting real work. Busy workers queue additional tasks.
 - **Session management:** Multiple sessions with quick switching, token/context metering, and a seat manager for configuring worker names, roles, and sprites.
-- **Multi-agent team management:** Each seat can be a **Worker** or an **Agent**. Workers are tool slots — they execute tasks dispatched by the main agent. Agents are independent OpenClaw agents with their own workspace, model, and memory. Add agents via `openclaw agents add <id>`, bind them to a seat, and they'll route through their own session automatically.
 
 ## How it works
 
 ```
 You approach a worker -> Press E -> Assign a task
   -> Worker walks back to desk (if away)
-  -> Task is sent to the OpenClaw gateway
+  -> Task is sent to the agent bridge
   -> Streaming updates flow back as chat, tool calls, bubbles
   -> Worker completes and picks up the next queued task
 ```
@@ -124,33 +121,33 @@ You approach a worker -> Press E -> Assign a task
 | ------------- | ------------------------------------------------------------------------- |
 | App           | Next.js 16, React 19, TypeScript                                          |
 | Game          | Phaser 3, Tiled maps, pixel sprite sheets                                 |
-| Agent runtime | [OpenClaw](https://github.com/openclaw/openclaw) via standalone connector |
+| Agent runtime | Claude Code / Auggie CLI, or Mettara AI's hosted SDK                      |
 | State         | React context + reducer + typed event bus                                 |
 
 ## Architecture
 
-Currently the game connects directly to an OpenClaw gateway via WebSocket proxy. The target architecture introduces a backend and standalone connector so that the game UI never talks to OpenClaw directly:
+Currently the game runs the agent CLI directly, spawned in-process by the server. The target architecture introduces a backend and standalone connector so that a cloud-hosted game UI can still reach an agent CLI running on your own machine:
 
 ```mermaid
 flowchart LR
     UI[Game UI]
     Backend[WaterCooler Backend]
     Connector[Connector]
-    GW[OpenClaw Gateway]
+    CLI[Local Agent CLI]
 
     UI -->|WSS| Backend
     Connector -->|outbound WSS| Backend
-    Connector -->|local WS| GW
+    Connector -->|local spawn| CLI
 ```
 
 - **Game UI:** Phaser office + React HUD. Talks only to the backend.
 - **Backend:** Runs locally for dev, cloud for prod. Same code, same protocol.
-- **Connector:** Standalone process on the user's machine. Bridges private OpenClaw to the backend. OpenClaw credentials never leave the local machine.
+- **Connector:** Standalone process on the user's machine. Bridges a local agent CLI to the backend. Credentials never leave the local machine.
 
 ## Roadmap
 
-- **Backend + Connector:** Decouple the game UI from OpenClaw; standalone connector bridges private gateways to a shared backend
-- **Cloud deployment:** Log into `cloud.agent.town` and operate your own OpenClaw through the cloud world UI
+- **Backend + Connector:** Decouple the game UI from the local machine; standalone connector bridges a local agent CLI to a shared backend
+- **Cloud deployment:** Log into `cloud.agent.town` and operate your own agents through the cloud world UI
 - **Shared world:** Multi-user presence, social interactions, cooperative rooms with opt-in projections
 - **Library scene:** Long-term memory as a walkable space (shelves, archives, research stations)
 - **Workshop scene:** Skill and tool management as physical stations in the world

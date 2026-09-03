@@ -8,16 +8,15 @@ import { roomFromLocation } from "./rooms";
 export function getAgentProvider(): AgentProvider {
   const val = process.env.NEXT_PUBLIC_AGENT_PROVIDER;
   if (val === "auggie") return "auggie";
-  if (val === "openclaw") return "openclaw";
   if (val === "claude-api") return "claude-api";
   if (val === "mettara") return "mettara";
   return "claude";
 }
 
 /**
- * True when agents run through the in-process bridge rather than an OpenClaw
- * gateway. These providers need no URL or token, so the app auto-connects to
- * its own bridge — whether that bridge spawns a CLI or calls a hosted API.
+ * True when agents run through the in-process bridge. These providers need
+ * no URL or token, so the app auto-connects to its own bridge — whether that
+ * bridge spawns a CLI or calls a hosted API.
  */
 export function isCliProvider(provider: AgentProvider = getAgentProvider()): boolean {
   return (
@@ -33,8 +32,7 @@ export function getProviderLabel(provider: AgentProvider = getAgentProvider()): 
   if (provider === "auggie") return "Auggie";
   if (provider === "claude") return "Claude Code";
   if (provider === "claude-api") return "Claude (API key)";
-  if (provider === "mettara") return "Mettara AI";
-  return "OpenClaw";
+  return "Mettara AI";
 }
 
 /**

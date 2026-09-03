@@ -1,7 +1,7 @@
 "use client";
 
 import MicButton from "../MicButton";
-import type { SeatState, SeatType, AgentConfig } from "@/types/game";
+import type { SeatState } from "@/types/game";
 import CharacterPortrait from "../CharacterPortrait";
 import SpritePreview from "./SpritePreview";
 
@@ -27,22 +27,14 @@ export interface SeatDetailPanelProps {
   effectiveRoleTitle: string;
   effectiveSpriteKey: string;
   effectiveSpritePath: string;
-  effectiveSeatType: SeatType;
-  effectiveAgentConfig: AgentConfig | undefined;
   busy: boolean;
   canSave: boolean;
-  agentsLoading: boolean;
-  discoveredAgents: AgentConfig[];
-  usedAgentIds: Set<string>;
   onNameChange: (value: string) => void;
   onRoleTitleChange: (value: string) => void;
   onSpriteSelect: (spriteKey: string, spritePath: string, spriteLabel: string) => void;
-  onSelectAgent: (agent: AgentConfig) => void;
   onSave: () => void;
   onUnassign: () => void;
   onClose: () => void;
-  isCliProvider?: boolean;
-  providerLabel?: string;
 }
 
 export default function SeatDetailPanel({
@@ -51,22 +43,14 @@ export default function SeatDetailPanel({
   effectiveRoleTitle,
   effectiveSpriteKey,
   effectiveSpritePath,
-  effectiveSeatType,
-  effectiveAgentConfig,
   busy,
   canSave,
-  agentsLoading,
-  discoveredAgents,
-  usedAgentIds,
   onNameChange,
   onRoleTitleChange,
   onSpriteSelect,
-  onSelectAgent,
   onSave,
   onUnassign,
   onClose,
-  isCliProvider,
-  providerLabel,
 }: SeatDetailPanelProps) {
   return (
     <div
@@ -106,11 +90,6 @@ export default function SeatDetailPanel({
               </div>
               <div style={{ fontSize: 8, color: "var(--pixel-muted)", marginTop: 4 }}>
                 {selectedSeat.seatId} · facing {selectedSeat.spawnFacing ?? "down"}
-                {effectiveSeatType === "agent" && effectiveAgentConfig && (
-                  <span style={{ color: "var(--pixel-accent)", marginLeft: 6 }}>
-                    agent:{effectiveAgentConfig.agentId}
-                  </span>
-                )}
               </div>
             </div>
             <div
@@ -125,87 +104,24 @@ export default function SeatDetailPanel({
             </div>
           </div>
 
-          {/* Name + (Agent selector) */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: effectiveSeatType === "agent" ? "1fr 1fr" : "1fr",
-              gap: 8,
-            }}
-          >
-            <div>
-              <label className="hud-panel__label">Name</label>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <input
-                  className="pixel-input hud-panel__input"
-                  value={effectiveName}
-                  onChange={(event) => onNameChange(event.target.value)}
-                  disabled={busy}
-                  placeholder="Crew name"
-                  style={{ minHeight: 0, flex: 1 }}
-                />
-                <MicButton
-                  onTranscript={(text) => onNameChange(text)}
-                  disabled={busy}
-                  size={28}
-                  what="name"
-                />
-              </div>
+          <div>
+            <label className="hud-panel__label">Name</label>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                className="pixel-input hud-panel__input"
+                value={effectiveName}
+                onChange={(event) => onNameChange(event.target.value)}
+                disabled={busy}
+                placeholder="Crew name"
+                style={{ minHeight: 0, flex: 1 }}
+              />
+              <MicButton
+                onTranscript={(text) => onNameChange(text)}
+                disabled={busy}
+                size={28}
+                what="name"
+              />
             </div>
-            {effectiveSeatType === "agent" && (
-              <div>
-                <label className="hud-panel__label">Agent</label>
-                {agentsLoading ? (
-                  <div
-                    className="pixel-input hud-panel__input"
-                    style={{
-                      minHeight: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      fontSize: 8,
-                      color: "var(--pixel-muted)",
-                    }}
-                  >
-                    Scanning...
-                  </div>
-                ) : discoveredAgents.length === 0 ? (
-                  <div
-                    className="pixel-input hud-panel__input"
-                    style={{
-                      minHeight: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      fontSize: 8,
-                      color: "var(--pixel-muted)",
-                    }}
-                  >
-                    {isCliProvider ? providerLabel : "No agents found"}
-                  </div>
-                ) : (
-                  <select
-                    className="pixel-input hud-panel__input"
-                    style={{ minHeight: 0 }}
-                    value={effectiveAgentConfig?.agentId ?? ""}
-                    disabled={busy}
-                    onChange={(e) => {
-                      const agent = discoveredAgents.find((a) => a.agentId === e.target.value);
-                      if (agent) onSelectAgent(agent);
-                    }}
-                  >
-                    <option value="">-- select --</option>
-                    {discoveredAgents.map((agent) => {
-                      const isUsed = usedAgentIds.has(agent.agentId);
-                      const label = `${agent.identity?.emoji ?? "◆"} ${agent.identity?.name ?? agent.agentId}`;
-                      return (
-                        <option key={agent.agentId} value={agent.agentId} disabled={isUsed}>
-                          {isUsed ? `${label} (assigned)` : label}
-                        </option>
-                      );
-                    })}
-                  </select>
-                )}
-              </div>
-            )}
           </div>
           <div>
             <label className="hud-panel__label">Role / Title</label>
@@ -246,11 +162,7 @@ export default function SeatDetailPanel({
       <div className="seat-hint">
         {busy
           ? "This seat is currently active. Finish or stop the task before changing crew assignment."
-          : effectiveSeatType === "agent"
-            ? isCliProvider
-              ? `Agent seats are not supported with the ${providerLabel} provider. Switch to Worker mode to assign tasks.`
-              : "Select an OpenClaw agent, choose a portrait, then save. Agents have their own workspace and session."
-            : "Select a portrait, set name and role, then save. Workers execute tasks from the main agent."}
+          : "Select a portrait, set name and role, then save. Workers execute tasks from the main agent."}
       </div>
 
       <SpritePreview
@@ -278,11 +190,7 @@ export default function SeatDetailPanel({
             onClick={onSave}
             disabled={!canSave}
           >
-            {selectedSeat.assigned
-              ? "Save Changes"
-              : effectiveSeatType === "agent"
-                ? "Assign Agent"
-                : "Assign Character"}
+            {selectedSeat.assigned ? "Save Changes" : "Assign Character"}
           </button>
         </div>
       </div>

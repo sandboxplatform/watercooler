@@ -1,15 +1,14 @@
 /**
- * Custom Next.js dev server with WebSocket proxy.
+ * Custom Next.js dev server.
  *
- * Proxies ws://localhost:3000/api/gateway → ws://GATEWAY_URL
- * so the browser never needs to connect to the gateway directly.
+ * Attaches the presence socket and the agent CLI bridge (ws://localhost:3000/api/gateway)
+ * so the browser never needs to spawn or reach an agent process directly.
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import { loadEnvConfig } from "@next/env";
 import next from "next";
 import { createLogger } from "./lib/logger";
-import { attachWsProxy } from "./lib/ws-proxy";
 import {
   attachCliBridge,
   dispatchToWorker,
@@ -37,7 +36,6 @@ const log = createLogger("Server");
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT ?? "3000", 10);
-const GATEWAY_URL = process.env.GATEWAY_URL ?? "ws://127.0.0.1:18789/";
 // Next loads .env files during app.prepare(), long after the settings below
 // are read. Without this, AGENT_PROVIDER in .env.local was silently ignored
 // while every lazily-read key in the same file worked — so the app would boot
@@ -45,13 +43,14 @@ const GATEWAY_URL = process.env.GATEWAY_URL ?? "ws://127.0.0.1:18789/";
 loadEnvConfig(process.cwd(), dev);
 
 const AGENT_PROVIDER = process.env.AGENT_PROVIDER ?? "claude";
-const CLI_PROVIDER = isCliProviderId(AGENT_PROVIDER) ? getCliProvider(AGENT_PROVIDER) : null;
+const CLI_PROVIDER = isCliProviderId(AGENT_PROVIDER)
+  ? getCliProvider(AGENT_PROVIDER)
+  : getCliProvider("claude");
 // The agents boot on the Claude implementation — the CLI, or the API-keyed
 // CLI where AGENT_PROVIDER says so — and Mettara is a switch away in the
 // HUD. AGENT_PROVIDER=mettara only says Mettara is wanted; the HUD's choice,
 // remembered in the room database, is what actually picks it.
-const DEFAULT_PROVIDER =
-  CLI_PROVIDER && CLI_PROVIDER.id !== "mettara" ? CLI_PROVIDER : getCliProvider("claude");
+const DEFAULT_PROVIDER = CLI_PROVIDER.id !== "mettara" ? CLI_PROVIDER : getCliProvider("claude");
 // Expose provider to Next.js client code (compiled on-demand in dev)
 process.env.NEXT_PUBLIC_AGENT_PROVIDER = AGENT_PROVIDER;
 
@@ -169,18 +168,16 @@ app
   .prepare()
   .then(() => {
     ensureErpData();
-    const mettaraTools = CLI_PROVIDER ? buildMettaraTools() : null;
+    const mettaraTools = buildMettaraTools();
     const server = createServer((req, res) => {
       // Intercept internal API routes before Next.js
-      if (CLI_PROVIDER) {
-        if (req.url === "/api/internal/dispatch") {
-          handleDispatch(req, res);
-          return;
-        }
-        if (mettaraTools && (req.url ?? "").split("?")[0] === TOOLS_PATH) {
-          void mettaraTools(req, res);
-          return;
-        }
+      if (req.url === "/api/internal/dispatch") {
+        handleDispatch(req, res);
+        return;
+      }
+      if (mettaraTools && (req.url ?? "").split("?")[0] === TOOLS_PATH) {
+        void mettaraTools(req, res);
+        return;
       }
       handle(req, res);
     });
@@ -189,38 +186,32 @@ app
     // agent traffic is rare and must not be dropped.
     attachPresenceSocket(server);
 
-    if (CLI_PROVIDER) {
-      attachCliBridge(server, DEFAULT_PROVIDER);
-      // The HUD may have switched the agents to another AI before; come
-      // back on it, and let it switch again.
-      const defaultId = DEFAULT_PROVIDER.id;
-      const remembered = rememberedProvider(getRoomStore(), defaultId);
-      if (remembered && remembered !== defaultId) setBridgeProvider(getCliProvider(remembered));
-      registerProviderSwitch({
-        defaultId,
-        active: () => getBridgeProvider().id,
-        async switchTo(id) {
-          if (!offeredProviders(defaultId).includes(id))
-            return "That provider is not offered here.";
-          const blocked = await providerBlocked(id);
-          if (blocked) return blocked;
-          if (getBridgeProvider().id !== id) setBridgeProvider(getCliProvider(id));
-          rememberProvider(getRoomStore(), id);
-          return null;
-        },
-      });
-      log.info(`Ready on http://localhost:${port}`);
-      log.info(
-        DEFAULT_PROVIDER.kind === "service"
-          ? `Provider: ${DEFAULT_PROVIDER.displayName} (hosted service)`
-          : `Provider: ${DEFAULT_PROVIDER.displayName} (bridging via ${DEFAULT_PROVIDER.binName} CLI)`,
-      );
-      if (mettaraTools) log.info(`Mettara tool endpoint: ${TOOLS_PATH}`);
-    } else {
-      attachWsProxy(server, GATEWAY_URL);
-      log.info(`Ready on http://localhost:${port}`);
-      log.info(`Gateway proxy: ws://localhost:${port}/api/gateway → ${GATEWAY_URL}`);
-    }
+    attachCliBridge(server, DEFAULT_PROVIDER);
+    // The HUD may have switched the agents to another AI before; come
+    // back on it, and let it switch again.
+    const defaultId = DEFAULT_PROVIDER.id;
+    const remembered = rememberedProvider(getRoomStore(), defaultId);
+    if (remembered && remembered !== defaultId) setBridgeProvider(getCliProvider(remembered));
+    registerProviderSwitch({
+      defaultId,
+      active: () => getBridgeProvider().id,
+      async switchTo(id) {
+        if (!offeredProviders(defaultId).includes(id))
+          return "That provider is not offered here.";
+        const blocked = await providerBlocked(id);
+        if (blocked) return blocked;
+        if (getBridgeProvider().id !== id) setBridgeProvider(getCliProvider(id));
+        rememberProvider(getRoomStore(), id);
+        return null;
+      },
+    });
+    log.info(`Ready on http://localhost:${port}`);
+    log.info(
+      DEFAULT_PROVIDER.kind === "service"
+        ? `Provider: ${DEFAULT_PROVIDER.displayName} (hosted service)`
+        : `Provider: ${DEFAULT_PROVIDER.displayName} (bridging via ${DEFAULT_PROVIDER.binName} CLI)`,
+    );
+    if (mettaraTools) log.info(`Mettara tool endpoint: ${TOOLS_PATH}`);
 
     server.listen(port);
   })

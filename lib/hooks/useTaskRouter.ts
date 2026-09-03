@@ -40,10 +40,7 @@ export function useTaskRouter(refs: TaskRouterRefs) {
       const task = findTask(refs.tasks.current, taskId);
 
       const seat = seatId ? refs.seats.current.find((s) => s.seatId === seatId) : undefined;
-      const isAgentSeat = seat?.seatType === "agent" && seat.agentConfig?.agentId;
-      const sessionKey = isAgentSeat
-        ? `agent:${seat!.agentConfig!.agentId}:main`
-        : (task?.sessionKey ?? refs.activeSessionKey.current ?? MAIN_SESSION_KEY);
+      const sessionKey = task?.sessionKey ?? refs.activeSessionKey.current ?? MAIN_SESSION_KEY;
       const actorName = task?.actorName ?? resolveSeatLabelForTask(refs.seats.current, seatId);
 
       refs.dispatch.current({ type: "UPDATE_TASK", taskId, patch: { status: "submitted" } });
@@ -68,7 +65,7 @@ export function useTaskRouter(refs: TaskRouterRefs) {
           // Files uploaded with the task; the bridge hands them to the agent.
           attachments: task?.attachments ?? attachmentsRef.current.get(taskId),
           // Passed through to the Auggie bridge for personality injection;
-          // OpenClaw ignores unknown params.
+          // ignored by other providers.
           seatLabel: seat?.label,
           seatRole: seat?.roleTitle,
         })

@@ -29,7 +29,6 @@ function makeSeat(overrides: Partial<SeatState> = {}): SeatState {
   return {
     seatId: "seat-1",
     label: "Alice",
-    seatType: "worker",
     assigned: true,
     status: "empty",
     spawnX: 100,
@@ -90,7 +89,6 @@ function makePersistedConfig(overrides: Partial<PersistedSeatConfig> = {}): Pers
   return {
     seatId: "seat-1",
     label: "Custom Label",
-    seatType: "worker",
     assigned: true,
     spriteKey: "char_01",
     spritePath: "/chars/01.png",
@@ -239,14 +237,12 @@ describe("mergeDiscoveredSeats", () => {
       makePersistedConfig({
         seatId: "s1",
         label: "My Custom Seat",
-        seatType: "agent",
         roleTitle: "Architect",
         assigned: true,
       }),
     ];
     const result = mergeDiscoveredSeats(discovered, stored, []);
     expect(result[0].label).toBe("My Custom Seat");
-    expect(result[0].seatType).toBe("agent");
     expect(result[0].roleTitle).toBe("Architect");
   });
 
@@ -277,13 +273,6 @@ describe("mergeDiscoveredSeats", () => {
     expect(result[0].spritePath).toBeUndefined();
   });
 
-  it("applies agentConfig from stored config", () => {
-    const discovered = [makeDiscoveredSeat({ seatId: "s1", index: 0 })];
-    const agentConfig = { agentId: "agent-x", model: "gpt-4" };
-    const stored = [makePersistedConfig({ seatId: "s1", agentConfig })];
-    const result = mergeDiscoveredSeats(discovered, stored, []);
-    expect(result[0].agentConfig).toEqual(agentConfig);
-  });
 });
 
 // ── Reducer action tests ────────────────────────────────────
@@ -801,15 +790,13 @@ describe("reducer", () => {
             seatId: "s1",
             label: "Alice",
             assigned: true,
-            seatType: "agent",
-            roleTitle: "Agent",
+            roleTitle: "Worker",
             spriteKey: "char_01",
             spritePath: "/chars/01.png",
             status: "running",
             runId: "run-1",
             taskSnippet: "work",
             startedAt: "2025-01-01",
-            agentConfig: { agentId: "a1" },
           }),
         ],
       });
@@ -820,7 +807,6 @@ describe("reducer", () => {
       });
       expect(next.seats[0].assigned).toBe(false);
       expect(next.seats[0].label).toBe("Alice"); // original label preserved
-      expect(next.seats[0].seatType).toBe("worker");
       expect(next.seats[0].roleTitle).toBeUndefined();
       expect(next.seats[0].spriteKey).toBeUndefined();
       expect(next.seats[0].spritePath).toBeUndefined();
@@ -828,7 +814,6 @@ describe("reducer", () => {
       expect(next.seats[0].runId).toBeUndefined();
       expect(next.seats[0].taskSnippet).toBeUndefined();
       expect(next.seats[0].startedAt).toBeUndefined();
-      expect(next.seats[0].agentConfig).toBeUndefined();
     });
 
     it("does not modify non-matching seats", () => {

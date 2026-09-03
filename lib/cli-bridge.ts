@@ -1,5 +1,5 @@
 /**
- * CLI Bridge — emulates the OpenClaw gateway protocol but delegates to a local
+ * CLI Bridge — emulates the gateway protocol but delegates to a local
  * agent CLI (Claude Code or Auggie) for actual agent execution.
  *
  * Handles WebSocket upgrades, the connect/challenge handshake, chat send/abort,
@@ -114,7 +114,7 @@ interface ClientState {
   room: string;
   seq: number;
   runningProcesses: Map<string, ChildProcess>;
-  /** Maps OpenClaw sessionKey → CLI session id for resume support */
+  /** Maps the browser's sessionKey → CLI session id for resume support */
   sessionMap: Map<string, string>;
 }
 
@@ -285,7 +285,7 @@ function sendResponse(
   sendFrame(state, frame);
 }
 
-// ── Origin check (same pattern as ws-proxy.ts) ─────────
+// ── Origin check ────────────────────────────────────────
 
 function checkOrigin(req: IncomingMessage, socket: Duplex): boolean {
   const origin = req.headers.origin;
@@ -1126,7 +1126,7 @@ function cleanupClient(state: ClientState) {
 /**
  * Attach the CLI bridge WebSocket handler to an HTTP server.
  * Intercepts upgrade requests on `path` and handles them with the
- * emulated OpenClaw gateway protocol, backed by the given CLI provider.
+ * emulated gateway protocol, backed by the given CLI provider.
  */
 export function attachCliBridge(
   server: import("http").Server,

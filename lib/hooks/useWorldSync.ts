@@ -140,12 +140,10 @@ export function useWorldSync(refs: WorldSyncRefs) {
             seatId: seat.seatId,
             patch: {
               label: seat.label,
-              seatType: seat.seatType,
               roleTitle: seat.roleTitle,
               assigned: seat.assigned,
               spriteKey: seat.spriteKey,
               spritePath: seat.spritePath,
-              agentConfig: seat.agentConfig,
             } as Partial<SeatState>,
           });
           break;

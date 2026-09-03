@@ -63,7 +63,7 @@ describe("mettara provider registration", () => {
     expect(provider.usesWorkspaces).toBe(false);
   });
 
-  it("connects through the in-process bridge, not an OpenClaw gateway", () => {
+  it("connects through the in-process bridge, not a WebSocket gateway", () => {
     expect(isCliProvider("mettara")).toBe(true);
     expect(getProviderLabel("mettara")).toBe("Mettara AI");
   });

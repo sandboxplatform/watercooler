@@ -7,7 +7,7 @@
  * and whether onboarding has been seen.
  */
 
-import type { GatewayConfig, SeatType, AgentConfig } from "@/types/game";
+import type { GatewayConfig } from "@/types/game";
 import { createLogger } from "./logger";
 import {
   LS_CONFIG,
@@ -26,12 +26,10 @@ const log = createLogger("Persistence");
 export interface PersistedSeatConfig {
   seatId: string;
   label?: string;
-  seatType?: SeatType;
   roleTitle?: string;
   assigned?: boolean;
   spriteKey?: string;
   spritePath?: string;
-  agentConfig?: AgentConfig;
 }
 
 // ── Generic helpers ────────────────────────────────────

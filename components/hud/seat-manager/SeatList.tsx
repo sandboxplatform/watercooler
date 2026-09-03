@@ -1,6 +1,6 @@
 "use client";
 
-import type { SeatState, SeatType } from "@/types/game";
+import type { SeatState } from "@/types/game";
 import CharacterPortrait from "../CharacterPortrait";
 
 function seatStateLabel(seat: SeatState) {
@@ -16,10 +16,6 @@ function seatSummary(seat: SeatState) {
   if (seat.status === "done") return "Recently completed task";
   if (seat.status === "failed") return "Last task failed";
   return "Waiting at desk";
-}
-
-function seatTypeIcon(type: SeatType) {
-  return type === "agent" ? "◆" : "●";
 }
 
 interface SeatListProps {
@@ -68,14 +64,7 @@ export default function SeatList({ seats, selectedSeatId, onSelectSeat }: SeatLi
                     gap: 4,
                   }}
                 >
-                  <span
-                    style={{
-                      color:
-                        seat.seatType === "agent" ? "var(--pixel-accent)" : "var(--pixel-muted)",
-                    }}
-                  >
-                    {seatTypeIcon(seat.seatType)}
-                  </span>
+                  <span style={{ color: "var(--pixel-muted)" }}>●</span>
                   Seat {index + 1}
                 </div>
                 <div
@@ -90,9 +79,7 @@ export default function SeatList({ seats, selectedSeatId, onSelectSeat }: SeatLi
                   {seat.assigned ? seat.label : "Vacant Seat"}
                 </div>
                 <div style={{ fontSize: 8, color: "var(--pixel-muted)", marginTop: 4 }}>
-                  {seat.assigned
-                    ? (seat.roleTitle ?? (seat.seatType === "agent" ? "Agent" : "Worker"))
-                    : "Unassigned"}
+                  {seat.assigned ? (seat.roleTitle ?? "Worker") : "Unassigned"}
                 </div>
               </div>
               <div

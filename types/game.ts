@@ -13,29 +13,9 @@ export type SeatFacing = "right" | "up" | "left" | "down";
 
 export type SeatStatus = "empty" | "returning" | "running" | "done" | "failed";
 
-export type SeatType = "worker" | "agent";
-
-/** Identity info read from an OpenClaw agent's IDENTITY.md / config. */
-export interface AgentIdentity {
-  name?: string;
-  emoji?: string;
-  avatar?: string;
-}
-
-/** Configuration snapshot for an OpenClaw independent agent. */
-export interface AgentConfig {
-  agentId: string;
-  workspace?: string;
-  model?: string;
-  identity?: AgentIdentity;
-  soul?: string;
-}
-
 export interface SeatState {
   seatId: string;
   label: string;
-  /** "worker" = tool-slot for main agent; "agent" = independent OpenClaw agent. */
-  seatType: SeatType;
   roleTitle?: string;
   assigned?: boolean;
   spriteKey?: string;
@@ -47,8 +27,6 @@ export interface SeatState {
   taskSnippet?: string;
   runId?: string;
   startedAt?: string;
-  /** Present only when seatType === "agent". */
-  agentConfig?: AgentConfig;
 }
 
 export type TaskStatus =
@@ -122,7 +100,7 @@ export interface ToolChatMessage extends ChatMessageBase {
 
 export type ChatMessage = TextChatMessage | ToolChatMessage;
 
-export type AgentProvider = "openclaw" | "auggie" | "claude" | "claude-api" | "mettara";
+export type AgentProvider = "auggie" | "claude" | "claude-api" | "mettara";
 
 export interface GatewayConfig {
   url: string;
