@@ -25,6 +25,15 @@ describe("the library roster", () => {
     }
   });
 
+  /**
+   * The order is a decision, not an accident of how WORKER_SPRITES happens to
+   * be written — appending a new sheet there must not reshuffle the picker.
+   */
+  it("offers the premade cast and the boss before the built likenesses", () => {
+    const names = LIBRARY_CHARACTERS.map((c) => c.name);
+    expect(names).toEqual(["Alice", "Bob", "Carol", "Dave", "The Boss", "Coop", "Rob"]);
+  });
+
   it("keeps the texture key a library sheet is preloaded under", () => {
     // Workers are created against these keys at boot; renaming one would
     // leave an existing seat pointing at a texture that no longer exists.

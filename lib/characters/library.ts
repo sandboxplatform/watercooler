@@ -34,8 +34,8 @@ export const LIBRARY_PREFIX = "library-";
 /** A resident's look is theirs: it stays in the library for them, but nobody else can pick it. */
 const RESERVED = new Set(RESIDENTS.map((r) => r.spriteKey));
 
-export const LIBRARY_CHARACTERS: RosterCharacter[] = [
-  ...WORKER_SPRITES.filter((s) => !RESERVED.has(s.key)).map((s) => ({
+const selectable: RosterCharacter[] = WORKER_SPRITES.filter((s) => !RESERVED.has(s.key)).map(
+  (s) => ({
     id: `${LIBRARY_PREFIX}${s.key}`,
     key: s.key,
     name: s.label,
@@ -43,16 +43,33 @@ export const LIBRARY_CHARACTERS: RosterCharacter[] = [
     portraitUrl: `/api/characters/${LIBRARY_PREFIX}${s.key}/portrait`,
     source: "library" as const,
     notes: "Ships with the game.",
-  })),
-  {
-    id: `${LIBRARY_PREFIX}${BOSS_SPRITE_KEY}`,
-    key: BOSS_SPRITE_KEY,
-    name: "The boss",
-    sheetUrl: BOSS_SPRITE_PATH,
-    portraitUrl: `/api/characters/${LIBRARY_PREFIX}${BOSS_SPRITE_KEY}/portrait`,
-    source: "library" as const,
-    notes: "The default look for a person walking in.",
-  },
+  }),
+);
+
+const THE_BOSS: RosterCharacter = {
+  id: `${LIBRARY_PREFIX}${BOSS_SPRITE_KEY}`,
+  key: BOSS_SPRITE_KEY,
+  name: "The Boss",
+  sheetUrl: BOSS_SPRITE_PATH,
+  portraitUrl: `/api/characters/${LIBRARY_PREFIX}${BOSS_SPRITE_KEY}/portrait`,
+  source: "library" as const,
+  notes: "The default look for a person walking in.",
+};
+
+/** A sheet that came with the pack, rather than one built from a source photo. */
+const isPremade = (character: RosterCharacter) => character.sheetUrl.includes("Premade_Character");
+
+/**
+ * The order the picker shows them in: the premade cast with the boss among
+ * them, then the likenesses built from sheets in public/characters/examples.
+ * The boss is a premade sheet himself (09), so he belongs with that group
+ * rather than tacked on after Coop and Rob, which is where simply appending
+ * him used to leave him.
+ */
+export const LIBRARY_CHARACTERS: RosterCharacter[] = [
+  ...selectable.filter(isPremade),
+  THE_BOSS,
+  ...selectable.filter((character) => !isPremade(character)),
 ];
 
 /** The public file behind a library id, or null for anything else. */

@@ -30,20 +30,20 @@ export interface Organisation {
 }
 
 export const ORGANISATIONS: readonly Organisation[] = [
-  { slug: "castle-atlantic", name: "Castle Atlantic", tagline: "Head office", style: "castle" },
+  { slug: "castle-atlantic", name: "Castle Atlantic", tagline: "Head Office", style: "castle" },
   { slug: "sandbox-erp", name: "Sandbox ERP", tagline: "Operations", style: "office" },
-  { slug: "chester", name: "Chester", tagline: "Building supply", style: "supply" },
-  { slug: "blockhouse", name: "Blockhouse", tagline: "Building supply", style: "blocks" },
-  { slug: "homestar", name: "Homestar", tagline: "Business campus", style: "campus", campus: true },
+  { slug: "chester", name: "Chester", tagline: "Building Supply", style: "supply" },
+  { slug: "blockhouse", name: "Blockhouse", tagline: "Building Supply", style: "blocks" },
+  { slug: "homestar", name: "Homestar", tagline: "Business Campus", style: "campus", campus: true },
   // Out of the way, past the trees at the far end of the south road: the
   // science lab that makes the whole world possible.
-  { slug: "mettara", name: "Mettara", tagline: "Science lab", style: "lab" },
+  { slug: "mettara", name: "Mettara", tagline: "Science Lab", style: "lab" },
   // Across the water: the island, reached by the ferry from the dock at
   // the bottom of the map. Its "campus" is the island itself.
   {
     slug: "apeiron-media",
     name: "Apeiron Media",
-    tagline: "Media house",
+    tagline: "Media House",
     style: "irish",
     campus: true,
   },
