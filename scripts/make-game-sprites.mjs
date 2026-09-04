@@ -442,7 +442,84 @@ function projectBoard() {
   return c;
 }
 
+/**
+ * The help desk board: the support queue, kept as a list rather than
+ * columns so it reads differently from the project board beside it. An
+ * amber header, a row per ticket with its priority as a dot, and a count
+ * badge in the corner.
+ */
+function helpDeskBoard() {
+  const c = canvas(144, 96);
+  const { set, rect, outline, disc } = c;
+  const frame = [92, 74, 58, 255];
+  const frameLit = [126, 102, 78, 255];
+  const frameDark = [64, 50, 38, 255];
+  const face = [235, 228, 242, 255];
+  const faceDark = [216, 208, 224, 255];
+  const header = [200, 128, 48, 255];
+  const headerLit = [232, 160, 72, 255];
+  const rowInk = [167, 151, 150, 255];
+  const urgent = [248, 113, 104, 255];
+  const high = [250, 165, 61, 255];
+  const medium = [87, 157, 255, 255];
+  const low = [133, 144, 162, 255];
+
+  // Frame, lit along the top and shadowed below.
+  rect(0, 0, 144, 96, ink);
+  rect(1, 1, 143, 95, frame);
+  rect(1, 1, 143, 4, frameLit);
+  rect(1, 91, 143, 95, frameDark);
+  for (let y = 1; y < 95; y++) {
+    set(1, y, frameLit);
+    set(142, y, frameDark);
+  }
+
+  // The face.
+  rect(6, 6, 138, 90, ink);
+  rect(7, 7, 137, 89, face);
+
+  // Header, with a headset motif and a count badge.
+  rect(7, 7, 137, 21, header);
+  rect(7, 7, 137, 10, headerLit);
+  // headset: a band and two earpieces
+  for (let x = 16; x <= 30; x++) {
+    const y = 12 + Math.round(2 * Math.sin(((x - 16) / 14) * Math.PI));
+    set(x, 16 - y + 12, [235, 228, 242, 255]);
+  }
+  rect(14, 13, 18, 19, [235, 228, 242, 255]);
+  rect(28, 13, 32, 19, [235, 228, 242, 255]);
+  // a row of blocky letters standing in for the title
+  for (let x = 40; x < 88; x += 6) rect(x, 12, x + 4, 16, [235, 228, 242, 255]);
+  // count badge
+  rect(112, 10, 132, 18, [64, 50, 38, 255]);
+  rect(113, 11, 131, 17, urgent);
+  for (let x = 116; x < 128; x += 4) rect(x, 13, x + 2, 15, [235, 228, 242, 255]);
+
+  // Ticket rows: a priority dot, a number block, and a line of subject.
+  const priorities = [urgent, high, medium, low, high, medium];
+  for (let i = 0; i < 6; i++) {
+    const y0 = 25 + i * 10;
+    rect(10, y0, 134, y0 + 9, i % 2 ? faceDark : [246, 242, 250, 255]);
+    rect(10, y0 + 8, 134, y0 + 9, [225, 218, 232, 255]);
+    disc(16, y0 + 4, 2, priorities[i]);
+    // the ticket number, then the subject trailing off
+    rect(22, y0 + 3, 34, y0 + 6, rowInk);
+    rect(38, y0 + 3, 96 + ((i * 13) % 30), y0 + 6, [198, 189, 213, 255]);
+    // who it is with, as a small square at the right
+    rect(124, y0 + 2, 131, y0 + 7, i % 3 === 0 ? [199, 168, 96, 255] : [176, 177, 196, 255]);
+  }
+
+  // Two pins.
+  for (const px of [24, 120]) {
+    disc(px, 4, 3, [73, 133, 204, 255]);
+    disc(px - 1, 3, 1, [235, 228, 242, 255]);
+  }
+  outline(0, 0, 144, 96);
+  return c;
+}
+
 save("pingpong_table_96x72.png", table());
 save("pinball_machine_96x120.png", pinball());
 save("arcade_cabinet_96x120.png", arcade());
 save("project_board_144x96.png", projectBoard());
+save("help_desk_144x96.png", helpDeskBoard());

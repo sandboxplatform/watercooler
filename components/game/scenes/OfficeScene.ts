@@ -82,6 +82,10 @@ export class OfficeScene extends Phaser.Scene {
   private projectZone: { x: number; y: number } | null = null;
   private projectPrompt: Phaser.GameObjects.Text | null = null;
   private projectOpen = false;
+  /** The help desk board beside it. */
+  private deskZone: { x: number; y: number } | null = null;
+  private deskPrompt: Phaser.GameObjects.Text | null = null;
+  private deskOpen = false;
   private navigator = new TapNavigator();
   private pathfinder: Pathfinder | null = null;
   /** The steps taken on arrival, before the keys are the player's. */
@@ -162,6 +166,7 @@ export class OfficeScene extends Phaser.Scene {
     this.load.image("pinball-machine", "/sprites/pinball_machine_96x120.png");
     this.load.image("arcade-cabinet", "/sprites/arcade_cabinet_96x120.png");
     this.load.image("project-board", "/sprites/project_board_144x96.png");
+    this.load.image("help-desk", "/sprites/help_desk_144x96.png");
     this.load.image("van", "/sprites/world/van_96x144.png");
     this.load.spritesheet("anim-elevator", "/sprites/animated_elevator_96x144.png", {
       frameWidth: 96,
@@ -241,6 +246,8 @@ export class OfficeScene extends Phaser.Scene {
     this.arcadeZone = arcade ? { x: arcade.x, y: arcade.y } : null;
     const project = pois.find((poi) => /project board/i.test(poi.name));
     this.projectZone = project ? { x: project.x, y: project.y } : null;
+    const desk = pois.find((poi) => /help desk/i.test(poi.name));
+    this.deskZone = desk ? { x: desk.x, y: desk.y } : null;
 
     // Beside the desk, not in it — the nook has walls on three sides
     this.player = new Player(
@@ -328,6 +335,11 @@ export class OfficeScene extends Phaser.Scene {
       board.setDepth(4);
       this.addSign(this.projectZone, "PROJECT BOARD", board.getTopCenter().y);
     }
+    if (this.deskZone) {
+      const board = this.add.image(this.deskZone.x, this.deskZone.y - 24, "help-desk");
+      board.setDepth(4);
+      this.addSign(this.deskZone, "HELP DESK", board.getTopCenter().y);
+    }
     // The board hangs on the wall; its sign goes above it, centred on the
     // board itself — its point is on the board's right-hand tile — with the
     // arrow on the wall's cap.
@@ -387,6 +399,13 @@ export class OfficeScene extends Phaser.Scene {
     // Listening for the open events rather than only setting the flag where
     // they are emitted means a game opened any other way — the ?pinball=1 and
     // ?board=1 links, say — still stops the character walking about behind it.
+    const unsubDeskOpen = gameEvents.on("open-help-desk", () => {
+      this.deskOpen = true;
+    });
+    const unsubDeskClosed = gameEvents.on("help-desk-closed", () => {
+      this.deskOpen = false;
+    });
+
     const unsubProjectOpen = gameEvents.on("open-project-board", () => {
       this.projectOpen = true;
     });
@@ -495,6 +514,8 @@ export class OfficeScene extends Phaser.Scene {
       unsubArcadeClosed();
       unsubProjectOpen();
       unsubProjectClosed();
+      unsubDeskOpen();
+      unsubDeskClosed();
       unsubElevatorClosed();
       unsubPongOpen();
       unsubPongClosed();
@@ -738,6 +759,19 @@ export class OfficeScene extends Phaser.Scene {
       .setVisible(false);
     this.cauldronPrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
 
+    this.deskPrompt = this.add
+      .text(
+        0,
+        0,
+        "Press E to read the queue",
+        PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle,
+      )
+      .setResolution(window.devicePixelRatio * 2)
+      .setOrigin(0.5, 1)
+      .setDepth(20)
+      .setVisible(false);
+    this.deskPrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+
     this.projectPrompt = this.add
       .text(
         0,
@@ -839,7 +873,8 @@ export class OfficeScene extends Phaser.Scene {
         this.pinballOpen ||
         this.pingPongOpen ||
         this.arcadeOpen ||
-        this.projectOpen
+        this.projectOpen ||
+        this.deskOpen
       )
         return;
       if (this.interactionManager.interactionMenu.visible) return;
@@ -972,6 +1007,7 @@ export class OfficeScene extends Phaser.Scene {
       this.pingPongOpen ||
       this.arcadeOpen ||
       this.projectOpen ||
+      this.deskOpen ||
       this.elevatorOpen ||
       dialogOpen() ||
       isInputFocused()
@@ -1080,6 +1116,24 @@ export class OfficeScene extends Phaser.Scene {
       if (atProject && interactPressed) {
         this.projectPrompt?.setVisible(false);
         gameEvents.emit("open-project-board");
+        return;
+      }
+    }
+
+    // The help desk board: walk up, press E, read the support queue
+    if (this.deskZone) {
+      const distance = Phaser.Math.Distance.Between(
+        this.player.sprite.x,
+        this.player.sprite.y,
+        this.deskZone.x,
+        this.deskZone.y,
+      );
+      const atDesk = distance < BOSS_INTERACT_DISTANCE;
+      this.deskPrompt?.setVisible(atDesk && !this.deskOpen);
+      if (atDesk) this.deskPrompt?.setPosition(this.deskZone.x, this.deskZone.y - 8);
+      if (atDesk && interactPressed) {
+        this.deskPrompt?.setVisible(false);
+        gameEvents.emit("open-help-desk");
         return;
       }
     }

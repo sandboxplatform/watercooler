@@ -11,7 +11,7 @@
  "version": "1.10",
  "tiledversion": "1.11.2",
  "nextlayerid": 13,
- "nextobjectid": 10,
+ "nextobjectid": 12,
  "tilesets": [
   {
    "columns": 16,
@@ -2067,6 +2067,17 @@
      "height": 96,
      "rotation": 0,
      "visible": true
+    },
+    {
+     "id": 6,
+     "name": "",
+     "type": "",
+     "x": 288,
+     "y": 48,
+     "width": 144,
+     "height": 96,
+     "rotation": 0,
+     "visible": true
     }
    ]
   },
@@ -2081,7 +2092,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 6,
+     "id": 7,
      "name": "Whiteboard",
      "type": "",
      "x": 504,
@@ -2100,10 +2111,29 @@
      ]
     },
     {
-     "id": 7,
+     "id": 8,
      "name": "Project board",
      "type": "",
      "x": 216,
+     "y": 120,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      }
+     ]
+    },
+    {
+     "id": 9,
+     "name": "Help desk",
+     "type": "",
+     "x": 360,
      "y": 120,
      "width": 0,
      "height": 0,
@@ -2131,7 +2161,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 8,
+     "id": 10,
      "name": "",
      "type": "",
      "x": 456,
@@ -2162,7 +2192,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 9,
+     "id": 11,
      "name": "elevator",
      "type": "",
      "x": 96,

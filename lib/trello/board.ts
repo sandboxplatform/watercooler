@@ -10,6 +10,12 @@
  * The office only ever reads. Nothing here writes back.
  */
 
+import { dueState, type DueState } from "../due";
+
+// The two boards on the wall agree on what "overdue" means.
+export { dueState, DUE_SOON_MS } from "../due";
+export type { DueState } from "../due";
+
 // ── What Trello sends ──────────────────────────────────
 
 export interface RawLabel {
@@ -65,9 +71,6 @@ export interface CardLabel {
   name: string;
   colour: string;
 }
-
-/** Where a card stands against its due date. */
-export type DueState = "none" | "later" | "soon" | "overdue" | "done";
 
 export interface BoardCard {
   id: string;
@@ -130,26 +133,6 @@ export function labelColour(colour: string | null | undefined): string {
   if (!colour) return NO_COLOUR;
   const base = colour.split("_")[0];
   return LABEL_COLOURS[base] ?? NO_COLOUR;
-}
-
-/** Within this long, a due date counts as coming up rather than merely later. */
-export const DUE_SOON_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Where a card stands against its due date. A card ticked as done is done
- * however late it was; an unticked one past its date is overdue.
- */
-export function dueState(
-  due: string | null | undefined,
-  dueComplete: boolean | undefined,
-  now: number,
-): DueState {
-  if (!due) return "none";
-  const at = Date.parse(due);
-  if (Number.isNaN(at)) return "none";
-  if (dueComplete) return "done";
-  if (at < now) return "overdue";
-  return at - now <= DUE_SOON_MS ? "soon" : "later";
 }
 
 /** Trello orders by a `pos` number; anything without one goes last. */

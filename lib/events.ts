@@ -48,6 +48,10 @@ export interface GameEventMap {
   "pingpong-closed": [];
   /** Somebody walked up to the cauldron and pressed E. */
   "open-pinball": [];
+  /** Somebody walked up to the help desk board and pressed E. */
+  "open-help-desk": [];
+  /** The help desk was closed, so the office takes input again. */
+  "help-desk-closed": [];
   /** Somebody walked up to the project board on the board floor and pressed E. */
   "open-project-board": [];
   /** The project board was closed, so the office takes input again. */

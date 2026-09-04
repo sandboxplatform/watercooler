@@ -300,6 +300,36 @@ on every request, so all of this happens server-side and the token never
 reaches the browser. And a token can see every board its account can — so
 generate it from an account that is only on the boards you want readable.
 
+### The help desk beside it
+
+The same wall carries a second board: the support queue from Zoho Desk.
+Walk up and press E and the tickets appear in columns by status — open
+first, then anything on hold or escalated, with the closed ones last. Each
+ticket shows its number, priority as a coloured dot, channel, due date, who
+asked and who it is with. It refreshes every half minute, and is
+**read-only**: nothing in the office replies to a ticket or changes one.
+
+Zoho uses OAuth rather than a simple key, so it takes a few minutes to set
+up. In Zoho's API console (`api-console.zoho.com`, or `.eu`, `.in`,
+`.com.au`, `.jp` to match your account):
+
+1. Create a **Self Client** and copy its Client ID and Client Secret into
+   `.env.local` as `ZOHO_CLIENT_ID` and `ZOHO_CLIENT_SECRET`. Set
+   `ZOHO_REGION` too if you are not on `.com`.
+2. On the **Generate Code** tab ask for the scope
+   `Desk.tickets.READ,Desk.basic.READ`, then copy the code it gives you.
+3. Run `pnpm zoho:setup <code>` within the few minutes the code lasts.
+
+That trades the code for a refresh token and finds your organisation id,
+then prints the two lines to paste back into `.env.local`. The client
+secret never goes on a command line, and the refresh token does not expire.
+Optionally set `ZOHO_DEPARTMENT_ID` to show one department's queue rather
+than the whole desk; the panel lists the departments it can see.
+
+The refresh token is the valuable one, so it stays on the server: the
+browser asks this app, this app asks Zoho, and no credential reaches the
+page or a log.
+
 ### Playing together
 
 One server is one world. Everyone who opens the site walks into the same

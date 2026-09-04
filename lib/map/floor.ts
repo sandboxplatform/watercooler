@@ -48,8 +48,27 @@ export const PROJECT_BOARD = {
   poi: { name: "Project board", tx: 4, ty: 2, facing: "up" } satisfies PoiSpec,
 };
 
+/**
+ * The help desk board, next along the same wall: the support queue beside
+ * the project board, with the whiteboard past it and the room's name
+ * lettered across the right.
+ */
+export const HELP_DESK = {
+  region: {
+    label: "help desk board",
+    sx: 0,
+    sy: 0,
+    sw: 3,
+    sh: 2,
+    dx: 6,
+    dy: 1,
+    layers: [],
+  } satisfies Region,
+  poi: { name: "Help desk", tx: 7, ty: 2, facing: "up" } satisfies PoiSpec,
+};
+
 export interface FloorOptions {
-  /** The board floor: the project board hangs beside the whiteboard. */
+  /** The board floor: the project board and the help desk hang on the wall. */
   board?: boolean;
 }
 
@@ -62,17 +81,15 @@ export function buildFloorSpec(source: SourceMap, options: FloorOptions = {}): R
     tileSize: TILE,
     walls: WALLS,
     placements: picked.placements,
-    pois: board ? [WHITEBOARD.poi, PROJECT_BOARD.poi] : [WHITEBOARD.poi],
+    pois: board ? [WHITEBOARD.poi, PROJECT_BOARD.poi, HELP_DESK.poi] : [WHITEBOARD.poi],
     spawns: [{ tx: PLAYER_START.tx, ty: PLAYER_START.ty, facing: PLAYER_START.facing }],
     collisions: board
-      ? [
-          {
-            x: PROJECT_BOARD.region.dx * TILE,
-            y: PROJECT_BOARD.region.dy * TILE,
-            width: PROJECT_BOARD.region.sw * TILE,
-            height: PROJECT_BOARD.region.sh * TILE,
-          },
-        ]
+      ? [PROJECT_BOARD.region, HELP_DESK.region].map((region) => ({
+          x: region.dx * TILE,
+          y: region.dy * TILE,
+          width: region.sw * TILE,
+          height: region.sh * TILE,
+        }))
       : [],
     // No door: the only way out is the way in.
     transitions: [{ name: "elevator", target: "elevator", ...ELEVATOR, facing: "down" }],
