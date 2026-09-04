@@ -573,6 +573,14 @@ the current behaviour.
 - Secrets come from the environment. `.env.local` is gitignored; never commit keys.
 - No `dangerouslySetInnerHTML`. A CSP is set in `next.config.ts` — new outbound
   connections need `CSP_CONNECT_SRC`, not a loosened policy.
+- Cache headers live beside it. A room change is a page load, and `public/` is
+  served `max-age=0` by default, so it used to revalidate around fifty assets
+  and re-fetch three and a half megabytes of music every time. `/audio/` is
+  immutable for a year — change the music by pointing at a different file, not
+  by replacing bytes — and `/characters/`, `/maps/`, `/tilesets/`, `/sprites/`
+  and `/ui/` get an hour, because `build:map` and `build-character.ts` rewrite
+  those in place and none of the paths carries a content hash. Making them
+  immutable would strand people on old art.
 - Commits: `<type>(<scope>): <subject>` with type in
   `feat|fix|docs|refactor|perf|test|chore`. One concern per PR.
 
