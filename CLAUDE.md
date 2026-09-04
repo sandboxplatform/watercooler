@@ -436,7 +436,7 @@ lib/
   server/                          server-only: room store, presence hub/socket, residents, uploads
   map/ world/                      map generation and world layout
   arcade/ pinball/ pong/           the games (Oak Island, Flappy, Snake, Breakout, Solitaire)
-  pixel/ characters/               sprite ingestion, composition, poses, palettes
+  pixel/ characters/               sheet validation, PNG codec, palettes, recolouring
   voice/                           WebRTC proximity voice
   mettara/ mcp/                    Mettara client + signed webhook; MCP servers
 public/maps|tilesets|sprites|characters|audio|ui
@@ -510,6 +510,46 @@ why a wanderer still needs a `WORKER_SPRITES` entry: that is where
 
 Michael, a chicken in a necktie, is the first and so far only wanderer.
 
+**A station** is the other way to have no desk:
+`station: { room, x, y, facing, paces? }` puts a resident at a post in a room,
+and having one replaces the routine rather than joining it — someone posted at a
+counter is either at it or out wandering the world map, and goes nowhere else.
+`home` stays null, so nothing is reserved for them upstairs; `org` is real,
+since they do work for the company.
+
+`paces` is the patch of floor they work, and it does the walking: on duty they
+pace it, using the same `wanderArea` bounds that send a resident round a lobby
+— which is why `wanderArea` takes the resident as well as the haunt, since a
+station's patch belongs to its counter rather than to the kind of room. Without
+`paces` they stand at the post. The bounds are for the sprite's **centre**, and
+nothing collides a resident, so they are the only thing keeping one out of their
+own furniture.
+
+Doc works the one station that exists: the help desk down in the wide bottom of
+Sandbox ERP's lobby — the part that carries on past the bitten-out corner, where
+nothing else is. Four tiles of counter with somebody's work all over it, one row
+of floor in front to walk up to it from and two behind to pace. Its footprint,
+its point of interest, his post and his pacing are all `HELP_COUNTER` in
+`lib/map/office.ts`; `buildOfficeSpec(src, { helpDesk: true })` puts it in a
+lobby, and only Sandbox ERP's asks for it. The art
+(`scripts/make-help-desk.ts` → `public/sprites/help_desk_counter_192x96.png`) is
+generated for the same reason the lift and the games are: the interiors pack has
+no reception counter.
+
+He paces _behind_ the counter rather than half hidden by it, which would look
+better, because **the room has two depth schemes and neither allows it**: a prop
+is drawn at depth 4 and a presence player at the height of their own feet, some
+hundreds, while the local player is a flat 5. So no height given to a counter
+covers a resident without also covering the person walking up to it. The bottom
+of his pacing patch is therefore the post, where the bottom edge of his sheet
+meets the counter's top edge — half a tile lower and he is drawn over his own
+desk. The counter's sign is the only one in the room hung _below_ its subject:
+above it is where he walks.
+
+Also note the lobby's counter is **not** called "Help desk". That is the
+support-queue board on an Operations floor, which `OfficeScene` finds by exactly
+that name — a loose match there drew the board on top of the counter.
+
 ### Characters
 
 Two files per character in `public/characters/examples/`: `<Name>.png` is the
@@ -518,39 +558,84 @@ profile picture and `<Name>_sprite.png` is the sheet, which
 `public/characters/<Name>_48x48.png`. Capitalise both — the lookup is by name,
 and a lowercase file only resolves on Windows.
 
-**Art is expected to arrive finished, in the game's format.** Draw over
-`public/characters/Character_Template_48x48.png`, which is a sheet of exactly
-it:
+**The file you deliver is the file the game loads.** A sheet in the format is
+copied into place, not decoded and re-encoded, so the installed file is the
+one handed over — palette, colour type and all. Nothing is scaled, quantised,
+keyed, padded, scrubbed or outlined; decoding happens only to check it.
 
 ```
-2688 x 1968, a grid of 48 x 96 frames, 56 columns
-row 1  idle, row 2  walk
-within a row, six frames each of right, up, left, down
-transparent background, or one flat colour throughout
+48 x 96 frames, 24 columns x 3 rows — 1152 x 288
+row 0 blank, row 1 idle, row 2 walk
+across a row, six frames each of right, up, left, down
+left is drawn, not mirrored; both cycles loop over their six frames
+a transparent background
 ```
 
-A sheet in that format is **used as it came** — a conforming sheet comes out
-byte-for-byte identical to what went in, and `exact.test.ts` holds every
-shipped sheet to that. The only things done to it cannot change how it looks:
-clearing a flat backdrop when the four corners agree on one, and padding
-transparent rows below the art so every sheet on disk is one size. Then it
-reports how many of the forty-eight animated frames are empty, which the game
-would otherwise show as the character blinking out for a tenth of a second.
+The pack's 2688-wide shape is accepted too, but **twenty-four columns is what
+to draw**: it holds exactly the frames the game animates and costs a sixteenth
+of the texture memory. 2688x1968 is 5.3M pixels of which nine tenths are
+empty, against 0.33M for 1152x288. The wide shape survives because the pack's
+cast and everything built before this are that size.
 
-Anything else is **refused**, with the measurements and the specification side
-by side. That refusal is the feature. Interpreting a loose sheet — finding the
-rows, cutting the frames apart, scaling to a common height, quantising to
-sixteen colours, then scrubbing the compression noise off the result and
-drawing an outline round what survived — is what this used to do, and every
-one of those steps is a guess that shows in the sprite. The despeckle,
-de-fringe, crumb and outline passes that existed to hide those guesses are
-gone. **The fix for art that comes out badly is better art, not a longer
-pipeline.**
+The figure sits about **72px tall** in its 96px frame, feet inside frame rows
+72-91 and horizontally within x 12-36 — that rectangle is the collision body
+the game derives from every frame — centred on x 24, at one scale on one
+baseline across all 48 slots. **Row 1, column 18** (the first idle-down frame)
+is lifted straight out as the HUD portrait and gallery card, so make that one
+a clean front view.
 
-`--loose` runs the old interpretation for a sheet that genuinely cannot be
-re-delivered, minus the scrubbing, so what it produces looks like what it was
-given. `/api/characters/ingest` is the same escape hatch inside the app: it
-tries the exact path first and falls back to interpreting an upload.
+A sheet's grid is **measured, not assumed** — `sheetColumns` counts it off the
+image, and `makeAnims` takes that count, because Phaser numbers frames across
+the whole sheet so row 1 begins at index `columns`. That number used to be the
+constant 56, which is why a delivered sheet had to be 2688 across whatever it
+held. Only two widths are accepted rather than any multiple of a frame: the
+loose illustration grids are 1536 across, a whole 32 frames, so a
+divisibility rule would wave one through to animate from nonsense.
+
+Indexed PNGs are read (colour type 3, at 1, 2, 4 or 8 bits). A palette is how
+pixel art is normally stored and what a tool writes for an "8-bit PNG";
+refusing it sent the artist back to re-export for nothing, since expanding a
+palette is exact.
+
+**Anything else is refused, and there is no way past it.** `sheetFaults` in
+`lib/pixel/exact.ts` is the whole rule, it reports _every_ fault at once
+rather than the first — a sheet on the wrong canvas is usually on the wrong
+background too, and sending somebody back to fix one thing at a time is how
+three rounds happen instead of one — and `describeSheetFaults` prints them
+with the specification underneath, the same words from the install script and
+the upload route alike. There is no `--loose` flag and no interpreting
+fallback: both existed, and having them meant art that was nearly right got
+guessed at instead of redrawn. Cutting a loose sheet apart, scaling it to a
+common height, quantising the colours and keying a background out is what this
+used to do, and every one of those steps shows in the sprite. **The fix for
+art that comes out badly is better art, not a longer pipeline.** Deleting them
+took `lib/pixel/strip.ts`, `lib/pixel/ingest.ts` and `lib/characters/poses.ts`
+with them — the model call that read a sheet's facings included.
+
+**A background is refused by whether it is opaque, not by what colour it is.**
+The check used to ask whether the four corners agreed on a colour, on the
+theory that a shared colour is probably the backdrop. Two whole classes of
+sheet walked through that: a gradient, and — the one that turned up — a sheet
+exported with the editor's transparency checkerboard baked into the pixels,
+whose corners were rgb(253,253,253), rgb(254,254,254), rgb(240,240,239) and
+rgb(236,237,236). Not agreeing on a colour is not evidence of transparency.
+So: a file with no alpha channel at all is named as that (`Bitmap.colourType`
+carries the PNG colour type through the decode for this one purpose, since
+"export with transparency" is a better message than "your background is the
+wrong colour"); failing that, a sheet with no transparent pixel anywhere;
+failing that, four opaque corners. A frame's corner is empty in every sheet
+ever drawn to this format, so an opaque one means something is behind the art
+— and it will be drawn, because nothing is keyed out any more.
+
+Adding a character is three steps: drop `<Name>_sprite.png` in `examples/`,
+run `build-character.ts <Name>`, add a line to `WORKER_SPRITES`. That last one
+stays by hand because a key outlives its filename — seats and saved profiles
+are stored against it, so deriving keys from filenames would mean renaming a
+file silently reassigns everyone's look.
+
+`/api/characters/ingest` is the same rule inside the app: a sheet in the
+format is stored as the bytes that were uploaded, and anything else comes back
+422 with that report.
 
 A sprite **key** in `WORKER_SPRITES` outlives its filename — seats and saved
 profiles are stored against it, so rename the file and the `path`, never the
