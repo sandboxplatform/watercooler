@@ -330,6 +330,30 @@ The refresh token is the valuable one, so it stays on the server: the
 browser asks this app, this app asks Zoho, and no credential reaches the
 page or a log.
 
+### The agents can read both boards
+
+The agents get the same two walls as tools, so a question like "what is in
+progress?" or "any urgent tickets?" is answered from the board rather than
+invented:
+
+| Tool            | Gives                                                     |
+| --------------- | --------------------------------------------------------- |
+| `board_summary` | The project board's columns and card counts               |
+| `board_cards`   | Cards, narrowed by column, label or a word in the title   |
+| `desk_summary`  | Open, overdue and how the queue sits across its statuses  |
+| `desk_tickets`  | Tickets, narrowed by status, priority, assignee or a word |
+
+They are **read-only**. There is no tool that moves a card, answers a
+ticket or changes anything, so an agent can talk about the work but cannot
+touch it. Having read, an agent replies in the room the way it replies to
+anything else, so people and agents discuss the same board.
+
+No credential reaches an agent's sandbox. The tool server holds none: it
+asks the office server over the loopback with the same shared secret the
+dispatch tool uses, and that server owns the keys and the cache — so a
+room of agents and a floor of people reading at once is still one request
+to Trello and one to Zoho.
+
 ### Playing together
 
 One server is one world. Everyone who opens the site walks into the same

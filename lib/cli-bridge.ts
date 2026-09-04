@@ -815,6 +815,11 @@ function getErpServerPath(): string {
   return join(process.cwd(), "lib", "mcp", "erp-mcp.mjs");
 }
 
+/** The boards tool server: the project board and the support queue, to read. */
+function getBoardsServerPath(): string {
+  return join(process.cwd(), "lib", "mcp", "boards-mcp.mjs");
+}
+
 function getMcpServerPath(): string {
   // Resolve the MCP server script relative to the project root.
   // In dev (tsx) process.cwd() is the project root; in prod the server
@@ -835,6 +840,12 @@ function writeMcpConfig(room: string): string | null {
         "brightwater-erp": {
           command: "node",
           args: [getErpServerPath()],
+        },
+        // What the office is working on: the project board and the support
+        // queue, read through the server so no key reaches a seat.
+        boards: {
+          command: "node",
+          args: [getBoardsServerPath()],
         },
         ...(canDelegate
           ? {

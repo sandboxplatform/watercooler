@@ -263,6 +263,17 @@ const CLAUDE_DISPATCH_TOOL = "mcp__watercooler__dispatch_to_worker";
  * that is registered but not named here fails at the moment it is needed —
  * which reads to the model as "the data is not available".
  */
+/**
+ * The boards on the third floor. Read-only tools, so an agent can answer
+ * "what is on the board?" from the wall rather than from imagination.
+ */
+const BOARD_TOOLS = [
+  "mcp__boards__board_summary",
+  "mcp__boards__board_cards",
+  "mcp__boards__desk_summary",
+  "mcp__boards__desk_tickets",
+];
+
 const ERP_TOOLS = [
   "mcp__brightwater-erp__erp_schema",
   "mcp__brightwater-erp__erp_query",
@@ -291,7 +302,7 @@ const claudeProvider: CliProvider = {
 
     if (mcpConfigPath) {
       args.push("--mcp-config", mcpConfigPath);
-      const allowed = [CLAUDE_DISPATCH_TOOL, ...ERP_TOOLS];
+      const allowed = [CLAUDE_DISPATCH_TOOL, ...ERP_TOOLS, ...BOARD_TOOLS];
       if (process.env.CLAUDE_ALLOWED_TOOLS) allowed.push(process.env.CLAUDE_ALLOWED_TOOLS);
       args.push("--allowedTools", allowed.join(","));
     } else if (process.env.CLAUDE_ALLOWED_TOOLS) {

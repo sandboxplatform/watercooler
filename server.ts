@@ -17,6 +17,7 @@ import {
 } from "./lib/cli-bridge";
 import { getCliProvider, isCliProviderId } from "./lib/cli-providers";
 import { getRoomStore } from "./lib/server/room-store";
+import { readBoard, readDesk } from "./lib/server/boards";
 import {
   offeredProviders,
   providerBlocked,
@@ -295,6 +296,49 @@ function blockedByGate(req: IncomingMessage, res: ServerResponse): boolean {
   return true;
 }
 
+/**
+ * What the office is working on, for the agents' MCP tools.
+ *
+ * Same door as dispatch: loopback only, and a shared secret. The boards'
+ * credentials live in this process and stop here — the agent's tool server
+ * gets the cards and tickets, never the keys.
+ *
+ * Read-only. There is no counterpart that writes.
+ */
+function handleBoards(req: IncomingMessage, res: ServerResponse) {
+  if (req.method !== "GET") {
+    res.writeHead(405, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Method not allowed" }));
+    return;
+  }
+
+  const remoteIp = req.socket.remoteAddress;
+  if (remoteIp !== "127.0.0.1" && remoteIp !== "::1" && remoteIp !== "::ffff:127.0.0.1") {
+    res.writeHead(403, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Forbidden" }));
+    return;
+  }
+
+  const secret = req.headers["x-dispatch-secret"] as string | undefined;
+  if (!secret || !validateDispatchSecret(secret)) {
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Invalid dispatch secret" }));
+    return;
+  }
+
+  const what = new URL(req.url ?? "", "http://127.0.0.1").searchParams.get("what");
+  const reader = what === "desk" ? readDesk() : readBoard();
+  reader
+    .then((answer) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(answer));
+    })
+    .catch((err: Error) => {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: err.message }));
+    });
+}
+
 // ── Inbound tool endpoint for Mettara AIs ──
 
 /**
@@ -361,6 +405,10 @@ app
       }
       if (mettaraTools && (req.url ?? "").split("?")[0] === TOOLS_PATH) {
         void mettaraTools(req, res);
+        return;
+      }
+      if ((req.url ?? "").split("?")[0] === "/api/internal/boards") {
+        handleBoards(req, res);
         return;
       }
       if ((req.url ?? "").split("?")[0] === "/api/unlock") {
