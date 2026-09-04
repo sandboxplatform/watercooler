@@ -1,7 +1,7 @@
 /**
  * Installs a delivered character sheet into the game.
  *
- *   pnpm tsx scripts/build-character.ts <Name> [--source file.png]
+ *   pnpm tsx scripts/build-character.ts <Name> [--source file.png] [--loose [--colours 48]]
  *
  * Reads  public/characters/examples/<Name>_sprite.png, or --source
  * Writes public/characters/<Name>_48x48.png — then add it to WORKER_SPRITES.
@@ -25,8 +25,8 @@
  * A sheet that is not in that format is **refused**, with the measurements
  * and the specification side by side. That refusal is the point of this
  * script. Guessing at a loose sheet — finding the rows, cutting the frames
- * apart, scaling them to a common height, quantising to sixteen colours,
- * scrubbing the compression noise off the result and drawing an outline round
+ * apart, scaling them to a common height, quantising down to a few dozen
+ * colours, scrubbing the noise off the result and drawing an outline round
  * what survived — is what this used to do, and every one of those steps is a
  * guess that shows in the sprite. The fix for art that comes out badly is
  * better art, not a longer pipeline.
@@ -79,6 +79,21 @@ import {
  * not for the scaler; stretching it sideways would only squash the face.
  */
 const CHARACTER_HEIGHT = 72;
+
+/**
+ * How many colours a `--loose` sheet is quantised to.
+ *
+ * Only interpretation needs this: the sources are smooth illustrations with
+ * tens of thousands of colours — Steve's has 87,510 — so they have to be cut
+ * down to something a sprite can be drawn in.
+ *
+ * Forty-eight, because the pack's own art uses ninety-two and this was
+ * sixteen. A third of what real pixel art of this size carries is not a
+ * pixel-art palette, it is a loss: at sixteen the skin flattens to two tones
+ * and the beard disappears into the face. Higher barely differs — 96 is hard
+ * to tell from 48 — so this is about where the returns stop.
+ */
+const LOOSE_COLOURS = 48;
 
 const args = process.argv.slice(2);
 const option = (flag: string, fallback: string) => {
@@ -183,7 +198,7 @@ function interpret() {
     });
   });
 
-  const colours = palette(image, 16);
+  const colours = palette(image, Number(option("--colours", String(LOOSE_COLOURS))));
   const sharp = snapToPalette(image, colours);
   const scale = commonScale(cells, FRAME_W, FRAME_H, 2, height);
   console.log(`scale ${scale.toFixed(3)}, ${colours.length} colours`);
