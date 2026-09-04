@@ -66,10 +66,14 @@ const operationsFloors = [
 for (const [file, build] of [
   ["office3.json", (src: SourceMap) => buildOfficeSpec(src)],
   ["lobby.json", (src: SourceMap) => buildOfficeSpec(src)],
-  ["lobby-castle-atlantic.json", (src: SourceMap) => buildOfficeSpec(src, "pong")],
+  ["lobby-castle-atlantic.json", (src: SourceMap) => buildOfficeSpec(src, { game: "pong" })],
   // The island's house: Castle Atlantic's layout, ping pong table and all.
-  ["lobby-apeiron-media.json", (src: SourceMap) => buildOfficeSpec(src, "pong")],
-  ["lobby-sandbox-erp.json", (src: SourceMap) => buildOfficeSpec(src, "pinball", ["arcade"])],
+  ["lobby-apeiron-media.json", (src: SourceMap) => buildOfficeSpec(src, { game: "pong" })],
+  // The only lobby with a staffed help desk: Doc works this one.
+  [
+    "lobby-sandbox-erp.json",
+    (src: SourceMap) => buildOfficeSpec(src, { game: "pinball", also: ["arcade"], helpDesk: true }),
+  ],
   ["floor.json", buildFloorSpec],
   // An Operations floor per set of boards actually hung anywhere: the same
   // room each time, with those boards on the wall. Named by the boards

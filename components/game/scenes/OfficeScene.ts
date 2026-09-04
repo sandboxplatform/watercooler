@@ -28,7 +28,7 @@ import {
 import { UNKNOWN_IDENTITY, type AccessIdentity } from "@/lib/identity";
 import { ArrivalWalk } from "@/lib/arrival";
 import { MAX_DESKS, deskBox, deskOrigin } from "@/lib/world/desks";
-import { WHITEBOARD } from "@/lib/map/office";
+import { HELP_COUNTER, TILE, WHITEBOARD } from "@/lib/map/office";
 import { hasCampus, hasFloors, tenantFor } from "@/lib/world/tenants";
 import { GARAGE_BAYS } from "@/lib/map/premises";
 import { fetchPeople } from "@/lib/people-client";
@@ -78,6 +78,8 @@ export class OfficeScene extends Phaser.Scene {
   private projectZone: { x: number; y: number } | null = null;
   private projectPrompt: Phaser.GameObjects.Text | null = null;
   private projectOpen = false;
+  /** Whether this lobby staffs a help desk, from its map. */
+  private counterHere = false;
   /** The help desk board beside it. */
   private deskZone: { x: number; y: number } | null = null;
   private deskPrompt: Phaser.GameObjects.Text | null = null;
@@ -171,6 +173,8 @@ export class OfficeScene extends Phaser.Scene {
     this.load.image("arcade-cabinet", "/sprites/arcade_cabinet_96x120.png");
     this.load.image("project-board", "/sprites/project_board_144x96.png");
     this.load.image("help-desk", "/sprites/help_desk_144x96.png");
+    // Furniture, not a board: the counter Doc works in Sandbox ERP's lobby.
+    this.load.image("help-desk-counter", "/sprites/help_desk_counter_192x96.png");
     this.load.image("van", "/sprites/world/van_96x144.png");
     this.load.spritesheet("anim-elevator", "/sprites/animated_elevator_96x144.png", {
       frameWidth: 96,
@@ -250,8 +254,12 @@ export class OfficeScene extends Phaser.Scene {
     this.arcadeZone = arcade ? { x: arcade.x, y: arcade.y } : null;
     const project = pois.find((poi) => /project board/i.test(poi.name));
     this.projectZone = project ? { x: project.x, y: project.y } : null;
-    const desk = pois.find((poi) => /help desk/i.test(poi.name));
+    // Anchored, not fuzzy: the lobby's "Help desk counter" is a different
+    // thing in a different room, and drawing the support-queue board on top
+    // of it is what a loose match here does.
+    const desk = pois.find((poi) => /^help desk$/i.test(poi.name));
     this.deskZone = desk ? { x: desk.x, y: desk.y } : null;
+    this.counterHere = pois.some((poi) => /^help desk counter$/i.test(poi.name));
 
     // Beside the desk, not in it — the nook has walls on three sides
     this.player = new Player(
@@ -345,6 +353,25 @@ export class OfficeScene extends Phaser.Scene {
       const board = this.add.image(this.deskZone.x, this.deskZone.y - 24, "help-desk");
       board.setDepth(4);
       this.addSign(this.deskZone, "HELP DESK", board.getTopCenter().y);
+    }
+    if (this.counterHere) {
+      // Placed from the spec rather than from its point of interest: the
+      // footprint is what the collision box was cut from, so drawing it
+      // corner to corner is the one way the art and the solid part agree.
+      const { dx, dy, sw, sh } = HELP_COUNTER.region;
+      this.add
+        .image(dx * TILE, dy * TILE, "help-desk-counter")
+        .setOrigin(0, 0)
+        .setDepth(4);
+      // Below it, which no other sign in the room is. Above the art is
+      // where whoever works the counter stands, and above them is the
+      // whiteboard, so a sign up there labels the wrong thing twice.
+      this.addSign(
+        { x: (dx + sw / 2) * TILE, y: (dy + sh) * TILE },
+        "HELP DESK",
+        (dy + sh) * TILE + 20,
+        "below",
+      );
     }
     // The board hangs on the wall; its sign goes above it, centred on the
     // board itself — its point is on the board's right-hand tile — with the

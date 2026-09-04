@@ -46,6 +46,9 @@ export const WORKER_SPRITES: WorkerSpriteConfig[] = [
   // Looks for people, built the same way.
   { key: "character_coop", path: "/characters/Coop_48x48.png", label: "Coop" },
   { key: "character_rob", path: "/characters/Rob_48x48.png", label: "Rob" },
+  // Delivered in the game's format and installed byte for byte — the first
+  // sheet that needed nothing done to it at all.
+  { key: "character_doc", path: "/characters/Doc_48x48.png", label: "Doc" },
   // Michael wanders the world map. Listed here so the scenes can find his
   // sheet; he is a resident, so the picker leaves his look to him.
   { key: "character_michael", path: "/characters/Michael_48x48.png", label: "Michael" },

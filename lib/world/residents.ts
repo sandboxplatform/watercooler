@@ -12,6 +12,7 @@
  * simulation and the scenes both read from this.
  */
 
+import type { Facing } from "../presence-types";
 import { floorRoomSlug, WORLD_ROOM_SLUG } from "../rooms";
 import {
   BUILDINGS,
@@ -23,7 +24,7 @@ import {
   type BuildingKind,
 } from "./tenants";
 import { CENTRE_AVENUE, EAST_AVENUE, NORTH_ROAD, SOUTH_ROAD, WEST_AVENUE } from "./scenery";
-import { TILE, WIDTH as LOBBY_COLS } from "../map/office";
+import { HELP_COUNTER, TILE, WIDTH as LOBBY_COLS } from "../map/office";
 import { standingSpot } from "./desks";
 import { CAMPUSES } from "./campus";
 
@@ -47,6 +48,32 @@ export interface Resident {
    * so `org` and `home` are both null.
    */
   wanders?: boolean;
+  /**
+   * A post they work from: somewhere they stand still, in a room, rather
+   * than a desk on the agents' floor.
+   *
+   * It is the counter in a lobby, and having one is a whole routine: someone
+   * posted at one is either at it or out wandering the world map, and goes
+   * nowhere else. `home` stays null, so they take no desk upstairs.
+   */
+  station?: Station;
+}
+
+/** A post in a room, by the sprite's centre, and the way they face at it. */
+export interface Station {
+  room: string;
+  x: number;
+  y: number;
+  facing: Facing;
+  /**
+   * The floor they pace while they are on duty, as bounds for the sprite's
+   * centre; without it they stand at the post and do not move.
+   *
+   * It has to be a patch a random point of which is never solid and never
+   * behind the furniture, exactly as WANDER_AREAS is — which is what lets the
+   * pacing be the same code that walks a resident round a lobby.
+   */
+  paces?: Rect;
 }
 
 export const RESIDENTS: readonly Resident[] = [
@@ -98,6 +125,23 @@ export const RESIDENTS: readonly Resident[] = [
     home: "homestar-sales",
     spriteKey: "character_mark",
   },
+  // Behind the counter in Sandbox ERP's lobby, or out on the map. No desk
+  // upstairs: the help desk is where his work is.
+  {
+    id: "doc",
+    name: "Doc",
+    title: "Help Desk",
+    org: "sandbox-erp",
+    home: null,
+    spriteKey: "character_doc",
+    station: {
+      room: "sandbox-erp",
+      x: HELP_COUNTER.post.x,
+      y: HELP_COUNTER.post.y,
+      facing: "down",
+      paces: HELP_COUNTER.paces,
+    },
+  },
   // Works nowhere and goes indoors never: he is out on the road, always.
   {
     id: "michael",
@@ -146,6 +190,7 @@ export type Area = "lobby" | BuildingKind | "world";
 /** Somewhere a resident goes. */
 export type Haunt =
   | { kind: "office" }
+  | { kind: "station" }
   | { kind: "room"; room: string; area: Area }
   | { kind: "campus"; campus: string }
   | { kind: "outside" };
@@ -173,9 +218,17 @@ export function hauntKey(haunt: Haunt): string {
  * a `room` haunt because the world map *is* a presence room, which is what
  * lets them walk it the way a resident walks a lobby — everyone watching sees
  * the same steps, rather than each browser inventing its own.
+ *
+ * Somebody with a station has two: the post, and that same world map. Manning
+ * a counter is not a stop on a round of the building — it is the job — so it
+ * replaces the routine rather than joining it, and the only other place they
+ * turn up is outside, wandering, which is what a break looks like from the
+ * lobby's point of view.
  */
 export function hauntsOf(resident: Resident): Haunt[] {
   if (resident.wanders) return [{ kind: "room", room: WORLD_ROOM_SLUG, area: "world" }];
+  if (resident.station)
+    return [{ kind: "station" }, { kind: "room", room: WORLD_ROOM_SLUG, area: "world" }];
   const haunts: Haunt[] = [];
   if (resident.home) haunts.push({ kind: "office" });
   if (resident.org) {
@@ -193,6 +246,7 @@ export function hauntsOf(resident: Resident): Haunt[] {
 export function roomForHaunt(resident: Resident, haunt: Haunt): string | null {
   if (haunt.kind === "office")
     return resident.home ? floorRoomSlug(resident.home, AGENTS_LEVEL) : null;
+  if (haunt.kind === "station") return resident.station?.room ?? null;
   if (haunt.kind === "room") return haunt.room;
   return null;
 }
@@ -291,8 +345,12 @@ export const WANDER_AREAS: Record<Exclude<Area, "world">, Rect> = {
  * a yard, and nowhere as an area on the world map — that one has spots
  * instead, since a patch of ground the size of the world would put a
  * wanderer in the sea.
+ *
+ * A station's patch belongs to the post rather than to the kind of room, so
+ * that one needs the resident: it is the floor around their own counter.
  */
-export function wanderArea(haunt: Haunt): Rect | null {
+export function wanderArea(haunt: Haunt, resident?: Resident): Rect | null {
+  if (haunt.kind === "station") return resident?.station?.paces ?? null;
   if (haunt.kind !== "room" || haunt.area === "world") return null;
   return WANDER_AREAS[haunt.area];
 }
@@ -320,6 +378,9 @@ export function yardArea(campus: string): Rect {
 /** How long a resident stays somewhere before moving on, in milliseconds. */
 export const DWELL_MS: Record<PlaceKind, [min: number, max: number]> = {
   office: [4 * 60_000, 8 * 60_000],
+  // Longest of any haunt, and much longer than the wander that follows it:
+  // somebody asking the help desk something wants to find it staffed.
+  station: [8 * 60_000, 14 * 60_000],
   room: [2 * 60_000, 4 * 60_000],
   campus: [2 * 60_000, 3 * 60_000],
   outside: [2 * 60_000, 3 * 60_000],

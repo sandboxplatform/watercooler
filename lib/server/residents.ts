@@ -229,9 +229,19 @@ export class ResidentSimulation {
     state.legs = [];
     state.spot = null;
     state.pauseUntil = now + 800;
-    const area = wanderArea(haunt);
+    const area = wanderArea(haunt, state.resident);
     const spots = wanderSpots(haunt);
-    if (spots) {
+    if (haunt.kind === "station") {
+      // At their post to begin with, facing the room, whether or not they
+      // pace afterwards — arriving in the middle of the patch would put them
+      // off to one side of their own counter.
+      const post = state.resident.station;
+      if (post) {
+        state.x = post.x;
+        state.y = post.y;
+        state.facing = post.facing;
+      }
+    } else if (spots) {
       // Start at one of the places rather than in the middle of the map,
       // which for the world map would be somewhere in a building.
       const first = spots[Math.min(spots.length - 1, Math.floor(this.random() * spots.length))];
@@ -284,7 +294,7 @@ export class ResidentSimulation {
     this.ensureInRoom(state);
     const { hub } = this.host.roomFor(state.room);
     const id = presenceIdFor(state.resident);
-    const area = wanderArea(state.haunt);
+    const area = wanderArea(state.haunt, state.resident);
     const spots = wanderSpots(state.haunt);
     if (!area && !spots) {
       hub.move(id, { x: state.x, y: state.y, facing: state.facing, moving: false });

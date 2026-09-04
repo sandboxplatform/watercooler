@@ -11,11 +11,14 @@ import {
 import { worldSolids } from "../../world/scenery";
 import { WORLD_HEIGHT, WORLD_WIDTH } from "../../world/tenants";
 import { WORLD_ROOM_SLUG } from "../../rooms";
+import { HELP_COUNTER, TILE } from "../../map/office";
+import { FRAME_HEIGHT } from "../../../components/game/config/animations";
 import { facingFor } from "../../facing";
 
 const yoshi = RESIDENTS[0];
 const mark = residentById("mark")!;
 const steve = residentById("steve")!;
+const doc = residentById("doc")!;
 
 /**
  * @param now the same clock the simulation is driven by.
@@ -268,5 +271,136 @@ describe("a wanderer's day", () => {
       last = { x: player.x, y: player.y };
     }
     expect(checked).toBeGreaterThan(100);
+  });
+});
+
+/** A deterministic stand-in for Math.random that actually varies. */
+function rolls(seed = 7) {
+  let state = seed;
+  return () => {
+    state = (state * 1103515245 + 12345) % 2147483648;
+    return state / 2147483648;
+  };
+}
+
+describe("someone on a station", () => {
+  /**
+   * Doc's day is the counter and the map, nothing between, so `startAt` has
+   * no office to find for him and hands back his first haunt — the post.
+   */
+  it("opens the lobby and stands at the post, facing the room", () => {
+    const { rooms, host } = world();
+    const sim = new ResidentSimulation(host, { now: () => 0, random: () => 0.5 });
+    const lobby = rooms.get("sandbox-erp")!;
+    const player = lobby.hub.snapshot().find((p) => p.id === presenceIdFor(doc))!;
+    expect(player.name).toBe("Doc");
+    expect(player.x).toBe(doc.station!.x);
+    expect(player.y).toBe(doc.station!.y);
+    expect(player.facing).toBe("down");
+    expect(player.resident).toBe(true);
+    // A resident is nobody's seat and takes none of the room's four places.
+    expect(lobby.hub.count).toBe(0);
+    expect(sim.whereabouts().find((w) => w.id === "doc")!.place).toBe("station");
+  });
+
+  /**
+   * Pacing, which is the wander-by-bounds code with the counter's own patch of
+   * floor instead of the room's. Nothing collides a resident, so staying
+   * inside the patch is the only thing keeping him out of his own desk.
+   */
+  it("paces the patch round the counter without leaving it", () => {
+    let clock = 0;
+    const { rooms, host } = world(() => clock);
+    // A varying source, not a constant: handed the same number every time he
+    // picks the same point to walk to, arrives on the spot he is standing on
+    // and never sets off again — which measures the stub, not the pacing.
+    const sim = new ResidentSimulation(host, { now: () => clock, random: rolls() });
+    const paces = doc.station!.paces!;
+    const seen = new Set<string>();
+    let moved = 0;
+    for (let i = 0; i < 400; i++) {
+      clock += 120;
+      sim.tick(clock);
+      const player = rooms
+        .get("sandbox-erp")!
+        .hub.snapshot()
+        .find((p) => p.id === presenceIdFor(doc))!;
+      expect(player.x).toBeGreaterThanOrEqual(paces.x);
+      expect(player.x).toBeLessThanOrEqual(paces.x + paces.width);
+      expect(player.y).toBeGreaterThanOrEqual(paces.y);
+      expect(player.y).toBeLessThanOrEqual(paces.y + paces.height);
+      seen.add(`${Math.round(player.x)},${Math.round(player.y)}`);
+      if (player.moving) moved++;
+    }
+    // He walks, rather than standing at the post for the whole shift.
+    expect(moved).toBeGreaterThan(50);
+    expect(seen.size).toBeGreaterThan(20);
+  });
+
+  /** The counter is drawn over him, so a step into it is a step out of sight. */
+  it("never paces into the counter itself", () => {
+    let clock = 0;
+    const { rooms, host } = world(() => clock);
+    const sim = new ResidentSimulation(host, { now: () => clock, random: () => 0.35 });
+    const counter = HELP_COUNTER.region;
+    const box = {
+      x: counter.dx * TILE,
+      y: counter.dy * TILE,
+      right: (counter.dx + counter.sw) * TILE,
+      bottom: (counter.dy + counter.sh) * TILE,
+    };
+    for (let i = 0; i < 400; i++) {
+      clock += 120;
+      sim.tick(clock);
+      const player = rooms
+        .get("sandbox-erp")!
+        .hub.snapshot()
+        .find((p) => p.id === presenceIdFor(doc))!;
+      // The sheet's bottom edge, which is what would show through the desk.
+      const feet = player.y + FRAME_HEIGHT / 2;
+      const over =
+        player.x >= box.x && player.x <= box.right && feet > box.y && player.y < box.bottom;
+      expect(over, `${player.x},${player.y}`).toBe(false);
+    }
+  });
+
+  /**
+   * Off for a wander and back again. Everything is scaled down so a stay is
+   * over in a few ticks; what is being checked is that he leaves the lobby's
+   * hub when he goes and is a walker on the world map when he gets there.
+   */
+  it("goes out to the map and comes back behind the counter", () => {
+    let clock = 0;
+    const { rooms, host } = world(() => clock);
+    const sim = new ResidentSimulation(host, {
+      now: () => clock,
+      random: () => 0.5,
+      dwellScale: 0.0001,
+    });
+    const seen = new Set<string>();
+    let awayFromLobby = false;
+    for (let i = 0; i < 400; i++) {
+      clock += 120;
+      sim.tick(clock);
+      const place = sim.whereabouts().find((w) => w.id === "doc")!.place;
+      seen.add(place);
+      const lobby = rooms.get("sandbox-erp")!.hub.snapshot();
+      if (place === "room") {
+        // Gone: out of the lobby altogether, and on the map with the walkers.
+        expect(lobby.some((p) => p.id === presenceIdFor(doc))).toBe(false);
+        expect(
+          rooms
+            .get(WORLD_ROOM_SLUG)!
+            .hub.snapshot()
+            .some((p) => p.id === presenceIdFor(doc)),
+        ).toBe(true);
+        awayFromLobby = true;
+      } else {
+        const player = lobby.find((p) => p.id === presenceIdFor(doc))!;
+        expect(player.x).toBe(doc.station!.x);
+      }
+    }
+    expect([...seen].sort()).toEqual(["room", "station"]);
+    expect(awayFromLobby).toBe(true);
   });
 });

@@ -1,7 +1,18 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { buildOfficeSpec, CUTOUT, HEIGHT, PLAYER_START, STANDABLE, WALLS, WIDTH } from "../office";
+import {
+  buildOfficeSpec,
+  CUTOUT,
+  HEIGHT,
+  HELP_COUNTER,
+  PLAYER_START,
+  STANDABLE,
+  TILE,
+  WALLS,
+  WIDTH,
+} from "../office";
+import { PLAYER_SPAWN_OFFSET_X } from "../../constants";
 import {
   deriveCollisions,
   generateMap,
@@ -239,6 +250,129 @@ describe("collisions", () => {
   });
 });
 
+describe("with a help desk on the floor", () => {
+  const staffed = buildOfficeSpec(source, { helpDesk: true });
+  const { dx, dy, sw, sh } = HELP_COUNTER.region;
+  const box = { x: dx * TILE, y: dy * TILE, width: sw * TILE, height: sh * TILE };
+  const boxes = staffed.collisions ?? [];
+
+  it("is a lobby's choice, so the plain lobby has neither the point nor the box", () => {
+    expect(spec.pois.some((poi) => /counter/i.test(poi.name))).toBe(false);
+    expect(spec.collisions ?? []).toHaveLength(0);
+  });
+
+  it("brings a point of interest and a solid footprint, and no tiles of its own", () => {
+    expect(staffed.pois.map((poi) => poi.name)).toContain("Help desk counter");
+    expect(boxes).toContainEqual(box);
+    // Drawn by the scene from its own sprite, like the games.
+    expect(staffed.placements.length).toBe(spec.placements.length);
+  });
+
+  /**
+   * The Operations floor's support-queue board is called "Help desk", and the
+   * scene finds it by that name. A counter whose name merely contains it
+   * would have the board drawn on top of it in the lobby.
+   */
+  it("is not called what the Operations board is called", () => {
+    const name = HELP_COUNTER.poi.name;
+    expect(/^help desk$/i.test(name)).toBe(false);
+    expect(/^help desk counter$/i.test(name)).toBe(true);
+  });
+
+  it("leaves the point to stand at on the floor rather than inside the counter", () => {
+    const poi = HELP_COUNTER.poi;
+    const inside = poi.tx >= dx && poi.tx < dx + sw && poi.ty >= dy && poi.ty < dy + sh;
+    expect(inside).toBe(false);
+    // Below it, and inside the room.
+    expect(poi.ty).toBeGreaterThanOrEqual(dy + sh);
+    expect(poi.ty).toBeLessThan(HEIGHT - 1);
+  });
+
+  /**
+   * Two things pass through a lobby: the player, who appears beside the
+   * spawn, and anyone walking the column under the door down to the lift.
+   * Furniture in either place is furniture you are standing in.
+   */
+  it("stands clear of where the player appears", () => {
+    const x = PLAYER_START.tx * TILE + TILE / 2 + PLAYER_SPAWN_OFFSET_X;
+    const y = PLAYER_START.ty * TILE + TILE / 2;
+    const clear =
+      x + TILE / 2 < box.x ||
+      x - TILE / 2 >= box.x + box.width ||
+      y + TILE / 2 < box.y ||
+      y - TILE / 2 >= box.y + box.height;
+    expect(clear).toBe(true);
+  });
+
+  it("stands clear of the column between the door and the lift", () => {
+    const door = staffed.transitions.find((t) => t.name === "door")!;
+    const lift = staffed.transitions.find((t) => t.name === "elevator")!;
+    for (const tx of [door.tx, lift.tx, lift.tx + 1]) {
+      expect(tx < dx || tx >= dx + sw, `column ${tx}`).toBe(true);
+    }
+  });
+
+  /**
+   * Down in the wide bottom of the room, which is where it was asked to be:
+   * past the bitten-out corner, so it needs the part of the floor that only
+   * the long side of the 7 has.
+   */
+  it("stands in the bottom of the room, and not in the corner that was cut out", () => {
+    expect(dy).toBeGreaterThan(CUTOUT.y - 1);
+    for (let tx = dx; tx < dx + sw; tx++) expect(tx).toBeGreaterThanOrEqual(CUTOUT.width + 1);
+    // A row of floor in front to walk up to it from, inside the bottom wall.
+    expect(dy + sh).toBeLessThan(HEIGHT - 1);
+  });
+
+  /**
+   * The pacing patch is bounds for a sprite's centre and nothing collides a
+   * resident, so every corner of it has to be floor and outside every solid
+   * box — including the counter's own, which they would otherwise walk
+   * through and be drawn on top of.
+   */
+  it("gives whoever works it a patch to pace that is all floor", () => {
+    const paces = HELP_COUNTER.paces;
+    const built = generateMap(staffed, []);
+    const floor = built.layers.find((l) => l.name === "floor");
+    if (!floor || floor.type !== "tilelayer") throw new Error("no floor");
+    const corners = [
+      [paces.x, paces.y],
+      [paces.x + paces.width, paces.y],
+      [paces.x, paces.y + paces.height],
+      [paces.x + paces.width, paces.y + paces.height],
+    ] as const;
+    for (const [x, y] of corners) {
+      const label = `${x},${y}`;
+      const tile = floor.data[Math.floor(y / TILE) * WIDTH + Math.floor(x / TILE)];
+      expect(STANDABLE.includes(tile), label).toBe(true);
+      for (const b of boxes) {
+        const inside = x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height;
+        expect(inside, `${label} inside ${b.x},${b.y}`).toBe(false);
+      }
+    }
+    // Behind the counter, never over it: the lowest a centre may go is the
+    // post, half a sheet above the counter's top edge.
+    expect(paces.y + paces.height).toBe(HELP_COUNTER.post.y);
+    expect(paces.y + paces.height + 48).toBe(box.y);
+  });
+
+  it("is still an open room to walk about in", () => {
+    const built = generateMap(staffed, []);
+    const floor = built.layers.find((l) => l.name === "floor");
+    if (!floor || floor.type !== "tilelayer") throw new Error("no floor");
+    const solid = new Set<number>();
+    for (const b of boxes)
+      for (let ty = b.y / TILE; ty < (b.y + b.height) / TILE; ty++)
+        for (let tx = b.x / TILE; tx < (b.x + b.width) / TILE; tx++) solid.add(ty * WIDTH + tx);
+    const walkable = floor.data.filter(
+      (tile, i) => STANDABLE.includes(tile) && !solid.has(i),
+    ).length;
+    // The room is 20 x 19 with a corner bitten out; the counter takes eight
+    // tiles of it, which should barely dent what is left.
+    expect(walkable).toBeGreaterThan(150);
+  });
+});
+
 describe("paintShell", () => {
   it("puts the wall stack above the first walkable row", () => {
     const grid = paintShell(spec);
@@ -256,7 +390,7 @@ describe("paintShell", () => {
       ["pinball", /pinball/i],
     ] as const) {
       it(`${game}: brings the art, a point the scene knows by name, and something solid`, () => {
-        const withGame = buildOfficeSpec(source, game);
+        const withGame = buildOfficeSpec(source, { game });
         const built = generateMap(withGame, []);
         const poiLayer = built.layers.find((l) => l.name === "pois");
         if (!poiLayer || poiLayer.type !== "objectgroup") throw new Error("no pois");

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DWELL_MS,
   RESIDENTS,
   WANDER_AREAS,
   deskOf,
@@ -19,13 +20,13 @@ import {
   WORLD_WANDER_SPOTS,
 } from "./residents";
 import { roomFromLocation } from "../rooms";
-import { CUTOUT, TILE, WIDTH } from "../map/office";
+import { CUTOUT, HELP_COUNTER, TILE, WIDTH } from "../map/office";
 import { HEIGHT as FLOOR_ROWS, WIDTH as FLOOR_COLS } from "../map/floor";
 import { SHORE_ROW, TENANTS, WORLD_HEIGHT, WORLD_WIDTH, organisationFor } from "./tenants";
 import { worldSolids } from "./scenery";
 import { routeAcross } from "./route";
 import { CAMPUSES } from "./campus";
-import { WORKER_SPRITES } from "../../components/game/config/animations";
+import { FRAME_HEIGHT, WORKER_SPRITES } from "../../components/game/config/animations";
 
 const yoshi = residentById("yoshi")!;
 const mark = residentById("mark")!;
@@ -50,13 +51,21 @@ describe("the residents", () => {
           TENANTS.some((t) => t.slug === r.home),
           r.name,
         ).toBe(true);
+      if (r.station) {
+        // A post is in a real room, and it is instead of a desk, not as well.
+        expect(
+          TENANTS.some((t) => t.slug === r.station!.room),
+          r.name,
+        ).toBe(true);
+        expect(r.home, r.name).toBeNull();
+      }
     }
   });
 
-  it("are Yoshi at Castle Atlantic, Sara and Bud at Sandbox ERP, Yash at Mettara, Steve at Chester, Mark at Homestar", () => {
+  it("are Yoshi at Castle Atlantic, Sara, Bud and Doc at Sandbox ERP, Yash at Mettara, Steve at Chester, Mark at Homestar", () => {
     const names = (org: string) => residentsOf(org).map((r) => r.name);
     expect(names("castle-atlantic")).toEqual(["Yoshi"]);
-    expect(names("sandbox-erp")).toEqual(["Sara", "Bud"]);
+    expect(names("sandbox-erp")).toEqual(["Sara", "Bud", "Doc"]);
     expect(names("mettara")).toEqual(["Yash"]);
     expect(names("chester")).toEqual(["Steve"]);
     expect(names("homestar")).toEqual(["Mark"]);
@@ -158,6 +167,109 @@ describe("wandering mode", () => {
   it("is how Michael lives, and he is the only one so far", () => {
     const wanderers = RESIDENTS.filter((r) => r.wanders);
     expect(wanderers.map((r) => r.name)).toEqual(["Michael"]);
+  });
+});
+
+describe("working a station", () => {
+  const doc = residentById("doc")!;
+
+  it("is Doc behind the counter in Sandbox ERP's lobby, and only him so far", () => {
+    expect(RESIDENTS.filter((r) => r.station).map((r) => r.name)).toEqual(["Doc"]);
+    expect(doc.station).toEqual({
+      room: "sandbox-erp",
+      x: HELP_COUNTER.post.x,
+      y: HELP_COUNTER.post.y,
+      facing: "down",
+      paces: HELP_COUNTER.paces,
+    });
+  });
+
+  it("is two places and no more: the post, and the world map", () => {
+    expect(hauntsOf(doc).map(hauntKey)).toEqual(["station", "room:world"]);
+    expect(roomForHaunt(doc, { kind: "station" })).toBe("sandbox-erp");
+    expect(roomForHaunt(doc, hauntsOf(doc)[1])).toBe("world");
+  });
+
+  /**
+   * A station's patch is the floor round that counter, not the kind of room
+   * it is in, so it comes off the resident — and without one they stand still.
+   */
+  it("paces a patch of its own, and crosses the map by places", () => {
+    expect(wanderArea({ kind: "station" }, doc)).toBe(doc.station!.paces);
+    expect(wanderArea({ kind: "station" })).toBeNull();
+    expect(wanderArea({ kind: "station" }, { ...doc, station: undefined })).toBeNull();
+    // A station is somewhere to pace, never somewhere to plan a route across.
+    expect(wanderSpots({ kind: "station" })).toBeNull();
+    expect(wanderSpots(hauntsOf(doc)[1])).toBe(WORLD_WANDER_SPOTS);
+  });
+
+  /**
+   * Bounds for the sprite's centre, so the bottom of them is the post: half a
+   * sheet lower and he is drawn over his own counter, since a prop sits at
+   * depth 4 and he sits at the height of his feet.
+   */
+  it("paces behind the counter and out past both ends of it, never over it", () => {
+    const paces = doc.station!.paces!;
+    const { dx, dy, sw } = HELP_COUNTER.region;
+    expect(paces.y + paces.height).toBe(HELP_COUNTER.post.y);
+    expect(paces.y + paces.height).toBeLessThan(dy * TILE);
+    expect(paces.x).toBeLessThan(dx * TILE);
+    expect(paces.x + paces.width).toBeGreaterThan((dx + sw) * TILE);
+    // Two rows deep, so it is pacing rather than sliding along a line.
+    expect(paces.height).toBe(TILE);
+  });
+
+  /** Two haunts, so it is always the other one — the day is post, map, post. */
+  it("alternates", () => {
+    const [post, map] = hauntsOf(doc);
+    expect(hauntKey(nextHaunt(doc, post, () => 0))).toBe("room:world");
+    expect(hauntKey(nextHaunt(doc, post, () => 0.999))).toBe("room:world");
+    expect(hauntKey(nextHaunt(doc, map, () => 0.999))).toBe("station");
+  });
+
+  it("gives him no desk upstairs: the counter is where his work is", () => {
+    expect(deskOf(doc)).toBe(-1);
+    expect(residentsAt("sandbox-erp").some((r) => r.id === "doc")).toBe(false);
+    expect(hauntsOf(doc).some((h) => h.kind === "office")).toBe(false);
+  });
+
+  it("keeps him at it longer than he is ever away from it", () => {
+    const [minAt] = DWELL_MS.station;
+    const [, maxAway] = DWELL_MS.room;
+    expect(minAt).toBeGreaterThan(maxAway);
+  });
+
+  /**
+   * Behind the counter and centred on it, with the bottom edge of his sheet
+   * exactly on the counter's top edge — no overlap in either direction.
+   *
+   * Overlapping would read better, and is not available: a prop is drawn at
+   * depth 4 and a presence player at the height of their own feet, so the
+   * counter cannot cover him at any height that does not also cover the
+   * person walking up to it. A gap instead would leave him standing in the
+   * middle of the floor with a desk somewhere in front.
+   */
+  it("puts him behind the counter, touching it, not beside it", () => {
+    const { dx, dy, sw } = HELP_COUNTER.region;
+    const { x, y } = HELP_COUNTER.post;
+    expect(x).toBe((dx + sw / 2) * TILE);
+    expect(y + FRAME_HEIGHT / 2).toBe(dy * TILE);
+  });
+
+  /**
+   * The lobby's own wanderers keep to a band in the middle of the room and
+   * walk through anything in it, so the counter and the pacing have to be
+   * clear of that band altogether — it is below it, in the bottom of the 7.
+   */
+  it("keeps out of the band everyone else wanders, and the cut-out corner", () => {
+    const band = WANDER_AREAS.lobby;
+    const paces = doc.station!.paces!;
+    const { dy } = HELP_COUNTER.region;
+    expect(dy * TILE).toBeGreaterThanOrEqual(band.y + band.height);
+    expect(paces.y).toBeGreaterThanOrEqual(band.y + band.height);
+    // East of the bite taken out of the room, so the floor is really there.
+    expect(paces.x).toBeGreaterThan((CUTOUT.x + CUTOUT.width) * TILE);
+    expect(paces.y).toBeGreaterThanOrEqual(CUTOUT.y * TILE - TILE);
   });
 });
 

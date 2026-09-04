@@ -123,9 +123,87 @@ export const GAMES: Record<Game, { region: Region; poi: PoiSpec }> = {
   },
 };
 
-export function buildOfficeSpec(source: SourceMap, game?: Game, more: Game[] = []): RoomSpec {
+/**
+ * The help desk in a lobby that staffs one.
+ *
+ * Four tiles of counter with somebody's work all over it, drawn by the scene
+ * from public/sprites/help_desk_counter_192x96.png; the region here is only
+ * its footprint, which becomes the collision box. Both its rows are solid, so
+ * nobody walks round the front of it into the wall.
+ *
+ * It stands down in the wide bottom of the room — the part that carries on
+ * past the bitten-out corner (see CUTOUT), where the floor runs from column 7
+ * to the far wall and nothing else is. One row of floor is left in front of it
+ * to walk up to it from, and two rows behind for whoever works it to pace.
+ *
+ * Its point of interest is that floor in front. The name is deliberately not
+ * "Help desk": that is the support-queue board on an Operations floor, which
+ * the scene finds by exactly that name.
+ */
+const COUNTER_COLUMN = 9;
+const COUNTER_ROW = 15;
+
+export const HELP_COUNTER = {
+  region: {
+    label: "help desk counter",
+    sx: 0,
+    sy: 0,
+    sw: 4,
+    sh: 2,
+    dx: COUNTER_COLUMN,
+    dy: COUNTER_ROW,
+    layers: [],
+  } satisfies Region,
+  poi: {
+    name: "Help desk counter",
+    tx: COUNTER_COLUMN + 1,
+    ty: COUNTER_ROW + 2,
+    facing: "up",
+  } satisfies PoiSpec,
+  /**
+   * Where whoever works it stands when they are still: centred on the counter,
+   * on the floor row behind it, with the bottom edge of their 96px sheet
+   * meeting the counter's top edge — so the desk and everything on it is
+   * between them and the room without a pixel of overlap.
+   *
+   * Behind rather than partly hidden by it, which would read better, because
+   * the room's depths do not allow the second thing. A prop is drawn at depth
+   * 4 and a presence player at the height of their own feet, several hundred
+   * — so a counter cannot cover anybody standing at it, whatever height it is
+   * given: raise it above the residents and it covers the person walking up
+   * to it instead, who is on depth 5 and lower down the screen.
+   */
+  post: { x: (COUNTER_COLUMN + 2) * TILE, y: COUNTER_ROW * TILE - 48 },
+  /**
+   * The floor they pace, as bounds for the sprite's centre.
+   *
+   * Two rows deep and a little wider than the counter, so they work their way
+   * along it and out past either end. The bottom of the band is the post, and
+   * it goes no lower for the same reason the post is where it is: a centre
+   * half a tile further down puts the sheet through the counter, and a
+   * resident is drawn over it rather than behind it.
+   */
+  paces: {
+    x: (COUNTER_COLUMN - 0.5) * TILE,
+    y: COUNTER_ROW * TILE - 96,
+    width: 5 * TILE,
+    height: 48,
+  },
+};
+
+/** What a lobby holds beyond its walls, its board and the ways out. */
+export interface OfficeOptions {
+  /** The game in the top right corner. */
+  game?: Game;
+  /** Any more games, beside the first. */
+  also?: Game[];
+  /** A staffed help desk out on the floor. */
+  helpDesk?: boolean;
+}
+
+export function buildOfficeSpec(source: SourceMap, options: OfficeOptions = {}): RoomSpec {
   const picked = harvest(source, REGIONS);
-  const games = game ? [game, ...more] : [];
+  const games = options.game ? [options.game, ...(options.also ?? [])] : [];
   // Harvested apart from the decor: the decor's old collision boxes are
   // deliberately left behind (the room is open floor), but the games' are
   // wanted — and if the old map drew none, the whole of each is solid.
@@ -143,9 +221,13 @@ export function buildOfficeSpec(source: SourceMap, game?: Game, more: Game[] = [
     // No agent seats: an open room. The only interaction point is the game
     // in the corner, when a lobby has one; the wall collisions the generator
     // adds and the game's own boxes are the only solid things in it.
-    pois: [WHITEBOARD.poi, ...games.map((g) => GAMES[g].poi)],
+    pois: [
+      WHITEBOARD.poi,
+      ...games.map((g) => GAMES[g].poi),
+      ...(options.helpDesk ? [HELP_COUNTER.poi] : []),
+    ],
     spawns: [{ tx: PLAYER_START.tx, ty: PLAYER_START.ty, facing: PLAYER_START.facing }],
-    collisions: cornerBoxes,
+    collisions: [...cornerBoxes, ...(options.helpDesk ? [regionBox(HELP_COUNTER.region)] : [])],
     cutout: CUTOUT,
     transitions: [
       // The door leads outside, to the world map. The lift is still a stub —

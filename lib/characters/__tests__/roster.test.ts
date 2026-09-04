@@ -38,6 +38,8 @@ describe("the library roster", () => {
    */
   it("offers the premade cast and the boss before the built likenesses", () => {
     const names = LIBRARY_CHARACTERS.map((c) => c.name);
+    // Doc's sheet is here on disk but not on this list: he became a resident,
+    // and a resident's look is reserved to them.
     expect(names).toEqual(["Alice", "Bob", "Carol", "Dave", "The Boss", "Coop", "Rob"]);
   });
 
