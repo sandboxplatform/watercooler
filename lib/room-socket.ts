@@ -119,6 +119,22 @@ export function onRoomOpen(handler: OpenHandler): () => void {
   return () => openHandlers.delete(handler);
 }
 
+/**
+ * Stop, and stay stopped.
+ *
+ * For a close the server asked for and meant: reconnecting would undo it.
+ * The ordinary close path comes back after a couple of seconds, which is
+ * right for a dropped network and wrong for being told the same person has
+ * arrived somewhere else.
+ */
+export function stopRoomSocket(): void {
+  disposed = true;
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  socket?.close();
+  socket = null;
+}
+
 /** Send a message if the socket is up. Returns whether it went out. */
 export function sendRoom(message: ClientMessage): boolean {
   if (!socket || socket.readyState !== WebSocket.OPEN) return false;

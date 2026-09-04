@@ -199,8 +199,12 @@ export interface OnlineMessage {
 
 export interface RejectedMessage {
   type: "rejected";
-  /** `full` — the room is at its human limit. `private` — not yours to enter. */
-  reason: "full" | "private";
+  /**
+   * `full` — the room is at its human limit. `private` — not yours to
+   * enter. `elsewhere` — you have arrived again somewhere else, and this
+   * connection is the one being let go.
+   */
+  reason: "full" | "private" | "elsewhere";
   /** Only meaningful for `full`. */
   capacity?: number;
 }

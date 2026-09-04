@@ -290,6 +290,36 @@ This is also why `server.ts` passes `port` to `next()` — Next builds each requ
 absolute URL from what it is told there, not from the socket, so without it sign-in
 callbacks point at 3000 whatever port the server is actually on.
 
+### Presence
+
+A room's people live in a `PresenceHub`, keyed by connection rather than by
+person: one browser tab is one player. Two rules keep that from showing a
+person twice.
+
+**One person, one place.** A personal code names exactly one person, so a
+second connection claiming `coop` or `rob` is that same someone arriving
+again. The earlier connection is dropped from the room and told
+`rejected: "elsewhere"`, and `stopRoomSocket` keeps it from reconnecting —
+without that last part two tabs trade the place back and forth for ever. The
+shared code is exempt: many people hold it, so two visitors are two people.
+
+**A dead socket is noticed.** The heartbeat pings every `HEARTBEAT_MS` and
+now reads the pongs; a connection that misses one is terminated. It used to
+ping and ignore the replies, so an abandoned socket counted as present until
+it went `IDLE_TIMEOUT_MS` — fifteen seconds — without speaking. The client
+sends nothing on a timer, only movement, so that clock is the only thing
+that was catching it.
+
+Both exist because of a bug that only appeared in production: behind
+Railway's proxy the browser navigating away does not promptly close the
+socket at the server, so walking out of a building meant meeting yourself at
+the door for fifteen seconds. It does not reproduce against a local server,
+where the close is immediate — `lib/server/__tests__/presence-identity.test.ts`
+drives real sockets against a real server to hold the rule down.
+
+The client closes on `pagehide` too, guarded on `persisted` so a hidden tab
+or a backgrounded phone is not taken out of the room for looking away.
+
 ### Voice chat
 
 Audio goes browser to browser over WebRTC (`lib/voice/`). The room socket carries

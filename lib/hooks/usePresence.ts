@@ -2,7 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import { gameEvents } from "../events";
-import { acquireRoomSocket, onRoomMessage, onRoomOpen, sendRoom } from "../room-socket";
+import {
+  acquireRoomSocket,
+  onRoomMessage,
+  onRoomOpen,
+  sendRoom,
+  stopRoomSocket,
+} from "../room-socket";
 import { currentRoom } from "../room-client";
 import { createLogger } from "../logger";
 import { loadPlayerName } from "../persistence";
@@ -90,6 +96,14 @@ export function usePresence() {
           break;
         case "rejected":
           joinedRef.current = false;
+          if (message.reason === "elsewhere") {
+            // The same person is in a room on another connection, and this
+            // is the one being let go. Coming back would take the place
+            // straight off them, and the two would trade it for ever.
+            log.warn("we are in the room on another connection; standing down");
+            stopRoomSocket();
+            break;
+          }
           if (message.reason === "private") {
             // The lift already said so in the room; nothing to show here.
             log.warn("that floor is not ours to be on");

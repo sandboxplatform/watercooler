@@ -151,6 +151,23 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   const roomOf = new Map<string, string>();
   /** Whose microphone is on, by connection: it stays on through a door. */
   const micOf = new Map<string, boolean>();
+  /**
+   * What the door let each connection in as, taken from its cookie.
+   *
+   * Kept per connection so a join can look for the same person already in
+   * the room, which the connection itself cannot be asked about.
+   */
+  const identityByConnection = new Map<string, AccessIdentity>();
+  /**
+   * Connections that have been pinged and have not answered.
+   *
+   * The server pinged before and never read the replies, so a socket the
+   * far end had abandoned counted as present until it went fifteen seconds
+   * without speaking. A proxy between browser and server makes that
+   * routine: the browser navigates away, the proxy holds the upstream open,
+   * and the person is left standing in the room they just walked out of.
+   */
+  const owesPong = new Set<string>();
 
   (globalThis as Record<symbol, unknown>)[BROADCAST_KEY] = ((slug, message) =>
     broadcast(slug, message)) satisfies RoomBroadcast;
@@ -236,6 +253,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   const drop = (id: string) => {
     const slug = roomOf.get(id);
     roomOf.delete(id);
+    owesPong.delete(id);
     if (!slug) return;
 
     const room = rooms.get(slug);
@@ -370,9 +388,18 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   // only a genuinely dead connection is swept.
   const heartbeat = setInterval(() => {
     for (const room of rooms.values()) {
-      for (const [id, socket] of room.sockets) {
+      // A copy, because dropping a dead one edits the map underneath.
+      for (const [id, socket] of [...room.sockets]) {
         if (socket.readyState !== WebSocket.OPEN) continue;
+        if (owesPong.has(id)) {
+          // Asked last time round and never answered: nobody is there.
+          log.info("a connection stopped answering; taking it out of the room");
+          drop(id);
+          socket.terminate();
+          continue;
+        }
         try {
+          owesPong.add(id);
           socket.ping();
         } catch {
           drop(id);
@@ -424,6 +451,8 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
     wss.handleUpgrade(req, socket, head, (ws) => {
       const id = randomUUID();
+      identityByConnection.set(id, identity);
+      ws.on("pong", () => owesPong.delete(id));
       const lookFor = (requested: unknown, fallback: string) => {
         const wanted = typeof requested === "string" ? requested : fallback;
         return permittedLook(identity, wanted, fallback);
@@ -444,6 +473,27 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           // and the floor's page turns them away, but neither is the gate:
           // the browser asks for whatever room it likes over this socket, so
           // the answer is checked against the cookie the way a look is.
+          // One person, one place. A personal code names exactly one
+          // person, so a second connection claiming it is that same
+          // someone arriving again — most often because the last page's
+          // socket outlived the page, which a proxy between browser and
+          // server makes routine. The earlier one is let go, and told why
+          // so it does not simply reconnect and take the place back.
+          //
+          // Only for a personal identity: the shared code is many people,
+          // so two visitors are two visitors and both belong here.
+          if (identity !== "visitor") {
+            const here = rooms.get(slug);
+            for (const [other, socket] of [...(here?.sockets ?? [])]) {
+              if (other === id) continue;
+              if (identityByConnection.get(other) !== identity) continue;
+              log.info(`${identity} arrived again; letting the older connection go`);
+              send(socket, { type: "rejected", reason: "elsewhere" });
+              drop(other);
+              socket.close();
+            }
+          }
+
           if (!mayEnterRoom(slug, identity)) {
             log.warn(`refused a join to "${slug}": not ${identity}'s floor`);
             send(ws, { type: "rejected", reason: "private" });
@@ -658,11 +708,13 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
       ws.on("close", () => {
         micOf.delete(id);
+        identityByConnection.delete(id);
         drop(id);
       });
       ws.on("error", (err) => {
         log.warn("socket error:", err.message);
         micOf.delete(id);
+        identityByConnection.delete(id);
         drop(id);
       });
     });
