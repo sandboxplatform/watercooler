@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { SPRITE_KEY, MOVE_SPEED, ALL_ANIMS, FRAME_WIDTH, FRAME_HEIGHT } from "../config/animations";
 import { ensureAnims } from "../utils/sheets";
 import { ChatBubble } from "./ChatBubble";
+import { facingFor } from "@/lib/facing";
 
 type Direction = "down" | "up" | "left" | "right";
 
@@ -170,11 +171,10 @@ export class Player {
     const moving = vx !== 0 || vy !== 0;
 
     if (moving) {
-      // Prefer horizontal when diagonal
-      if (vx < 0) this.facing = "left";
-      else if (vx > 0) this.facing = "right";
-      else if (vy < 0) this.facing = "up";
-      else if (vy > 0) this.facing = "down";
+      // Whichever axis they are doing more of; an exact diagonal goes
+      // sideways. Standing still leaves the facing as it was, so stopping
+      // shows the way they were last walking. See lib/facing.ts.
+      this.facing = facingFor(vx, vy) ?? this.facing;
 
       const walkKey = this.animKey("walk");
       if (this.sprite.anims.currentAnim?.key !== walkKey) {

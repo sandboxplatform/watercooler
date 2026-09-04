@@ -10,6 +10,7 @@ import {
   BODY_OFFSET_RATIO_X,
   BODY_OFFSET_RATIO_Y,
 } from "@/lib/constants";
+import { facingFor } from "@/lib/facing";
 import type { WorkerCtx } from "./types";
 
 const WORKER_SPEED = MOVE_SPEED * WORKER_SPEED_FACTOR;
@@ -38,13 +39,7 @@ export function isAtHomePose(ctx: WorkerCtx) {
 
 export function faceToward(ctx: WorkerCtx, tx: number, ty: number) {
   const nav = navPoint(ctx);
-  const dx = tx - nav.x;
-  const dy = ty - nav.y;
-  if (Math.abs(dx) > Math.abs(dy)) {
-    ctx.facing = dx > 0 ? "right" : "left";
-  } else {
-    ctx.facing = dy > 0 ? "down" : "up";
-  }
+  ctx.facing = facingFor(tx - nav.x, ty - nav.y) ?? ctx.facing;
 }
 
 export function resetToHomePose(ctx: WorkerCtx) {
