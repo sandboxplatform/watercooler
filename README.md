@@ -55,6 +55,23 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Access
+
+The world is private behind one shared code. Set `ACCESS_CODE` to a long random
+value — a GUID is ideal — and share it with the people you want in:
+
+```bash
+ACCESS_CODE=$(node -e "console.log(crypto.randomUUID())")
+```
+
+Visitors enter it once at `/unlock` and get a signed cookie lasting seven days.
+Rotating `ACCESS_CODE` invalidates every cookie already issued, which is how you
+lock everyone back out. Left unset, `pnpm dev` runs open with a warning, while a
+production server **refuses to start** rather than sit exposed.
+
+One code for everyone means there is no per-person revocation and no record of who
+came in. For that, configure sign-in (below) — it layers on top.
+
 ## Agent providers
 
 Agents can be executed several ways, selected with the `AGENT_PROVIDER` env var:

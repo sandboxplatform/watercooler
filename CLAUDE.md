@@ -153,6 +153,37 @@ fallback that mounts it unauthenticated.
 There is also `/api/internal/dispatch` for the MCP dispatch tool: localhost-only by
 remote address, plus an `x-dispatch-secret` header.
 
+### The door
+
+`ACCESS_CODE` is one shared code that opens the whole world. It is exchanged once
+at `/unlock` for a signed cookie (`lib/server/access.ts`), so the code itself never
+travels in a URL, where history, proxies and access logs would all keep a copy. The
+cookie is an HMAC over its own expiry keyed by the code, so there is no session
+store — and **rotating `ACCESS_CODE` invalidates every cookie already issued**,
+which is the entire revocation story.
+
+The gate lives in `server.ts`, not in Next middleware, because **middleware never
+sees a WebSocket upgrade**: both sockets attach to the Node server directly, so a
+middleware-only gate would leave presence and agent dispatch wide open. Every
+surface is covered in one place — pages, API routes, and both upgrades
+(`lib/cli-bridge.ts`, `lib/server/presence-socket.ts` each call `isAuthorized`).
+`checkOrigin` beside it is **not** authentication: it only constrains browsers, and
+any other client can send whatever `Origin` it likes.
+
+Left open by design: `/unlock` and `/api/unlock`, `/api/health` (the host's
+liveness probe), `/api/auth/` (so sign-in can work), `/_next/` (without which the
+unlock page cannot render). `/api/mettara/tools` and `/api/internal/dispatch` are
+answered _before_ the gate — they are machine-to-machine and carry stronger
+authentication of their own.
+
+A production server **refuses to start** without `ACCESS_CODE`: a deployment that
+would be open to anyone who finds the URL should fail loudly, not quietly. In dev
+it only warns. Unlock attempts are rate limited to 10 per 15 minutes per address,
+in memory — so the count resets on restart and is per-instance, not shared.
+
+Know the limits: one code for everyone means no per-person revocation and no
+record of who came in. Sign-in below is the finer-grained answer and layers on top.
+
 ### Sign-in
 
 By default a person is a browser profile — name, home building and character in
@@ -303,20 +334,21 @@ From `CONTRIBUTING.md`, and worth holding to when adding anything:
 
 ## Environment variables
 
-| Variable                                                                 | Default                                 | Purpose                                     |
-| ------------------------------------------------------------------------ | --------------------------------------- | ------------------------------------------- |
-| `AGENT_PROVIDER`                                                         | `claude`                                | Which provider runs agents                  |
-| `PORT` / `HOSTNAME`                                                      | `3000` / `localhost`                    | Server bind; also builds auth callback URLs |
-| `ANTHROPIC_API_KEY`                                                      | —                                       | Required by `claude-api`                    |
-| `CLAUDE_BIN` / `CLAUDE_PERMISSION_MODE` / `CLAUDE_ALLOWED_TOOLS`         | — / `acceptEdits` / —                   | Claude CLI tuning                           |
-| `AGENT_TOWN_MODEL`                                                       | CLI default                             | `opus` \| `sonnet` \| `haiku`               |
-| `AGENT_MAX_CONCURRENT` / `AGENT_RUN_TIMEOUT_MS` / `ROOM_SPEND_LIMIT_USD` | 4 / 180000 / 50                         | Run limits                                  |
-| `AGENT_WORKSPACE_ROOT`                                                   | `.agent-workspaces`                     | Where seat sandboxes go                     |
-| `ERP_DB_PATH` / `UPLOADS_DIR`                                            | `.data/erp.sqlite` / beside the room db | Storage paths                               |
-| `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                             | —                                       | Required by the `mettara` provider          |
-| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`              | —                                       | Auth.js sign-in; off when absent            |
-| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT      |
-| `CSP_CONNECT_SRC`                                                        | —                                       | Extra `connect-src` origins                 |
+| Variable                                                                 | Default                                 | Purpose                                                             |
+| ------------------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------- |
+| `ACCESS_CODE`                                                            | —                                       | Shared code for `/unlock`; refuses to boot without it in production |
+| `AGENT_PROVIDER`                                                         | `claude`                                | Which provider runs agents                                          |
+| `PORT` / `HOSTNAME`                                                      | `3000` / `localhost`                    | Server bind; also builds auth callback URLs                         |
+| `ANTHROPIC_API_KEY`                                                      | —                                       | Required by `claude-api`                                            |
+| `CLAUDE_BIN` / `CLAUDE_PERMISSION_MODE` / `CLAUDE_ALLOWED_TOOLS`         | — / `acceptEdits` / —                   | Claude CLI tuning                                                   |
+| `AGENT_TOWN_MODEL`                                                       | CLI default                             | `opus` \| `sonnet` \| `haiku`                                       |
+| `AGENT_MAX_CONCURRENT` / `AGENT_RUN_TIMEOUT_MS` / `ROOM_SPEND_LIMIT_USD` | 4 / 180000 / 50                         | Run limits                                                          |
+| `AGENT_WORKSPACE_ROOT`                                                   | `.agent-workspaces`                     | Where seat sandboxes go                                             |
+| `ERP_DB_PATH` / `UPLOADS_DIR`                                            | `.data/erp.sqlite` / beside the room db | Storage paths                                                       |
+| `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                             | —                                       | Required by the `mettara` provider                                  |
+| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`              | —                                       | Auth.js sign-in; off when absent                                    |
+| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT                              |
+| `CSP_CONNECT_SRC`                                                        | —                                       | Extra `connect-src` origins                                         |
 
 `README.md` covers the same ground as user-facing narrative, with setup walkthroughs
 and the feature tour (arcade, island, controller, playing together). Change behaviour

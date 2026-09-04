@@ -18,6 +18,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { createLogger } from "./logger";
 import { attachmentNote, attachmentRefs } from "./attachments";
 import { resolveUpload, type StoredUpload } from "./server/uploads";
+import { isAuthorized } from "./server/access";
 import { ROOM_SPEND_LIMIT_USD, getRoomStore } from "./server/room-store";
 import { onRunCompleted, type CompletedRun } from "./server/achievement-rules";
 import { humansInRoom, recordActivity } from "./server/presence-socket";
@@ -1143,6 +1144,15 @@ export function attachCliBridge(
     const requestPath = (req.url ?? "").split("?")[0];
     if (requestPath !== path) return;
     if (!checkOrigin(req, socket)) return;
+    // The origin check above only constrains browsers — any other client can
+    // send whatever Origin it likes. This socket can dispatch work and spend
+    // money, so it needs the door's cookie like everything else.
+    if (!isAuthorized(req)) {
+      log.warn("Rejected WS upgrade: no valid access cookie");
+      socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+      socket.destroy();
+      return;
+    }
 
     wss.handleUpgrade(req, socket, head, (ws) => {
       const state: ClientState = {

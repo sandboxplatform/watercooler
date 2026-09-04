@@ -15,6 +15,7 @@ import type { Duplex } from "stream";
 import { WebSocket, WebSocketServer } from "ws";
 import { PresenceHub } from "./presence-hub";
 import { getRoomStore } from "./room-store";
+import { isAuthorized } from "./access";
 import { normaliseRoomSlug } from "../rooms";
 import { achievementFor, type EarnedAchievement } from "../achievements";
 import type { ActivityEntry } from "../activity";
@@ -390,6 +391,14 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     if (req.url !== path) return;
     if (!checkOrigin(req, socket)) return;
+    // Origin only binds browsers; this socket carries everyone's position,
+    // speech and voice signalling, so it needs the door's cookie too.
+    if (!isAuthorized(req)) {
+      log.warn("rejected upgrade: no valid access cookie");
+      socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+      socket.destroy();
+      return;
+    }
 
     wss.handleUpgrade(req, socket, head, (ws) => {
       const id = randomUUID();

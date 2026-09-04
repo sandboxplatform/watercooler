@@ -31,6 +31,19 @@ import { DEFAULT_ROOM_SLUG } from "./lib/rooms";
 import { readMettaraConfig } from "./lib/mettara/config";
 import { buildOfficeTools } from "./lib/mettara/office-tools";
 import { createToolsHandler, TOOLS_PATH } from "./lib/mettara/webhook";
+import {
+  accessCookieHeader,
+  clearFailures,
+  clientIp,
+  codeMatches,
+  gateEnabled,
+  isAuthorized,
+  isOpenPath,
+  mintToken,
+  rateLimited,
+  recordFailure,
+  retryAfterSeconds,
+} from "./lib/server/access";
 
 const log = createLogger("Server");
 
@@ -53,6 +66,20 @@ const CLI_PROVIDER = isCliProviderId(AGENT_PROVIDER)
 const DEFAULT_PROVIDER = CLI_PROVIDER.id !== "mettara" ? CLI_PROVIDER : getCliProvider("claude");
 // Expose provider to Next.js client code (compiled on-demand in dev)
 process.env.NEXT_PUBLIC_AGENT_PROVIDER = AGENT_PROVIDER;
+
+// A production deployment is reachable by anyone who finds the URL, so it
+// must not start wide open. Failing here is loud and cheap; discovering it
+// later, from the outside, is neither.
+if (!dev && !gateEnabled()) {
+  log.error(
+    "ACCESS_CODE is not set. Refusing to start a production server with no access gate — " +
+      "set ACCESS_CODE to a long random value (a GUID is fine) and restart.",
+  );
+  process.exit(1);
+}
+if (dev && !gateEnabled()) {
+  log.warn("ACCESS_CODE is not set: the world is open to anyone who can reach this port.");
+}
 
 // Next builds each request's absolute URL from what it is told here, not
 // from the socket: without the port, sign-in callbacks would point at 3000
@@ -113,6 +140,104 @@ function handleDispatch(req: IncomingMessage, res: ServerResponse) {
   });
 }
 
+// ── The access gate ──
+
+/**
+ * Exchange the shared code for a cookie.
+ *
+ * Handled here rather than as a Next route so that the attempt counters live
+ * in one module instance: a route handler is bundled into Next's own module
+ * graph, which would give it a second, separate copy of them.
+ */
+function handleUnlock(req: IncomingMessage, res: ServerResponse) {
+  if (req.method !== "POST") {
+    res.writeHead(405, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Method not allowed" }));
+    return;
+  }
+
+  const ip = clientIp(req);
+  if (rateLimited(ip)) {
+    const retry = retryAfterSeconds(ip);
+    log.warn(`unlock: too many attempts from ${ip}`);
+    res.writeHead(429, { "Content-Type": "application/json", "Retry-After": String(retry) });
+    res.end(
+      JSON.stringify({ error: `Too many attempts. Try again in ${Math.ceil(retry / 60)} min.` }),
+    );
+    return;
+  }
+
+  let body = "";
+  let tooBig = false;
+  req.on("data", (chunk: Buffer) => {
+    body += chunk.toString();
+    // Nothing legitimate is large, and an unbounded body is a free denial of service.
+    if (body.length > 4096) {
+      tooBig = true;
+      req.destroy();
+    }
+  });
+  req.on("end", () => {
+    if (tooBig) return;
+    let submitted = "";
+    try {
+      submitted = String((JSON.parse(body) as { code?: unknown }).code ?? "");
+    } catch {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid JSON body" }));
+      return;
+    }
+
+    if (!codeMatches(submitted)) {
+      recordFailure(ip);
+      log.warn(`unlock: rejected code from ${ip}`);
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "That code was not accepted." }));
+      return;
+    }
+
+    const token = mintToken();
+    if (!token) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "No access code is configured." }));
+      return;
+    }
+
+    clearFailures(ip);
+    log.info(`unlock: let ${ip} in`);
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Set-Cookie": accessCookieHeader(token, !dev),
+    });
+    res.end(JSON.stringify({ ok: true }));
+  });
+}
+
+/**
+ * Turn away anything without a valid cookie. Returns true when the request
+ * has been answered and must go no further.
+ *
+ * A navigation gets the unlock page and is sent on afterwards; anything else
+ * — fetches, uploads, the API — gets a flat 401, because redirecting an XHR
+ * to an HTML page only produces a confusing parse error at the other end.
+ */
+function blockedByGate(req: IncomingMessage, res: ServerResponse): boolean {
+  const pathname = (req.url ?? "/").split("?")[0];
+  if (isOpenPath(pathname) || isAuthorized(req)) return false;
+
+  const wantsHtml = (req.headers.accept ?? "").includes("text/html");
+  if (wantsHtml) {
+    const next = encodeURIComponent(req.url ?? "/");
+    res.writeHead(302, { Location: `/unlock?next=${next}`, "Cache-Control": "no-store" });
+    res.end();
+    return true;
+  }
+
+  res.writeHead(401, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+  res.end(JSON.stringify({ error: "Locked. Enter the access code at /unlock." }));
+  return true;
+}
+
 // ── Inbound tool endpoint for Mettara AIs ──
 
 /**
@@ -170,7 +295,9 @@ app
     ensureErpData();
     const mettaraTools = buildMettaraTools();
     const server = createServer((req, res) => {
-      // Intercept internal API routes before Next.js
+      // Intercept internal API routes before Next.js. These two authenticate
+      // themselves — a localhost-plus-secret check and an HMAC signature —
+      // and are not browser traffic, so the cookie gate does not apply.
       if (req.url === "/api/internal/dispatch") {
         handleDispatch(req, res);
         return;
@@ -179,6 +306,12 @@ app
         void mettaraTools(req, res);
         return;
       }
+      if ((req.url ?? "").split("?")[0] === "/api/unlock") {
+        handleUnlock(req, res);
+        return;
+      }
+      // Everything below this line needs the cookie: pages, API routes, uploads.
+      if (blockedByGate(req, res)) return;
       handle(req, res);
     });
 
