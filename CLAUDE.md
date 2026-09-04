@@ -404,16 +404,43 @@ Michael, a chicken in a necktie, is the first and so far only wanderer.
 
 Two files per character in `public/characters/examples/`: `<Name>.png` is the
 profile picture and `<Name>_sprite.png` is the sheet, which
-`scripts/build-character.ts <Name>` cuts into
+`scripts/build-character.ts <Name>` installs as
 `public/characters/<Name>_48x48.png`. Capitalise both — the lookup is by name,
 and a lowercase file only resolves on Windows.
 
-The sheet wants **three rows** (down, up, right; left is mirrored) of three
-idle then six walk frames, on a **flat background** — the backdrop is found from
-the four corners and keyed out globally, so a checkerboard defeats it and the
-rows then read as one. Prefer a dark backdrop: keying is deliberately tight
-(tolerance 12) to spare dark outlines, so on white the lossy edge fringe
-survives as a pale halo that shimmers frame to frame.
+**Art is expected to arrive finished, in the game's format.** Draw over
+`public/characters/Character_Template_48x48.png`, which is a sheet of exactly
+it:
+
+```
+2688 x 1968, a grid of 48 x 96 frames, 56 columns
+row 1  idle, row 2  walk
+within a row, six frames each of right, up, left, down
+transparent background, or one flat colour throughout
+```
+
+A sheet in that format is **used as it came** — a conforming sheet comes out
+byte-for-byte identical to what went in, and `exact.test.ts` holds every
+shipped sheet to that. The only things done to it cannot change how it looks:
+clearing a flat backdrop when the four corners agree on one, and padding
+transparent rows below the art so every sheet on disk is one size. Then it
+reports how many of the forty-eight animated frames are empty, which the game
+would otherwise show as the character blinking out for a tenth of a second.
+
+Anything else is **refused**, with the measurements and the specification side
+by side. That refusal is the feature. Interpreting a loose sheet — finding the
+rows, cutting the frames apart, scaling to a common height, quantising to
+sixteen colours, then scrubbing the compression noise off the result and
+drawing an outline round what survived — is what this used to do, and every
+one of those steps is a guess that shows in the sprite. The despeckle,
+de-fringe, crumb and outline passes that existed to hide those guesses are
+gone. **The fix for art that comes out badly is better art, not a longer
+pipeline.**
+
+`--loose` runs the old interpretation for a sheet that genuinely cannot be
+re-delivered, minus the scrubbing, so what it produces looks like what it was
+given. `/api/characters/ingest` is the same escape hatch inside the app: it
+tries the exact path first and falls back to interpreting an upload.
 
 A sprite **key** in `WORKER_SPRITES` outlives its filename — seats and saved
 profiles are stored against it, so rename the file and the `path`, never the

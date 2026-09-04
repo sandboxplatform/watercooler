@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { decodePng } from "../png";
 import { blankSheet } from "../ingest";
@@ -110,4 +110,44 @@ describe("slotName", () => {
     expect(slotName(1, 0)).toBe("idle right #1");
     expect(slotName(2, 17)).toBe("walk left #6");
   });
+});
+
+/**
+ * The art we ship, held to the format it is supposed to arrive in.
+ *
+ * This is the promise that lets the build script do nothing to a sheet but
+ * write it out. If one of these ever stops being an exact sheet, the honest
+ * answer is to fix that sheet — not to put a pipeline back in front of it.
+ */
+describe("the shipped sheets", () => {
+  const dir = join(process.cwd(), "public/characters");
+  const sheets = readdirSync(dir).filter((f) => f.endsWith("_48x48.png"));
+
+  it("is not an empty list, or this suite proves nothing", () => {
+    expect(sheets.length).toBeGreaterThan(5);
+  });
+
+  for (const file of sheets) {
+    describe(file, () => {
+      const image = decodePng(readFileSync(join(dir, file)));
+
+      it("is in the game's format", () => {
+        expect(isExactSheet(image)).toBe(true);
+        expect(image.width).toBe(SHEET_W);
+        expect(image.height).toBe(SHEET_H);
+      });
+
+      it("has every animated frame drawn", () => {
+        expect(emptySlots(image)).toEqual([]);
+      });
+
+      /** Nothing to clear and nothing to pad: it goes to disk as it came. */
+      it("needs nothing done to it", () => {
+        const { sheet, backdropRemoved, padded } = normaliseExactSheet(image);
+        expect(backdropRemoved).toBe(false);
+        expect(padded).toBe(false);
+        expect(sheet.data).toBe(image.data);
+      });
+    });
+  }
 });
