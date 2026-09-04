@@ -59,6 +59,8 @@ export interface DeskTicket {
 
 export interface DeskColumn {
   name: string;
+  /** Zoho's coarse type for the status: "Open", "On Hold" or "Closed". */
+  statusType: string;
   /** Whether Zoho counts this status as closed, which sends it to the end. */
   closed: boolean;
   tickets: DeskTicket[];
@@ -108,15 +110,22 @@ export function personName(person: RawPerson | null | undefined): string | null 
 }
 
 /**
- * The order statuses hang in: the ones needing attention first, whatever a
- * given Desk calls them, then anything custom, then the closed ones.
+ * The order statuses hang in.
+ *
+ * Every desk names its own statuses — "New", "Queue", "Under
+ * Consideration" — so the coarse type Zoho guarantees decides first: what
+ * is open, then what is waiting, then what is done. Within a type, the
+ * familiar names lead and the rest fall in alphabetically, so the order is
+ * the same every time the wall is read.
  */
-const STATUS_ORDER = ["open", "on hold", "escalated", "in progress"];
+const STATUS_TYPE_ORDER = ["open", "on hold", "closed"];
+const KNOWN_FIRST = ["new", "open", "queue", "in progress", "escalated"];
 
-function statusRank(name: string, closed: boolean): number {
-  if (closed) return 100;
-  const known = STATUS_ORDER.indexOf(name.trim().toLowerCase());
-  return known === -1 ? 50 : known;
+export function statusRank(name: string, statusType: string): number {
+  const type = STATUS_TYPE_ORDER.indexOf(statusType.trim().toLowerCase());
+  const band = (type === -1 ? 1 : type) * 100;
+  const known = KNOWN_FIRST.indexOf(name.trim().toLowerCase());
+  return band + (known === -1 ? 50 : known);
 }
 
 function toTicket(raw: RawTicket, now: number): DeskTicket {
@@ -154,7 +163,12 @@ export function toDeskView(raw: unknown, now: number = Date.now()): DeskView {
   for (const item of tickets) {
     const ticket = toTicket(item, now);
     const closed = (item.statusType ?? "").trim().toLowerCase() === "closed";
-    const column = columns.get(ticket.status) ?? { name: ticket.status, closed, tickets: [] };
+    const column = columns.get(ticket.status) ?? {
+      name: ticket.status,
+      statusType: item.statusType?.trim() || "Open",
+      closed,
+      tickets: [],
+    };
     column.tickets.push(ticket);
     columns.set(ticket.status, column);
     if (!closed) openCount += 1;
@@ -162,7 +176,7 @@ export function toDeskView(raw: unknown, now: number = Date.now()): DeskView {
   }
 
   const ordered = [...columns.values()].sort((a, b) => {
-    const rank = statusRank(a.name, a.closed) - statusRank(b.name, b.closed);
+    const rank = statusRank(a.name, a.statusType) - statusRank(b.name, b.statusType);
     return rank !== 0 ? rank : a.name.localeCompare(b.name);
   });
 

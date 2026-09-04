@@ -55,14 +55,41 @@ describe("a queue as the wall shows it", () => {
       priority: "Low",
       dueDate: "2026-08-01T09:00:00.000Z",
     },
-    { id: "4", ticketNumber: 1041, subject: "Quote wrong", status: "On Hold", statusType: "Open" },
+    {
+      id: "4",
+      ticketNumber: 1041,
+      subject: "Quote wrong",
+      status: "On Hold",
+      statusType: "On Hold",
+    },
     { id: "5", ticketNumber: 1042, subject: "Site down", status: "Escalated", statusType: "Open" },
   ];
 
   const view = toDeskView(raw, NOW);
 
-  it("puts what needs attention first and the closed ones last", () => {
-    expect(view.columns.map((c) => c.name)).toEqual(["Open", "On Hold", "Escalated", "Closed"]);
+  it("puts open work first, then what is parked, then the closed ones", () => {
+    expect(view.columns.map((c) => c.name)).toEqual(["Open", "Escalated", "On Hold", "Closed"]);
+  });
+
+  it("orders a desk that names its statuses its own way", () => {
+    // A real desk: none of these are the words the code knows, so Zoho's
+    // coarse type is what decides.
+    const real = toDeskView(
+      [
+        { id: "a", status: "Closed", statusType: "Closed" },
+        { id: "b", status: "Under Consideration", statusType: "On Hold" },
+        { id: "c", status: "Queue", statusType: "Open" },
+        { id: "d", status: "New", statusType: "Open" },
+      ],
+      NOW,
+    );
+    expect(real.columns.map((c) => c.name)).toEqual([
+      "New",
+      "Queue",
+      "Under Consideration",
+      "Closed",
+    ]);
+    expect(real.openCount).toBe(3);
   });
 
   it("counts the queue, what is still open, and what is late", () => {

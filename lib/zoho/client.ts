@@ -63,12 +63,34 @@ export class ZohoError extends Error {
   }
 }
 
-function describe(status: number): string {
+function describe(status: number, detail?: string): string {
   if (status === 401) return "Zoho refused the token. Check the client and refresh token.";
   if (status === 403) return "That Zoho token is not allowed to read tickets. Check its scope.";
   if (status === 404) return "Zoho has no such desk or department.";
+  if (status === 422) {
+    // Zoho's own words are the useful part here: it names the field it
+    // did not like.
+    return detail
+      ? `Zoho would not accept the request: ${detail}`
+      : "Zoho would not accept the request.";
+  }
   if (status === 429) return "Zoho is rate limiting us. The queue will refresh shortly.";
-  return `Zoho answered ${status}.`;
+  return detail ? `Zoho answered ${status}: ${detail}` : `Zoho answered ${status}.`;
+}
+
+/** Zoho explains a refusal in the body; that explanation names no credential. */
+async function reasonFrom(response: Response): Promise<string | undefined> {
+  try {
+    const body = (await response.clone().json()) as {
+      errorCode?: string;
+      message?: string;
+      errorField?: string;
+    };
+    const parts = [body.message, body.errorField && `(field: ${body.errorField})`].filter(Boolean);
+    return parts.length > 0 ? parts.join(" ") : body.errorCode;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The access token in hand, and when it goes stale. */
@@ -151,8 +173,9 @@ async function get(path: string, params: Record<string, string>, config: ZohoCon
   // Nothing to show is not a failure: Zoho answers 204 for an empty queue.
   if (response.status === 204) return { data: [] };
   if (!response.ok) {
-    log.warn(`Zoho Desk answered ${response.status} for ${path}`);
-    throw new ZohoError(response.status, describe(response.status));
+    const reason = await reasonFrom(response);
+    log.warn(`Zoho Desk answered ${response.status} for ${path}${reason ? `: ${reason}` : ""}`);
+    throw new ZohoError(response.status, describe(response.status, reason));
   }
   return (await response.json()) as { data?: unknown };
 }
@@ -162,7 +185,9 @@ export async function fetchTickets(config: ZohoConfig): Promise<DeskView> {
   const params: Record<string, string> = {
     limit: String(TICKET_LIMIT),
     sortBy: "-modifiedTime",
-    include: "assignee,contact",
+    // "contacts", plural: Zoho names the include differently from the
+    // field it fills in, and refuses the singular with a 422.
+    include: "contacts,assignee",
   };
   if (config.departmentId) params.departmentId = config.departmentId;
   const answer = await get("/tickets", params, config);
