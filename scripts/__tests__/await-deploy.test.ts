@@ -70,6 +70,33 @@ describe("awaitCommit", () => {
   });
 
   /**
+   * The two timeouts have different causes and need telling apart. A run that
+   * only said "never reported the sha" left exactly this question open the
+   * first time it failed for real: wrong URL, or a deploy still building?
+   */
+  it("distinguishes a host that never answered from one still on the old build", async () => {
+    await expect(run(answers(null), 3)).resolves.toMatchObject({
+      reason: "timeout",
+      answered: 0,
+      seen: null,
+    });
+    await expect(run(answers(older), 3)).resolves.toMatchObject({
+      reason: "timeout",
+      answered: 3,
+      seen: "5d42c4a",
+    });
+  });
+
+  /** A host that answers, drops out, then answers again is still "answering". */
+  it("remembers the last commit it saw across a gap", async () => {
+    await expect(run(answers(older, null, null), 3)).resolves.toMatchObject({
+      reason: "timeout",
+      seen: "5d42c4a",
+      answered: 1,
+    });
+  });
+
+  /**
    * A build that predates the health check reporting one has neither field, so
    * there is no `source: "none"` to short-circuit on — it has to keep waiting
    * for the new container rather than passing on a missing field.

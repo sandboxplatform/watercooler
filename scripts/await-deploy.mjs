@@ -1,7 +1,7 @@
 /**
  * Waits for a deployment to actually answer as the commit that was pushed.
  *
- *   node scripts/await-deploy.mjs <healthUrl> <sha> [--attempts 60] [--every 10]
+ *   node scripts/await-deploy.mjs <healthUrl> <sha> [--attempts 150] [--every 10]
  *
  * Railway deploys this repository itself on a push to main, so nothing in CI
  * knows when — or whether — the commit reached the container that is serving
@@ -16,7 +16,16 @@
  *                wait for. A configuration gap, not a broken deploy, so exit
  *                0 with a warning rather than failing a release over a field
  *                only a health check reads.
- *   timeout      it never reported it. Exit 1.
+ *   timeout      it never reported it. Exit 1, saying which kind of timeout:
+ *                nothing ever answered (wrong URL, unreachable host) or the
+ *                previous build answered throughout (still building, or the
+ *                deploy did not replace the container).
+ *
+ * The default window is twenty-five minutes, which sounds generous and is
+ * not: the image runs apt-get, installs the agent CLI globally from npm,
+ * then pnpm install and next build, and Railway waits on its own health check
+ * before moving traffic. Ten minutes was the first guess and it timed out on
+ * a deploy that was simply still going.
  *
  * Plain .mjs with no dependencies on purpose: the job checks out the repo and
  * installs nothing, so this has to run on the bare Node that setup-node
@@ -49,7 +58,7 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export async function awaitCommit({
   read,
   want,
-  attempts = 60,
+  attempts = 150,
   every = 10_000,
   sleep = pause,
   log = console.log,
@@ -57,10 +66,20 @@ export async function awaitCommit({
   const wanted = short(want);
   if (!wanted) throw new Error("no commit to wait for");
 
+  // The last thing the host said, so a timeout can say which kind it was.
+  // Without this the message is the same whether nothing ever answered or the
+  // previous build answered every time — and those have different causes.
+  let seen = null;
+  let answered = 0;
+
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const body = await read();
     const commit = body?.commit ?? null;
     const source = body?.source ?? null;
+    if (body) {
+      answered++;
+      seen = commit ?? seen;
+    }
 
     if (commit && short(commit) === wanted) return { ok: true, reason: "live", attempt };
     if (source === "none") return { ok: true, reason: "unreported", attempt };
@@ -68,7 +87,7 @@ export async function awaitCommit({
     log(`attempt ${attempt}/${attempts}: commit=${commit ?? "-"} source=${source ?? "-"}`);
     if (attempt < attempts) await sleep(every);
   }
-  return { ok: false, reason: "timeout", attempt: attempts };
+  return { ok: false, reason: "timeout", attempt: attempts, seen, answered };
 }
 
 /** GitHub's log annotations, which surface on the run's summary page. */
@@ -106,7 +125,7 @@ async function main(argv) {
   const result = await awaitCommit({
     read,
     want: sha,
-    attempts: flag("attempts", 60),
+    attempts: flag("attempts", 150),
     every: flag("every", 10) * 1000,
   });
 
@@ -118,11 +137,24 @@ async function main(argv) {
       "Deployed, but the build reports no commit (source=none), so this could " +
         "not be verified. Check that GIT_SHA reached the service.",
     );
+  } else if (result.answered === 0) {
+    annotate(
+      "error",
+      `${url} never answered. Check the URL — it needs the full path, ` +
+        "e.g. https://host/api/health — and that the host is reachable.",
+    );
+  } else if (result.seen) {
+    annotate(
+      "error",
+      `${url} answered, but was still reporting ${result.seen} rather than ` +
+        `${short(sha)} after ${result.attempt} attempts. Either the deploy has ` +
+        "not finished, or it did not replace the running container.",
+    );
   } else {
     annotate(
       "error",
-      `${url} never reported ${short(sha)}. The deploy may not have replaced ` +
-        "the running container.",
+      `${url} answered but reported no commit at all, so ${short(sha)} could ` +
+        "not be confirmed. The running build predates /api/health reporting one.",
     );
   }
   process.exit(result.ok ? 0 : 1);

@@ -62,7 +62,12 @@ jobs:
     name: Verify the deploy
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.HEALTH_URL != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Above the poll's own window, which is twenty-five minutes: this image
+    # runs apt-get, installs the agent CLI from npm, then pnpm install and
+    # next build, and Railway waits on its own health check before moving
+    # traffic. The first attempt at this allowed ten minutes and failed on a
+    # deploy that was still going.
+    timeout-minutes: 35
     permissions:
       contents: read
     # Two pushes in quick succession: the older poll is waiting for a commit
