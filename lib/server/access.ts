@@ -18,20 +18,15 @@
 
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "http";
+import type { AccessIdentity } from "../identity";
 
 export const ACCESS_COOKIE = "wc_access";
 
 /** Bump if the token shape changes, to invalidate old cookies. */
 const TOKEN_VERSION = "v2";
 
-/**
- * Who a code lets in.
- *
- * `visitor` is the shared code: anyone who has been given it. The others are
- * one person each, holding a code they never pass on, so the code *is* the
- * identity — presenting it is enough to be brought in as them.
- */
-export type AccessIdentity = "visitor" | "coop" | "rob";
+/** Re-exported so the gate's callers need one import; see lib/identity.ts. */
+export type { AccessIdentity };
 
 /** Someone whose own code brings them straight in, already dressed. */
 export interface Persona {

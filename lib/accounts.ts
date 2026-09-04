@@ -10,6 +10,7 @@
  */
 
 import type { CharacterChoice } from "./characters/choice";
+import type { AccessIdentity } from "./identity";
 import { isHome } from "./world/floors";
 
 export const NAME_LIMIT = 16;
@@ -49,7 +50,7 @@ export interface Account {
  * them, so the welcome screen asks them nothing.
  */
 export interface AccessClaim {
-  identity: "visitor" | "coop" | "rob";
+  identity: AccessIdentity;
   persona: { identity: string; name: string; home: string; characterKey: string } | null;
 }
 
