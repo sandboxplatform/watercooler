@@ -113,10 +113,13 @@ worker's bubble, not an opaque failure.
 | Spend per room         | $50     | `ROOM_SPEND_LIMIT_USD` |
 | Humans per room        | 4       | —                      |
 
-Spend is measured server-side from what each run reports, accumulated in the room's
-record, and shown in the HUD beside the occupancy pill. Hitting the ceiling is a hard
-stop on dispatch, not a warning — with a host-side key the bill belongs to whoever
-runs the server.
+Spend is measured server-side from what each run reports and accumulated in the
+room's record. Hitting the ceiling is a hard stop on dispatch, not a warning — with
+a host-side key the bill belongs to whoever runs the server — and the refusal comes
+back as a plain sentence in the worker's bubble, which is the only place a person
+sees it. Nothing shows the running total: the HUD's pill was taken out, and
+`budget-updated` is still emitted from the room snapshot for whatever surfaces it
+next.
 
 ### Mettara
 

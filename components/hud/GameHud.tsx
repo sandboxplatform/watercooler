@@ -185,11 +185,7 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
 
       {/* Bottom area: status pills (left) + chat dock (right) */}
       <div className="layout-bottom">
-        <BottomBar
-          connection={state.connection}
-          sessionMetrics={state.sessionMetrics}
-          seats={state.seats}
-        />
+        <BottomBar connection={state.connection} sessionMetrics={state.sessionMetrics} />
 
         {/* Spacer pushes chat to right */}
         <div style={{ flex: "1 1 auto" }} />

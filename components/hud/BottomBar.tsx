@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { CircleDollarSign, Gamepad2, Mic, MicOff, Sparkles, User, Users } from "lucide-react";
+import { Gamepad2, Mic, MicOff, Sparkles, User } from "lucide-react";
 import { gameEvents } from "@/lib/events";
 import { useVoice } from "@/lib/hooks/useVoice";
 import { voiceChat } from "@/lib/voice/voice-chat";
 import { STATUS_LABELS, formatModelLabel } from "@/lib/constants";
-import type { ConnectionStatus, SessionMetrics, SeatState } from "@/types/game";
+import type { ConnectionStatus, SessionMetrics } from "@/types/game";
 import ControllerCheck from "./ControllerCheck";
 import { buttonLabel } from "@/lib/gamepad/buttons";
 import { subscribeTalkButton, talkButton } from "@/lib/gamepad/bindings";
@@ -14,26 +14,15 @@ import { subscribeTalkButton, talkButton } from "@/lib/gamepad/bindings";
 interface BottomBarProps {
   connection: ConnectionStatus;
   sessionMetrics: SessionMetrics;
-  seats: SeatState[];
 }
 
-export default function BottomBar({ connection, sessionMetrics, seats }: BottomBarProps) {
-  // Humans in the room, which is separate from the agent seats beside it
+export default function BottomBar({ connection, sessionMetrics }: BottomBarProps) {
+  // Humans in the room; the pill counts people, not the agent seats
   const [humans, setHumans] = useState<{ count: number; capacity: number } | null>(null);
-
-  const [budget, setBudget] = useState<{ spent: number; limit: number; halted: boolean } | null>(
-    null,
-  );
 
   useEffect(() => {
     return gameEvents.on("presence-count", (count, capacity) => {
       setHumans({ count, capacity });
-    });
-  }, []);
-
-  useEffect(() => {
-    return gameEvents.on("budget-updated", (spentUsd, limitUsd, halted) => {
-      setBudget({ spent: spentUsd, limit: limitUsd, halted });
     });
   }, []);
 
@@ -65,12 +54,6 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
         : (voice.reason ??
           `${voice.withMic > 0 ? `${here} ` : ""}Switch on voice chat: people near you in the room will hear you. On a controller, hold ${talk} to talk.`);
 
-  const totalSeats = seats.length;
-  const assignedSeats = seats.filter((s) => s.assigned).length;
-  const workingCount = seats.filter(
-    (s) => s.assigned && (s.status === "running" || s.status === "returning"),
-  ).length;
-
   return (
     <div className="layout-bottombar">
       <div className="hud-pill hud-pill--connection">
@@ -90,12 +73,6 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
           </span>
         </div>
       ) : null}
-      <div className="hud-pill hud-pill--metric">
-        <Users size={10} />
-        <span>
-          {assignedSeats}/{totalSeats} seat
-        </span>
-      </div>
       <button
         type="button"
         className={`hud-pill hud-pill--metric hud-pill--button hud-mic${micOn ? " hud-mic--on" : ""}${
@@ -142,28 +119,6 @@ export default function BottomBar({ connection, sessionMetrics, seats }: BottomB
         <span>{pad ? `${pad.layout} · hold ${talk} to talk` : "no pad"}</span>
       </button>
       {checkOpen && <ControllerCheck onClose={() => setCheckOpen(false)} />}
-      {budget && (
-        <div
-          className="hud-pill hud-pill--metric"
-          title={
-            budget.halted
-              ? `This room has reached its $${budget.limit} limit and agents are paused`
-              : `Spent $${budget.spent.toFixed(2)} of $${budget.limit} on agents in this room`
-          }
-          style={budget.halted ? { color: "var(--pixel-red)" } : undefined}
-        >
-          <CircleDollarSign size={10} />
-          <span>
-            {budget.spent.toFixed(2)}/{budget.limit}
-          </span>
-        </div>
-      )}
-      <div className="hud-pill hud-pill--metric">
-        <Sparkles size={10} />
-        <span>
-          {workingCount}/{assignedSeats} busy
-        </span>
-      </div>
     </div>
   );
 }

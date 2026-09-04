@@ -552,11 +552,12 @@ Three limits apply to every run, whether assigned directly or delegated:
 | Spend per room         | $50     | `ROOM_SPEND_LIMIT_USD` |
 | Humans per room        | 4       | —                      |
 
-Spend is measured server-side from what each run reports, accumulated in the
-room's record, and shown in the HUD next to the occupancy pill. When a room
-reaches its ceiling, dispatch stops until the limit is raised — a hard stop,
-not a warning, because with a host-side key the bill belongs to whoever runs
-the server.
+Spend is measured server-side from what each run reports and accumulated in
+the room's record. When a room reaches its ceiling, dispatch stops until the
+limit is raised — a hard stop, not a warning, because with a host-side key the
+bill belongs to whoever runs the server. You find out when a task comes back
+refused, in the worker's own words; the running total is not shown anywhere, so
+watch `ROOM_SPEND_LIMIT_USD` if the bill is yours.
 
 Each seat gets a sandbox at `.agent-workspaces/<room>/<seat>/`, so rooms cannot
 read each other's work.
