@@ -27,14 +27,18 @@ export interface StoredCharacter extends Partial<CharacterColours> {
   createdAt: string;
   /**
    * "photo": built by re-skinning the library sheet with colours read from a
-   * picture. "sheet": an entire drawn sheet that was cut up and re-laid onto
-   * the game's grid. The four colours exist only for the first kind.
+   * picture. "sheet": a whole character sheet, uploaded in the game's format
+   * and stored as it arrived. The four colours exist only for the first kind.
    */
   source: "photo" | "sheet";
   /**
-   * For sheets: "exact" was stored as uploaded, already in the game's format;
-   * "loose" was found, read and re-laid onto the grid; "library" was a whole
-   * library-style sheet of which only the two animated rows were used.
+   * For sheets: "exact" was stored as uploaded, already in the game's format.
+   *
+   * Only "exact" is produced now — a sheet is delivered on the grid or it is
+   * refused. The other two are kept because characters uploaded before that
+   * are still on disk under them: "loose" was a sheet found, read and re-laid
+   * onto the grid, and "library" a whole library-style sheet of which only
+   * the two animated rows were used.
    */
   layout?: "exact" | "loose" | "library";
 }
