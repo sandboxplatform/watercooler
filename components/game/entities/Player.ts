@@ -3,11 +3,12 @@ import {
   SPRITE_KEY,
   MOVE_SPEED,
   SPRINT_SPEED,
-  ALL_ANIMS,
+  allAnims,
   FRAME_WIDTH,
   FRAME_HEIGHT,
 } from "../config/animations";
 import { ensureAnims } from "../utils/sheets";
+import { sheetColumns } from "../utils/MapHelpers";
 import { ChatBubble } from "./ChatBubble";
 import { facingFor } from "@/lib/facing";
 import { dialogOpen, typingInAField } from "@/lib/gamepad/dialogs";
@@ -134,7 +135,7 @@ export class Player {
   private createAnimations(scene: Phaser.Scene) {
     if (scene.anims.exists("idle-down")) return;
 
-    for (const anim of ALL_ANIMS) {
+    for (const anim of allAnims(sheetColumns(scene, SPRITE_KEY))) {
       const frames: Phaser.Types.Animations.AnimationFrame[] = [];
       for (let i = anim.start; i <= anim.end; i++) {
         frames.push({ key: SPRITE_KEY, frame: i });

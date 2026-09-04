@@ -12,9 +12,20 @@ import { MOVE_SPEED_PX_S, SPRINT_SPEED_PX_S } from "@/lib/presence-types";
 
 export const FRAME_WIDTH = 48;
 export const FRAME_HEIGHT = 96;
+/**
+ * How wide the pack's own sheets are, in frames.
+ *
+ * Not the grid any more: a sheet's columns are counted from its own width,
+ * so a tight sheet holding only the twenty-four frames the game animates
+ * works as well as one of these. This is the fallback for the moment before
+ * a texture has loaded, and the width the pack's cast happens to have.
+ */
 export const SHEET_COLUMNS = 56;
 
 const FRAMES_PER_DIR = 6;
+
+/** Frames the game animates in a row: right, up, left and down, six each. */
+export const ANIMATED_COLUMNS = FRAMES_PER_DIR * 4;
 
 /**
  * How fast a person moves, in px/s, and how much faster sprinting is.
@@ -62,32 +73,42 @@ export const SPRITE_PATH = BOSS_PATH;
 const directions = ["right", "up", "left", "down"] as const;
 export type Direction = (typeof directions)[number];
 
+/**
+ * The four animations of one row, as frame ranges into a sheet.
+ *
+ * `columns` is the sheet's own width in frames, because Phaser numbers frames
+ * across the whole sheet: the first frame of row 1 is index `columns`. Taking
+ * it from the sheet rather than from a constant is what lets a delivered
+ * sheet be only as wide as the frames it holds.
+ */
 export function makeAnims(
   spriteKey: string,
   prefix: string,
   row: number,
   frameRate: number,
+  columns: number,
 ): AnimDef[] {
   return directions.map((dir, i) => ({
     key: `${spriteKey}:${prefix}-${dir}`,
-    start: row * SHEET_COLUMNS + i * FRAMES_PER_DIR,
-    end: row * SHEET_COLUMNS + i * FRAMES_PER_DIR + FRAMES_PER_DIR - 1,
+    start: row * columns + i * FRAMES_PER_DIR,
+    end: row * columns + i * FRAMES_PER_DIR + FRAMES_PER_DIR - 1,
     frameRate,
     repeat: -1,
   }));
 }
 
-// Boss anims (legacy format without spriteKey prefix for backward compat)
-function rowAnims(prefix: string, row: number, frameRate: number): AnimDef[] {
-  return directions.map((dir, i) => ({
-    key: `${prefix}-${dir}`,
-    start: row * SHEET_COLUMNS + i * FRAMES_PER_DIR,
-    end: row * SHEET_COLUMNS + i * FRAMES_PER_DIR + FRAMES_PER_DIR - 1,
-    frameRate,
-    repeat: -1,
-  }));
+/**
+ * The same, unprefixed: the player's own sheet was animated before generated
+ * ones existed and its keys are bare ("idle-down").
+ */
+export function allAnims(columns: number): AnimDef[] {
+  const rowAnims = (prefix: string, row: number, frameRate: number) =>
+    directions.map((dir, i) => ({
+      key: `${prefix}-${dir}`,
+      start: row * columns + i * FRAMES_PER_DIR,
+      end: row * columns + i * FRAMES_PER_DIR + FRAMES_PER_DIR - 1,
+      frameRate,
+      repeat: -1,
+    }));
+  return [...rowAnims("idle", 1, 8), ...rowAnims("walk", 2, 10)];
 }
-
-export const IDLE_ANIMS = rowAnims("idle", 1, 8);
-export const WALK_ANIMS = rowAnims("walk", 2, 10);
-export const ALL_ANIMS: AnimDef[] = [...IDLE_ANIMS, ...WALK_ANIMS];

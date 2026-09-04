@@ -18,14 +18,29 @@ export interface POIDef {
   facing: Direction | null;
 }
 
+/**
+ * How many frames wide a loaded sheet is.
+ *
+ * Counted from the image rather than assumed, so a sheet holding only the
+ * frames the game animates is as valid as one of the pack's wide ones. Falls
+ * back to the pack's width if the texture is not there to measure, which
+ * keeps a missing sheet from producing a zero-column grid.
+ */
+export function sheetColumns(scene: Phaser.Scene, key: string): number {
+  const source = scene.textures.get(key)?.source?.[0];
+  if (!source?.width) return SHEET_COLUMNS;
+  return Math.max(1, Math.floor(source.width / FRAME_WIDTH));
+}
+
 export function buildSpriteFrames(scene: Phaser.Scene, key: string) {
   const tex = scene.textures.get(key);
   if (!tex.source.length) return;
+  const columns = sheetColumns(scene, key);
   const rows = Math.floor(tex.source[0].height / FRAME_HEIGHT);
   for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < SHEET_COLUMNS; col++) {
+    for (let col = 0; col < columns; col++) {
       tex.add(
-        row * SHEET_COLUMNS + col,
+        row * columns + col,
         0,
         col * FRAME_WIDTH,
         row * FRAME_HEIGHT,

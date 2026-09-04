@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { FRAME_HEIGHT, makeAnims, type Direction } from "../config/animations";
+import { sheetColumns } from "../utils/MapHelpers";
 import { EMOTE_SHEET_KEY, EMOTE_ANIMS } from "../config/emotes";
 import { ChatBubble } from "./ChatBubble";
 import type { Pathfinder, PathPoint } from "../utils/Pathfinder";
@@ -226,8 +227,9 @@ export class Worker implements WorkerCtx {
 
     buildSpriteFrames(scene, spriteKey);
 
-    const idleAnims = makeAnims(spriteKey, "idle", 1, 8);
-    const walkAnims = makeAnims(spriteKey, "walk", 2, 10);
+    const columns = sheetColumns(this.scene, spriteKey);
+    const idleAnims = makeAnims(spriteKey, "idle", 1, 8, columns);
+    const walkAnims = makeAnims(spriteKey, "walk", 2, 10, columns);
     for (const anim of [...idleAnims, ...walkAnims]) {
       const frames: Phaser.Types.Animations.AnimationFrame[] = [];
       for (let i = anim.start; i <= anim.end; i++) {

@@ -78,8 +78,11 @@ describe("png codec", () => {
     ]);
     fake.writeUInt32BE(4, 16);
     fake.writeUInt32BE(4, 20);
-    fake[24] = 8;
-    fake[25] = 3; // palette
+    // Sixteen bits a sample: a real PNG, and not one this reads. Indexed
+    // colour used to be the example here, until it turned out to be the
+    // format pixel art actually arrives in — see png-indexed.test.ts.
+    fake[24] = 16;
+    fake[25] = 6;
     expect(() => decodePng(fake)).toThrow(/colour type/i);
   });
 

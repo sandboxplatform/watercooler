@@ -1,6 +1,6 @@
 import { makeAnims } from "../config/animations";
 import * as Phaser from "phaser";
-import { buildSpriteFrames } from "./MapHelpers";
+import { buildSpriteFrames, sheetColumns } from "./MapHelpers";
 
 /**
  * Makes sure a character sheet is a texture the scene can use.
@@ -38,9 +38,10 @@ export function ensureAnims(scene: Phaser.Scene, spriteKey: string) {
   // Nothing to make from a sheet that has not been cut yet; an animation
   // with no frames is worse than none, since it can never be replaced.
   if (!scene.textures.exists(spriteKey) || scene.textures.get(spriteKey).frameTotal <= 1) return;
+  const columns = sheetColumns(scene, spriteKey);
   for (const anim of [
-    ...makeAnims(spriteKey, "idle", 1, 8),
-    ...makeAnims(spriteKey, "walk", 2, 10),
+    ...makeAnims(spriteKey, "idle", 1, 8, columns),
+    ...makeAnims(spriteKey, "walk", 2, 10, columns),
   ]) {
     if (scene.anims.exists(anim.key)) continue;
     scene.anims.create({
