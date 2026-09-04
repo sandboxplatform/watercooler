@@ -15,6 +15,7 @@ import {
   LS_PLAYER_NAME,
   LS_ONBOARDING_DONE,
   LS_SIDEBAR_WIDTH,
+  LS_SPRINTING,
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
@@ -95,6 +96,22 @@ export function loadBgmVolume(): number {
 
 export function saveBgmVolume(volume: number) {
   lsSet(LS_BGM_VOLUME, volume);
+}
+
+/**
+ * Whether this browser is sprinting.
+ *
+ * Left Shift is a toggle, so it has to outlive the character it was
+ * pressed on: walking through a door builds a new one, and resetting to a
+ * walk each time made the mode useless for the thing it is for — getting
+ * somewhere across several rooms.
+ */
+export function loadSprinting(): boolean {
+  return lsGet<boolean>(LS_SPRINTING, false);
+}
+
+export function saveSprinting(sprinting: boolean) {
+  lsSet(LS_SPRINTING, sprinting);
 }
 
 export function loadOnboardingDone(): boolean {

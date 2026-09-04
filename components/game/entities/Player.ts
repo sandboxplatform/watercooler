@@ -12,6 +12,7 @@ import { ChatBubble } from "./ChatBubble";
 import { facingFor } from "@/lib/facing";
 import { dialogOpen, typingInAField } from "@/lib/gamepad/dialogs";
 import { togglesSprint } from "@/lib/sprint";
+import { loadSprinting, saveSprinting } from "@/lib/persistence";
 
 type Direction = "down" | "up" | "left" | "right";
 
@@ -35,10 +36,14 @@ export class Player {
    *
    * A mode, not a held key: left Shift switches between the two and it stays
    * where it was put, so crossing the world map does not mean holding a key
-   * for twenty seconds. It survives a scene change only as far as the Player
-   * does — walking through a door builds a new one, which starts off walking.
+   * for twenty seconds.
+   *
+   * Read from and written to the browser rather than kept on the character,
+   * because a room change builds a new character. Holding it here meant the
+   * mode fell back to a walk at every door, which is useless for the thing
+   * it is for: getting somewhere several rooms away.
    */
-  private sprinting = false;
+  private sprinting = loadSprinting();
 
   constructor(scene: Phaser.Scene, x: number, y: number, facing: Direction = "left") {
     this.facing = facing;
@@ -70,6 +75,7 @@ export class Player {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!togglesSprint(event, typingInAField() || dialogOpen())) return;
       this.sprinting = !this.sprinting;
+      saveSprinting(this.sprinting);
     };
     kb.on("keydown", onKeyDown);
     // Dropped when the scene goes, or a walk through a door would leave the

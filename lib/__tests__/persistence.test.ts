@@ -149,3 +149,23 @@ describe("rename migration", () => {
     expect(mod.lsGet("watercooler:player-name", "Guest")).toBe("New");
   });
 });
+
+describe("the sprint mode", () => {
+  /**
+   * It has to outlive the character it was toggled on: a room change builds
+   * a new one, and resetting to a walk at every door made the mode useless
+   * for the thing it is for — getting somewhere several rooms away.
+   */
+  it("is remembered across a room change", async () => {
+    const { loadSprinting, saveSprinting } = await loadModule();
+    saveSprinting(true);
+    expect(loadSprinting()).toBe(true);
+    saveSprinting(false);
+    expect(loadSprinting()).toBe(false);
+  });
+
+  it("starts off walking, for a browser that has never said", async () => {
+    const { loadSprinting } = await loadModule();
+    expect(loadSprinting()).toBe(false);
+  });
+});

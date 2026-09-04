@@ -24,8 +24,15 @@ pnpm build:map      # regenerate public/maps/*.json from the room specs
 pnpm seed:erp       # seed the fictional company's SQLite database (--force to wipe)
 ```
 
-Node 22+, pnpm 10. CI runs format:check → lint → typecheck → build → test on every
-PR, so run those four before handing work back.
+Node 22+, pnpm 10 — `.nvmrc` pins it and CI reads that file, because the room
+store and the ERP are built on `node:sqlite`, which arrived in 22.5. CI ran on
+Node 20 for a long time and stayed green: nothing at CI time actually executed
+the store, since route handlers are not run during a build. The first test to
+import the presence socket brought the whole chain in and CI went red on a
+commit that was fine.
+
+CI runs format:check → lint → typecheck → build → test on every PR, so run those
+four before handing work back.
 
 `pnpm dev:next` exists but skips the WebSocket layer — presence, agent dispatch and
 voice all break under it. Only reach for it to isolate a pure-Next rendering issue.
@@ -471,7 +478,11 @@ never crosses a solid.
 
 **Sprinting** is a mode, not a held key: left Shift toggles it (`togglesSprint`
 in `lib/sprint.ts`, bound by `ShiftLeft` so right Shift is untouched, and
-ignored while a field or a dialog has the keyboard). `player.speed` is what
+ignored while a field or a dialog has the keyboard). The mode is kept in the
+browser (`loadSprinting`), not on the character, because a room change builds
+a new character — holding it there dropped everyone back to a walk at every
+door, which is useless for the thing it is for: getting somewhere several
+rooms away. `player.speed` is what
 every driver reads — the keys, the pad, a tapped route — so none of them knows
 about the mode; only the scripted walk out of a doorway stays at `MOVE_SPEED`.
 The walk cycle's `timeScale` comes from the actual velocity rather than from

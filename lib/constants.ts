@@ -88,6 +88,12 @@ export const LS_BGM_VOLUME = "watercooler:bgm-volume";
 export const LS_PLAYER_NAME = "watercooler:player-name";
 export const LS_ONBOARDING_DONE = "watercooler:onboarding-done";
 export const LS_SIDEBAR_WIDTH = "watercooler:sidebar-width";
+/**
+ * Sprinting or walking. Kept per browser rather than on the character,
+ * because a room change builds a new one and the mode is the person's
+ * choice about how they get about, not a property of the room.
+ */
+export const LS_SPRINTING = "watercooler:sprinting";
 
 /** How wide the chat and activity column can be dragged. */
 export const SIDEBAR_MIN_WIDTH = 280;
