@@ -14,12 +14,16 @@ import {
   residentsOf,
   roomForHaunt,
   wanderArea,
+  wanderSpots,
   yardArea,
+  WORLD_WANDER_SPOTS,
 } from "./residents";
 import { roomFromLocation } from "../rooms";
 import { CUTOUT, TILE, WIDTH } from "../map/office";
 import { HEIGHT as FLOOR_ROWS, WIDTH as FLOOR_COLS } from "../map/floor";
-import { SHORE_ROW, TENANTS, WORLD_WIDTH, organisationFor } from "./tenants";
+import { SHORE_ROW, TENANTS, WORLD_HEIGHT, WORLD_WIDTH, organisationFor } from "./tenants";
+import { worldSolids } from "./scenery";
+import { routeAcross } from "./route";
 import { CAMPUSES } from "./campus";
 import { WORKER_SPRITES } from "../../components/game/config/animations";
 
@@ -74,15 +78,65 @@ describe("wandering mode", () => {
     expect(roomFromLocation({ pathname: "/world", search: "" })).toBe("world");
   });
 
-  it("gives them ground to walk, and keeps it clear of the sea", () => {
-    const area = wanderArea(hauntsOf(wanderer)[0])!;
-    expect(area).toBe(WANDER_AREAS.world);
-    expect(area.width).toBeGreaterThan(TILE * 4);
-    expect(area.height).toBeGreaterThan(0);
-    // SHORE_ROW is where the water starts; a wanderer must stay well north of it.
-    expect(area.y + area.height).toBeLessThan(SHORE_ROW * TILE);
-    expect(area.x).toBeGreaterThan(0);
-    expect(area.x + area.width).toBeLessThan(WORLD_WIDTH);
+  /**
+   * Places, not bounds. A patch of ground the size of the world would put a
+   * wanderer through a wall or in the sea, so the world map is the one haunt
+   * wandered by a set of spots.
+   */
+  it("gives them places to walk between rather than a patch of ground", () => {
+    const haunt = hauntsOf(wanderer)[0];
+    expect(wanderArea(haunt)).toBeNull();
+    expect(wanderSpots(haunt)).toBe(WORLD_WANDER_SPOTS);
+  });
+
+  it("has twenty of them", () => {
+    expect(WORLD_WANDER_SPOTS).toHaveLength(20);
+  });
+
+  it("spreads them over the whole map rather than one corner of it", () => {
+    const xs = WORLD_WANDER_SPOTS.map((s) => s.x);
+    const ys = WORLD_WANDER_SPOTS.map((s) => s.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(WORLD_WIDTH * 0.75);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(WORLD_HEIGHT * 0.4);
+  });
+
+  it("keeps every one of them on dry land", () => {
+    for (const spot of WORLD_WANDER_SPOTS) {
+      expect(spot.y, `${spot.x},${spot.y}`).toBeLessThan(SHORE_ROW * TILE);
+      expect(spot.x).toBeGreaterThan(0);
+      expect(spot.x).toBeLessThan(WORLD_WIDTH);
+    }
+  });
+
+  /**
+   * Nothing collides a resident — they are drawn where the server says — so
+   * a spot inside a building or a prop is a chicken standing in a wall, and
+   * only this catches it. The car park's spot moved once already for it.
+   */
+  it("stands none of them in a building, a prop or a sign", () => {
+    const solids = worldSolids();
+    for (const spot of WORLD_WANDER_SPOTS) {
+      const inside = solids.find(
+        (s) =>
+          spot.x >= s.x && spot.x <= s.x + s.width && spot.y >= s.y && spot.y <= s.y + s.height,
+      );
+      expect(inside, `${spot.x},${spot.y} is inside ${JSON.stringify(inside)}`).toBeUndefined();
+    }
+  });
+
+  /** And a spot nothing can reach is one a wanderer would never get to. */
+  it("can walk from any one of them to any other", () => {
+    const bounds = { width: WORLD_WIDTH, height: WORLD_HEIGHT };
+    const solids = worldSolids();
+    for (const from of WORLD_WANDER_SPOTS) {
+      for (const to of WORLD_WANDER_SPOTS) {
+        if (from === to) continue;
+        expect(
+          routeAcross(bounds, solids, from, to),
+          `${from.x},${from.y} to ${to.x},${to.y}`,
+        ).not.toBeNull();
+      }
+    }
   });
 
   /** Without this the simulation would hand back undefined and throw. */

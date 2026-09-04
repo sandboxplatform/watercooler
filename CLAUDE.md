@@ -362,17 +362,36 @@ them walk; outside they simply stand at a spot from `outsideSpots`.
 
 **Wandering mode** is `wanders: true` on a resident. It is a mode, not a kind of
 character — put it on anybody and their whole routine collapses to one haunt,
-the road outside, and they never go in. A wanderer works nowhere, so `org` and
+the world map, and they never go in. A wanderer works nowhere, so `org` and
 `home` are both null, which is what leaves them without a desk (`deskOf` → -1).
 
 It leans on the world map being a presence room (`WORLD_ROOM_SLUG`), so a
 wanderer is an ordinary player in it and the same `wander()` that walks a
-resident round a lobby walks them down the road — no separate movement code, and
-because the server is the one walking them, every viewer sees the same steps
-rather than each browser inventing its own. `WORLD_WANDER` bounds the ground
-they keep to, spanned between two points the game already stands people on so
-it is known pavement; nothing collides them, so those bounds are all that keeps
-them off the buildings and out of the sea.
+resident round a lobby walks them across the map — no separate movement code,
+and because the server is the one walking them, every viewer sees the same steps
+rather than each browser inventing its own.
+
+Everywhere else a resident wanders inside **bounds** (`WANDER_AREAS`), a patch
+of open floor picked so a random point in it is never solid. The world map is
+too big and too built-up for that, so it has **places** instead:
+`WORLD_WANDER_SPOTS`, twenty points on doorsteps, promenades, avenues, the
+plaza and the dock. A wanderer picks one they are not standing on and walks
+there, and since nothing collides them the route is the only thing keeping them
+out of the walls — `routeAcross` (`lib/world/route.ts`) plans it over
+`worldSolids()` on the same coarse grid `allReachable` checks the map with, and
+hands back corners rather than cells. `residents.test.ts` holds every spot to
+being clear of the buildings, the props and the sea, and reachable from every
+other; the simulation's own tests walk Michael for twelve minutes and assert he
+never crosses a solid.
+
+**Facing** is one rule everywhere, `facingFor` in `lib/facing.ts`: the dominant
+axis, with an exact diagonal going sideways for the keyboard's sake, and nothing
+decided when nothing moves — which is what leaves someone who walked left and
+stopped still looking left. Taking horizontal whenever there was any of it,
+which is what the player used to do, is indistinguishable on a keyboard and
+wrong for every tapped route, since a walk straight down carries a pixel of
+sideways drift and that was enough to turn the walker side-on for the whole
+journey.
 
 A resident's look is reserved (`RESERVED` in `lib/characters/library.ts`), so
 adding one takes their sheet out of the player picker automatically — which is

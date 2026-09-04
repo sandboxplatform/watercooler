@@ -35,6 +35,16 @@ const CENTRE = CENTRE_X / TILE;
 export const NORTH_ROAD = 16;
 export const SOUTH_ROAD = 30;
 
+/**
+ * The three avenues joining the two promenades, as the left of each pair of
+ * tile columns: one in the west, one up the middle past the plaza, one out
+ * east by the campus. Named because they are junctions — the routes across
+ * the map run along them, and a wanderer's spots sit on them.
+ */
+export const WEST_AVENUE = 8;
+export const CENTRE_AVENUE = CENTRE + 14;
+export const EAST_AVENUE = CENTRE + 30 + 6;
+
 /** A path from a building's door straight down to the road below it, in tiles. */
 function pathDown(b: (typeof BUILDINGS)[number]): Rect {
   const x = Math.floor((b.door.x + b.door.width / 2) / TILE) - 1;
@@ -51,9 +61,12 @@ export const PAVED: readonly Rect[] = [
   // A path to each door; the ferry has the dock instead.
   ...BUILDINGS.filter((b) => b.frame.y < SOUTH_ROAD * TILE).map(pathDown),
   // Three avenues join the two roads: west, centre and east.
-  { x: 8, y: NORTH_ROAD + 2, width: 2, height: SOUTH_ROAD - NORTH_ROAD - 2 },
-  { x: CENTRE + 14, y: NORTH_ROAD + 2, width: 2, height: SOUTH_ROAD - NORTH_ROAD - 2 },
-  { x: CENTRE + 30 + 6, y: NORTH_ROAD + 2, width: 2, height: SOUTH_ROAD - NORTH_ROAD - 2 },
+  ...[WEST_AVENUE, CENTRE_AVENUE, EAST_AVENUE].map((x) => ({
+    x,
+    y: NORTH_ROAD + 2,
+    width: 2,
+    height: SOUTH_ROAD - NORTH_ROAD - 2,
+  })),
 ];
 
 /** Asphalt, in tiles: the car park by the campus, off the east avenue. */

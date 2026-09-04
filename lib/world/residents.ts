@@ -16,11 +16,13 @@ import { floorRoomSlug, WORLD_ROOM_SLUG } from "../rooms";
 import {
   BUILDINGS,
   WORLD_SPAWN,
+  TILE as WORLD_TILE,
   hasCampus,
   hasFloors,
   tenantsOf,
   type BuildingKind,
 } from "./tenants";
+import { CENTRE_AVENUE, EAST_AVENUE, NORTH_ROAD, SOUTH_ROAD, WEST_AVENUE } from "./scenery";
 import { TILE, WIDTH as LOBBY_COLS } from "../map/office";
 import { standingSpot } from "./desks";
 import { CAMPUSES } from "./campus";
@@ -212,22 +214,65 @@ export interface Rect {
 export const OUTSIDE_SPOT = { x: 760, y: 668 };
 
 /**
- * The stretch of road a wanderer keeps to, by the feet, in world pixels.
- *
- * Spanned between two points the game already stands people on — the
- * residents' spot by the fountain and where a person appears with no
- * building to step out of — so the whole strip is known pavement. Nothing
- * collides a wanderer, since they are drawn where the server says, so the
- * bounds are the only thing keeping them off the buildings and out of the sea.
+ * The middle of a two-tile promenade or avenue, by the feet, in world pixels
+ * — the roads and avenues are named as the first of their pair of tiles.
  */
-export const WORLD_WANDER: Rect = {
-  x: OUTSIDE_SPOT.x,
-  y: OUTSIDE_SPOT.y - 14,
-  width: WORLD_SPAWN.x - OUTSIDE_SPOT.x,
-  height: 28,
-};
+const onRoad = (road: number) => (road + 1) * WORLD_TILE;
+const onAvenue = onRoad;
+/** Where a building's own path meets the ground in front of its door. */
+const front = (org: string) => BUILDINGS.find((b) => b.org.slug === org)?.outside ?? WORLD_SPAWN;
 
-export const WANDER_AREAS: Record<Area, Rect> = {
+/**
+ * The twenty places a wanderer walks between, by the feet, in world pixels.
+ *
+ * A rectangle was the wrong shape for this. It began as one — a strip of road
+ * a few tiles long, because nothing collides a wanderer and bounds were the
+ * only thing keeping them out of the walls — and it read as pacing, not
+ * wandering. What makes the map feel inhabited is somebody crossing it: from
+ * the stores in the west to the campus gate in the east, down to the dock, up
+ * to a doorway. So instead of bounds there are places, and the way between
+ * any two is planned around the buildings (see route.ts).
+ *
+ * Each is somewhere the map already means people to stand — a doorstep, a
+ * promenade, an avenue, the plaza by the fountain, the shore end of the dock
+ * — and `residents.test.ts` holds every one of them to it: clear of the
+ * buildings, the props and the sea, and reachable from the spawn. The car
+ * park's spot is the strip in front of the vans rather than the middle of it,
+ * because the vans wall off everything behind them.
+ */
+export const WORLD_WANDER_SPOTS: readonly { x: number; y: number }[] = [
+  // The doorsteps, west to east.
+  front("blockhouse"),
+  front("chester"),
+  front("castle-atlantic"),
+  front("sandbox-erp"),
+  front("homestar"),
+  front("mettara"),
+  // The plaza, by the fountain, where the residents stand when they are out.
+  OUTSIDE_SPOT,
+  // Along the north promenade: the ends, the three avenue junctions, and the
+  // stretches between.
+  { x: 144, y: onRoad(NORTH_ROAD) },
+  { x: onAvenue(WEST_AVENUE), y: onRoad(NORTH_ROAD) },
+  { x: 960, y: onRoad(NORTH_ROAD) },
+  { x: onAvenue(CENTRE_AVENUE), y: onRoad(NORTH_ROAD) },
+  { x: 2064, y: onRoad(NORTH_ROAD) },
+  { x: 2880, y: onRoad(NORTH_ROAD) },
+  // Half way down the outer avenues, between the two promenades.
+  { x: onAvenue(WEST_AVENUE), y: 1152 },
+  { x: onAvenue(EAST_AVENUE), y: 1152 },
+  // The car park by the campus, in front of the vans.
+  { x: 2760, y: 1080 },
+  // The south promenade.
+  { x: onAvenue(WEST_AVENUE), y: onRoad(SOUTH_ROAD) },
+  { x: onAvenue(CENTRE_AVENUE), y: onRoad(SOUTH_ROAD) },
+  { x: onAvenue(EAST_AVENUE), y: onRoad(SOUTH_ROAD) },
+  // The shore end of the dock — near the water, and well short of the
+  // gangway, so a wanderer never boards the ferry.
+  { x: onAvenue(CENTRE_AVENUE), y: 1560 },
+];
+
+export const WANDER_AREAS: Record<Exclude<Area, "world">, Rect> = {
   // The wide part of the lobby: inside the walls with a margin, below the
   // top wall's furniture, and clear of the lift in the bottom corner.
   lobby: { x: 2 * TILE, y: 7 * TILE, width: (LOBBY_COLS - 5) * TILE, height: 5 * TILE },
@@ -239,13 +284,25 @@ export const WANDER_AREAS: Record<Area, Rect> = {
   garage: { x: 1.5 * TILE, y: 4.75 * TILE, width: 15 * TILE, height: 1.25 * TILE },
   // An office on a campus is a lobby with floors, and wanders as one.
   office: { x: 2 * TILE, y: 7 * TILE, width: (LOBBY_COLS - 5) * TILE, height: 5 * TILE },
-  // The road outside, in world pixels — see WORLD_WANDER.
-  world: WORLD_WANDER,
 };
 
-/** Where a resident may wander at a haunt; nowhere at the desk, outside or on a yard. */
+/**
+ * Where a resident may wander at a haunt; nowhere at the desk, outside or on
+ * a yard, and nowhere as an area on the world map — that one has spots
+ * instead, since a patch of ground the size of the world would put a
+ * wanderer in the sea.
+ */
 export function wanderArea(haunt: Haunt): Rect | null {
-  return haunt.kind === "room" ? WANDER_AREAS[haunt.area] : null;
+  if (haunt.kind !== "room" || haunt.area === "world") return null;
+  return WANDER_AREAS[haunt.area];
+}
+
+/**
+ * The places a resident walks between at a haunt, for somewhere too big and
+ * too built-up to wander by bounds. Only the world map has them.
+ */
+export function wanderSpots(haunt: Haunt): readonly { x: number; y: number }[] | null {
+  return haunt.kind === "room" && haunt.area === "world" ? WORLD_WANDER_SPOTS : null;
 }
 
 /** The paved yard of a campus, in campus pixels, as bounds for the feet: well inside its edges. */

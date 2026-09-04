@@ -24,6 +24,7 @@ import {
   outsideSpots,
   roomForHaunt,
   wanderArea,
+  wanderSpots,
   yardArea,
   type Haunt,
   type PlaceKind,
@@ -32,6 +33,10 @@ import {
   type Whereabouts,
 } from "../world/residents";
 import { createLogger } from "../logger";
+import { facingFor } from "../facing";
+import { routeAcross, type Point } from "../world/route";
+import { worldSolids } from "../world/scenery";
+import { WORLD_HEIGHT, WORLD_WIDTH } from "../world/tenants";
 
 const log = createLogger("Residents");
 
@@ -64,10 +69,26 @@ interface State {
   x: number;
   y: number;
   target: { x: number; y: number } | null;
+  /**
+   * The legs still to walk after the current target, for somebody crossing
+   * ground that has to be gone round rather than through. Empty everywhere
+   * a resident wanders by bounds, where the next corner is the destination.
+   */
+  legs: Point[];
   pauseUntil: number;
   facing: Facing;
   lastTick: number;
 }
+
+/**
+ * The world map's solids, worked out once.
+ *
+ * They never change — the buildings, the props' feet, the signs and the sea
+ * are all laid out at module load — and a route is planned every time a
+ * wanderer picks somewhere new to be, so this is not worth recomputing.
+ */
+let worldObstacles: Rect[] | null = null;
+const obstacles = () => (worldObstacles ??= worldSolids());
 
 /** How a route handler, in its own module graph, reaches the running simulation. */
 const WHEREABOUTS_KEY = Symbol.for("watercooler.residents.whereabouts");
@@ -111,6 +132,7 @@ export function residentWhereabouts(): Whereabouts[] {
       x: 0,
       y: 0,
       target: null,
+      legs: [],
       pauseUntil: 0,
       facing: "down",
       lastTick: 0,
@@ -146,6 +168,7 @@ export class ResidentSimulation {
         x: 0,
         y: 0,
         target: null,
+        legs: [],
         pauseUntil: 0,
         facing: "down",
         lastTick: at,
@@ -203,10 +226,19 @@ export class ResidentSimulation {
     state.since = now;
     state.room = roomForHaunt(state.resident, haunt);
     state.target = null;
+    state.legs = [];
     state.spot = null;
     state.pauseUntil = now + 800;
     const area = wanderArea(haunt);
-    if (area) {
+    const spots = wanderSpots(haunt);
+    if (spots) {
+      // Start at one of the places rather than in the middle of the map,
+      // which for the world map would be somewhere in a building.
+      const first = spots[Math.min(spots.length - 1, Math.floor(this.random() * spots.length))];
+      state.x = first.x;
+      state.y = first.y;
+      state.facing = "down";
+    } else if (area) {
       state.x = area.x + area.width / 2;
       state.y = area.y + area.height / 2;
       state.facing = "down";
@@ -253,32 +285,70 @@ export class ResidentSimulation {
     const { hub } = this.host.roomFor(state.room);
     const id = presenceIdFor(state.resident);
     const area = wanderArea(state.haunt);
-    if (!area) {
+    const spots = wanderSpots(state.haunt);
+    if (!area && !spots) {
       hub.move(id, { x: state.x, y: state.y, facing: state.facing, moving: false });
       return;
     }
 
     let moving = false;
     if (now >= state.pauseUntil) {
-      if (!state.target) state.target = randomPoint(area, this.random);
-      const dx = state.target.x - state.x;
-      const dy = state.target.y - state.y;
-      const distance = Math.hypot(dx, dy);
-      const step = (WANDER_SPEED_PX_S * (now - state.lastTick)) / 1000;
-      if (distance <= step) {
-        state.x = state.target.x;
-        state.y = state.target.y;
-        state.target = null;
-        state.pauseUntil = now + PAUSE_MS[0] + this.random() * (PAUSE_MS[1] - PAUSE_MS[0]);
-      } else {
-        state.x += (dx / distance) * step;
-        state.y += (dy / distance) * step;
-        state.facing =
-          Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
-        moving = true;
+      if (!state.target) {
+        // Somewhere else to be. A patch of floor is walked at directly; a set
+        // of places is a walk across the map, so it comes with a route.
+        if (spots) this.setOff(state, spots);
+        else if (area) state.target = randomPoint(area, this.random);
+      }
+      if (state.target) {
+        const dx = state.target.x - state.x;
+        const dy = state.target.y - state.y;
+        const distance = Math.hypot(dx, dy);
+        const step = (WANDER_SPEED_PX_S * (now - state.lastTick)) / 1000;
+        if (distance <= step) {
+          state.x = state.target.x;
+          state.y = state.target.y;
+          // Straight on round the corner if the walk goes further; a rest
+          // only once they are actually somewhere.
+          state.target = state.legs.shift() ?? null;
+          if (!state.target) {
+            state.pauseUntil = now + PAUSE_MS[0] + this.random() * (PAUSE_MS[1] - PAUSE_MS[0]);
+          }
+        } else {
+          state.x += (dx / distance) * step;
+          state.y += (dy / distance) * step;
+          state.facing = facingFor(dx, dy) ?? state.facing;
+          moving = true;
+        }
       }
     }
     hub.move(id, { x: state.x, y: state.y, facing: state.facing, moving });
+  }
+
+  /**
+   * Pick somewhere else among the places and plan the way there.
+   *
+   * Never the spot they are standing on, so a wanderer always goes somewhere.
+   * A route that cannot be found leaves them where they are rather than
+   * sending them through a wall — it would mean the map had changed under
+   * them, and the next tick tries somewhere else.
+   */
+  private setOff(state: State, spots: readonly Point[]) {
+    const here = spots.findIndex((s) => s.x === state.x && s.y === state.y);
+    const options = spots.filter((_, i) => i !== here);
+    if (options.length === 0) return;
+    const to = options[Math.min(options.length - 1, Math.floor(this.random() * options.length))];
+    const route = routeAcross(
+      { width: WORLD_WIDTH, height: WORLD_HEIGHT },
+      obstacles(),
+      { x: state.x, y: state.y },
+      to,
+    );
+    if (!route) {
+      log.warn(`${state.resident.name} could not get to ${to.x},${to.y}`);
+      return;
+    }
+    state.legs = route.slice(1);
+    state.target = route[0];
   }
 }
 
