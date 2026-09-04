@@ -69,6 +69,22 @@ Rotating `ACCESS_CODE` invalidates every cookie already issued, which is how you
 lock everyone back out. Left unset, `pnpm dev` runs open with a warning, while a
 production server **refuses to start** rather than sit exposed.
 
+### Sharing a link
+
+Anyone can also arrive with the code in the URL, which makes a bookmark that skips
+the prompt entirely:
+
+```
+https://your-host/?code=<your-access-code>
+https://your-host/world?code=<your-access-code>
+```
+
+The code is swapped for the cookie and then removed from the URL by a redirect, so
+it sits in the address bar for one request and no longer. Be aware of what a link
+still costs that a typed password does not: it is kept in browser history, in the
+host's request logs, and in whatever chat window someone pastes it into. Treat such
+a bookmark as the credential it is.
+
 One code for everyone means there is no per-person revocation and no record of who
 came in. For that, configure sign-in (below) — it layers on top.
 

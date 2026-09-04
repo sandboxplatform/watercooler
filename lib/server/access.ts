@@ -106,6 +106,44 @@ export function codeMatches(submitted: string): boolean {
   return equals(submitted, code);
 }
 
+// ── The code in a link ─────────────────────────────────
+
+/** Query parameter carrying the code, for a bookmarkable link. */
+export const CODE_PARAM = "code";
+
+/**
+ * A link is a convenience with a cost: unlike a typed password, the code
+ * lands in browser history, in the server's request log, and in whatever
+ * chat window the link gets pasted into. It is accepted, but the very next
+ * thing that happens is a redirect to the same place without it, so it lives
+ * in the address bar for exactly one request. Cross-origin Referer leakage is
+ * already blocked by the Referrer-Policy set in next.config.ts.
+ */
+export function codeFromUrl(rawUrl: string): string | null {
+  return params(rawUrl).searchParams.get(CODE_PARAM);
+}
+
+/** The same target, minus the code. Path and query only — never a host. */
+export function urlWithoutCode(rawUrl: string): string {
+  const url = params(rawUrl);
+  url.searchParams.delete(CODE_PARAM);
+  const query = url.searchParams.toString();
+  return `${url.pathname}${query ? `?${query}` : ""}`;
+}
+
+/**
+ * A request target is usually a path, but a proxy may send an absolute URL.
+ * The base makes both parse; only pathname and search are ever read from the
+ * result, so a host smuggled in here goes nowhere.
+ */
+function params(rawUrl: string): URL {
+  try {
+    return new URL(rawUrl || "/", "http://placeholder.invalid");
+  } catch {
+    return new URL("/", "http://placeholder.invalid");
+  }
+}
+
 // ── Reading the request ────────────────────────────────
 
 export function readCookie(req: IncomingMessage, name: string): string | undefined {

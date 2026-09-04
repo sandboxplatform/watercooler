@@ -2,12 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   accessCookieHeader,
   clearFailures,
+  codeFromUrl,
   codeMatches,
   gateEnabled,
   isOpenPath,
   mintToken,
   rateLimited,
   recordFailure,
+  urlWithoutCode,
   verifyToken,
 } from "../access";
 
@@ -133,6 +135,44 @@ describe("which paths answer before anyone has a cookie", () => {
     expect(isOpenPath("/unlockfoo")).toBe(false);
     expect(isOpenPath("/api/healthz")).toBe(false);
     expect(isOpenPath("/api/unlock-me")).toBe(false);
+  });
+});
+
+describe("the code arriving in a link", () => {
+  it("is found wherever it sits in the query", () => {
+    expect(codeFromUrl(`/?code=${CODE}`)).toBe(CODE);
+    expect(codeFromUrl(`/world?room=x&code=${CODE}`)).toBe(CODE);
+    expect(codeFromUrl(`/r/somewhere?code=${CODE}&other=1`)).toBe(CODE);
+  });
+
+  it("is absent when no link carries one", () => {
+    expect(codeFromUrl("/")).toBeNull();
+    expect(codeFromUrl("/world?room=x")).toBeNull();
+  });
+
+  /** An empty code is still an attempt, and must not be mistaken for absence. */
+  it("tells an empty code apart from none at all", () => {
+    expect(codeFromUrl("/?code=")).toBe("");
+    expect(codeMatches("")).toBe(false);
+  });
+
+  it("strips the code and keeps everything else about the target", () => {
+    expect(urlWithoutCode(`/?code=${CODE}`)).toBe("/");
+    expect(urlWithoutCode(`/world?code=${CODE}`)).toBe("/world");
+    expect(urlWithoutCode(`/world?room=x&code=${CODE}`)).toBe("/world?room=x");
+    expect(urlWithoutCode(`/r/a/floor/2?code=${CODE}&zoom=3`)).toBe("/r/a/floor/2?zoom=3");
+  });
+
+  it("leaves a target that never had one alone", () => {
+    expect(urlWithoutCode("/world?room=x")).toBe("/world?room=x");
+    expect(urlWithoutCode("/")).toBe("/");
+  });
+
+  /** Only the path and query are ever used, so a smuggled host goes nowhere. */
+  it("never returns somewhere off this site", () => {
+    expect(urlWithoutCode("http://evil.example/world?code=x")).toBe("/world");
+    expect(urlWithoutCode("//evil.example/world")).toBe("/world");
+    expect(urlWithoutCode("")).toBe("/");
   });
 });
 

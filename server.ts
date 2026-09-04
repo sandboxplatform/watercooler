@@ -35,6 +35,7 @@ import {
   accessCookieHeader,
   clearFailures,
   clientIp,
+  codeFromUrl,
   codeMatches,
   gateEnabled,
   isAuthorized,
@@ -43,6 +44,7 @@ import {
   rateLimited,
   recordFailure,
   retryAfterSeconds,
+  urlWithoutCode,
 } from "./lib/server/access";
 
 const log = createLogger("Server");
@@ -214,6 +216,57 @@ function handleUnlock(req: IncomingMessage, res: ServerResponse) {
 }
 
 /**
+ * Trade a `?code=` in the link for the cookie, then send the browser to the
+ * same place without it. Returns true when the request has been answered.
+ *
+ * Done for every path, and whether or not the caller already holds a cookie:
+ * the point is that the code does not stay in the address bar, so it has to
+ * be stripped even when it was not needed.
+ */
+function handleCodeInLink(req: IncomingMessage, res: ServerResponse): boolean {
+  const supplied = codeFromUrl(req.url ?? "/");
+  if (supplied === null) return false;
+
+  const ip = clientIp(req);
+  const clean = urlWithoutCode(req.url ?? "/");
+
+  // Guessed at just as easily through a link as through the form.
+  if (rateLimited(ip)) {
+    const retry = retryAfterSeconds(ip);
+    log.warn(`link: too many attempts from ${ip}`);
+    res.writeHead(429, { "Content-Type": "text/plain", "Retry-After": String(retry) });
+    res.end(`Too many attempts. Try again in ${Math.ceil(retry / 60)} min.`);
+    return true;
+  }
+
+  if (!codeMatches(supplied)) {
+    recordFailure(ip);
+    log.warn(`link: rejected code from ${ip}`);
+    // Strip it anyway — a wrong code is no more welcome in the log or the
+    // address bar than a right one — and let the door ask properly.
+    const next = encodeURIComponent(clean);
+    res.writeHead(302, { Location: `/unlock?next=${next}`, "Cache-Control": "no-store" });
+    res.end();
+    return true;
+  }
+
+  const token = mintToken();
+  if (!token) return false;
+
+  clearFailures(ip);
+  log.info(`link: let ${ip} in`);
+  res.writeHead(302, {
+    Location: clean,
+    "Set-Cookie": accessCookieHeader(token, !dev),
+    // Never let a proxy or the browser keep this redirect: the URL that
+    // produced it carries the code.
+    "Cache-Control": "no-store, private",
+  });
+  res.end();
+  return true;
+}
+
+/**
  * Turn away anything without a valid cookie. Returns true when the request
  * has been answered and must go no further.
  *
@@ -222,6 +275,10 @@ function handleUnlock(req: IncomingMessage, res: ServerResponse) {
  * to an HTML page only produces a confusing parse error at the other end.
  */
 function blockedByGate(req: IncomingMessage, res: ServerResponse): boolean {
+  if (!gateEnabled()) return false;
+  // Before the open-path check, so a bookmark to /unlock?code=… works too.
+  if (handleCodeInLink(req, res)) return true;
+
   const pathname = (req.url ?? "/").split("?")[0];
   if (isOpenPath(pathname) || isAuthorized(req)) return false;
 

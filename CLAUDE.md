@@ -155,12 +155,23 @@ remote address, plus an `x-dispatch-secret` header.
 
 ### The door
 
-`ACCESS_CODE` is one shared code that opens the whole world. It is exchanged once
-at `/unlock` for a signed cookie (`lib/server/access.ts`), so the code itself never
-travels in a URL, where history, proxies and access logs would all keep a copy. The
-cookie is an HMAC over its own expiry keyed by the code, so there is no session
-store — and **rotating `ACCESS_CODE` invalidates every cookie already issued**,
-which is the entire revocation story.
+`ACCESS_CODE` is one shared code that opens the whole world. It is exchanged for a
+signed cookie (`lib/server/access.ts`) either by typing it at `/unlock` or by
+arriving with `?code=…` on any path, which is what makes a shareable bookmark
+possible. The cookie is an HMAC over its own expiry keyed by the code, so there is
+no session store — and **rotating `ACCESS_CODE` invalidates every cookie already
+issued**, which is the entire revocation story.
+
+**The code in a link costs something.** Unlike a typed password it lands in browser
+history, in the host's request log, and in whatever chat window the link is pasted
+into. So `?code=` is honoured once and then **stripped by an immediate 302 to the
+same target without it** (`urlWithoutCode`), leaving it in the address bar for a
+single request; other query parameters survive, so `/r/x/floor/2?code=…&zoom=3`
+lands on `/r/x/floor/2?zoom=3`. A wrong code in a link is stripped too — no sense
+keeping it either — and the link path shares the form's attempt counter, so it
+cannot be used to sidestep the rate limit. Cross-origin `Referer` leakage is
+already covered by the `Referrer-Policy` in `next.config.ts`. If that trade stops
+being worth it, the feature is one function (`handleCodeInLink` in `server.ts`).
 
 The gate lives in `server.ts`, not in Next middleware, because **middleware never
 sees a WebSocket upgrade**: both sockets attach to the Node server directly, so a
