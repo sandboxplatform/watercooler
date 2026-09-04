@@ -87,6 +87,12 @@ describe("cradling the ball", () => {
 });
 
 describe("nowhere on the table keeps the ball", () => {
+  /**
+   * An exhaustive sweep — sixteen hundred drops, each simulated to a stop —
+   * so it wants a budget to match. It runs in three or four seconds against
+   * the five-second default, which is close enough that a busy machine or a
+   * slower runner tips it over and fails a suite that is perfectly healthy.
+   */
   it("gives every ball back, wherever it is dropped", () => {
     const stuck: string[] = [];
 
@@ -110,7 +116,7 @@ describe("nowhere on the table keeps the ball", () => {
     }
 
     expect(stuck).toEqual([]);
-  });
+  }, 30_000);
 
   it("does not let a ball bounce on a bumper for ever", () => {
     // Dropped dead centre onto a bumper, a perfectly square bounce would
