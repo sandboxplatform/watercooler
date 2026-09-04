@@ -67,7 +67,9 @@ ACCESS_CODE=$(node -e "console.log(crypto.randomUUID())")
 Visitors enter it once at `/unlock` and get a signed cookie lasting seven days.
 Rotating `ACCESS_CODE` invalidates every cookie already issued, which is how you
 lock everyone back out. Left unset, `pnpm dev` runs open with a warning, while a
-production server **refuses to start** rather than sit exposed.
+production server **serves nothing** rather than sit exposed: it answers its
+health check and refuses everything else with a 503 saying the code is missing,
+so a deployment tells you what it needs instead of failing as a bare 502.
 
 ### Sharing a link
 

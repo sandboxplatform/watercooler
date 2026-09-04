@@ -71,18 +71,44 @@ const DEFAULT_PROVIDER = CLI_PROVIDER.id !== "mettara" ? CLI_PROVIDER : getCliPr
 // Expose provider to Next.js client code (compiled on-demand in dev)
 process.env.NEXT_PUBLIC_AGENT_PROVIDER = AGENT_PROVIDER;
 
-// A production deployment is reachable by anyone who finds the URL, so it
-// must not start wide open. Failing here is loud and cheap; discovering it
-// later, from the outside, is neither.
-if (!dev && !gateEnabled()) {
+/**
+ * Production with no code configured: serve nothing, but say so.
+ *
+ * A deployment is reachable by anyone who finds the URL, so it must not come
+ * up open. It used to exit instead, which was equally closed and far worse to
+ * diagnose: the host had nothing to route to, so a visitor — and the person
+ * who deployed it — got a bare 502 with the reason buried in deploy logs. So
+ * the server now starts, answers the health check, and refuses every other
+ * request with the one sentence that explains it.
+ */
+const unconfigured = !dev && !gateEnabled();
+if (unconfigured) {
   log.error(
-    "ACCESS_CODE is not set. Refusing to start a production server with no access gate — " +
-      "set ACCESS_CODE to a long random value (a GUID is fine) and restart.",
+    "ACCESS_CODE is not set. Serving nothing until it is — set ACCESS_CODE to a long " +
+      "random value (a GUID is fine) and redeploy.",
   );
-  process.exit(1);
 }
 if (dev && !gateEnabled()) {
   log.warn("ACCESS_CODE is not set: the world is open to anyone who can reach this port.");
+}
+
+const UNCONFIGURED_MESSAGE =
+  "This world has no access code, so nothing is being served.\n\n" +
+  "Set ACCESS_CODE in the server's environment to a long random value and redeploy.\n";
+
+/**
+ * Answer while unconfigured. The health check says the process is alive, so
+ * the host routes to it and whoever opens the page reads why — a failing
+ * probe would only reproduce the 502 this exists to avoid.
+ */
+function answerUnconfigured(req: IncomingMessage, res: ServerResponse) {
+  if ((req.url ?? "").split("?")[0] === "/api/health") {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ ok: true, serving: false, reason: "ACCESS_CODE is not set" }));
+    return;
+  }
+  res.writeHead(503, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+  res.end(UNCONFIGURED_MESSAGE);
 }
 // A personal code that is also the shared one would hand that person's name,
 // look and desk to every visitor who was given the shared code.
@@ -399,69 +425,80 @@ function ensureErpData() {
   }
 }
 
-app
-  .prepare()
-  .then(() => {
-    ensureErpData();
-    const mettaraTools = buildMettaraTools();
-    const server = createServer((req, res) => {
-      // Intercept internal API routes before Next.js. These two authenticate
-      // themselves — a localhost-plus-secret check and an HMAC signature —
-      // and are not browser traffic, so the cookie gate does not apply.
-      if (req.url === "/api/internal/dispatch") {
-        handleDispatch(req, res);
-        return;
-      }
-      if (mettaraTools && (req.url ?? "").split("?")[0] === TOOLS_PATH) {
-        void mettaraTools(req, res);
-        return;
-      }
-      if ((req.url ?? "").split("?")[0] === "/api/internal/boards") {
-        handleBoards(req, res);
-        return;
-      }
-      if ((req.url ?? "").split("?")[0] === "/api/unlock") {
-        handleUnlock(req, res);
-        return;
-      }
-      // Everything below this line needs the cookie: pages, API routes, uploads.
-      if (blockedByGate(req, res)) return;
-      handle(req, res);
-    });
-
-    // Players and agents ride separate sockets: presence is lossy and constant,
-    // agent traffic is rare and must not be dropped.
-    attachPresenceSocket(server);
-
-    attachCliBridge(server, DEFAULT_PROVIDER);
-    // The HUD may have switched the agents to another AI before; come
-    // back on it, and let it switch again.
-    const defaultId = DEFAULT_PROVIDER.id;
-    const remembered = rememberedProvider(getRoomStore(), defaultId);
-    if (remembered && remembered !== defaultId) setBridgeProvider(getCliProvider(remembered));
-    registerProviderSwitch({
-      defaultId,
-      active: () => getBridgeProvider().id,
-      async switchTo(id) {
-        if (!offeredProviders(defaultId).includes(id)) return "That provider is not offered here.";
-        const blocked = await providerBlocked(id);
-        if (blocked) return blocked;
-        if (getBridgeProvider().id !== id) setBridgeProvider(getCliProvider(id));
-        rememberProvider(getRoomStore(), id);
-        return null;
-      },
-    });
-    log.info(`Ready on http://localhost:${port}`);
-    log.info(
-      DEFAULT_PROVIDER.kind === "service"
-        ? `Provider: ${DEFAULT_PROVIDER.displayName} (hosted service)`
-        : `Provider: ${DEFAULT_PROVIDER.displayName} (bridging via ${DEFAULT_PROVIDER.binName} CLI)`,
-    );
-    if (mettaraTools) log.info(`Mettara tool endpoint: ${TOOLS_PATH}`);
-
-    server.listen(port);
-  })
-  .catch((err) => {
-    log.error("Failed to prepare Next.js:", err);
-    process.exit(1);
+if (unconfigured) {
+  // Nothing is prepared and nothing is attached: no Next, no presence socket,
+  // no agent bridge. isAuthorized() waves everything through when no code is
+  // configured, so a running server with the sockets on would have been open
+  // to anyone — the surface here is one function that answers and stops.
+  createServer(answerUnconfigured).listen(port, () => {
+    log.error(`Serving nothing on http://localhost:${port} until ACCESS_CODE is set.`);
   });
+} else {
+  app
+    .prepare()
+    .then(() => {
+      ensureErpData();
+      const mettaraTools = buildMettaraTools();
+      const server = createServer((req, res) => {
+        // Intercept internal API routes before Next.js. These authenticate
+        // themselves — a localhost-plus-secret check and an HMAC signature —
+        // and are not browser traffic, so the cookie gate does not apply.
+        if (req.url === "/api/internal/dispatch") {
+          handleDispatch(req, res);
+          return;
+        }
+        if (mettaraTools && (req.url ?? "").split("?")[0] === TOOLS_PATH) {
+          void mettaraTools(req, res);
+          return;
+        }
+        if ((req.url ?? "").split("?")[0] === "/api/internal/boards") {
+          handleBoards(req, res);
+          return;
+        }
+        if ((req.url ?? "").split("?")[0] === "/api/unlock") {
+          handleUnlock(req, res);
+          return;
+        }
+        // Everything below this line needs the cookie: pages, API routes, uploads.
+        if (blockedByGate(req, res)) return;
+        handle(req, res);
+      });
+
+      // Players and agents ride separate sockets: presence is lossy and constant,
+      // agent traffic is rare and must not be dropped.
+      attachPresenceSocket(server);
+
+      attachCliBridge(server, DEFAULT_PROVIDER);
+      // The HUD may have switched the agents to another AI before; come
+      // back on it, and let it switch again.
+      const defaultId = DEFAULT_PROVIDER.id;
+      const remembered = rememberedProvider(getRoomStore(), defaultId);
+      if (remembered && remembered !== defaultId) setBridgeProvider(getCliProvider(remembered));
+      registerProviderSwitch({
+        defaultId,
+        active: () => getBridgeProvider().id,
+        async switchTo(id) {
+          if (!offeredProviders(defaultId).includes(id))
+            return "That provider is not offered here.";
+          const blocked = await providerBlocked(id);
+          if (blocked) return blocked;
+          if (getBridgeProvider().id !== id) setBridgeProvider(getCliProvider(id));
+          rememberProvider(getRoomStore(), id);
+          return null;
+        },
+      });
+      log.info(`Ready on http://localhost:${port}`);
+      log.info(
+        DEFAULT_PROVIDER.kind === "service"
+          ? `Provider: ${DEFAULT_PROVIDER.displayName} (hosted service)`
+          : `Provider: ${DEFAULT_PROVIDER.displayName} (bridging via ${DEFAULT_PROVIDER.binName} CLI)`,
+      );
+      if (mettaraTools) log.info(`Mettara tool endpoint: ${TOOLS_PATH}`);
+
+      server.listen(port);
+    })
+    .catch((err) => {
+      log.error("Failed to prepare Next.js:", err);
+      process.exit(1);
+    });
+}

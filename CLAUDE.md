@@ -187,10 +187,17 @@ unlock page cannot render). `/api/mettara/tools` and `/api/internal/dispatch` ar
 answered _before_ the gate — they are machine-to-machine and carry stronger
 authentication of their own.
 
-A production server **refuses to start** without `ACCESS_CODE`: a deployment that
-would be open to anyone who finds the URL should fail loudly, not quietly. In dev
-it only warns. Unlock attempts are rate limited to 10 per 15 minutes per address,
-in memory — so the count resets on restart and is per-instance, not shared.
+**Without a code, production serves nothing and says so.** A deployment must not
+come up open, so with no `ACCESS_CODE` the server answers the health check and
+refuses every other request — sockets included — with a 503 naming what is
+missing. Nothing else is even built: no Next, no presence socket, no agent
+bridge, because `isAuthorized()` waves everything through when no code is
+configured and a running server with the sockets attached would have been open to
+anyone. It used to `process.exit(1)` instead, which was equally closed and far
+worse to run: the host had nothing to route to, so the deployment showed a bare
+502 with the reason buried in its logs. In dev, no code just warns and the world
+is open. Unlock attempts are rate limited to 10 per 15 minutes per address, in
+memory — so the count resets on restart and is per-instance, not shared.
 
 **A code says who you are.** The cookie carries the identity it was opened with,
 inside the signature and keyed by _that identity's_ code — so it cannot be edited
