@@ -183,6 +183,12 @@ export default function ProjectBoard() {
       // As above.
     }
     setPicked(id);
+    // Tell the office too: the agents have no browser to remember it in.
+    void fetch("/api/trello", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ board: id }),
+    }).catch(() => {});
     void load(id);
   };
 

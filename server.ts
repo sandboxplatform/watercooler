@@ -326,8 +326,9 @@ function handleBoards(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
-  const what = new URL(req.url ?? "", "http://127.0.0.1").searchParams.get("what");
-  const reader = what === "desk" ? readDesk() : readBoard();
+  const params = new URL(req.url ?? "", "http://127.0.0.1").searchParams;
+  const what = params.get("what");
+  const reader = what === "desk" ? readDesk() : readBoard(params.get("board"));
   reader
     .then((answer) => {
       res.writeHead(200, { "Content-Type": "application/json" });

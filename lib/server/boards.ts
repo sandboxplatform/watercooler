@@ -27,9 +27,35 @@ import {
   readZohoConfig,
 } from "../zoho/client";
 import type { DeskView } from "../zoho/tickets";
+import { getRoomStore } from "./room-store";
 import { createLogger } from "../logger";
 
 const log = createLogger("Boards");
+
+/**
+ * Which board the office is looking at.
+ *
+ * Whoever picks one on the wall picks it for everyone, agents included:
+ * an agent has no browser, so a choice kept only in someone's localStorage
+ * is a choice it can never see. TRELLO_BOARD_ID still wins when set.
+ */
+const BOARD_SETTING = "trello-board";
+
+export function officeBoard(): string | null {
+  try {
+    return getRoomStore().getSetting(BOARD_SETTING);
+  } catch {
+    return null;
+  }
+}
+
+export function setOfficeBoard(boardId: string): void {
+  try {
+    getRoomStore().setSetting(BOARD_SETTING, boardId);
+  } catch (err) {
+    log.warn("could not remember the board:", (err as Error).message);
+  }
+}
 
 export interface BoardAnswer {
   configured: boolean;
@@ -61,10 +87,30 @@ export async function readBoard(asked?: string | null): Promise<BoardAnswer> {
   const config = readTrelloConfig();
   if (!config) return { configured: false };
 
-  const boardId = asked?.trim() || config.boardId;
+  const wanted = asked?.trim() || config.boardId || officeBoard();
   const now = Date.now();
 
   try {
+    // A person names a board the way they say it out loud — "Sandbox ERP" —
+    // so a name is resolved to its id before anything else.
+    let boardId = wanted;
+    if (wanted && !/^[a-f0-9]{8,}$/i.test(wanted)) {
+      if (!boardList || now - boardList.at > BOARD_CACHE_MS) {
+        boardList = { at: now, boards: await fetchBoards(config) };
+      }
+      const found = boardList.boards.find(
+        (b) => b.name.trim().toLowerCase() === wanted.toLowerCase(),
+      );
+      if (!found) {
+        return {
+          configured: true,
+          boards: boardList.boards,
+          error: `No board here is called "${wanted}".`,
+        };
+      }
+      boardId = found.id;
+    }
+
     if (!boardId) {
       if (!boardList || now - boardList.at > BOARD_CACHE_MS) {
         boardList = { at: now, boards: await fetchBoards(config) };
