@@ -199,6 +199,15 @@ worse to run: the host had nothing to route to, so the deployment showed a bare
 is open. Unlock attempts are rate limited to 10 per 15 minutes per address, in
 memory — so the count resets on restart and is per-instance, not shared.
 
+**The gate is only on `server.ts`.** There are two production entry points and
+this one — `pnpm start`, and the Docker image Railway builds — is the gated one.
+`server.prod.mjs`, which the published npm package runs, has no gate and serves
+everything to whoever reaches the port; it is for `npx` on one machine and says
+so at startup. The check is deliberately not duplicated there: it is TypeScript
+the package cannot import, and a second implementation of an access check is how
+the two drift — which is how that file came to be the ungated one in the first
+place. Shipping one server instead of two is the fix when it matters.
+
 **A code says who you are.** The cookie carries the identity it was opened with,
 inside the signature and keyed by _that identity's_ code — so it cannot be edited
 into somebody else's, and rotating one person's code turns out only them.

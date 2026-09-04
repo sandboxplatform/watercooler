@@ -3,6 +3,19 @@
  *
  * Reads the Next.js config from the standalone build output and creates
  * an HTTP server with the Next.js request handler + agent bridge.
+ *
+ * **There is no access gate here.** ACCESS_CODE gates `server.ts`, which is
+ * what `pnpm start` and the Docker image run; this file is the separate
+ * entry point the published package uses, and it serves everything to
+ * whoever can reach the port. It is meant for `npx` on your own machine —
+ * localhost, one person — which is the same footing as `pnpm dev` without a
+ * code. Do not put it on an address other people can reach.
+ *
+ * The gate is not duplicated here on purpose: it lives in TypeScript that
+ * this file cannot import (the package ships no tsx), and a second
+ * implementation of an access check is how the two drift apart — which is
+ * precisely how this file came to be the ungated one. The fix, when it
+ * matters, is to ship one server rather than two.
  */
 
 import { createServer } from "node:http";
@@ -61,6 +74,14 @@ app
         log.info("  > Provider: Auggie (bridging via auggie CLI)");
       }
       log.info("");
+      // Said with log.error so it is seen even in production, where info is
+      // silenced: somebody putting this on a public address should not have
+      // to read the source to learn that ACCESS_CODE does nothing here.
+      log.error(
+        "This server has no access code: everything is open to whoever can reach it. " +
+          "It is meant for localhost. To run it where others can reach it, use the " +
+          "gated server (`pnpm start` / the Docker image), which honours ACCESS_CODE.",
+      );
     });
   })
   .catch((err) => {

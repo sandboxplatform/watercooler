@@ -105,6 +105,12 @@ so at boot.
 The shared code has no per-person revocation and no record of who came in on it.
 For that, configure sign-in (below) — it layers on top.
 
+> **`npx` runs ungated.** `ACCESS_CODE` gates `pnpm start` and the Docker image.
+> The published package has its own entry point (`server.prod.mjs`) with no gate
+> at all, so it serves everything to whoever can reach the port. That is fine for
+> `npx` on your own machine, which is what it is for; do not put it on an address
+> other people can reach. It says so on startup.
+
 ## Agent providers
 
 Agents can be executed several ways, selected with the `AGENT_PROVIDER` env var:
