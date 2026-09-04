@@ -25,6 +25,7 @@ import ElevatorModal from "./ElevatorModal";
 import AchievementToast from "./AchievementToast";
 import Whiteboard from "./Whiteboard";
 import Pinball from "./Pinball";
+import ProjectBoard from "./ProjectBoard";
 import Arcade from "./Arcade";
 import PingPong from "./PingPong";
 import TouchControls from "./TouchControls";
@@ -156,6 +157,7 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
       <AchievementToast />
       <Whiteboard />
       <Pinball />
+      <ProjectBoard />
       <Arcade />
       <PingPong />
       <TouchControls />

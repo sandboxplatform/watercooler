@@ -68,6 +68,11 @@ export interface Tenant {
   kind?: BuildingKind;
   /** The game in the lobby's corner, if it has one. */
   game?: Game;
+  /**
+   * A third floor with the project board on its wall, above the people and
+   * the agents. Only a building that runs its work off a board has one.
+   */
+  boardFloor?: boolean;
 }
 
 const org = (slug: string) => organisationFor(slug)!;
@@ -78,7 +83,7 @@ function lobby(slug: string, orgSlug: string, extra: Partial<Tenant> = {}): Tena
 
 export const TENANTS: readonly Tenant[] = [
   lobby("castle-atlantic", "castle-atlantic", { game: "pong" }),
-  lobby("sandbox-erp", "sandbox-erp", { game: "pinball" }),
+  lobby("sandbox-erp", "sandbox-erp", { game: "pinball", boardFloor: true }),
   lobby("chester-warehouse", "chester", { location: "Warehouse", kind: "warehouse" }),
   lobby("chester-store", "chester", { location: "Store", kind: "store" }),
   lobby("blockhouse-warehouse", "blockhouse", { location: "Warehouse", kind: "warehouse" }),
@@ -128,6 +133,11 @@ export function hasCampus(orgSlug: string): boolean {
 /** Whether a room is a lobby with floors above it, rather than a store, warehouse or garage. */
 export function hasFloors(tenant: Tenant): boolean {
   return !tenant.kind || tenant.kind === "office";
+}
+
+/** Whether a building has the board floor above its agents' floor. */
+export function hasBoardFloor(tenant: Tenant | null | undefined): boolean {
+  return !!tenant && hasFloors(tenant) && tenant.boardFloor === true;
 }
 
 /** The store an organisation is entered through, if it is a store business. */

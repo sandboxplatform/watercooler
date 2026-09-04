@@ -364,6 +364,85 @@ function save(name, c) {
   );
   console.log(`wrote ${name}`);
 }
+
+/**
+ * The project board: a big kanban board on the wall, three columns of
+ * pinned cards under a titled header. Drawn in the interiors' palette so it
+ * belongs beside the whiteboard, and deliberately readable at a glance from
+ * across the room — the real cards are on the panel it opens.
+ */
+function projectBoard() {
+  const c = canvas(144, 96);
+  const { set, rect, outline, disc } = c;
+  const frame = [92, 74, 58, 255];
+  const frameLit = [126, 102, 78, 255];
+  const frameDark = [64, 50, 38, 255];
+  const face = [235, 228, 242, 255];
+  const faceDark = [216, 208, 224, 255];
+  const rule = [198, 189, 213, 255];
+  const header = [47, 125, 120, 255];
+  const headerLit = [66, 150, 144, 255];
+  const cardInk = [167, 151, 150, 255];
+
+  // The frame, with a lit top edge and a shadow beneath.
+  rect(0, 0, 144, 96, ink);
+  rect(1, 1, 143, 95, frame);
+  rect(1, 1, 143, 4, frameLit);
+  rect(1, 91, 143, 95, frameDark);
+  for (let y = 1; y < 95; y++) {
+    set(1, y, frameLit);
+    set(142, y, frameDark);
+  }
+
+  // The board's face, inset.
+  rect(6, 6, 138, 90, ink);
+  rect(7, 7, 137, 89, face);
+
+  // Header strip with a row of blocky letters standing in for a title.
+  rect(7, 7, 137, 20, header);
+  rect(7, 7, 137, 10, headerLit);
+  for (let x = 14; x < 66; x += 6) rect(x, 12, x + 4, 16, [235, 228, 242, 255]);
+  // A small clock at the right of the header: the board is a live thing.
+  disc(126, 13, 5, [235, 228, 242, 255]);
+  disc(126, 13, 4, header);
+  rect(126, 10, 127, 14, [235, 228, 242, 255]);
+  rect(126, 13, 130, 14, [235, 228, 242, 255]);
+
+  // Three columns, ruled apart.
+  const colours = [
+    [87, 157, 255, 255],
+    [242, 178, 43, 255],
+    [75, 206, 151, 255],
+  ];
+  for (let i = 0; i < 3; i++) {
+    const x0 = 9 + i * 43;
+    if (i > 0) rect(x0 - 2, 22, x0 - 1, 87, rule);
+    // Column heading: a short bar in the column's colour.
+    rect(x0, 24, x0 + 26, 28, colours[i]);
+    rect(x0, 24, x0 + 26, 25, [255, 255, 255, 90]);
+    // Cards, fewer as the work moves right — a board mid-flight.
+    const cards = 4 - i;
+    for (let n = 0; n < cards; n++) {
+      const y0 = 32 + n * 14;
+      rect(x0, y0, x0 + 39, y0 + 11, ink);
+      rect(x0 + 1, y0 + 1, x0 + 38, y0 + 10, n % 2 ? faceDark : [246, 242, 250, 255]);
+      // A label strip and two lines of writing.
+      rect(x0 + 3, y0 + 3, x0 + 13, y0 + 5, colours[(i + n) % 3]);
+      rect(x0 + 3, y0 + 7, x0 + 30, y0 + 8, cardInk);
+      if (n % 2 === 0) rect(x0 + 3, y0 + 9 > y0 + 9 ? y0 + 9 : y0 + 9, x0 + 22, y0 + 10, cardInk);
+    }
+  }
+
+  // Two pins holding it up.
+  for (const px of [24, 120]) {
+    disc(px, 4, 3, [179, 94, 63, 255]);
+    disc(px - 1, 3, 1, [235, 228, 242, 255]);
+  }
+  outline(0, 0, 144, 96);
+  return c;
+}
+
 save("pingpong_table_96x72.png", table());
 save("pinball_machine_96x120.png", pinball());
 save("arcade_cabinet_96x120.png", arcade());
+save("project_board_144x96.png", projectBoard());

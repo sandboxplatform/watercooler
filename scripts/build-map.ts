@@ -58,6 +58,8 @@ for (const [file, build] of [
   ["lobby-apeiron-media.json", (src: SourceMap) => buildOfficeSpec(src, "pong")],
   ["lobby-sandbox-erp.json", (src: SourceMap) => buildOfficeSpec(src, "pinball", ["arcade"])],
   ["floor.json", buildFloorSpec],
+  // The board floor: the same room, with the project board on the wall.
+  ["floor-board.json", (src: SourceMap) => buildFloorSpec(src, { board: true })],
   ...premises,
 ] as const) {
   const spec = build(raw);

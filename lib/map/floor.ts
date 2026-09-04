@@ -10,7 +10,7 @@
  */
 
 import { harvest, type Region, type SourceMap } from "./harvest";
-import type { RoomSpec } from "./spec";
+import type { PoiSpec, RoomSpec } from "./spec";
 import { TILE, WALLS, WHITEBOARD } from "./office";
 
 export const WIDTH = 20;
@@ -25,17 +25,55 @@ export const PLAYER_START = { tx: 9, ty: 7, facing: "down" } as const;
 /** Where it is downstairs: bottom left, under where the door would be. */
 export const ELEVATOR = { tx: 2, ty: HEIGHT - 2, tw: 2, th: 2 } as const;
 
-export function buildFloorSpec(source: SourceMap): RoomSpec {
+/**
+ * The project board's place on the wall: the picture is drawn by the scene
+ * from its own sprite, so what the map carries is the footprint that makes
+ * it solid, and the point of interest on its lower tile — stand below it
+ * and you are within reach, the way the whiteboard works.
+ *
+ * On the left of the wall: the whiteboard has the middle, and the room's
+ * name is lettered across the right.
+ */
+export const PROJECT_BOARD = {
+  region: {
+    label: "project board",
+    sx: 0,
+    sy: 0,
+    sw: 3,
+    sh: 2,
+    dx: 3,
+    dy: 1,
+    layers: [],
+  } satisfies Region,
+  poi: { name: "Project board", tx: 4, ty: 2, facing: "up" } satisfies PoiSpec,
+};
+
+export interface FloorOptions {
+  /** The board floor: the project board hangs beside the whiteboard. */
+  board?: boolean;
+}
+
+export function buildFloorSpec(source: SourceMap, options: FloorOptions = {}): RoomSpec {
   const picked = harvest(source, REGIONS);
+  const board = options.board === true;
   return {
     width: WIDTH,
     height: HEIGHT,
     tileSize: TILE,
     walls: WALLS,
     placements: picked.placements,
-    pois: [WHITEBOARD.poi],
+    pois: board ? [WHITEBOARD.poi, PROJECT_BOARD.poi] : [WHITEBOARD.poi],
     spawns: [{ tx: PLAYER_START.tx, ty: PLAYER_START.ty, facing: PLAYER_START.facing }],
-    collisions: [],
+    collisions: board
+      ? [
+          {
+            x: PROJECT_BOARD.region.dx * TILE,
+            y: PROJECT_BOARD.region.dy * TILE,
+            width: PROJECT_BOARD.region.sw * TILE,
+            height: PROJECT_BOARD.region.sh * TILE,
+          },
+        ]
+      : [],
     // No door: the only way out is the way in.
     transitions: [{ name: "elevator", target: "elevator", ...ELEVATOR, facing: "down" }],
   };

@@ -11,6 +11,7 @@
  *   /r/<slug>            the lobby
  *   /r/<slug>/floor/1    the people's floor
  *   /r/<slug>/floor/2    the agents' floor
+ *   /r/<slug>/floor/3    the board floor, in a building that has one
  * Add ?via=elevator to step out of the lift, or ?via=door to step in from
  * outside; either way you arrive walking, and clear of the doorway.
  *
@@ -18,15 +19,17 @@
  */
 
 import { floorRoomSlug, parseRoomPath } from "../rooms";
-import { ORGANISATIONS, hasFloors, tenantFor, type Tenant } from "./tenants";
+import { ORGANISATIONS, hasBoardFloor, hasFloors, tenantFor, type Tenant } from "./tenants";
 import { residentsAt } from "./residents";
 
-export type Level = 1 | 2;
+export type Level = 1 | 2 | 3;
 export type Floor = { kind: "lobby" } | { kind: "floor"; level: Level };
 
 export const LOBBY: Floor = { kind: "lobby" };
 export const PEOPLE_FLOOR: Floor = { kind: "floor", level: 1 };
 export const AGENTS_FLOOR: Floor = { kind: "floor", level: 2 };
+/** Where the project board hangs. Only some buildings have one. */
+export const BOARD_FLOOR: Floor = { kind: "floor", level: 3 };
 
 export interface Address {
   tenant: Tenant;
@@ -38,8 +41,11 @@ export function addressFromLocation(location: { pathname: string }): Address | n
   const tenant = path ? tenantFor(path.slug) : null;
   if (!path || !tenant) return null;
   if (path.floor === null) return { tenant, floor: LOBBY };
-  if (path.floor !== 1 && path.floor !== 2) return null;
-  return { tenant, floor: { kind: "floor", level: path.floor } };
+  const level = path.floor;
+  if (level !== 1 && level !== 2 && level !== 3) return null;
+  // The board floor is not a floor every building has.
+  if (level === 3 && !hasBoardFloor(tenant)) return null;
+  return { tenant, floor: { kind: "floor", level } };
 }
 
 export function floorUrl(tenant: Tenant, floor: Floor, via?: "elevator" | "door"): string {
@@ -84,12 +90,13 @@ export interface FloorStop {
 
 export function floorTitle(floor: Floor): string {
   if (floor.kind === "lobby") return "Lobby";
-  return floor.level === 1 ? "Floor 1 · People" : "Floor 2 · Agents";
+  if (floor.level === 1) return "Floor 1 · People";
+  return floor.level === 2 ? "Floor 2 · Agents" : "Floor 3 · Board";
 }
 
 /** The floors of a building, bottom up, with who sits on each. */
 export function floorsOf(tenant: Tenant, occupancy: Occupancy): FloorStop[] {
-  return [
+  const floors: FloorStop[] = [
     { floor: LOBBY, label: floorTitle(LOBBY), names: [] },
     {
       floor: PEOPLE_FLOOR,
@@ -102,12 +109,19 @@ export function floorsOf(tenant: Tenant, occupancy: Occupancy): FloorStop[] {
       names: residentsAt(tenant.slug).map((r) => r.name),
     },
   ];
+  // Nobody sits on the board floor; the board is what it is for.
+  if (hasBoardFloor(tenant)) {
+    floors.push({ floor: BOARD_FLOOR, label: floorTitle(BOARD_FLOOR), names: [] });
+  }
+  return floors;
 }
 
 /** Who has a desk on a floor, in slot order. */
 export function occupantsOf(tenant: Tenant, floor: Floor, occupancy: Occupancy): Occupant[] {
   if (floor.kind === "lobby") return [];
   if (floor.level === 1) return occupancy.people;
+  // The board floor has no desks: it is one wall and the room to read it.
+  if (floor.level === 3) return [];
   return residentsAt(tenant.slug).map((r) => ({ id: r.id, name: r.name }));
 }
 
@@ -137,7 +151,9 @@ export function elevatorStops(address: Address, occupancy: Occupancy): ElevatorS
  */
 export function mapFileFor(address: Address | null): string {
   if (!address) return "/maps/office3.json";
-  if (address.floor.kind === "floor") return "/maps/floor.json";
+  if (address.floor.kind === "floor") {
+    return address.floor.level === 3 ? "/maps/floor-board.json" : "/maps/floor.json";
+  }
   if (!hasFloors(address.tenant)) return `/maps/room-${address.tenant.slug}.json`;
   return address.tenant.game ? `/maps/lobby-${address.tenant.slug}.json` : "/maps/lobby.json";
 }

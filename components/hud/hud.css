@@ -1482,6 +1482,255 @@
 }
 
 /* ── The trophy wall ───────────────────────────────────── */
+/* ── The project board: a Trello board on the wall ── */
+.board-overlay .board-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1100px, 94vw);
+  height: min(720px, 88vh);
+  padding: 0;
+  overflow: hidden;
+}
+
+.board-count {
+  align-self: center;
+  margin-right: 4px;
+  font-size: 8px;
+  color: var(--pixel-muted);
+  white-space: nowrap;
+}
+
+.board-spin {
+  animation: board-spin 0.9s linear infinite;
+}
+
+@keyframes board-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.board-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.board-columns {
+  display: flex;
+  gap: 10px;
+  height: 100%;
+  padding: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  align-items: flex-start;
+}
+
+.board-column {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 220px;
+  max-height: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  border: 2px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-sm);
+}
+
+.board-column__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 8px;
+  border-bottom: 2px solid var(--pixel-border);
+  font-size: 9px;
+  color: var(--pixel-accent);
+}
+
+.board-column__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-column__count {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--pixel-muted);
+  font-size: 8px;
+}
+
+.board-column__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.board-column__empty {
+  margin: 4px 2px;
+  color: var(--pixel-muted);
+  font-size: 8px;
+}
+
+.board-card {
+  padding: 7px 8px;
+  background: var(--pixel-panel, #23233a);
+  border: 2px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-sm);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+}
+
+.board-card__labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: 5px;
+}
+
+.board-card__label {
+  min-width: 26px;
+  max-width: 100%;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: #12121c;
+  font-size: 7px;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-card__title {
+  font-size: 9px;
+  line-height: 1.5;
+  color: var(--pixel-text);
+  word-break: break-word;
+}
+
+.board-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 7px;
+  color: var(--pixel-muted);
+}
+
+.board-chip,
+.board-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.board-chip--done {
+  color: var(--pixel-green);
+}
+
+.board-due--overdue {
+  background: rgba(248, 113, 104, 0.2);
+  color: #f87168;
+}
+
+.board-due--soon {
+  background: rgba(226, 178, 3, 0.2);
+  color: #e2b203;
+}
+
+.board-due--done {
+  background: rgba(75, 206, 151, 0.2);
+  color: #4bce97;
+}
+
+.board-card__who {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.board-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--pixel-accent);
+  color: #12121c;
+  font-size: 6px;
+}
+
+.board-note {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 28px 20px;
+  font-size: 9px;
+  line-height: 1.7;
+  color: var(--pixel-muted);
+  text-align: center;
+}
+
+.board-note__lead {
+  margin-bottom: 10px;
+  color: var(--pixel-accent);
+  font-size: 11px;
+}
+
+.board-note code {
+  color: var(--pixel-text);
+}
+
+.board-note__keys {
+  margin: 10px auto;
+  padding: 8px 10px;
+  border: 2px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-sm);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--pixel-text);
+  font-size: 8px;
+  line-height: 1.8;
+  text-align: left;
+}
+
+.board-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.board-picker__item {
+  width: 100%;
+}
+
+.board-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  border-top: 2px solid var(--pixel-border);
+  color: var(--pixel-muted);
+  font-size: 8px;
+}
+
+.board-foot__switch {
+  border: none;
+  background: none;
+  color: var(--pixel-accent);
+  font-family: inherit;
+  font-size: 8px;
+  cursor: pointer;
+}
+
 /* ── People: everyone online, by place ── */
 .people {
   padding: 10px 12px;

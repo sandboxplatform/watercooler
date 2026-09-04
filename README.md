@@ -270,6 +270,36 @@ room's activity like a pinball one. Keys, a pad or a touch screen all work;
 Escape (or B) backs out of a game to the menu, and out of the menu to the
 room.
 
+### The project board on Sandbox ERP's third floor
+
+Sandbox ERP has a third floor above its people and its agents, reached by
+the lift, with the team's Trello board on the wall. Walk up to it and press
+E: the board opens as columns of cards, with their labels, due dates,
+checklists, comments and who they are assigned to. It refreshes itself
+every half minute while it is open.
+
+It is **read-only**. Nothing in the office writes to Trello, and there is no
+code here that could.
+
+To connect a board, put a Trello API key and token in `.env.local`:
+
+```
+TRELLO_API_KEY=…
+TRELLO_TOKEN=…
+TRELLO_BOARD_ID=…   # optional
+```
+
+The key comes from Trello's developer portal (create a Power-Up to get
+one), and the token is generated from that key against the account whose
+boards should be readable. Leave `TRELLO_BOARD_ID` out and the wall offers
+every board the token can see, remembering the choice in that browser; set
+it to fix one board for everyone. Restart the server after adding them.
+
+Two things worth knowing. Trello takes its credentials as query parameters
+on every request, so all of this happens server-side and the token never
+reaches the browser. And a token can see every board its account can — so
+generate it from an account that is only on the boards you want readable.
+
 ### Playing together
 
 One server is one world. Everyone who opens the site walks into the same
