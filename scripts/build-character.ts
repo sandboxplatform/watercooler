@@ -7,7 +7,7 @@
  * facings given. Left is mirrored from right by the composer, so a sheet
  * needs only down, up and right. See lib/pixel/strip.ts for the cutting.
  *
- *   pnpm tsx scripts/build-character.ts <Name> [--source file.png] [--rows down,up,right] [--idle 3] [--walk 6] [--preview out.png]
+ *   pnpm tsx scripts/build-character.ts <Name> [--source file.png] [--rows down,up,right] [--idle 3] [--walk 6] [--height 72] [--no-outline] [--preview out.png]
  *
  * Reads  public/characters/examples/<Name>_sprite.png, or --source
  * Writes public/characters/<Name>_48x48.png — then add it to WORKER_SPRITES.
@@ -22,6 +22,7 @@ import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { decodePng, encodePng } from "../lib/pixel/png";
 import { detectBackdrop, keyOutBackdrop } from "../lib/pixel/ingest";
+import { addOutline, outlineColour } from "../lib/pixel/outline";
 import {
   composeSheet,
   FACINGS,
@@ -41,7 +42,19 @@ import {
   type Cell,
 } from "../lib/pixel/strip";
 
-/** How tall the game's own characters stand in their 96px frame. */
+/**
+ * How tall a standing adult is in their 96px frame, matching the pack's cast.
+ *
+ * Override with `--height` for anyone who is not a person: everything is
+ * scaled uniformly to this, so a chicken given the human default ends up
+ * eye-to-eye with one.
+ *
+ * Note this fixes height only. The width that comes out is whatever the
+ * source's proportions give — the pack's cast is chibi, about 42 wide at 66
+ * tall, and a realistically proportioned figure at the same height lands
+ * nearer 26 and reads as lanky beside them. That is a matter for the drawing,
+ * not for the scaler; stretching it sideways would only squash the face.
+ */
 const CHARACTER_HEIGHT = 72;
 
 const args = process.argv.slice(2);
@@ -59,6 +72,11 @@ for (const f of facings) if (!FACINGS.includes(f)) throw new Error(`unknown faci
 const idleCount = Number(option("--idle", "3"));
 const walkCount = Number(option("--walk", "6"));
 const preview = option("--preview", "");
+const height = Number(option("--height", String(CHARACTER_HEIGHT)));
+if (!Number.isFinite(height) || height < 8 || height > FRAME_H - 2)
+  throw new Error(`--height must be between 8 and ${FRAME_H - 2}`);
+/** The pack's cast is drawn with a dark edge; pass --no-outline to go without. */
+const outline = !args.includes("--no-outline");
 
 const SOURCE = option(
   "--source",
@@ -102,13 +120,20 @@ bands.forEach((band, r) => {
 
 const colours = palette(image, 16);
 const sharp = snapToPalette(image, colours);
-const scale = commonScale(cells, FRAME_W, FRAME_H, 2, CHARACTER_HEIGHT);
+const scale = commonScale(cells, FRAME_W, FRAME_H, 2, height);
 console.log(`scale ${scale.toFixed(3)}, ${colours.length} colours`);
 const frames = cells.map((cell) =>
   snapToPalette(drawScaled(sharp, cell, scale, FRAME_W, FRAME_H), colours),
 );
 
-const sheet = composeSheet(frames, assignments);
+const composed = composeSheet(frames, assignments);
+// Last, after the palette snap, so the line is exactly the colour asked for
+// rather than the nearest of sixteen. It is one colour more on the sheet.
+const sheet = outline ? addOutline(composed, FRAME_W, FRAME_H) : composed;
+if (outline) {
+  const [r, g, b] = outlineColour(composed);
+  console.log(`outlined in rgb(${r},${g},${b})`);
+}
 writeFileSync(OUTPUT, encodePng(sheet));
 console.log(`wrote ${OUTPUT}`);
 if (preview) writeFileSync(preview, encodePng(sheet));
