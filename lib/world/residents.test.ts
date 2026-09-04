@@ -19,7 +19,7 @@ import {
 import { roomFromLocation } from "../rooms";
 import { CUTOUT, TILE, WIDTH } from "../map/office";
 import { HEIGHT as FLOOR_ROWS, WIDTH as FLOOR_COLS } from "../map/floor";
-import { TENANTS, organisationFor } from "./tenants";
+import { SHORE_ROW, TENANTS, WORLD_WIDTH, organisationFor } from "./tenants";
 import { CAMPUSES } from "./campus";
 import { WORKER_SPRITES } from "../../components/game/config/animations";
 
@@ -28,13 +28,19 @@ const mark = residentById("mark")!;
 const steve = residentById("steve")!;
 
 describe("the residents", () => {
-  it("each work for a real organisation, with a sheet in the library", () => {
+  it("each have a sheet in the library, and a real organisation unless they wander", () => {
     for (const r of RESIDENTS) {
-      expect(organisationFor(r.org), r.name).not.toBeNull();
       expect(
         WORKER_SPRITES.some((w) => w.key === r.spriteKey),
         r.name,
       ).toBe(true);
+      if (r.wanders) {
+        // Works nowhere and sleeps at no desk: both are the point of the mode.
+        expect(r.org, r.name).toBeNull();
+        expect(r.home, r.name).toBeNull();
+      } else {
+        expect(organisationFor(r.org), r.name).not.toBeNull();
+      }
       if (r.home)
         expect(
           TENANTS.some((t) => t.slug === r.home),
@@ -51,6 +57,53 @@ describe("the residents", () => {
     expect(names("chester")).toEqual(["Steve"]);
     expect(names("homestar")).toEqual(["Mark"]);
     expect(names("blockhouse")).toEqual([]);
+  });
+});
+
+describe("wandering mode", () => {
+  /** Written against the mode, not against Michael: anyone can be put in it. */
+  const wanderer = { ...yoshi, id: "w", name: "W", org: null, home: null, wanders: true };
+
+  it("has one haunt, the world map, so they never go indoors", () => {
+    const haunts = hauntsOf(wanderer);
+    expect(haunts).toEqual([{ kind: "room", room: "world", area: "world" }]);
+  });
+
+  it("puts them in the world map's presence room, where everyone sees the same steps", () => {
+    expect(roomForHaunt(wanderer, hauntsOf(wanderer)[0])).toBe("world");
+    expect(roomFromLocation({ pathname: "/world", search: "" })).toBe("world");
+  });
+
+  it("gives them ground to walk, and keeps it clear of the sea", () => {
+    const area = wanderArea(hauntsOf(wanderer)[0])!;
+    expect(area).toBe(WANDER_AREAS.world);
+    expect(area.width).toBeGreaterThan(TILE * 4);
+    expect(area.height).toBeGreaterThan(0);
+    // SHORE_ROW is where the water starts; a wanderer must stay well north of it.
+    expect(area.y + area.height).toBeLessThan(SHORE_ROW * TILE);
+    expect(area.x).toBeGreaterThan(0);
+    expect(area.x + area.width).toBeLessThan(WORLD_WIDTH);
+  });
+
+  /** Without this the simulation would hand back undefined and throw. */
+  it("keeps them where they are when there is nowhere else to go", () => {
+    const only = hauntsOf(wanderer)[0];
+    expect(hauntKey(nextHaunt(wanderer, only, () => 0))).toBe(hauntKey(only));
+    expect(hauntKey(nextHaunt(wanderer, only, () => 0.999))).toBe(hauntKey(only));
+  });
+
+  it("gives them no desk", () => {
+    expect(deskOf(wanderer)).toBe(-1);
+  });
+
+  it("leaves everyone else's routine alone", () => {
+    expect(hauntsOf(yoshi).length).toBeGreaterThan(1);
+    expect(hauntsOf(yoshi).some((h) => h.kind === "office")).toBe(true);
+  });
+
+  it("is how Michael lives, and he is the only one so far", () => {
+    const wanderers = RESIDENTS.filter((r) => r.wanders);
+    expect(wanderers.map((r) => r.name)).toEqual(["Michael"]);
   });
 });
 

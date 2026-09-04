@@ -9,8 +9,13 @@
  *
  *   pnpm tsx scripts/build-character.ts <Name> [--source file.png] [--rows down,up,right] [--idle 3] [--walk 6] [--preview out.png]
  *
- * Reads  public/characters/examples/<Name>.png, or --source
+ * Reads  public/characters/examples/<Name>_sprite.png, or --source
  * Writes public/characters/<Name>_48x48.png — then add it to WORKER_SPRITES.
+ *
+ * Two files per character live in examples/: `<Name>.png` is the profile
+ * picture, `<Name>_sprite.png` is the sheet this reads. Taking the sheet by
+ * name matters — the profile picture is a portrait on a backdrop, and feeding
+ * one to the cutter yields either a row-count error or a single mangled frame.
  */
 
 import { readFileSync, writeFileSync } from "fs";
@@ -55,7 +60,10 @@ const idleCount = Number(option("--idle", "3"));
 const walkCount = Number(option("--walk", "6"));
 const preview = option("--preview", "");
 
-const SOURCE = option("--source", join(process.cwd(), "public/characters/examples", `${name}.png`));
+const SOURCE = option(
+  "--source",
+  join(process.cwd(), "public/characters/examples", `${name}_sprite.png`),
+);
 const OUTPUT = join(process.cwd(), "public/characters", `${name}_48x48.png`);
 
 const raw = decodePng(readFileSync(SOURCE));

@@ -50,10 +50,15 @@ export default function Welcome() {
   const me = useMe();
   const authOn = me?.auth.enabled ?? false;
   const account = me?.account ?? null;
+  // Whoever the door let in. Someone on their own code arrives as themselves;
+  // everybody else is a visitor, passing through with no office and no desk.
+  const persona = me?.access?.persona ?? null;
+  const visitor = (me?.access?.identity ?? "visitor") === "visitor";
   // A guest's browser profile is enough; a signed-in person's must be the
   // account's, so a profile left here by someone else does not let them in.
   const guest = !authOn || (!account && !!profile?.guest);
-  const done = !!profile && isComplete(profile) && (guest || !!account?.profile);
+  const done =
+    !!profile && isComplete(profile, !visitor) && (guest || !!account?.profile || !!persona);
   const { characters, error } = useCharacterRoster();
 
   const [typedName, setTypedName] = useState<string | null>(null);
@@ -74,6 +79,29 @@ export default function Welcome() {
     }
   }, [done]);
 
+  /**
+   * Someone who came in on their own code is asked nothing: the code says who
+   * they are, so their name, office and look are written straight in and the
+   * effect above walks them through. It settles after one pass — saving the
+   * profile brings this back with `already` true.
+   */
+  useEffect(() => {
+    if (!persona || !profile || characters.length === 0) return;
+    const already =
+      profile.name === persona.name &&
+      profile.home === persona.home &&
+      profile.character?.key === persona.characterKey;
+    if (already) return;
+    const look = characters.find((candidate) => textureKeyFor(candidate) === persona.characterKey);
+    if (!look) return;
+    saveProfile({
+      name: persona.name,
+      home: persona.home,
+      character: { key: textureKeyFor(look), path: look.sheetUrl },
+    });
+    void registerProfile(profileSnapshot());
+  }, [persona, profile, characters]);
+
   if (!profile || !me || done) return null;
 
   // What is already known goes in first: the account's name, or a guest's from last time.
@@ -83,14 +111,15 @@ export default function Welcome() {
     (profile.name === NO_NAME ? "" : profile.name);
   const name = (typedName ?? suggestedName).slice(0, NAME_LIMIT);
   const trimmed = name.trim();
-  const home = pickedHome ?? account?.profile?.home ?? profile.home;
+  // A visitor works nowhere, so there is no office to choose and none to remember.
+  const home = visitor ? null : (pickedHome ?? account?.profile?.home ?? profile.home);
   const rememberedKey = account?.profile?.character.key ?? profile.character?.key ?? null;
   const character =
     pickedCharacter ?? characters.find((c) => textureKeyFor(c) === rememberedKey) ?? null;
-  const ready = trimmed.length > 0 && !!home && !!character && !walking;
+  const ready = trimmed.length > 0 && (visitor || !!home) && !!character && !walking;
 
   const walkIn = async () => {
-    if (!ready || !home || !character) return;
+    if (!ready || !character) return;
     const next = {
       name: trimmed,
       home,
@@ -98,8 +127,10 @@ export default function Welcome() {
     };
     setWalking(true);
     setRefusal(null);
-    if (account) {
-      const saved = await saveAccountProfile(next);
+    // An account keeps a name, an office and a look; a visitor has no office,
+    // so there is nothing of that shape to save and it stays in this browser.
+    if (account && home) {
+      const saved = await saveAccountProfile({ ...next, home });
       if (!saved) {
         setRefusal("That could not be saved. Try again in a moment.");
         setWalking(false);
@@ -131,7 +162,9 @@ export default function Welcome() {
           <p className="welcome__lead">
             {needsSignIn
               ? "Sign in to walk in. Your desk, your character and your record are kept under your email."
-              : "Tell us who you are, where you work, and what you look like — then walk in."}
+              : visitor
+                ? "You are visiting. Tell us who you are and what you look like — then walk out onto the world map."
+                : "Tell us who you are, where you work, and what you look like — then walk in."}
           </p>
         </header>
 
@@ -200,23 +233,25 @@ export default function Welcome() {
               />
             </section>
 
-            <section className="welcome__step">
-              <div className="welcome__label">Your home office</div>
-              <div className="welcome__homes">
-                {ORGANISATIONS.map((company) => (
-                  <button
-                    key={company.slug}
-                    type="button"
-                    className={`welcome-home${home === company.slug ? " welcome-home--chosen" : ""}`}
-                    onClick={() => setPickedHome(company.slug)}
-                    aria-pressed={home === company.slug}
-                  >
-                    <span className="welcome-home__name">{company.name}</span>
-                    <span className="welcome-home__tagline">{company.tagline}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
+            {!visitor && (
+              <section className="welcome__step">
+                <div className="welcome__label">Your home office</div>
+                <div className="welcome__homes">
+                  {ORGANISATIONS.map((company) => (
+                    <button
+                      key={company.slug}
+                      type="button"
+                      className={`welcome-home${home === company.slug ? " welcome-home--chosen" : ""}`}
+                      onClick={() => setPickedHome(company.slug)}
+                      aria-pressed={home === company.slug}
+                    >
+                      <span className="welcome-home__name">{company.name}</span>
+                      <span className="welcome-home__tagline">{company.tagline}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <section className="welcome__step">
               <div className="welcome__label">
@@ -256,6 +291,8 @@ export default function Welcome() {
               <span className="welcome__hint">
                 {refusal ? (
                   <span className="welcome__error">{refusal}</span>
+                ) : visitor ? (
+                  "Kept in this browser only. You are visiting, so you have no office and no desk."
                 ) : account ? (
                   "Kept under your email. Your desk is on Floor 1 of your home building."
                 ) : (

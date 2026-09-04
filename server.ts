@@ -37,8 +37,9 @@ import {
   clearFailures,
   clientIp,
   codeFromUrl,
-  codeMatches,
   gateEnabled,
+  identityForCode,
+  misconfiguredCodes,
   isAuthorized,
   isOpenPath,
   mintToken,
@@ -82,6 +83,11 @@ if (!dev && !gateEnabled()) {
 }
 if (dev && !gateEnabled()) {
   log.warn("ACCESS_CODE is not set: the world is open to anyone who can reach this port.");
+}
+// A personal code that is also the shared one would hand that person's name,
+// look and desk to every visitor who was given the shared code.
+for (const problem of misconfiguredCodes()) {
+  log.error(`Access codes: ${problem}. Give each person their own.`);
 }
 
 // Next builds each request's absolute URL from what it is told here, not
@@ -191,7 +197,8 @@ function handleUnlock(req: IncomingMessage, res: ServerResponse) {
       return;
     }
 
-    if (!codeMatches(submitted)) {
+    const identity = identityForCode(submitted);
+    if (!identity) {
       recordFailure(ip);
       log.warn(`unlock: rejected code from ${ip}`);
       res.writeHead(401, { "Content-Type": "application/json" });
@@ -199,7 +206,7 @@ function handleUnlock(req: IncomingMessage, res: ServerResponse) {
       return;
     }
 
-    const token = mintToken();
+    const token = mintToken(identity);
     if (!token) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "No access code is configured." }));
@@ -207,7 +214,7 @@ function handleUnlock(req: IncomingMessage, res: ServerResponse) {
     }
 
     clearFailures(ip);
-    log.info(`unlock: let ${ip} in`);
+    log.info(`unlock: let ${ip} in as ${identity}`);
     res.writeHead(200, {
       "Content-Type": "application/json",
       "Set-Cookie": accessCookieHeader(token, !dev),
@@ -240,7 +247,8 @@ function handleCodeInLink(req: IncomingMessage, res: ServerResponse): boolean {
     return true;
   }
 
-  if (!codeMatches(supplied)) {
+  const identity = identityForCode(supplied);
+  if (!identity) {
     recordFailure(ip);
     log.warn(`link: rejected code from ${ip}`);
     // Strip it anyway — a wrong code is no more welcome in the log or the
@@ -251,11 +259,11 @@ function handleCodeInLink(req: IncomingMessage, res: ServerResponse): boolean {
     return true;
   }
 
-  const token = mintToken();
+  const token = mintToken(identity);
   if (!token) return false;
 
   clearFailures(ip);
-  log.info(`link: let ${ip} in`);
+  log.info(`link: let ${ip} in as ${identity}`);
   res.writeHead(302, {
     Location: clean,
     "Set-Cookie": accessCookieHeader(token, !dev),

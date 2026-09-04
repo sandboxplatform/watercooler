@@ -72,6 +72,22 @@ export const LIBRARY_CHARACTERS: RosterCharacter[] = [
   ...selectable.filter((character) => !isPremade(character)),
 ];
 
+/**
+ * The looks a visitor may wear: the cast that ships with the game.
+ *
+ * Coop's and Rob's likenesses are theirs, the way a resident's is theirs —
+ * they arrive on their own code already wearing them, and nobody who came in
+ * on the shared code may put one on.
+ */
+export const SHARED_CAST: RosterCharacter[] = LIBRARY_CHARACTERS.filter(
+  (character) => isPremade(character) || character.key === BOSS_SPRITE_KEY,
+);
+
+/** Whether this look is one a visitor may choose. */
+export function inSharedCast(key: string): boolean {
+  return SHARED_CAST.some((character) => character.key === key);
+}
+
 /** The public file behind a library id, or null for anything else. */
 export function librarySheetPath(id: string): string | null {
   const entry = LIBRARY_CHARACTERS.find((c) => c.id === id);

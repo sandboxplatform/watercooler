@@ -11,6 +11,8 @@ import type { Profile } from "./profile";
 import { isComplete } from "./profile";
 
 export async function registerProfile(profile: Profile): Promise<void> {
+  // Registering *is* the desk, so a visitor has nothing to register: they work
+  // nowhere. Their name reaches the room over the presence socket instead.
   if (!isComplete(profile)) return;
   try {
     await fetch("/api/people", {

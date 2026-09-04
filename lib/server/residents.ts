@@ -177,10 +177,17 @@ export class ResidentSimulation {
     for (const state of this.states.values()) {
       if (now >= state.until) {
         const next = nextHaunt(state.resident, state.haunt, this.random);
-        this.leaveRoom(state);
-        this.arrive(state, next, now);
-        state.until = now + this.stay(next);
-        log.info(`${state.resident.name} went to ${hauntKey(next)}`);
+        if (hauntKey(next) === hauntKey(state.haunt)) {
+          // Nowhere else to be — a wanderer never goes in. Just carry on
+          // walking: leaving and arriving in the same place would snap them
+          // back to the middle of it and blink them out of the room.
+          state.until = now + this.stay(next);
+        } else {
+          this.leaveRoom(state);
+          this.arrive(state, next, now);
+          state.until = now + this.stay(next);
+          log.info(`${state.resident.name} went to ${hauntKey(next)}`);
+        }
       }
       if (state.room) this.wander(state, now);
       state.lastTick = now;

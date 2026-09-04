@@ -60,14 +60,24 @@ export function chooseGuest(guest: boolean) {
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
-/** Whether there is enough here to walk in. */
-export function isComplete(profile: Profile): boolean {
-  return (
-    profile.name !== NO_NAME && profile.name.trim() !== "" && !!profile.home && !!profile.character
-  );
+/**
+ * Whether there is enough here to walk in.
+ *
+ * A visitor works nowhere — they are passing through the world map and have
+ * no desk — so a home is not asked of them. Everyone else needs one, since
+ * it decides which floor their desk stands on.
+ */
+export function isComplete(profile: Profile, needsHome = true): boolean {
+  const named = profile.name !== NO_NAME && profile.name.trim() !== "";
+  return named && !!profile.character && (!needsHome || !!profile.home);
 }
 
-export function saveProfile(next: { name: string; home: string; character: CharacterChoice }) {
+export function saveProfile(next: {
+  name: string;
+  /** Null for a visitor, who works nowhere and so has no desk. */
+  home: string | null;
+  character: CharacterChoice;
+}) {
   savePlayerName(next.name.trim().slice(0, 16));
   lsSet(LS_HOME, next.home);
   rememberCharacter(next.character);

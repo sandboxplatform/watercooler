@@ -15,7 +15,8 @@ import type { Duplex } from "stream";
 import { WebSocket, WebSocketServer } from "ws";
 import { PresenceHub } from "./presence-hub";
 import { getRoomStore } from "./room-store";
-import { isAuthorized } from "./access";
+import { identityOf, isAuthorized, type AccessIdentity } from "./access";
+import { inSharedCast } from "../characters/library";
 import { normaliseRoomSlug } from "../rooms";
 import { achievementFor, type EarnedAchievement } from "../achievements";
 import type { ActivityEntry } from "../activity";
@@ -53,6 +54,22 @@ function coerceFacing(value: unknown): Facing {
 
 function coerceNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+/**
+ * The look this connection is allowed to wear.
+ *
+ * The picker already offers a visitor the shared cast only, but the browser
+ * says what it likes over this socket — a hand-edited profile could otherwise
+ * walk into the room wearing Coop's face. So the claim is checked rather than
+ * trusted, and anything a visitor may not wear falls back to what they had.
+ * Anyone on their own code is left alone: their roster is not restricted.
+ */
+function permittedLook(identity: AccessIdentity, wanted: string, fallback: string): string {
+  if (identity !== "visitor") return wanted;
+  if (inSharedCast(wanted)) return wanted;
+  log.warn(`a visitor asked for the look "${wanted}"; kept "${fallback}"`);
+  return fallback;
 }
 
 /** Same-origin check, matching the agent bridge. */
@@ -400,8 +417,16 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
       return;
     }
 
+    // Taken from the cookie at the upgrade, not from anything the connection
+    // says later: a look is clamped to what that identity is allowed to wear.
+    const identity = identityOf(req.headers.cookie);
+
     wss.handleUpgrade(req, socket, head, (ws) => {
       const id = randomUUID();
+      const lookFor = (requested: unknown, fallback: string) => {
+        const wanted = typeof requested === "string" ? requested : fallback;
+        return permittedLook(identity, wanted, fallback);
+      };
 
       ws.on("message", (raw) => {
         let parsed: unknown;
@@ -426,7 +451,10 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
                 y: coerceNumber(parsed.y, player.y),
                 facing: coerceFacing(parsed.facing),
                 name: typeof parsed.name === "string" ? parsed.name : undefined,
-                spriteKey: typeof parsed.spriteKey === "string" ? parsed.spriteKey : undefined,
+                spriteKey:
+                  typeof parsed.spriteKey === "string"
+                    ? lookFor(parsed.spriteKey, player.spriteKey)
+                    : undefined,
               });
               broadcastOnline();
               send(ws, {
@@ -444,7 +472,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
           const result = room.hub.join(id, {
             name: typeof parsed.name === "string" ? parsed.name : "Guest",
-            spriteKey: typeof parsed.spriteKey === "string" ? parsed.spriteKey : "player",
+            spriteKey: lookFor(parsed.spriteKey, "player"),
             x: coerceNumber(parsed.x),
             y: coerceNumber(parsed.y),
             facing: coerceFacing(parsed.facing),

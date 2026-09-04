@@ -192,8 +192,30 @@ would be open to anyone who finds the URL should fail loudly, not quietly. In de
 it only warns. Unlock attempts are rate limited to 10 per 15 minutes per address,
 in memory — so the count resets on restart and is per-instance, not shared.
 
-Know the limits: one code for everyone means no per-person revocation and no
-record of who came in. Sign-in below is the finer-grained answer and layers on top.
+**A code says who you are.** The cookie carries the identity it was opened with,
+inside the signature and keyed by _that identity's_ code — so it cannot be edited
+into somebody else's, and rotating one person's code turns out only them.
+
+| Code               | Identity  | What they get                                                     |
+| ------------------ | --------- | ----------------------------------------------------------------- |
+| `ACCESS_CODE`      | `visitor` | The shared cast only, no office, no desk; starts on the world map |
+| `ACCESS_CODE_COOP` | `coop`    | Brought in as Coop, at Sandbox ERP, wearing his own look          |
+| `ACCESS_CODE_ROB`  | `rob`     | The same, as Rob                                                  |
+
+A visitor is offered the **shared cast** — the premade four and The Boss
+(`SHARED_CAST` in `lib/characters/library.ts`). Coop's and Rob's likenesses are
+theirs alone. That is enforced in three places, because hiding a choice in the
+picker is decoration: `/api/characters` filters the roster by identity, and the
+presence socket clamps the `spriteKey` a connection claims, so a hand-edited
+profile cannot walk in wearing someone else's face.
+
+A personal code names its holder, so the welcome screen asks them nothing — name,
+office and look are written straight in. Giving two people the same code, or
+reusing the shared one, would hand over that identity; the server says so loudly
+at boot rather than letting it pass.
+
+Know the limits: the shared code has no per-person revocation and no record of who
+came in on it. Sign-in below is the finer-grained answer and layers on top.
 
 ### Sign-in
 
@@ -314,6 +336,54 @@ scripts/                build-map, seed-erp, sprite and world-art generators
 types/game.ts           shared game types
 ```
 
+### Residents and wandering
+
+Residents (`lib/world/residents.ts`) are the agents who live in the buildings;
+`ResidentSimulation` walks them through their **haunts** — desk, their
+organisation's rooms, its campus yard, outside — staying `DWELL_MS` at each. In
+a room they join that room's presence hub as a player, so everyone there sees
+them walk; outside they simply stand at a spot from `outsideSpots`.
+
+**Wandering mode** is `wanders: true` on a resident. It is a mode, not a kind of
+character — put it on anybody and their whole routine collapses to one haunt,
+the road outside, and they never go in. A wanderer works nowhere, so `org` and
+`home` are both null, which is what leaves them without a desk (`deskOf` → -1).
+
+It leans on the world map being a presence room (`WORLD_ROOM_SLUG`), so a
+wanderer is an ordinary player in it and the same `wander()` that walks a
+resident round a lobby walks them down the road — no separate movement code, and
+because the server is the one walking them, every viewer sees the same steps
+rather than each browser inventing its own. `WORLD_WANDER` bounds the ground
+they keep to, spanned between two points the game already stands people on so
+it is known pavement; nothing collides them, so those bounds are all that keeps
+them off the buildings and out of the sea.
+
+A resident's look is reserved (`RESERVED` in `lib/characters/library.ts`), so
+adding one takes their sheet out of the player picker automatically — which is
+why a wanderer still needs a `WORKER_SPRITES` entry: that is where
+`scene-presence.ts` looks up the sheet to load for a presence player.
+
+Michael, a chicken in a necktie, is the first and so far only wanderer.
+
+### Characters
+
+Two files per character in `public/characters/examples/`: `<Name>.png` is the
+profile picture and `<Name>_sprite.png` is the sheet, which
+`scripts/build-character.ts <Name>` cuts into
+`public/characters/<Name>_48x48.png`. Capitalise both — the lookup is by name,
+and a lowercase file only resolves on Windows.
+
+The sheet wants **three rows** (down, up, right; left is mirrored) of three
+idle then six walk frames, on a **flat background** — the backdrop is found from
+the four corners and keyed out globally, so a checkerboard defeats it and the
+rows then read as one. Prefer a dark backdrop: keying is deliberately tight
+(tolerance 12) to spare dark outlines, so on white the lossy edge fringe
+survives as a pale halo that shimmers frame to frame.
+
+A sprite **key** in `WORKER_SPRITES` outlives its filename — seats and saved
+profiles are stored against it, so rename the file and the `path`, never the
+key.
+
 Tests sit in `__tests__/` beside the code they cover, plus `*.test.ts` files in
 `lib/world/`. Coverage is substantial — when you change reducer, gateway-handler,
 room-store, map or arcade logic, there is almost certainly a test already asserting
@@ -345,21 +415,22 @@ From `CONTRIBUTING.md`, and worth holding to when adding anything:
 
 ## Environment variables
 
-| Variable                                                                 | Default                                 | Purpose                                                             |
-| ------------------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------- |
-| `ACCESS_CODE`                                                            | —                                       | Shared code for `/unlock`; refuses to boot without it in production |
-| `AGENT_PROVIDER`                                                         | `claude`                                | Which provider runs agents                                          |
-| `PORT` / `HOSTNAME`                                                      | `3000` / `localhost`                    | Server bind; also builds auth callback URLs                         |
-| `ANTHROPIC_API_KEY`                                                      | —                                       | Required by `claude-api`                                            |
-| `CLAUDE_BIN` / `CLAUDE_PERMISSION_MODE` / `CLAUDE_ALLOWED_TOOLS`         | — / `acceptEdits` / —                   | Claude CLI tuning                                                   |
-| `AGENT_TOWN_MODEL`                                                       | CLI default                             | `opus` \| `sonnet` \| `haiku`                                       |
-| `AGENT_MAX_CONCURRENT` / `AGENT_RUN_TIMEOUT_MS` / `ROOM_SPEND_LIMIT_USD` | 4 / 180000 / 50                         | Run limits                                                          |
-| `AGENT_WORKSPACE_ROOT`                                                   | `.agent-workspaces`                     | Where seat sandboxes go                                             |
-| `ERP_DB_PATH` / `UPLOADS_DIR`                                            | `.data/erp.sqlite` / beside the room db | Storage paths                                                       |
-| `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                             | —                                       | Required by the `mettara` provider                                  |
-| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`              | —                                       | Auth.js sign-in; off when absent                                    |
-| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT                              |
-| `CSP_CONNECT_SRC`                                                        | —                                       | Extra `connect-src` origins                                         |
+| Variable                                                                 | Default                                 | Purpose                                                               |
+| ------------------------------------------------------------------------ | --------------------------------------- | --------------------------------------------------------------------- |
+| `ACCESS_CODE`                                                            | —                                       | Shared visitors' code; production refuses to boot with no code at all |
+| `ACCESS_CODE_COOP` / `ACCESS_CODE_ROB`                                   | —                                       | One code each; brings its holder in as themselves                     |
+| `AGENT_PROVIDER`                                                         | `claude`                                | Which provider runs agents                                            |
+| `PORT` / `HOSTNAME`                                                      | `3000` / `localhost`                    | Server bind; also builds auth callback URLs                           |
+| `ANTHROPIC_API_KEY`                                                      | —                                       | Required by `claude-api`                                              |
+| `CLAUDE_BIN` / `CLAUDE_PERMISSION_MODE` / `CLAUDE_ALLOWED_TOOLS`         | — / `acceptEdits` / —                   | Claude CLI tuning                                                     |
+| `AGENT_TOWN_MODEL`                                                       | CLI default                             | `opus` \| `sonnet` \| `haiku`                                         |
+| `AGENT_MAX_CONCURRENT` / `AGENT_RUN_TIMEOUT_MS` / `ROOM_SPEND_LIMIT_USD` | 4 / 180000 / 50                         | Run limits                                                            |
+| `AGENT_WORKSPACE_ROOT`                                                   | `.agent-workspaces`                     | Where seat sandboxes go                                               |
+| `ERP_DB_PATH` / `UPLOADS_DIR`                                            | `.data/erp.sqlite` / beside the room db | Storage paths                                                         |
+| `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                             | —                                       | Required by the `mettara` provider                                    |
+| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`              | —                                       | Auth.js sign-in; off when absent                                      |
+| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT                                |
+| `CSP_CONNECT_SRC`                                                        | —                                       | Extra `connect-src` origins                                           |
 
 `README.md` covers the same ground as user-facing narrative, with setup walkthroughs
 and the feature tour (arcade, island, controller, playing together). Change behaviour

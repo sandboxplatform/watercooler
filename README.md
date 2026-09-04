@@ -85,8 +85,23 @@ still costs that a typed password does not: it is kept in browser history, in th
 host's request logs, and in whatever chat window someone pastes it into. Treat such
 a bookmark as the credential it is.
 
-One code for everyone means there is no per-person revocation and no record of who
-came in. For that, configure sign-in (below) — it layers on top.
+### Visitors and regulars
+
+The shared code makes you a **visitor**: you pick a name and one of the five
+characters that ship with the game, and start out on the world map. Visitors work
+nowhere, so they choose no office and have no desk.
+
+Someone who works here gets a code of their own instead — `ACCESS_CODE_COOP`,
+`ACCESS_CODE_ROB` — which they keep to themselves. It names them: they are brought
+straight in as themselves, at Sandbox ERP, wearing their own look, without being
+asked. Their likeness is theirs, and no visitor can put it on.
+
+Give every code a different value. Two people sharing one, or a personal code that
+is also the shared one, hands that identity to whoever holds it — the server says
+so at boot.
+
+The shared code has no per-person revocation and no record of who came in on it.
+For that, configure sign-in (below) — it layers on top.
 
 ## Agent providers
 

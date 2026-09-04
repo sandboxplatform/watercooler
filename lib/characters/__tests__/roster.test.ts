@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { LIBRARY_CHARACTERS, LIBRARY_PREFIX, librarySheetPath, textureKeyFor } from "../library";
+import {
+  LIBRARY_CHARACTERS,
+  LIBRARY_PREFIX,
+  SHARED_CAST,
+  inSharedCast,
+  librarySheetPath,
+  textureKeyFor,
+} from "../library";
 import { RESIDENTS } from "../../world/residents";
 
 describe("the library roster", () => {
@@ -32,6 +39,19 @@ describe("the library roster", () => {
   it("offers the premade cast and the boss before the built likenesses", () => {
     const names = LIBRARY_CHARACTERS.map((c) => c.name);
     expect(names).toEqual(["Alice", "Bob", "Carol", "Dave", "The Boss", "Coop", "Rob"]);
+  });
+
+  /**
+   * A visitor came in on a code that was passed around; Coop's and Rob's
+   * likenesses are theirs, and no visitor may put one on.
+   */
+  it("offers a visitor the shared cast only, never a likeness", () => {
+    expect(SHARED_CAST.map((c) => c.name)).toEqual(["Alice", "Bob", "Carol", "Dave", "The Boss"]);
+    expect(SHARED_CAST.some((c) => c.name === "Coop" || c.name === "Rob")).toBe(false);
+    expect(inSharedCast("character_02")).toBe(true);
+    expect(inSharedCast("character_09")).toBe(true);
+    expect(inSharedCast("character_coop")).toBe(false);
+    expect(inSharedCast("character_rob")).toBe(false);
   });
 
   it("keeps the texture key a library sheet is preloaded under", () => {

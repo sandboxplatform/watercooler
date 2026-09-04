@@ -43,6 +43,16 @@ export interface Account {
 }
 
 /** What GET /api/me answers with. */
+/**
+ * What the access code proved. A visitor chooses their own look from the
+ * shared cast and works nowhere; a persona is someone whose own code names
+ * them, so the welcome screen asks them nothing.
+ */
+export interface AccessClaim {
+  identity: "visitor" | "coop" | "rob";
+  persona: { identity: string; name: string; home: string; characterKey: string } | null;
+}
+
 export interface Me {
   auth: {
     /** Whether sign-in is set up at all. Without it, a profile lives in the browser as before. */
@@ -50,6 +60,8 @@ export interface Me {
     providers: SignInProvider[];
   };
   account: Account | null;
+  /** Absent from an older cached answer, so treat a missing claim as a visitor. */
+  access?: AccessClaim;
 }
 
 /** What the session says about a signed-in person: enough to make an account of. */
