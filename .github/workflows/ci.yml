@@ -16,7 +16,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # From .nvmrc, so the version lives in one place. The app needs
+          # Node 22: the room store and the ERP are built on node:sqlite,
+          # which arrived in 22.5 and does not exist before it.
+          node-version-file: .nvmrc
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
