@@ -1,8 +1,17 @@
 import * as Phaser from "phaser";
-import { SPRITE_KEY, MOVE_SPEED, ALL_ANIMS, FRAME_WIDTH, FRAME_HEIGHT } from "../config/animations";
+import {
+  SPRITE_KEY,
+  MOVE_SPEED,
+  SPRINT_SPEED,
+  ALL_ANIMS,
+  FRAME_WIDTH,
+  FRAME_HEIGHT,
+} from "../config/animations";
 import { ensureAnims } from "../utils/sheets";
 import { ChatBubble } from "./ChatBubble";
 import { facingFor } from "@/lib/facing";
+import { dialogOpen, typingInAField } from "@/lib/gamepad/dialogs";
+import { togglesSprint } from "@/lib/sprint";
 
 type Direction = "down" | "up" | "left" | "right";
 
@@ -21,6 +30,15 @@ export class Player {
    * Empty means the original, unprefixed set.
    */
   private animPrefix = "";
+  /**
+   * Sprinting rather than walking.
+   *
+   * A mode, not a held key: left Shift switches between the two and it stays
+   * where it was put, so crossing the world map does not mean holding a key
+   * for twenty seconds. It survives a scene change only as far as the Player
+   * does — walking through a door builds a new one, which starts off walking.
+   */
+  private sprinting = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, facing: Direction = "left") {
     this.facing = facing;
@@ -47,8 +65,37 @@ export class Player {
       false,
     ) as Record<string, Phaser.Input.Keyboard.Key>;
 
+    // Phaser's keyboard is attached to the window, so this fires wherever the
+    // focus is; see lib/sprint.ts for which presses count.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!togglesSprint(event, typingInAField() || dialogOpen())) return;
+      this.sprinting = !this.sprinting;
+    };
+    kb.on("keydown", onKeyDown);
+    // Dropped when the scene goes, or a walk through a door would leave the
+    // old scene's listener behind and every character built since would
+    // toggle together. React's development double-mount makes two of these
+    // on the first load, which is how the pile-up showed itself.
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => kb.off("keydown", onKeyDown));
+
     this.sprite.anims.play(this.animKey("idle"));
     this.bubble = new ChatBubble(scene);
+  }
+
+  /**
+   * How fast this character travels now.
+   *
+   * Read by whatever is driving them — the keys, the pad, a tapped route —
+   * so every way of moving obeys the toggle and none of them has to know
+   * about it.
+   */
+  get speed(): number {
+    return this.sprinting ? SPRINT_SPEED : MOVE_SPEED;
+  }
+
+  /** Whether the toggle is on, for anything that wants to show it. */
+  get isSprinting(): boolean {
+    return this.sprinting;
   }
 
   private animKey(prefix: "idle" | "walk"): string {
@@ -130,7 +177,7 @@ export class Player {
    */
   /** What the keys, or failing them the pad, are asking for. */
   inputVelocity(padVelocity?: { vx: number; vy: number }): { vx: number; vy: number } {
-    const speed = MOVE_SPEED;
+    const speed = this.speed;
     let vx = 0;
     let vy = 0;
 
@@ -180,8 +227,15 @@ export class Player {
       if (this.sprite.anims.currentAnim?.key !== walkKey) {
         this.sprite.anims.play(walkKey);
       }
+      // Legs to match the ground. Taken from the velocity rather than from
+      // the sprint toggle, so it is right for every way of moving: a pad's
+      // half-pushed stick, a tapped route, and the scripted walk out of a
+      // doorway, which goes at walking pace whatever the toggle says. Left
+      // at 1 a sprinter slides along as if on ice.
+      this.sprite.anims.timeScale = Math.max(0.5, Math.hypot(vx, vy) / MOVE_SPEED);
     } else {
       const idleKey = this.animKey("idle");
+      this.sprite.anims.timeScale = 1;
       if (this.sprite.anims.currentAnim?.key !== idleKey) {
         this.sprite.anims.play(idleKey);
       }

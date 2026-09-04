@@ -50,7 +50,7 @@ import { WorkerManager } from "../systems/WorkerManager";
 import { InteractionManager } from "../systems/InteractionManager";
 import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
-import { dialogOpen } from "@/lib/gamepad/dialogs";
+import { dialogOpen, typingInAField } from "@/lib/gamepad/dialogs";
 import { RemotePlayerManager } from "../systems/RemotePlayerManager";
 import { DoorManager } from "../systems/DoorManager";
 import { initSceneEventBridge } from "../systems/SceneEventBridge";
@@ -61,13 +61,6 @@ const BODY_BELOW_CENTRE = 33;
 const ARRIVAL_STEPS = 96;
 
 const log = createLogger("OfficeScene");
-
-function isInputFocused(): boolean {
-  const el = document.activeElement;
-  if (!el) return false;
-  const tag = el.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || (el as HTMLElement).isContentEditable;
-}
 
 export class OfficeScene extends Phaser.Scene {
   private player!: Player;
@@ -999,7 +992,7 @@ export class OfficeScene extends Phaser.Scene {
 
   /** The pad's push on the character; nothing while a dialog has the screen. */
   private padVelocity() {
-    return dialogOpen() ? { vx: 0, vy: 0 } : this.gamepad.velocity(MOVE_SPEED);
+    return dialogOpen() ? { vx: 0, vy: 0 } : this.gamepad.velocity(this.player.speed);
   }
 
   update(_time: number, delta: number) {
@@ -1050,7 +1043,7 @@ export class OfficeScene extends Phaser.Scene {
       this.deskOpen ||
       this.elevatorOpen ||
       dialogOpen() ||
-      isInputFocused()
+      typingInAField()
     ) {
       this.workerManager.updateAll();
       this.doorManager.updateDoors();
@@ -1060,7 +1053,9 @@ export class OfficeScene extends Phaser.Scene {
     // A key or a stick means the player has taken over, and the tap they
     // made a moment ago is no longer what they want
     const padVelocity = this.padVelocity();
-    const steering = this.navigator.active ? this.navigator.step(this.feet(), MOVE_SPEED) : null;
+    const steering = this.navigator.active
+      ? this.navigator.step(this.feet(), this.player.speed)
+      : null;
 
     if (
       this.navigator.active &&

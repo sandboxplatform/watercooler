@@ -21,12 +21,29 @@ export const HEARTBEAT_MS = 5_000;
 export const IDLE_TIMEOUT_MS = 15_000;
 
 /**
- * Walking speed in px/s, mirrored from the game's MOVE_SPEED so the server can
- * reject teleports without importing Phaser.
+ * How fast a person moves, in px/s.
+ *
+ * They live here, with the presence types, because both sides need them and
+ * this file imports nothing: the game reads them as MOVE_SPEED and
+ * SPRINT_SPEED, and the server needs them to reject a teleport without
+ * importing Phaser. They used to be written out in both places and called
+ * mirrored, which lasts until one of them changes.
  */
 export const MOVE_SPEED_PX_S = 160;
 
-/** Allowance over walking speed before a move is treated as a teleport. */
+/** Shift is a toggle, and this is the other setting: a shade under twice. */
+export const SPRINT_SPEED_PX_S = 280;
+
+/**
+ * Allowance over the fastest legitimate speed before a move is a teleport.
+ *
+ * Measured against sprinting rather than walking, or the clamp would be
+ * spending its jitter allowance on somebody running honestly: two updates
+ * arriving back to back after a network stall carry a long interval's worth
+ * of movement, and a budget without headroom would haul them back to where
+ * they were. What the ceiling has to stay well under is a jump across the
+ * map, which at 700px/s it does.
+ */
 export const SPEED_TOLERANCE = 2.5;
 
 export type Facing = "up" | "down" | "left" | "right";

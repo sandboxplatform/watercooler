@@ -8,14 +8,24 @@
  *     Row 2: walk — right(6) · up(6) · left(6) · down(6)
  */
 
+import { MOVE_SPEED_PX_S, SPRINT_SPEED_PX_S } from "@/lib/presence-types";
+
 export const FRAME_WIDTH = 48;
 export const FRAME_HEIGHT = 96;
 export const SHEET_COLUMNS = 56;
 
 const FRAMES_PER_DIR = 6;
 
-/** Pixel/sec movement speed */
-export const MOVE_SPEED = 160;
+/**
+ * How fast a person moves, in px/s, and how much faster sprinting is.
+ *
+ * Taken from lib/presence-types.ts rather than written here, because the
+ * server clamps a player's movement against the same numbers and two copies
+ * of a speed is one drift away from the server hauling back somebody who is
+ * only running.
+ */
+export const MOVE_SPEED = MOVE_SPEED_PX_S;
+export const SPRINT_SPEED = SPRINT_SPEED_PX_S;
 
 export interface AnimDef {
   key: string;

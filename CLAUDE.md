@@ -406,6 +406,20 @@ being clear of the buildings, the props and the sea, and reachable from every
 other; the simulation's own tests walk Michael for twelve minutes and assert he
 never crosses a solid.
 
+**Sprinting** is a mode, not a held key: left Shift toggles it (`togglesSprint`
+in `lib/sprint.ts`, bound by `ShiftLeft` so right Shift is untouched, and
+ignored while a field or a dialog has the keyboard). `player.speed` is what
+every driver reads — the keys, the pad, a tapped route — so none of them knows
+about the mode; only the scripted walk out of a doorway stays at `MOVE_SPEED`.
+The walk cycle's `timeScale` comes from the actual velocity rather than from
+the toggle, so a half-pushed stick and a sprint both look right.
+
+Both speeds live in `lib/presence-types.ts`, not in the game config, because
+**the presence hub clamps movement against them** — its budget is
+`SPRINT_SPEED_PX_S × SPEED_TOLERANCE`, so a sprinter is not hauled backwards
+while a teleport still is. Two copies of a speed is one drift away from the
+server fighting an honest runner.
+
 **Facing** is one rule everywhere, `facingFor` in `lib/facing.ts`: the dominant
 axis, with an exact diagonal going sideways for the keyboard's sake, and nothing
 decided when nothing moves — which is what leaves someone who walked left and

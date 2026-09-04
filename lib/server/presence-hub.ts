@@ -11,7 +11,7 @@
 import {
   IDLE_TIMEOUT_MS,
   MAX_HUMAN_PLAYERS,
-  MOVE_SPEED_PX_S,
+  SPRINT_SPEED_PX_S,
   SPEED_TOLERANCE,
   type Facing,
   type PresencePlayer,
@@ -149,7 +149,7 @@ export class PresenceHub {
 
     const at = this.now();
     const elapsedMs = Math.max(at - player.lastMoveAt, 0);
-    const budget = (MOVE_SPEED_PX_S / 1000) * elapsedMs * SPEED_TOLERANCE;
+    const budget = (SPRINT_SPEED_PX_S / 1000) * elapsedMs * SPEED_TOLERANCE;
 
     const dx = update.x - player.x;
     const dy = update.y - player.y;

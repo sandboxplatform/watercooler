@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { PresenceHub, sanitiseName } from "../presence-hub";
-import { IDLE_TIMEOUT_MS, MAX_HUMAN_PLAYERS, MOVE_SPEED_PX_S } from "../../presence-types";
+import {
+  IDLE_TIMEOUT_MS,
+  MAX_HUMAN_PLAYERS,
+  SPEED_TOLERANCE,
+  SPRINT_SPEED_PX_S,
+} from "../../presence-types";
 
 let clock = 1_000_000;
 let hub: PresenceHub;
@@ -89,15 +94,29 @@ describe("movement", () => {
     expect(moved?.moving).toBe(true);
   });
 
-  it("clamps a teleport back to walking distance", () => {
+  it("clamps a teleport back to a distance somebody could have run", () => {
     join("p1");
     clock += 100;
     const moved = hub.move("p1", { x: 5000, y: 100, facing: "right", moving: true })!;
 
     const travelled = moved.x - 100;
     expect(travelled).toBeGreaterThan(0);
-    // 100ms at 160px/s with the tolerance is well under 100px, never 4900
-    expect(travelled).toBeLessThan((MOVE_SPEED_PX_S / 1000) * 100 * 3);
+    // The ceiling is sprinting plus the jitter allowance — 70px in 100ms,
+    // never the 4900 that was asked for.
+    expect(travelled).toBeLessThanOrEqual((SPRINT_SPEED_PX_S / 1000) * 100 * SPEED_TOLERANCE);
+    expect(travelled).toBeLessThan(100);
+  });
+
+  /**
+   * The reason the ceiling is measured against sprinting: somebody running
+   * honestly must not be hauled backwards. A sprint is 28px in 100ms.
+   */
+  it("lets a sprinter through unclamped", () => {
+    join("p1");
+    clock += 100;
+    const ran = (SPRINT_SPEED_PX_S / 1000) * 100;
+    const moved = hub.move("p1", { x: 100 + ran, y: 100, facing: "right", moving: true })!;
+    expect(moved.x).toBeCloseTo(100 + ran, 5);
   });
 
   it("keeps the intended direction when clamping", () => {

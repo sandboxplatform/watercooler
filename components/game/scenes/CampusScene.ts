@@ -326,7 +326,7 @@ export class CampusScene extends Phaser.Scene {
 
   /** The pad's push on the character; nothing while a dialog has the screen. */
   private padVelocity() {
-    return dialogOpen() ? { vx: 0, vy: 0 } : this.gamepad.velocity(MOVE_SPEED);
+    return dialogOpen() ? { vx: 0, vy: 0 } : this.gamepad.velocity(this.player.speed);
   }
 
   update(_time: number, delta: number) {
@@ -348,7 +348,9 @@ export class CampusScene extends Phaser.Scene {
       return;
     }
     const padVelocity = this.padVelocity();
-    const steering = this.navigator.active ? this.navigator.step(this.feet(), MOVE_SPEED) : null;
+    const steering = this.navigator.active
+      ? this.navigator.step(this.feet(), this.player.speed)
+      : null;
     if (
       this.navigator.active &&
       (this.player.hasKeyboardInput() || padVelocity.vx || padVelocity.vy)

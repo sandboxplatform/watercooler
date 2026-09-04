@@ -401,6 +401,22 @@ under a board that says "Welcome to Ireland", sheep on the grass, and one
 whitewashed house: Apeiron Media, laid out inside like Castle Atlantic,
 ping pong table and all. Walk back onto the end of the dock to sail home.
 
+### Walking and sprinting
+
+Arrow keys or WASD walk; on a phone, tap the floor and your character walks
+there around the furniture. **Left Shift toggles sprinting** — it is a switch,
+not a key to hold, so crossing the world map does not mean keeping a finger
+down for twenty seconds. Press it again to go back to walking. The legs speed
+up to match, which is how you can tell which one you are in.
+
+It is left Shift only: right Shift keeps meaning what it usually means, and
+neither does anything while you are typing in the chat box or a panel is open,
+where Shift is a modifier rather than a binding.
+
+Sprinting applies however you are moving — the keys, a controller stick, or a
+tapped route. Only the short walk out of a doorway on arriving is always at
+walking pace.
+
 ### Playing with a controller
 
 Plug in an Xbox controller (a PlayStation or Switch pad works the same; the

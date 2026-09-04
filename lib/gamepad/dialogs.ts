@@ -28,3 +28,20 @@ export function topDialog(): HTMLElement | null {
 export function dialogOpen(): boolean {
   return openDialogs().length > 0;
 }
+
+/**
+ * Whether the keyboard belongs to a field rather than to the character.
+ *
+ * Shift is a modifier as well as a binding: held over a letter in the chat
+ * box it means a capital, and a toggle that fired on it would flip the
+ * character between walking and sprinting every time somebody typed a name.
+ * The same question the E key has to ask before opening anything.
+ */
+export function typingInAField(): boolean {
+  if (typeof document === "undefined") return false;
+  const el = document.activeElement;
+  if (!el) return false;
+  return (
+    el.tagName === "INPUT" || el.tagName === "TEXTAREA" || (el as HTMLElement).isContentEditable
+  );
+}
