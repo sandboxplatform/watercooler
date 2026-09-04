@@ -67,16 +67,41 @@ function open() {
   next.onerror = () => next.close();
 }
 
+/**
+ * Hang up when the page goes away.
+ *
+ * A browser usually closes a socket as it navigates, but usually leaves a
+ * window where the server still has you standing in the room you have just
+ * left, and its sweeper does not collect a quiet player for fifteen seconds.
+ * That is long enough to walk out of a building and meet yourself at the
+ * door. Closing it here is immediate and costs nothing when the browser was
+ * going to do it anyway.
+ *
+ * `pagehide` covers a navigation and a closed tab alike, where `unload`
+ * fires reliably on neither. But it also fires for a page being put into the
+ * back-forward cache, which is not leaving at all — a hidden tab, or a phone
+ * backgrounding the browser — and hanging up on that would take somebody out
+ * of the room for looking away. `persisted` is what tells the two apart, and
+ * it was worth finding out the hard way: without this guard, backgrounding
+ * the tab emptied the room.
+ */
+function hangUp(event: PageTransitionEvent) {
+  if (event.persisted) return;
+  socket?.close();
+}
+
 /** Open the socket, or join an existing one. Returns a release function. */
 export function acquireRoomSocket(): () => void {
   disposed = false;
   refCount += 1;
+  if (refCount === 1) window.addEventListener("pagehide", hangUp);
   open();
 
   return () => {
     refCount = Math.max(0, refCount - 1);
     if (refCount > 0) return;
     disposed = true;
+    window.removeEventListener("pagehide", hangUp);
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = null;
     socket?.close();

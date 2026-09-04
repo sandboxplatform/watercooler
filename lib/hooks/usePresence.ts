@@ -46,20 +46,27 @@ export function usePresence() {
     };
 
     /** Walk into the place the address bar names, standing where the scene put us. */
-    const join = (spawn: { x: number; y: number; facing: Facing } | null, look?: string) => {
+    const join = (spawn: { x: number; y: number; facing: Facing }, look?: string) => {
       joinedRef.current = false;
       sendRoom({
         type: "join",
         room: currentRoom(),
         name: loadPlayerName(),
         spriteKey: look ?? rememberedCharacter()?.key ?? SPRITE_KEY,
-        x: spawn?.x ?? 0,
-        y: spawn?.y ?? 0,
-        facing: spawn?.facing ?? "down",
+        x: spawn.x,
+        y: spawn.y,
+        facing: spawn.facing,
       });
     };
 
-    const unsubOpen = onRoomOpen(() => join(latestRef.current));
+    // Nothing is sent until the scene has said where the character stands.
+    // The join used to fall back to 0,0, which put a stranger in the top-left
+    // corner of everyone else's map for the moment before the first step —
+    // and on the world map that corner is a long way from anywhere.
+    // `place-entered` follows every scene's create, so the wait is a frame.
+    const unsubOpen = onRoomOpen(() => {
+      if (latestRef.current) join(latestRef.current);
+    });
 
     // A scene started in-page — out of a door onto the world map, through a
     // gate onto a campus — is a different place with the same socket. The
@@ -126,7 +133,7 @@ export function usePresence() {
     // rather than on the next walk through a door.
     // The event carries the key: the choice is remembered a moment later.
     const unsubLook = gameEvents.on("player-sprite-chosen", (spriteKey) => {
-      if (joinedRef.current) join(latestRef.current, spriteKey);
+      if (joinedRef.current && latestRef.current) join(latestRef.current, spriteKey);
     });
 
     return () => {
