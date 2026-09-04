@@ -199,24 +199,48 @@ describe("reading an indexed PNG", () => {
   });
 });
 
-describe("the sheets people actually deliver", () => {
-  /**
-   * Doc's sheet, which is where this came from: correct in every dimension
-   * and refused outright because it carried a palette.
-   *
-   * The **installed** sheet, not the source in examples/. The installed file
-   * is a build artefact of the pipeline and is what the browser fetches, so
-   * its colour type is a fact about this codec's job; the source beside it is
-   * somebody's working art, replaced whenever they redraw, and pinning a unit
-   * test to that made the suite go red when Doc's was redrawn mid-session.
-   */
-  it("reads a delivered indexed sheet", () => {
-    const file = readFileSync(join(process.cwd(), "public/characters/Doc_48x48.png"));
-    expect(file[25]).toBe(3); // indexed, or this test has stopped covering the case
+/**
+ * A real tool's output, frozen as a fixture.
+ *
+ * This began as an assertion about a sheet in public/characters, and that was
+ * wrong twice over: the source in examples/ was redrawn mid-session, and then
+ * the installed sheet was replaced with an RGBA one — so a suite that proved
+ * the codec worked went red twice for reasons that were not bugs, and the
+ * second time it silently stopped covering the indexed case at all.
+ *
+ * Delivered art is not a fixture. It is somebody's work in progress and it is
+ * *supposed* to change. So the one real indexed file this needs is copied in
+ * here and left alone: 2688x1968, 8-bit palette, PLTE + tRNS, two IDAT
+ * chunks, written by whatever the artist draws in. The hand-built files above
+ * cover the decode paths; this covers the part they cannot, which is that a
+ * genuine encoder's output reads correctly.
+ */
+describe("a real indexed sheet", () => {
+  const file = readFileSync(join(__dirname, "fixtures/indexed-sheet.png"));
+
+  it("is still the thing this is meant to cover", () => {
+    expect(file[25]).toBe(3);
+    expect(file[24]).toBe(8);
+  });
+
+  it("reads at the size it says, on transparency", () => {
     const img = decodePng(file);
     expect(img.width).toBe(2688);
     expect(img.height).toBe(1968);
-    // Delivered on transparency, so the corner is clear rather than keyed.
+    expect(img.colourType).toBe(3);
+    // Delivered cut out, so the corner is clear rather than keyed.
     expect(img.data[3]).toBe(0);
+  });
+
+  it("comes back as real colours, not palette indices", () => {
+    const img = decodePng(file);
+    const colours = new Set<string>();
+    for (let i = 0; i < img.data.length; i += 4) {
+      if (img.data[i + 3] > 0) colours.add(`${img.data[i]},${img.data[i + 1]},${img.data[i + 2]}`);
+    }
+    // A palette holds at most 256 entries, and an index-shaped read would
+    // come back as a handful of near-black greys.
+    expect(colours.size).toBeGreaterThan(20);
+    expect(colours.size).toBeLessThanOrEqual(256);
   });
 });
