@@ -83,9 +83,14 @@ export function usePresence() {
           break;
         case "rejected":
           joinedRef.current = false;
-          capacityRef.current = message.capacity;
+          if (message.reason === "private") {
+            // The lift already said so in the room; nothing to show here.
+            log.warn("that floor is not ours to be on");
+            break;
+          }
+          capacityRef.current = message.capacity ?? capacityRef.current;
           log.warn(`room is full (${message.capacity} humans)`);
-          gameEvents.emit("presence-count", message.capacity, message.capacity);
+          gameEvents.emit("presence-count", capacityRef.current, capacityRef.current);
           break;
         case "presence":
           publish(message.players);

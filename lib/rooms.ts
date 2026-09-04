@@ -55,6 +55,21 @@ export function floorRoomSlug(slug: string, level: number): string {
 }
 
 /**
+ * The building and floor a room slug names, or null for a slug that is not a
+ * floor — a lobby, the world map, a campus.
+ *
+ * The other direction of `floorRoomSlug`, and here for the same reason: a
+ * room slug is parsed in one place, so a floor is recognised the same way by
+ * everyone who has to ask. The building part is whatever precedes the last
+ * `-floor-<n>`, since a slug may hold hyphens of its own.
+ */
+export function parseFloorRoomSlug(room: string): { slug: string; level: number } | null {
+  const match = normaliseRoomSlug(room).match(/^(.+)-floor-(\d{1,2})$/);
+  if (!match) return null;
+  return { slug: match[1], level: Number(match[2]) };
+}
+
+/**
  * The outdoors are rooms too: everyone on the world map is in one place,
  * and everyone on a campus or the island in another. That is what lets
  * people see and hear each other out there, and not only through a door.

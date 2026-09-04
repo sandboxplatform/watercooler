@@ -39,6 +39,7 @@ import {
   codeFromUrl,
   gateEnabled,
   identityForCode,
+  identityOf,
   misconfiguredCodes,
   isAuthorized,
   isOpenPath,
@@ -48,6 +49,8 @@ import {
   retryAfterSeconds,
   urlWithoutCode,
 } from "./lib/server/access";
+import { parseRoomPath, floorRoomSlug } from "./lib/rooms";
+import { mayEnterRoom } from "./lib/world/floors";
 
 const log = createLogger("Server");
 
@@ -331,6 +334,40 @@ function blockedByGate(req: IncomingMessage, res: ServerResponse): boolean {
 }
 
 /**
+ * Send somebody back down from a floor that is not theirs.
+ *
+ * A valid cookie opens the world, not every room in it: a building's upper
+ * floors can belong to the people whose own codes name them. The lift refuses
+ * to carry anyone else and the presence socket refuses their room, but a URL
+ * is typed, bookmarked and shared, so the page itself has to turn them away
+ * — otherwise "only they can go up" holds everywhere except the address bar.
+ *
+ * They land in the lobby, which is public, rather than on an error: they are
+ * welcome in the building, just not upstairs.
+ */
+function blockedByFloor(req: IncomingMessage, res: ServerResponse): boolean {
+  if (!gateEnabled()) return false;
+  const pathname = (req.url ?? "/").split("?")[0];
+  const path = parseRoomPath(pathname);
+  if (!path || path.floor === null) return false;
+
+  const identity = identityOf(req.headers.cookie);
+  if (mayEnterRoom(floorRoomSlug(path.slug, path.floor), identity)) return false;
+
+  log.info(`turned a ${identity} away from ${pathname}`);
+  // A navigation is sent down to the lobby; a prefetch or a fetch is refused
+  // flatly, for the same reason the cookie gate does not redirect one.
+  if ((req.headers.accept ?? "").includes("text/html")) {
+    res.writeHead(302, { Location: `/r/${path.slug}`, "Cache-Control": "no-store" });
+    res.end();
+    return true;
+  }
+  res.writeHead(403, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+  res.end(JSON.stringify({ error: "That floor is not yours." }));
+  return true;
+}
+
+/**
  * What the office is working on, for the agents' MCP tools.
  *
  * Same door as dispatch: loopback only, and a shared secret. The boards'
@@ -461,6 +498,8 @@ if (unconfigured) {
         }
         // Everything below this line needs the cookie: pages, API routes, uploads.
         if (blockedByGate(req, res)) return;
+        // Past the door, but a private floor is still not everyone's.
+        if (blockedByFloor(req, res)) return;
         handle(req, res);
       });
 

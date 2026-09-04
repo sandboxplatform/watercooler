@@ -18,6 +18,7 @@ import { getRoomStore } from "./room-store";
 import { identityOf, isAuthorized, type AccessIdentity } from "./access";
 import { inSharedCast } from "../characters/library";
 import { normaliseRoomSlug } from "../rooms";
+import { mayEnterRoom } from "../world/floors";
 import { achievementFor, type EarnedAchievement } from "../achievements";
 import type { ActivityEntry } from "../activity";
 import { isPongPayload } from "../pong/protocol";
@@ -439,6 +440,16 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
         if (parsed.type === "join") {
           const slug = normaliseRoomSlug(parsed.room);
+          // A private building's floors. The lift will not carry a visitor
+          // and the floor's page turns them away, but neither is the gate:
+          // the browser asks for whatever room it likes over this socket, so
+          // the answer is checked against the cookie the way a look is.
+          if (!mayEnterRoom(slug, identity)) {
+            log.warn(`refused a join to "${slug}": not ${identity}'s floor`);
+            send(ws, { type: "rejected", reason: "private" });
+            ws.close();
+            return;
+          }
           // Walking from one place to another on the same connection: out
           // of the old room first, so nobody there keeps a ghost of you.
           const previous = roomOf.get(id);

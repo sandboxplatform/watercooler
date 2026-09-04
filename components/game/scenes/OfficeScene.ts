@@ -19,10 +19,13 @@ import { roomFromLocation } from "@/lib/rooms";
 import {
   addressFromLocation,
   describeFloor,
+  LIFT_REFUSAL,
   mapFileFor,
+  mayRideLift,
   occupantsOf,
   type Address,
 } from "@/lib/world/floors";
+import { UNKNOWN_IDENTITY, type AccessIdentity } from "@/lib/identity";
 import { ArrivalWalk } from "@/lib/arrival";
 import { MAX_DESKS, deskBox, deskOrigin } from "@/lib/world/desks";
 import { WHITEBOARD } from "@/lib/map/office";
@@ -97,6 +100,14 @@ export class OfficeScene extends Phaser.Scene {
   private bucketPrompt: Phaser.GameObjects.Text | null = null;
   private pingPongOpen = false;
   private elevatorOpen = false;
+  /**
+   * Who the door let this browser in as, for the lift.
+   *
+   * A visitor until the server says otherwise: the answer is asked for on
+   * arriving and the walk to the lift takes far longer than the round trip,
+   * but a gate that is open while it waits is not a gate.
+   */
+  private identity: AccessIdentity = UNKNOWN_IDENTITY;
   /** False while a just-opened dialog waits for the stick and keys to be let go. */
   private boardPrompt: Phaser.GameObjects.Text | null = null;
   private whiteboardOpen = false;
@@ -268,6 +279,8 @@ export class OfficeScene extends Phaser.Scene {
     // Upstairs, everyone with a desk gets one, with their name on it.
     const address = addressFromLocation(window.location);
     if (address?.floor.kind === "floor") void this.furnishFloor(address, map, collisionRects);
+
+    void this.askWhoIAm();
 
     // Arriving by a doorway — the lift, the front door, the door from the
     // room next door: start in it and walk out of it, rather than appear at
@@ -449,6 +462,15 @@ export class OfficeScene extends Phaser.Scene {
         return;
       }
       if (target === "elevator") {
+        // Some buildings' floors are private. The lift is where that is felt,
+        // so it is where it is said — the server refuses the floor's room and
+        // its page regardless, and this is the part a person sees.
+        const here = addressFromLocation(window.location);
+        if (here && !mayRideLift(here.tenant.slug, this.identity)) {
+          log.info(`the lift in ${here.tenant.slug} is not this visitor's to ride`);
+          this.player?.say(LIFT_REFUSAL);
+          return;
+        }
         this.elevatorOpen = true;
         gameEvents.emit("open-elevator");
         return;
@@ -545,6 +567,24 @@ export class OfficeScene extends Phaser.Scene {
    * nameplate. The desks are solid, for walking and for the pathfinder,
    * which is rebuilt to know about them.
    */
+  /**
+   * Ask the door who it let in, for the lift.
+   *
+   * Straight to the API rather than through the HUD's copy of the answer:
+   * the game layer holds no React, and going over the event bus would mean
+   * racing the HUD's own fetch — miss that one emit and the identity would
+   * never arrive. A failed ask leaves the safe default in place.
+   */
+  private async askWhoIAm() {
+    try {
+      const res = await fetch("/api/me");
+      const body = (await res.json()) as { access?: { identity?: AccessIdentity } };
+      if (body.access?.identity) this.identity = body.access.identity;
+    } catch {
+      log.warn("could not ask who this is; treating them as a visitor");
+    }
+  }
+
   private async furnishFloor(
     address: Address,
     map: Phaser.Tilemaps.Tilemap,

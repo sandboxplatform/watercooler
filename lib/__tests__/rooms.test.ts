@@ -6,6 +6,7 @@ import {
   parseRoomPath,
   roomFromLocation,
   generateRoomSlug,
+  parseFloorRoomSlug,
 } from "../rooms";
 
 describe("normaliseRoomSlug", () => {
@@ -86,5 +87,35 @@ describe("roomFromLocation", () => {
 describe("generateRoomSlug", () => {
   it("is prefixed and carries the random part", () => {
     expect(generateRoomSlug(() => "abc123")).toBe("r-abc123");
+  });
+});
+
+describe("parseFloorRoomSlug", () => {
+  it("reads back what floorRoomSlug wrote", () => {
+    expect(parseFloorRoomSlug(floorRoomSlug("sandbox-erp", 2))).toEqual({
+      slug: "sandbox-erp",
+      level: 2,
+    });
+  });
+
+  /** A building's own slug holds hyphens, so the split is at the last one. */
+  it("keeps a hyphenated building whole", () => {
+    expect(parseFloorRoomSlug("homestar-field-crew-floor-1")).toEqual({
+      slug: "homestar-field-crew",
+      level: 1,
+    });
+  });
+
+  it("says nothing for a room that is not a floor", () => {
+    expect(parseFloorRoomSlug("sandbox-erp")).toBeNull();
+    expect(parseFloorRoomSlug("world")).toBeNull();
+    expect(parseFloorRoomSlug("campus-homestar")).toBeNull();
+    expect(parseFloorRoomSlug("chester-warehouse")).toBeNull();
+  });
+
+  it("is not fooled by a slug that merely mentions a floor", () => {
+    expect(parseFloorRoomSlug("floor")).toBeNull();
+    expect(parseFloorRoomSlug("the-floor-shop")).toBeNull();
+    expect(parseFloorRoomSlug("erp-floor-two")).toBeNull();
   });
 });

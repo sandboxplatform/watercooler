@@ -225,6 +225,28 @@ picker is decoration: `/api/characters` filters the roster by identity, and the
 presence socket clamps the `spriteKey` a connection claims, so a hand-edited
 profile cannot walk in wearing someone else's face.
 
+**Private floors.** A building's upper floors can belong to the people whose own
+codes name them. `PRIVATE_LIFTS` in `lib/world/floors.ts` is the whole rule —
+today `sandbox-erp` is Coop's and Rob's — and a building not listed is open to
+everybody, so a new one needs no entry. The **lobby stays public**: a visitor
+may walk in, look round and talk to whoever is there. It is the desks and the
+agents above that are shut.
+
+Enforced in three places, for the same reason a look is:
+
+| Where                           | What it does                                              |
+| ------------------------------- | --------------------------------------------------------- |
+| `OfficeScene`                   | The lift will not open; the character says `LIFT_REFUSAL` |
+| `blockedByFloor` in `server.ts` | A typed or shared floor URL is sent down to the lobby     |
+| `attachPresenceSocket`          | A `join` for that room is refused `reason: "private"`     |
+
+The scene's copy of the identity is asked for straight from `/api/me` rather
+than taken over the event bus, because the game layer holds no React and an
+emit that lands before the scene subscribes would never arrive; it assumes
+`visitor` until the answer comes, since a gate that is open while it waits is
+not a gate. None of the three is the gate on its own — the lift is what a
+person feels, the socket is what actually keeps them out of the room.
+
 A personal code names its holder, so the welcome screen asks them nothing — name,
 office and look are written straight in. Giving two people the same code, or
 reusing the shared one, would hand over that identity; the server says so loudly

@@ -18,7 +18,8 @@
  * Nothing here touches Phaser or the DOM.
  */
 
-import { floorRoomSlug, parseRoomPath } from "../rooms";
+import { floorRoomSlug, parseFloorRoomSlug, parseRoomPath } from "../rooms";
+import type { AccessIdentity } from "../identity";
 import { ORGANISATIONS, hasBoardFloor, hasFloors, tenantFor, type Tenant } from "./tenants";
 import { residentsAt } from "./residents";
 
@@ -161,4 +162,52 @@ export function mapFileFor(address: Address | null): string {
 /** Whether a slug names an organisation someone can call home. */
 export function isHome(slug: string | null | undefined): slug is string {
   return ORGANISATIONS.some((o) => o.slug === slug);
+}
+
+// ── Who may ride the lift ───────────────────────────────
+
+/**
+ * Buildings whose upper floors are private, and who may go up.
+ *
+ * The lobby is always public — a visitor may walk in, look round and talk to
+ * whoever is there. It is the floors above that are shut, because that is
+ * where the desks and the agents are.
+ *
+ * Keyed by tenant slug, so making another building private is a line here
+ * rather than a change anywhere else.
+ */
+export const PRIVATE_LIFTS: Record<string, readonly AccessIdentity[]> = {
+  "sandbox-erp": ["coop", "rob"],
+};
+
+/** What the lift says to somebody it will not carry. */
+export const LIFT_REFUSAL = "Thou shall not pass!";
+
+/** Whether a building's floors are anyone's but the public's. */
+export function liftIsPrivate(slug: string): boolean {
+  return slug in PRIVATE_LIFTS;
+}
+
+/**
+ * Whether this identity may ride a building's lift.
+ *
+ * Everywhere not named is open to everybody, so a new building works without
+ * being listed.
+ */
+export function mayRideLift(slug: string, identity: AccessIdentity): boolean {
+  const allowed = PRIVATE_LIFTS[slug];
+  return !allowed || allowed.includes(identity);
+}
+
+/**
+ * Whether this identity may be in a room at all.
+ *
+ * The same rule as the lift, asked of a room slug instead of a building, so
+ * the server can apply it to a socket joining `sandbox-erp-floor-2` without
+ * caring how the browser got there. A lobby, the world map and a campus are
+ * everyone's; only a private building's floors are not.
+ */
+export function mayEnterRoom(room: string, identity: AccessIdentity): boolean {
+  const floor = parseFloorRoomSlug(room);
+  return floor ? mayRideLift(floor.slug, identity) : true;
 }

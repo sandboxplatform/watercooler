@@ -182,8 +182,10 @@ export interface OnlineMessage {
 
 export interface RejectedMessage {
   type: "rejected";
-  reason: "full";
-  capacity: number;
+  /** `full` — the room is at its human limit. `private` — not yours to enter. */
+  reason: "full" | "private";
+  /** Only meaningful for `full`. */
+  capacity?: number;
 }
 
 export interface PresenceMessage {
