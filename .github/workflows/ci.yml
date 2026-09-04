@@ -43,112 +43,47 @@ jobs:
         run: pnpm audit --audit-level=high
         continue-on-error: true
 
-  # Closes the gap between "the fix is on main" and "the fix is live", which
-  # is where three separate fixes sat while the running container was older.
+  # Railway deploys this repository itself, on every push to main. CI cannot
+  # gate that — the push has already happened by the time these checks run —
+  # so this job does not deploy anything. It reports whether the commit
+  # actually reached production, which is the part nothing else could answer.
   #
-  # Setup, once:
-  #   secrets.RAILWAY_TOKEN   a Railway *project* token — Project Settings ->
-  #                           Tokens. Scoped to one environment, so the CLI
-  #                           needs no `railway link`. An account token will
-  #                           not do: it needs --project as well.
-  #   vars.RAILWAY_SERVICE    the service name, when the project has more than
-  #                           one. Omit it and Railway picks.
-  #   vars.HEALTH_URL         e.g. https://your-host/api/health, to verify the
-  #                           commit actually came up. Omit it and the deploy
-  #                           still runs, unverified.
+  # Gating a deploy on the checks would mean CI owning the deploy instead,
+  # which is a different trade: it would also mean two things deploying the
+  # same service.
   #
-  # Without the token this job says so and passes, rather than going red on
-  # every push until somebody adds it.
-  deploy:
-    name: Deploy to Railway
-    # Never from a pull request: a fork's PR must not be able to deploy, and
-    # `needs` alone would not stop it.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build
+  # Needs one repository variable, or it is skipped:
+  #   vars.HEALTH_URL   e.g. https://your-host/api/health
+  #
+  # Deliberately not `needs: build`. Railway deploys whether or not the checks
+  # pass, so what is live is worth reporting either way — and starting at the
+  # same time as them means the poll is running while the container swaps.
+  verify-deploy:
+    name: Verify the deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.HEALTH_URL != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     permissions:
       contents: read
-    # One deploy at a time, and never cancelled half way: killing `railway up`
-    # mid-build leaves the service on whatever it was, which is a worse place
-    # to be than a queue.
+    # Two pushes in quick succession: the older poll is waiting for a commit
+    # that has already been superseded and would fail on the timeout. Safe to
+    # cancel, unlike a deploy — nothing is half done.
     concurrency:
-      group: railway-deploy
-      cancel-in-progress: false
+      group: verify-deploy
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
 
-      - name: Is there a token?
-        id: gate
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: |
-          if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::No RAILWAY_TOKEN secret, so nothing was deployed. Add a project token to deploy on every push to main."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/setup-node@v4
-        if: steps.gate.outputs.skip == 'false'
         with:
           node-version-file: .nvmrc
 
-      - name: Install the Railway CLI
-        if: steps.gate.outputs.skip == 'false'
-        run: |
-          npm install -g "@railway/cli@^4"
-          railway --version
-
-      # Runtime environment, not a build argument: Railway sets
-      # RAILWAY_GIT_COMMIT_SHA only on a deploy it triggered from the connected
-      # repository, and this is not one of those. Without it /api/health can
-      # only answer `source: "none"`.
-      #
-      # Best effort on purpose. A CLI that has moved this flag around must not
-      # be able to stop a deploy over a field that is only ever read by a
-      # health check — the verification below is what notices, and says so.
-      - name: Tell the service which commit this is
-        if: steps.gate.outputs.skip == 'false'
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          SERVICE: ${{ vars.RAILWAY_SERVICE }}
-        run: |
-          set -uo pipefail
-          args=()
-          if [ -n "${SERVICE:-}" ]; then args+=(--service "$SERVICE"); fi
-          railway variables --set "GIT_SHA=$GITHUB_SHA" --skip-deploys "${args[@]}" \
-            || railway variables --set "GIT_SHA=$GITHUB_SHA" "${args[@]}" \
-            || echo "::warning::Could not set GIT_SHA on the service; /api/health will report source=none."
-
-      - name: Deploy
-        if: steps.gate.outputs.skip == 'false'
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          SERVICE: ${{ vars.RAILWAY_SERVICE }}
-        run: |
-          set -euo pipefail
-          args=()
-          if [ -n "${SERVICE:-}" ]; then args+=(--service "$SERVICE"); fi
-          # No --detach: the build runs on Railway, and a failed build has to
-          # fail this job rather than being reported as a successful deploy.
-          railway up "${args[@]}"
-
-      # The deploy step succeeding means Railway accepted the image and built
-      # it. This is the step that means the commit is actually answering
-      # requests, which is the whole reason /api/health reports a sha.
-      #
-      # A script rather than bash around `jq`: the runner has jq today, and
-      # `jq -r '.commit' 2>/dev/null || echo null` reads a missing jq as "the
-      # commit is not live yet" — so an image that dropped it would poll for
-      # ten minutes and then report a deploy failure that had not happened.
+      # A script rather than bash around `jq`, and not for tidiness: the
+      # runner has jq today, and `jq -r '.commit' 2>/dev/null || echo null`
+      # reads a *missing* jq as "the commit is not live yet" — so an image
+      # that dropped it would poll for ten minutes and then report a failure
+      # that had not happened.
       - name: Wait for the commit to answer
-        if: steps.gate.outputs.skip == 'false' && vars.HEALTH_URL != ''
         env:
           HEALTH_URL: ${{ vars.HEALTH_URL }}
         run: node scripts/await-deploy.mjs "$HEALTH_URL" "$GITHUB_SHA"
-
-      - name: Say what to do about an unverified deploy
-        if: steps.gate.outputs.skip == 'false' && vars.HEALTH_URL == ''
-        run: echo "::notice::Deployed, but not verified. Set a HEALTH_URL repository variable (e.g. https://your-host/api/health) to have CI wait for the commit to answer."

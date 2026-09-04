@@ -732,42 +732,44 @@ other half — whether a redeploy actually replaced the process, or the same
 container is still up. The same line is printed at start-up, so a deploy's own
 log says what it brought up.
 
-The sha comes from `GIT_SHA` if it is set, else `RAILWAY_GIT_COMMIT_SHA`, which
-Railway sets only on a deploy it triggered from the connected repository — so
-`railway up` from a laptop needs the Dockerfile's build argument
-(`--build-arg GIT_SHA=$(git rev-parse HEAD)`) to report one. A build nobody told
-answers `source: "none"` with a null commit rather than guessing: "this build was
-not told which commit it is" and "this endpoint does not report commits" look
-identical if the field is simply absent, and they need different fixes. Anything
-that is not commit-shaped hex is refused for the same reason — an unexpanded
-`$GIT_SHA` reported as the running commit looks like an answer.
+The sha comes from `GIT_SHA` if it is set, else `RAILWAY_GIT_COMMIT_SHA`. The
+second is the one that normally answers: Railway sets it on any deploy it
+triggered from the connected repository, which is every deploy here, so nothing
+has to be configured for this to work. `GIT_SHA` is for the cases Railway did
+not trigger — a `railway up` from a laptop, or a plain
+`docker build --build-arg GIT_SHA=$(git rev-parse HEAD)`.
 
-None of this existed until a fix sat on `main` three times over while the running
-container was older, and nothing on the box could have said so.
+A build nobody told answers `source: "none"` with a null commit rather than
+guessing: "this build was not told which commit it is" and "this endpoint does
+not report commits" look identical if the field is simply absent, and they need
+different fixes. Anything that is not commit-shaped hex is refused for the same
+reason — an unexpanded `$GIT_SHA` reported as the running commit looks like an
+answer.
 
-**CI deploys it.** The `deploy` job in `ci.yml` runs after the four checks pass,
-on a push to `main` only — never from a pull request, so a fork cannot deploy —
-and one at a time, never cancelled part way, because killing `railway up`
-mid-build leaves the service on whatever it was. It needs three things set on
-the repository, and without the first it says so and passes rather than going
-red on every push:
+None of this existed until three separate fixes were each believed to be
+un-deployed while nothing on the box could confirm either way.
 
-| Setting           | Kind   | For                                                             |
-| ----------------- | ------ | --------------------------------------------------------------- |
-| `RAILWAY_TOKEN`   | secret | A Railway **project** token. An account token needs `--project` |
-| `RAILWAY_SERVICE` | var    | The service name, when the project has more than one            |
-| `HEALTH_URL`      | var    | `https://host/api/health`, to verify the commit came up         |
+**Railway deploys this repository itself**, on every push to `main`. CI does
+not do it and cannot gate it — by the time the checks run, the push that
+triggered the deploy has already happened. So `ci.yml`'s `verify-deploy` job
+does not deploy anything; it polls `HEALTH_URL` until the pushed commit
+answers, which is the part nothing else could tell you. Set a `HEALTH_URL`
+repository variable (`https://host/api/health`) or the job is skipped.
 
-The commit reaches the container as a Railway **service variable**, set by the
-job before it deploys — `RAILWAY_GIT_COMMIT_SHA` is only set on a deploy Railway
-triggered from the connected repository, and this is not one of those. Setting
-it is best effort: a CLI that has moved that flag must not be able to stop a
-release over a field only the health check reads.
+It deliberately does not `needs: build`. Railway deploys whether or not the
+checks pass, so what is live is worth reporting either way — and starting
+alongside them means the poll is already running while the container swaps.
+Two pushes close together cancel the older poll, which would otherwise time
+out waiting for a commit that has been superseded.
 
-Then `scripts/await-deploy.mjs` polls `HEALTH_URL` until it reports the pushed
-commit, because `railway up` succeeding only means Railway built the image, not
-that the container answering requests is that build. It is a script and not
-bash around `jq` for a reason worth keeping: `jq -r '.commit' 2>/dev/null || echo
-null` reads a _missing jq_ as "not live yet", so a runner image that dropped it
-would poll for ten minutes and then report a deploy failure that never
-happened. Dependency-free `.mjs` because the deploy job installs nothing.
+Gating a deploy on the checks would mean CI owning the deploy instead, with
+`railway up` and a project token. That was written and then taken out: with
+Railway already deploying from the repository it meant two things deploying
+one service, racing on every push.
+
+`scripts/await-deploy.mjs` is the poll, and it is a script rather than bash
+around `jq` for a reason worth keeping: `jq -r '.commit' 2>/dev/null || echo
+null` reads a _missing jq_ as "not live yet", so a runner image that dropped
+it would poll for ten minutes and then report a deploy failure that never
+happened — which is exactly what it did the first time it ran on a machine
+without jq. Dependency-free `.mjs` because the job installs nothing.

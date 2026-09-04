@@ -3,9 +3,10 @@
  *
  *   node scripts/await-deploy.mjs <healthUrl> <sha> [--attempts 60] [--every 10]
  *
- * `railway up` succeeding means Railway accepted and built the image. It does
- * not mean the container serving requests is that build. This is the step that
- * says so, and it is the whole reason /api/health reports a commit.
+ * Railway deploys this repository itself on a push to main, so nothing in CI
+ * knows when — or whether — the commit reached the container that is serving
+ * requests. This is what answers that, and it is the whole reason
+ * /api/health reports a commit.
  *
  * Three outcomes, and the middle one matters:
  *
@@ -17,9 +18,9 @@
  *                only a health check reads.
  *   timeout      it never reported it. Exit 1.
  *
- * Plain .mjs with no dependencies on purpose: the deploy job checks out the
- * repo and installs nothing, so this has to run on the bare Node that
- * setup-node provides. It began as ten lines of bash around `jq`, which is
+ * Plain .mjs with no dependencies on purpose: the job checks out the repo and
+ * installs nothing, so this has to run on the bare Node that setup-node
+ * provides. It began as ten lines of bash around `jq`, which is
  * worse in a way worth recording — `jq -r '.commit' 2>/dev/null || echo null`
  * reads a missing jq as "the commit is not live yet", so a runner image
  * without it would poll for ten minutes and then report a deploy failure that
