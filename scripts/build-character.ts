@@ -7,7 +7,7 @@
  * facings given. Left is mirrored from right by the composer, so a sheet
  * needs only down, up and right. See lib/pixel/strip.ts for the cutting.
  *
- *   pnpm tsx scripts/build-character.ts <Name> [--source file.png] [--rows down,up,right] [--idle 3] [--walk 6] [--height 72] [--no-outline] [--preview out.png]
+ *   pnpm tsx scripts/build-character.ts <Name> [--source file.png] [--rows down,up,right] [--idle 3] [--walk 6] [--height 72] [--no-outline] [--no-clean] [--preview out.png]
  *
  * Reads  public/characters/examples/<Name>_sprite.png, or --source
  * Writes public/characters/<Name>_48x48.png — then add it to WORKER_SPRITES.
@@ -23,6 +23,8 @@ import { join } from "path";
 import { decodePng, encodePng } from "../lib/pixel/png";
 import { detectBackdrop, keyOutBackdrop } from "../lib/pixel/ingest";
 import { addOutline, outlineColour } from "../lib/pixel/outline";
+import { deFringe, despeckle } from "../lib/pixel/despeckle";
+import { dropCrumbs } from "../lib/pixel/crumbs";
 import {
   composeSheet,
   FACINGS,
@@ -77,6 +79,13 @@ if (!Number.isFinite(height) || height < 8 || height > FRAME_H - 2)
   throw new Error(`--height must be between 8 and ${FRAME_H - 2}`);
 /** The pack's cast is drawn with a dark edge; pass --no-outline to go without. */
 const outline = !args.includes("--no-outline");
+/**
+ * The three passes that scrub the lossy source's mess off the built sheet:
+ * lone bright specks, the pale rim along the silhouette, and small detached
+ * crumbs. `--no-clean` keeps the lot, which is worth a look when a character
+ * comes out missing something.
+ */
+const clean = !args.includes("--no-clean");
 
 const SOURCE = option(
   "--source",
@@ -127,11 +136,18 @@ const frames = cells.map((cell) =>
 );
 
 const composed = composeSheet(frames, assignments);
+// Every scrubbing pass runs before the line, so the line is never drawn
+// around the dirt: specks first, then the pale rim, then the crumbs — which
+// the outline pass would otherwise mistake for tiny figures and paint the
+// darkest colour on the sheet.
+const cleaned = clean
+  ? dropCrumbs(deFringe(despeckle(composed, FRAME_W, FRAME_H), FRAME_W, FRAME_H), FRAME_W, FRAME_H)
+  : composed;
 // Last, after the palette snap, so the line is exactly the colour asked for
 // rather than the nearest of sixteen. It is one colour more on the sheet.
-const sheet = outline ? addOutline(composed, FRAME_W, FRAME_H) : composed;
+const sheet = outline ? addOutline(cleaned, FRAME_W, FRAME_H) : cleaned;
 if (outline) {
-  const [r, g, b] = outlineColour(composed);
+  const [r, g, b] = outlineColour(cleaned);
   console.log(`outlined in rgb(${r},${g},${b})`);
 }
 writeFileSync(OUTPUT, encodePng(sheet));

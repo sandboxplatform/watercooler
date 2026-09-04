@@ -6,11 +6,18 @@
  * figure needs a hard edge to hold its shape against the floor behind it.
  * Sheets built from illustrations arrive without one.
  *
- * The line is added *outside* the figure, into the transparent pixels around
- * it, so nothing already drawn is painted over. It is applied frame by frame
- * and clipped to each frame's own bounds — a sheet is a grid of them, and an
- * outline that ran past the edge would appear as a stray mark down the side of
- * its neighbour.
+ * The line is painted **onto** the figure's outermost ring of pixels rather
+ * than added around it, and that choice matters more than it sounds. A sheet
+ * cut from a lossy source has a ramp at every edge — read across one and it
+ * runs 12, 77, 155, 193 into the body. Ringing the figure from outside leaves
+ * that ramp between the new line and the body, where the mid-greys read as
+ * light dirt against the black: the very speckle the line was meant to tidy.
+ * Painting the ring instead consumes the ramp, and costs only the outermost
+ * pixel of a figure whose outermost pixel was mush.
+ *
+ * Applied frame by frame and clipped to each frame's own bounds — a sheet is
+ * a grid of them, and a line that ran past an edge would show up as a stray
+ * mark down the side of its neighbour.
  */
 
 import type { Bitmap } from "./png";
@@ -43,10 +50,10 @@ export function outlineColour(image: Bitmap): [number, number, number] {
 }
 
 /**
- * Return a copy with a one-pixel outline round every figure on the sheet.
+ * Return a copy with every figure's outermost ring painted as its outline.
  *
- * Neighbours are read from the original, so the line grows to one pixel and
- * stops rather than feeding on itself.
+ * Neighbours are read from the original, so the ring is exactly one pixel
+ * deep rather than eating inward on itself.
  */
 export function addOutline(
   image: Bitmap,
@@ -67,14 +74,16 @@ export function addOutline(
       for (let y = frameY; y < bottom; y++) {
         for (let x = frameX; x < right; x++) {
           const i = (y * width + x) * 4;
-          if (data[i + 3] >= SOLID) continue; // already part of the figure
-          // Only look at neighbours inside this frame.
-          const touches =
-            (x > frameX && solidAt(x - 1, y)) ||
-            (x < right - 1 && solidAt(x + 1, y)) ||
-            (y > frameY && solidAt(x, y - 1)) ||
-            (y < bottom - 1 && solidAt(x, y + 1));
-          if (!touches) continue;
+          if (data[i + 3] < SOLID) continue; // empty space stays empty
+          // On the ring if any side faces nothing. The frame's own edge is
+          // the edge of the world, not space, so a figure running to it is
+          // not outlined along that side.
+          const onRing =
+            (x > frameX && !solidAt(x - 1, y)) ||
+            (x < right - 1 && !solidAt(x + 1, y)) ||
+            (y > frameY && !solidAt(x, y - 1)) ||
+            (y < bottom - 1 && !solidAt(x, y + 1));
+          if (!onRing) continue;
           out[i] = r;
           out[i + 1] = g;
           out[i + 2] = b;
