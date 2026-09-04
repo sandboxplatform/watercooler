@@ -62,5 +62,14 @@ ENV ERP_DB_PATH=/data/erp.sqlite
 ENV UPLOADS_DIR=/data/uploads
 ENV AGENT_PROVIDER=claude-api
 
+# Which commit this image is, for /api/health and the start-up log. Railway
+# sets RAILWAY_GIT_COMMIT_SHA itself on a deploy it triggered from the
+# connected repository; this argument is for everything else —
+#   docker build --build-arg GIT_SHA=$(git rev-parse HEAD) .
+# Last in the file on purpose: it changes with every commit, so anything
+# placed under it would rebuild every time.
+ARG GIT_SHA=""
+ENV GIT_SHA=${GIT_SHA}
+
 EXPOSE 3000
 CMD ["pnpm", "start"]

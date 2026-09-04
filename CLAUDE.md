@@ -680,22 +680,23 @@ From `CONTRIBUTING.md`, and worth holding to when adding anything:
 
 ## Environment variables
 
-| Variable                                                                 | Default                                 | Purpose                                                               |
-| ------------------------------------------------------------------------ | --------------------------------------- | --------------------------------------------------------------------- |
-| `ACCESS_CODE`                                                            | —                                       | Shared visitors' code; production refuses to boot with no code at all |
-| `ACCESS_CODE_COOP` / `ACCESS_CODE_ROB`                                   | —                                       | One code each; brings its holder in as themselves                     |
-| `AGENT_PROVIDER`                                                         | `claude`                                | Which provider runs agents                                            |
-| `PORT` / `HOSTNAME`                                                      | `3000` / `localhost`                    | Server bind; also builds auth callback URLs                           |
-| `ANTHROPIC_API_KEY`                                                      | —                                       | Required by `claude-api`                                              |
-| `CLAUDE_BIN` / `CLAUDE_PERMISSION_MODE` / `CLAUDE_ALLOWED_TOOLS`         | — / `acceptEdits` / —                   | Claude CLI tuning                                                     |
-| `AGENT_TOWN_MODEL`                                                       | CLI default                             | `opus` \| `sonnet` \| `haiku`                                         |
-| `AGENT_MAX_CONCURRENT` / `AGENT_RUN_TIMEOUT_MS` / `ROOM_SPEND_LIMIT_USD` | 4 / 180000 / 50                         | Run limits                                                            |
-| `AGENT_WORKSPACE_ROOT`                                                   | `.agent-workspaces`                     | Where seat sandboxes go                                               |
-| `ERP_DB_PATH` / `UPLOADS_DIR`                                            | `.data/erp.sqlite` / beside the room db | Storage paths                                                         |
-| `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                             | —                                       | Required by the `mettara` provider                                    |
-| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`              | —                                       | Auth.js sign-in; off when absent                                      |
-| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT                                |
-| `CSP_CONNECT_SRC`                                                        | —                                       | Extra `connect-src` origins                                           |
+| Variable                                                                 | Default                                 | Purpose                                                                  |
+| ------------------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------ |
+| `ACCESS_CODE`                                                            | —                                       | Shared visitors' code; production refuses to boot with no code at all    |
+| `ACCESS_CODE_COOP` / `ACCESS_CODE_ROB`                                   | —                                       | One code each; brings its holder in as themselves                        |
+| `AGENT_PROVIDER`                                                         | `claude`                                | Which provider runs agents                                               |
+| `PORT` / `HOSTNAME`                                                      | `3000` / `localhost`                    | Server bind; also builds auth callback URLs                              |
+| `ANTHROPIC_API_KEY`                                                      | —                                       | Required by `claude-api`                                                 |
+| `CLAUDE_BIN` / `CLAUDE_PERMISSION_MODE` / `CLAUDE_ALLOWED_TOOLS`         | — / `acceptEdits` / —                   | Claude CLI tuning                                                        |
+| `AGENT_TOWN_MODEL`                                                       | CLI default                             | `opus` \| `sonnet` \| `haiku`                                            |
+| `AGENT_MAX_CONCURRENT` / `AGENT_RUN_TIMEOUT_MS` / `ROOM_SPEND_LIMIT_USD` | 4 / 180000 / 50                         | Run limits                                                               |
+| `AGENT_WORKSPACE_ROOT`                                                   | `.agent-workspaces`                     | Where seat sandboxes go                                                  |
+| `ERP_DB_PATH` / `UPLOADS_DIR`                                            | `.data/erp.sqlite` / beside the room db | Storage paths                                                            |
+| `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                             | —                                       | Required by the `mettara` provider                                       |
+| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`              | —                                       | Auth.js sign-in; off when absent                                         |
+| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT                                   |
+| `CSP_CONNECT_SRC`                                                        | —                                       | Extra `connect-src` origins                                              |
+| `GIT_SHA`                                                                | —                                       | The commit `/api/health` reports; the Dockerfile takes it as a build arg |
 
 `README.md` covers the same ground as user-facing narrative, with setup walkthroughs
 and the feature tour (arcade, island, controller, playing together). Change behaviour
@@ -711,3 +712,35 @@ Mettara SDK (see above).
 Cloud deploys run `AGENT_PROVIDER=claude-api`: there is no signed-in user on the host
 and a subscription cannot be shared, so the API key is the credential and the spend
 limit is the guard.
+
+**Which build is live** comes back from `/api/health`, the one route the gate
+leaves open:
+
+```json
+{
+  "ok": true,
+  "version": "0.4.1",
+  "commit": "5d42c4a",
+  "branch": "main",
+  "source": "GIT_SHA",
+  "startedAt": "..."
+}
+```
+
+`commit` compares against `git log --oneline` by eye, and `startedAt` answers the
+other half — whether a redeploy actually replaced the process, or the same
+container is still up. The same line is printed at start-up, so a deploy's own
+log says what it brought up.
+
+The sha comes from `GIT_SHA` if it is set, else `RAILWAY_GIT_COMMIT_SHA`, which
+Railway sets only on a deploy it triggered from the connected repository — so
+`railway up` from a laptop needs the Dockerfile's build argument
+(`--build-arg GIT_SHA=$(git rev-parse HEAD)`) to report one. A build nobody told
+answers `source: "none"` with a null commit rather than guessing: "this build was
+not told which commit it is" and "this endpoint does not report commits" look
+identical if the field is simply absent, and they need different fixes. Anything
+that is not commit-shaped hex is refused for the same reason — an unexpanded
+`$GIT_SHA` reported as the running commit looks like an answer.
+
+None of this existed until a fix sat on `main` three times over while the running
+container was older, and nothing on the box could have said so.

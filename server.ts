@@ -17,6 +17,7 @@ import {
 } from "./lib/cli-bridge";
 import { getCliProvider, isCliProviderId } from "./lib/cli-providers";
 import { getRoomStore } from "./lib/server/room-store";
+import { describeBuild } from "./lib/server/build-info";
 import { readBoard, readDesk } from "./lib/server/boards";
 import {
   offeredProviders,
@@ -527,6 +528,11 @@ if (unconfigured) {
         },
       });
       log.info(`Ready on http://localhost:${port}`);
+      // Printed at start-up as well as served from /api/health, so a deploy's
+      // own output says which commit it brought up — which is the first thing
+      // you want when a fix is on main and the box is behaving as though it
+      // is not.
+      log.info(describeBuild());
       log.info(
         DEFAULT_PROVIDER.kind === "service"
           ? `Provider: ${DEFAULT_PROVIDER.displayName} (hosted service)`
