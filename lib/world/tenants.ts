@@ -56,6 +56,15 @@ export function organisationFor(slug: string | null | undefined): Organisation |
 /** What a little building on a campus is, which decides how it is drawn. */
 export type BuildingKind = "warehouse" | "store" | "garage" | "office";
 
+/**
+ * A board that can hang on an Operations floor.
+ *
+ * `trello` is the project board and `zoho` the support queue; each is a
+ * picture on the wall you walk up to and press E at, and each reads from
+ * its own service.
+ */
+export type BoardKind = "trello" | "zoho";
+
 export interface Tenant {
   /** Room slug; also the lobby's identity in URLs. */
   slug: string;
@@ -69,10 +78,15 @@ export interface Tenant {
   /** The game in the lobby's corner, if it has one. */
   game?: Game;
   /**
-   * A third floor with the project board on its wall, above the people and
-   * the agents. Only a building that runs its work off a board has one.
+   * The boards on the wall of the building's Operations floor, the third
+   * one above the people and the agents.
+   *
+   * The list is the floor: a building with none has no third floor at all,
+   * and which boards it names is what hangs there. Two buildings can run
+   * off different things — Castle Atlantic keeps a Trello board and no
+   * support queue — so this is a set rather than a flag.
    */
-  boardFloor?: boolean;
+  operations?: readonly BoardKind[];
 }
 
 const org = (slug: string) => organisationFor(slug)!;
@@ -82,8 +96,8 @@ function lobby(slug: string, orgSlug: string, extra: Partial<Tenant> = {}): Tena
 }
 
 export const TENANTS: readonly Tenant[] = [
-  lobby("castle-atlantic", "castle-atlantic", { game: "pong" }),
-  lobby("sandbox-erp", "sandbox-erp", { game: "pinball", boardFloor: true }),
+  lobby("castle-atlantic", "castle-atlantic", { game: "pong", operations: ["trello"] }),
+  lobby("sandbox-erp", "sandbox-erp", { game: "pinball", operations: ["trello", "zoho"] }),
   lobby("chester-warehouse", "chester", { location: "Warehouse", kind: "warehouse" }),
   lobby("chester-store", "chester", { location: "Store", kind: "store" }),
   lobby("blockhouse-warehouse", "blockhouse", { location: "Warehouse", kind: "warehouse" }),
@@ -135,9 +149,21 @@ export function hasFloors(tenant: Tenant): boolean {
   return !tenant.kind || tenant.kind === "office";
 }
 
-/** Whether a building has the board floor above its agents' floor. */
-export function hasBoardFloor(tenant: Tenant | null | undefined): boolean {
-  return !!tenant && hasFloors(tenant) && tenant.boardFloor === true;
+/**
+ * The boards on a building's Operations floor, in the order they hang.
+ *
+ * Empty for a building without one, which is most of them: a store or a
+ * warehouse has no floors at all, and a lobby only gets a third floor by
+ * naming what goes on its wall.
+ */
+export function operationsBoards(tenant: Tenant | null | undefined): readonly BoardKind[] {
+  if (!tenant || !hasFloors(tenant)) return [];
+  return tenant.operations ?? [];
+}
+
+/** Whether a building has an Operations floor above its agents' floor. */
+export function hasOperationsFloor(tenant: Tenant | null | undefined): boolean {
+  return operationsBoards(tenant).length > 0;
 }
 
 /** The store an organisation is entered through, if it is a store business. */

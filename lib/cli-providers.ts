@@ -264,7 +264,7 @@ const CLAUDE_DISPATCH_TOOL = "mcp__watercooler__dispatch_to_worker";
  * which reads to the model as "the data is not available".
  */
 /**
- * The boards on the third floor. Read-only tools, so an agent can answer
+ * The boards on an Operations floor. Read-only tools, so an agent can answer
  * "what is on the board?" from the wall rather than from imagination.
  */
 const BOARD_TOOLS = [

@@ -15,7 +15,8 @@ import { generateMap, type TilesetRef } from "../lib/map/generate";
 import { buildOfficeSpec } from "../lib/map/office";
 import { buildFloorSpec } from "../lib/map/floor";
 import { buildGarageSpec, buildStoreSpec, buildWarehouseSpec } from "../lib/map/premises";
-import { TENANTS, storeOf, tenantsOf } from "../lib/world/tenants";
+import { TENANTS, operationsBoards, storeOf, tenantsOf } from "../lib/world/tenants";
+import { operationsMapFile } from "../lib/world/floors";
 import type { SourceMap } from "../lib/map/harvest";
 
 const MAPS = join(process.cwd(), "public", "maps");
@@ -50,6 +51,18 @@ const premises = TENANTS.filter((t) => t.kind && t.kind !== "office").map((t) =>
   return [`room-${t.slug}.json`, build] as const;
 });
 
+/** Every distinct set of boards hung on an Operations floor, once each. */
+const operationsFloors = [
+  ...new Map(
+    TENANTS.map((t) => operationsBoards(t))
+      .filter((boards) => boards.length > 0)
+      .map((boards) => [operationsMapFile(boards), boards] as const),
+  ),
+].map(([path, boards]) => {
+  const file = path.replace("/maps/", "");
+  return [file, (src: SourceMap) => buildFloorSpec(src, { boards })] as const;
+});
+
 for (const [file, build] of [
   ["office3.json", (src: SourceMap) => buildOfficeSpec(src)],
   ["lobby.json", (src: SourceMap) => buildOfficeSpec(src)],
@@ -58,8 +71,11 @@ for (const [file, build] of [
   ["lobby-apeiron-media.json", (src: SourceMap) => buildOfficeSpec(src, "pong")],
   ["lobby-sandbox-erp.json", (src: SourceMap) => buildOfficeSpec(src, "pinball", ["arcade"])],
   ["floor.json", buildFloorSpec],
-  // The board floor: the same room, with the project board on the wall.
-  ["floor-board.json", (src: SourceMap) => buildFloorSpec(src, { board: true })],
+  // An Operations floor per set of boards actually hung anywhere: the same
+  // room each time, with those boards on the wall. Named by the boards
+  // rather than the building, so two buildings running off the same ones
+  // share a map and a third needs no new file.
+  ...operationsFloors,
   ...premises,
 ] as const) {
   const spec = build(raw);

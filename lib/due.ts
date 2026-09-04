@@ -1,7 +1,7 @@
 /**
  * Where something stands against its due date.
  *
- * Shared by the two boards on Sandbox ERP's third floor — the Trello cards
+ * Shared by the boards on an Operations floor — the Trello cards
  * and the Zoho Desk tickets — so "overdue" means the same thing and is the
  * same colour on both walls. Pure, and takes its clock as an argument.
  */

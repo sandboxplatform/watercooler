@@ -103,7 +103,7 @@ function Card({ card }: { card: BoardCard }) {
 }
 
 /**
- * The team's Trello board, on the wall of Sandbox ERP's third floor.
+ * The team's Trello board, on the wall of an Operations floor.
  *
  * A window onto the board, and only that: nothing here writes back, so
  * what is on the wall is what is on Trello a moment ago. The server holds

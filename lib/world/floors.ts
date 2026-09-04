@@ -11,7 +11,7 @@
  *   /r/<slug>            the lobby
  *   /r/<slug>/floor/1    the people's floor
  *   /r/<slug>/floor/2    the agents' floor
- *   /r/<slug>/floor/3    the board floor, in a building that has one
+ *   /r/<slug>/floor/3    the Operations floor, in a building that has one
  * Add ?via=elevator to step out of the lift, or ?via=door to step in from
  * outside; either way you arrive walking, and clear of the doorway.
  *
@@ -20,7 +20,14 @@
 
 import { floorRoomSlug, parseFloorRoomSlug, parseRoomPath } from "../rooms";
 import type { AccessIdentity } from "../identity";
-import { ORGANISATIONS, hasBoardFloor, hasFloors, tenantFor, type Tenant } from "./tenants";
+import {
+  ORGANISATIONS,
+  hasFloors,
+  hasOperationsFloor,
+  operationsBoards,
+  tenantFor,
+  type Tenant,
+} from "./tenants";
 import { residentsAt } from "./residents";
 
 export type Level = 1 | 2 | 3;
@@ -29,8 +36,12 @@ export type Floor = { kind: "lobby" } | { kind: "floor"; level: Level };
 export const LOBBY: Floor = { kind: "lobby" };
 export const PEOPLE_FLOOR: Floor = { kind: "floor", level: 1 };
 export const AGENTS_FLOOR: Floor = { kind: "floor", level: 2 };
-/** Where the project board hangs. Only some buildings have one. */
-export const BOARD_FLOOR: Floor = { kind: "floor", level: 3 };
+/**
+ * Where a building's boards hang. Only some buildings have one, and which
+ * boards are on the wall is the building's own business — see
+ * `operationsBoards`.
+ */
+export const OPERATIONS_FLOOR: Floor = { kind: "floor", level: 3 };
 
 export interface Address {
   tenant: Tenant;
@@ -44,8 +55,8 @@ export function addressFromLocation(location: { pathname: string }): Address | n
   if (path.floor === null) return { tenant, floor: LOBBY };
   const level = path.floor;
   if (level !== 1 && level !== 2 && level !== 3) return null;
-  // The board floor is not a floor every building has.
-  if (level === 3 && !hasBoardFloor(tenant)) return null;
+  // The Operations floor is not a floor every building has.
+  if (level === 3 && !hasOperationsFloor(tenant)) return null;
   return { tenant, floor: { kind: "floor", level } };
 }
 
@@ -92,7 +103,7 @@ export interface FloorStop {
 export function floorTitle(floor: Floor): string {
   if (floor.kind === "lobby") return "Lobby";
   if (floor.level === 1) return "Floor 1 · People";
-  return floor.level === 2 ? "Floor 2 · Agents" : "Floor 3 · Board";
+  return floor.level === 2 ? "Floor 2 · Agents" : "Floor 3 · Operations";
 }
 
 /** The floors of a building, bottom up, with who sits on each. */
@@ -110,9 +121,9 @@ export function floorsOf(tenant: Tenant, occupancy: Occupancy): FloorStop[] {
       names: residentsAt(tenant.slug).map((r) => r.name),
     },
   ];
-  // Nobody sits on the board floor; the board is what it is for.
-  if (hasBoardFloor(tenant)) {
-    floors.push({ floor: BOARD_FLOOR, label: floorTitle(BOARD_FLOOR), names: [] });
+  // Nobody sits on the Operations floor; the boards are what it is for.
+  if (hasOperationsFloor(tenant)) {
+    floors.push({ floor: OPERATIONS_FLOOR, label: floorTitle(OPERATIONS_FLOOR), names: [] });
   }
   return floors;
 }
@@ -121,7 +132,7 @@ export function floorsOf(tenant: Tenant, occupancy: Occupancy): FloorStop[] {
 export function occupantsOf(tenant: Tenant, floor: Floor, occupancy: Occupancy): Occupant[] {
   if (floor.kind === "lobby") return [];
   if (floor.level === 1) return occupancy.people;
-  // The board floor has no desks: it is one wall and the room to read it.
+  // The Operations floor has no desks: it is a wall and the room to read it.
   if (floor.level === 3) return [];
   return residentsAt(tenant.slug).map((r) => ({ id: r.id, name: r.name }));
 }
@@ -150,10 +161,24 @@ export function elevatorStops(address: Address, occupancy: Occupancy): ElevatorS
  * The map a room is drawn from: a store, warehouse or garage has its own; a
  * lobby with a game has its own; any other lobby the shared one.
  */
+/**
+ * The map file for an Operations floor carrying these boards.
+ *
+ * Here rather than in the generator so the two cannot drift: the script
+ * writes the files this names, and the scene asks for them by the same
+ * rule.
+ */
+export function operationsMapFile(boards: readonly string[]): string {
+  return `/maps/floor-ops-${[...boards].join("-")}.json`;
+}
+
 export function mapFileFor(address: Address | null): string {
   if (!address) return "/maps/office3.json";
   if (address.floor.kind === "floor") {
-    return address.floor.level === 3 ? "/maps/floor-board.json" : "/maps/floor.json";
+    if (address.floor.level !== 3) return "/maps/floor.json";
+    // Named by what hangs on the wall rather than by the building, so two
+    // buildings running off the same boards share one map.
+    return operationsMapFile(operationsBoards(address.tenant));
   }
   if (!hasFloors(address.tenant)) return `/maps/room-${address.tenant.slug}.json`;
   return address.tenant.game ? `/maps/lobby-${address.tenant.slug}.json` : "/maps/lobby.json";
@@ -178,6 +203,7 @@ export function isHome(slug: string | null | undefined): slug is string {
  */
 export const PRIVATE_LIFTS: Record<string, readonly AccessIdentity[]> = {
   "sandbox-erp": ["coop", "rob"],
+  "castle-atlantic": ["coop", "rob"],
 };
 
 /** What the lift says to somebody it will not carry. */

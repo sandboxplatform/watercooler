@@ -12,6 +12,7 @@
 import { harvest, type Region, type SourceMap } from "./harvest";
 import type { PoiSpec, RoomSpec } from "./spec";
 import { TILE, WALLS, WHITEBOARD } from "./office";
+import type { BoardKind } from "../world/tenants";
 
 export const WIDTH = 20;
 export const HEIGHT = 14;
@@ -67,30 +68,39 @@ export const HELP_DESK = {
   poi: { name: "Help desk", tx: 7, ty: 2, facing: "up" } satisfies PoiSpec,
 };
 
+/** Where each board hangs, and the point of interest to read it from. */
+const BOARDS: Record<BoardKind, { region: Region; poi: PoiSpec }> = {
+  trello: PROJECT_BOARD,
+  zoho: HELP_DESK,
+};
+
 export interface FloorOptions {
-  /** The board floor: the project board and the help desk hang on the wall. */
-  board?: boolean;
+  /**
+   * The boards hanging on the wall, which is what makes a floor an
+   * Operations floor. Each keeps its own place along the wall whether or
+   * not the others are there, so a building with one board has a gap where
+   * the other would be rather than a board in the wrong spot.
+   */
+  boards?: readonly BoardKind[];
 }
 
 export function buildFloorSpec(source: SourceMap, options: FloorOptions = {}): RoomSpec {
   const picked = harvest(source, REGIONS);
-  const board = options.board === true;
+  const boards = (options.boards ?? []).map((kind) => BOARDS[kind]);
   return {
     width: WIDTH,
     height: HEIGHT,
     tileSize: TILE,
     walls: WALLS,
     placements: picked.placements,
-    pois: board ? [WHITEBOARD.poi, PROJECT_BOARD.poi, HELP_DESK.poi] : [WHITEBOARD.poi],
+    pois: [WHITEBOARD.poi, ...boards.map((b) => b.poi)],
     spawns: [{ tx: PLAYER_START.tx, ty: PLAYER_START.ty, facing: PLAYER_START.facing }],
-    collisions: board
-      ? [PROJECT_BOARD.region, HELP_DESK.region].map((region) => ({
-          x: region.dx * TILE,
-          y: region.dy * TILE,
-          width: region.sw * TILE,
-          height: region.sh * TILE,
-        }))
-      : [],
+    collisions: boards.map(({ region }) => ({
+      x: region.dx * TILE,
+      y: region.dy * TILE,
+      width: region.sw * TILE,
+      height: region.sh * TILE,
+    })),
     // No door: the only way out is the way in.
     transitions: [{ name: "elevator", target: "elevator", ...ELEVATOR, facing: "down" }],
   };

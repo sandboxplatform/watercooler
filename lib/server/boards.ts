@@ -1,5 +1,5 @@
 /**
- * The two boards on Sandbox ERP's third floor, read once for everyone.
+ * The boards on an Operations floor, read once for everyone.
  *
  * Three callers want the same thing: the HUD panels, and the agents through
  * their MCP tools. Each fetch is held briefly here rather than in any one

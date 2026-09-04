@@ -52,7 +52,7 @@ export interface GameEventMap {
   "open-help-desk": [];
   /** The help desk was closed, so the office takes input again. */
   "help-desk-closed": [];
-  /** Somebody walked up to the project board on the board floor and pressed E. */
+  /** Somebody walked up to the project board on an Operations floor and pressed E. */
   "open-project-board": [];
   /** The project board was closed, so the office takes input again. */
   "project-board-closed": [];

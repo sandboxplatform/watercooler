@@ -74,7 +74,7 @@ export class OfficeScene extends Phaser.Scene {
   private arcadeZone: { x: number; y: number } | null = null;
   private arcadePrompt: Phaser.GameObjects.Text | null = null;
   private arcadeOpen = false;
-  /** The project board on the board floor's wall. */
+  /** The project board on the Operations floor's wall. */
   private projectZone: { x: number; y: number } | null = null;
   private projectPrompt: Phaser.GameObjects.Text | null = null;
   private projectOpen = false;

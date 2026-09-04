@@ -230,8 +230,8 @@ profile cannot walk in wearing someone else's face.
 
 **Private floors.** A building's upper floors can belong to the people whose own
 codes name them. `PRIVATE_LIFTS` in `lib/world/floors.ts` is the whole rule —
-today `sandbox-erp` is Coop's and Rob's — and a building not listed is open to
-everybody, so a new one needs no entry. The **lobby stays public**: a visitor
+today `sandbox-erp` and `castle-atlantic` are Coop's and Rob's — and a building
+not listed is open to everybody, so a new one needs no entry. The **lobby stays public**: a visitor
 may walk in, look round and talk to whoever is there. It is the desks and the
 agents above that are shut.
 
@@ -361,6 +361,36 @@ and server, so keep it import-free.
 Slugs become directory names for agent sandboxes, which is why
 `normaliseRoomSlug` excludes separators and traversal outright rather than
 trusting callers.
+
+### Floors
+
+A building with floors has a lobby, Floor 1 for its people's desks and
+Floor 2 for its agents'. Some have a third, **Floor 3 · Operations**, and
+what makes one is naming the boards that hang on its wall:
+
+```ts
+// lib/world/tenants.ts
+lobby("sandbox-erp", "sandbox-erp", { game: "pinball", operations: ["trello", "zoho"] }),
+lobby("castle-atlantic", "castle-atlantic", { game: "pong", operations: ["trello"] }),
+```
+
+`trello` is the project board and `zoho` the support queue — each a picture
+on the wall you walk up to and press E at. The list **is** the floor: a
+building that names none has no third floor at all, and `addressFromLocation`
+refuses `/floor/3` there. So Castle Atlantic has a Trello board and no
+support queue, and nothing had to be special-cased to arrange it.
+
+Each board keeps its own place along the wall whether or not the others are
+there, so a building with one has a gap rather than a board in the wrong
+spot. The map is named by the boards rather than the building —
+`operationsMapFile` in `lib/world/floors.ts`, giving
+`floor-ops-trello.json` and `floor-ops-trello-zoho.json` — so two buildings
+running off the same boards share one map and a third needs no new file.
+`pnpm build:map` writes one per set actually in use, read off `TENANTS`.
+
+The `?board=1` and `?desk=1` query parameters open either panel from
+anywhere, which is a development shortcut rather than a way into the room:
+what is on the wall is what the floor's map carries.
 
 ### Maps
 

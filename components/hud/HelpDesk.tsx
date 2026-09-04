@@ -77,8 +77,8 @@ function Ticket({ ticket }: { ticket: DeskTicket }) {
 }
 
 /**
- * The support queue from Zoho Desk, on the wall of Sandbox ERP's third
- * floor beside the project board.
+ * The support queue from Zoho Desk, on the wall of an Operations floor
+ * beside the project board.
  *
  * A window onto the desk, and only that: nothing here replies to a ticket
  * or changes one. The server holds the credentials and the answer for half
