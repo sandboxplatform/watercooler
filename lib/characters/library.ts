@@ -7,11 +7,9 @@
  * face — where the file lives is a detail the picker does not need to know.
  */
 
-import {
-  BOSS_SPRITE_KEY,
-  BOSS_SPRITE_PATH,
-  WORKER_SPRITES,
-} from "@/components/game/config/animations";
+// From lib, not from components/game: the presence socket reaches this file,
+// and the server's runtime image carries no components/.
+import { BOSS_SPRITE_KEY, BOSS_SPRITE_PATH, WORKER_SPRITES } from "./sprites";
 import { RESIDENTS } from "@/lib/world/residents";
 
 export interface RosterCharacter {

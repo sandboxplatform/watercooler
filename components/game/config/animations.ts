@@ -25,47 +25,29 @@ export interface AnimDef {
   repeat: number;
 }
 
-// Boss character (player-controlled) — male character
-export const BOSS_SPRITE_KEY = "character_09";
-export const BOSS_SPRITE_PATH = "/characters/Premade_Character_48x48_09.png";
+/**
+ * The sheets themselves live in `lib/characters/sprites.ts` and are re-exported
+ * here, so game code carries on importing them from this file.
+ *
+ * They are not defined here because the server reads them too, and the server
+ * cannot import from `components/game/` — the runtime image does not carry it.
+ * A server module reaching in here once crashed the container on startup.
+ */
+export {
+  BOSS_SPRITE_KEY,
+  BOSS_SPRITE_PATH,
+  WORKER_SPRITES,
+  type WorkerSpriteConfig,
+} from "@/lib/characters/sprites";
+
+import {
+  BOSS_SPRITE_KEY as BOSS_KEY,
+  BOSS_SPRITE_PATH as BOSS_PATH,
+} from "@/lib/characters/sprites";
 
 // Keep legacy exports for Player.ts compatibility
-export const SPRITE_KEY = BOSS_SPRITE_KEY;
-export const SPRITE_PATH = BOSS_SPRITE_PATH;
-
-export interface WorkerSpriteConfig {
-  key: string;
-  path: string;
-  label: string;
-}
-
-export const WORKER_SPRITES: WorkerSpriteConfig[] = [
-  { key: "character_02", path: "/characters/Premade_Character_48x48_02.png", label: "Alice" },
-  { key: "character_03", path: "/characters/Premade_Character_48x48_03.png", label: "Bob" },
-  { key: "character_04", path: "/characters/Premade_Character_48x48_04.png", label: "Carol" },
-  { key: "character_05", path: "/characters/Premade_Character_48x48_05.png", label: "Dave" },
-  // Built from the side-view sheet in public/characters/examples by
-  // scripts/build-character.ts — a look for the agents. The key is the one
-  // seats and saved profiles were stored against, so it outlives the
-  // filename: renaming it would point them at a texture that is gone.
-  {
-    key: "character_data_scientist",
-    path: "/characters/Yoshi_48x48.png",
-    label: "Yoshi",
-  },
-  // The other residents, built the same way from their sheets.
-  { key: "character_mark", path: "/characters/Mark_48x48.png", label: "Mark" },
-  { key: "character_sara", path: "/characters/Sara_48x48.png", label: "Sara" },
-  { key: "character_spud", path: "/characters/Bud_48x48.png", label: "Bud" },
-  { key: "character_steve", path: "/characters/Steve_48x48.png", label: "Steve" },
-  { key: "character_yash", path: "/characters/Yash_48x48.png", label: "Yash" },
-  // Looks for people, built the same way.
-  { key: "character_coop", path: "/characters/Coop_48x48.png", label: "Coop" },
-  { key: "character_rob", path: "/characters/Rob_48x48.png", label: "Rob" },
-  // Michael wanders the world map. Listed here so the scenes can find his
-  // sheet; he is a resident, so the picker leaves his look to him.
-  { key: "character_michael", path: "/characters/Michael_48x48.png", label: "Michael" },
-];
+export const SPRITE_KEY = BOSS_KEY;
+export const SPRITE_PATH = BOSS_PATH;
 
 const directions = ["right", "up", "left", "down"] as const;
 export type Direction = (typeof directions)[number];
