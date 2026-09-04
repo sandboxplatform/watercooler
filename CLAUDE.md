@@ -744,3 +744,30 @@ that is not commit-shaped hex is refused for the same reason — an unexpanded
 
 None of this existed until a fix sat on `main` three times over while the running
 container was older, and nothing on the box could have said so.
+
+**CI deploys it.** The `deploy` job in `ci.yml` runs after the four checks pass,
+on a push to `main` only — never from a pull request, so a fork cannot deploy —
+and one at a time, never cancelled part way, because killing `railway up`
+mid-build leaves the service on whatever it was. It needs three things set on
+the repository, and without the first it says so and passes rather than going
+red on every push:
+
+| Setting           | Kind   | For                                                             |
+| ----------------- | ------ | --------------------------------------------------------------- |
+| `RAILWAY_TOKEN`   | secret | A Railway **project** token. An account token needs `--project` |
+| `RAILWAY_SERVICE` | var    | The service name, when the project has more than one            |
+| `HEALTH_URL`      | var    | `https://host/api/health`, to verify the commit came up         |
+
+The commit reaches the container as a Railway **service variable**, set by the
+job before it deploys — `RAILWAY_GIT_COMMIT_SHA` is only set on a deploy Railway
+triggered from the connected repository, and this is not one of those. Setting
+it is best effort: a CLI that has moved that flag must not be able to stop a
+release over a field only the health check reads.
+
+Then `scripts/await-deploy.mjs` polls `HEALTH_URL` until it reports the pushed
+commit, because `railway up` succeeding only means Railway built the image, not
+that the container answering requests is that build. It is a script and not
+bash around `jq` for a reason worth keeping: `jq -r '.commit' 2>/dev/null || echo
+null` reads a _missing jq_ as "not live yet", so a runner image that dropped it
+would poll for ten minutes and then report a deploy failure that never
+happened. Dependency-free `.mjs` because the deploy job installs nothing.
