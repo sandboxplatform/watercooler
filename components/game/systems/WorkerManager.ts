@@ -5,6 +5,7 @@ import type { Pathfinder } from "../utils/Pathfinder";
 import type { SeatDef } from "../utils/MapHelpers";
 import type { SeatState } from "@/types/game";
 import { ensureSheet } from "../utils/sheets";
+import { WORKER_SPRITES } from "../config/animations";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("Workers");
@@ -35,11 +36,15 @@ export class WorkerManager {
     // come back to this seat when it is — the worker appears a moment late
     // rather than as a blank.
     if (!this.scene.textures.exists(seat.spriteKey)) {
-      if (seat.spritePath && !this.pending.has(seat.spriteKey)) {
+      // A seat stored before spritePath existed carries only the key. That
+      // used to be harmless because every sheet was preloaded; now it would
+      // leave the seat empty for ever, so fall back to the roster.
+      const path = seat.spritePath ?? WORKER_SPRITES.find((w) => w.key === seat.spriteKey)?.path;
+      if (path && !this.pending.has(seat.spriteKey)) {
         this.pending.add(seat.spriteKey);
         const key = seat.spriteKey;
         log.info(`fetching sheet ${key} for seat ${seat.seatId}`);
-        ensureSheet(this.scene, key, seat.spritePath, (ok) => {
+        ensureSheet(this.scene, key, path, (ok) => {
           this.pending.delete(key);
           if (!ok) log.error(`sheet ${key} failed to load for seat ${seat.seatId}`);
           else log.info(`sheet ${key} ready; placing seat ${seat.seatId}`);

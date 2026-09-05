@@ -110,6 +110,10 @@ export class OfficeScene extends Phaser.Scene {
   private eKey!: Phaser.Input.Keyboard.Key;
   private gamepad!: GamepadInput;
   private remotePlayers!: RemotePlayerManager;
+  /** Sheets already being fetched for people in the room, so none is asked for twice. */
+  private fetchingSheets = new Set<string>();
+  /** The last roster, replayed once a sheet arrives so the wearer is redrawn. */
+  private lastRoster: Parameters<RemotePlayerManager["sync"]>[0] = [];
   private cleanupPresence: (() => void) | null = null;
   private terminalOpen = false;
 
@@ -143,9 +147,19 @@ export class OfficeScene extends Phaser.Scene {
 
     this.load.image(SPRITE_KEY, asset(SPRITE_PATH));
 
-    for (const ws of WORKER_SPRITES) {
-      this.load.image(ws.key, asset(ws.path));
-    }
+    // The player's own look, and nothing else. This used to load the whole
+    // cast — fifteen sheets, 114MB of RGBA decoded and cut into frames on the
+    // way into every room, to draw two or three of them. Caching never
+    // touched it because the bytes were already local; the decode was the
+    // cost, and it was most of the black screen on entering a building.
+    //
+    // Everyone else arrives through `ensureSheet`: the seats via
+    // WorkerManager, which already checks for the texture and fetches what is
+    // missing, and other people via scene-presence as they turn up. Loading
+    // the remembered look *here* rather than leaving it to `wearCharacter` is
+    // what keeps the player from appearing as the default for a frame first.
+    const mine = rememberedCharacter();
+    if (mine && mine.key !== SPRITE_KEY) this.load.image(mine.key, asset(mine.path));
 
     this.load.spritesheet(EMOTE_SHEET_KEY, asset(EMOTE_SHEET_PATH), {
       frameWidth: EMOTE_FRAME_SIZE,
@@ -184,9 +198,14 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   create() {
+    // Frames for what was actually loaded. `buildSpriteFrames` measures the
+    // sheet's own grid, so it has to run per texture; `ensureSheet` does it
+    // for anything that arrives later.
     buildSpriteFrames(this, SPRITE_KEY);
-    for (const ws of WORKER_SPRITES) {
-      buildSpriteFrames(this, ws.key);
+    for (const key of this.textures.getTextureKeys()) {
+      if (key.startsWith("character_") || key.startsWith("generated:")) {
+        buildSpriteFrames(this, key);
+      }
     }
 
     const map = this.make.tilemap({ key: "office" });
@@ -416,7 +435,9 @@ export class OfficeScene extends Phaser.Scene {
     this.remotePlayers = new RemotePlayerManager(this);
 
     const unsubPresence = gameEvents.on("presence-updated", (players) => {
+      this.lastRoster = players;
       this.remotePlayers.sync(players);
+      this.dressRemotePlayers(players);
     });
     const unsubSpeaking = gameEvents.on("voice-speaking", (id, speaking) => {
       this.remotePlayers.setSpeaking(id, speaking);
@@ -967,6 +988,37 @@ export class OfficeScene extends Phaser.Scene {
    * by key. Loading a key twice is a no-op, which makes re-picking a character
    * instant.
    */
+  /**
+   * Fetch the sheets the people in the room are wearing, and show them again.
+   *
+   * Only the player's own look is preloaded now, so anyone else arrives
+   * wearing a texture this scene has not got. `RemotePlayerManager` falls
+   * back to the default sheet for a missing one, which is why the gap showed
+   * as two residents who looked like each other rather than as a crash — the
+   * quietest possible symptom, and the reason this is worth a comment.
+   *
+   * The office wires its own presence rather than using `attachPresence`
+   * (see systems/scene-presence.ts, which says as much), so it needs its own
+   * copy of this. Both fetch once per key and re-sync when the sheet lands.
+   */
+  private dressRemotePlayers(players: { spriteKey: string }[]) {
+    for (const player of players) {
+      const key = player.spriteKey;
+      if (!key || this.textures.exists(key) || this.fetchingSheets.has(key)) continue;
+      const path = WORKER_SPRITES.find((w) => w.key === key)?.path;
+      if (!path) continue;
+      this.fetchingSheets.add(key);
+      ensureSheet(this, key, path, (ok) => {
+        this.fetchingSheets.delete(key);
+        if (!ok) {
+          log.error(`sheet ${key} failed to load for a person in the room`);
+          return;
+        }
+        if (this.scene.isActive()) this.remotePlayers.sync(this.lastRoster);
+      });
+    }
+  }
+
   private wearCharacter(spriteKey: string, spritePath: string) {
     ensureSheet(this, spriteKey, spritePath, (ok) => {
       if (!ok) {

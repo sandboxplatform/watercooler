@@ -451,6 +451,23 @@ characters come from `/api/characters/<id>`, which is a route and not a file.
 
 ### Maps
 
+**A room loads the sheets it needs, not the whole cast.** `OfficeScene` used to
+preload every entry in `WORKER_SPRITES` — fifteen sheets, 114MB of RGBA decoded
+and cut into frames on the way into every room, to draw two or three of them.
+It now loads the default sheet and the player's remembered look, read from
+localStorage in `preload` so nobody appears as the default for a frame first.
+Everyone else arrives on demand: seats through `WorkerManager`, which already
+fetched what was missing, and other people through `dressRemotePlayers`.
+
+That last one had to be written. `systems/scene-presence.ts` does the same job
+and says in its own docstring that it is "for a scene that is not the office" —
+the office wires presence by hand, and its path had no fallback because every
+sheet used to be preloaded. Removing the preload without spotting that showed
+up as **two residents who looked like each other**: `RemotePlayerManager`
+substitutes the default sheet for a missing texture, so the failure was silent
+rather than a missing-texture box. If you touch preloading, check that people
+still look like themselves — a room that renders is not proof that it is right.
+
 **A map declares only the tilesets it draws from.** The source map carries all
 sixteen of the pack's sheets, and every generated room used to inherit the lot
 while placing tiles from two — so the scene, which loads whatever the map
