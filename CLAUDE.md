@@ -16,7 +16,9 @@ pnpm install
 pnpm dev            # custom server (tsx server.ts) on :3000 — use this, not `next dev`
 pnpm build          # next build (standalone output)
 pnpm start          # production, same custom server
-pnpm test           # vitest --run
+pnpm test           # vitest, fast project only (~27s)
+pnpm test:all       # every test, including the slow project — run before pushing
+pnpm test:changed   # only tests whose imports reach what you changed (~7s)
 pnpm typecheck      # tsc --noEmit
 pnpm lint           # eslint
 pnpm format         # prettier --write .
@@ -31,8 +33,24 @@ the store, since route handlers are not run during a build. The first test to
 import the presence socket brought the whole chain in and CI went red on a
 commit that was fine.
 
-CI runs format:check → lint → typecheck → build → test on every PR, so run those
-four before handing work back.
+CI runs format:check → lint → typecheck → build → test:all on every PR, so run
+those before handing work back.
+
+**Do not run the whole suite on every edit.** `pnpm test:changed` runs only the
+tests whose import graph reaches what you touched — seconds instead of half a
+minute. Two things it will not catch, so run them by hand:
+
+- **Tests that read files at runtime.** `--changed` follows imports, and
+  `exact.test.ts` sweeps `public/characters/*.png` with `readFileSync`. Change
+  a sheet and scoping misses the one test that matters. Same for
+  `assets.test.ts` and anything under `public/`.
+- **Foundational modules.** `vitest related lib/map/office.ts` selects 25 files
+  because half the codebase imports `TILE` from it. Scoping saves nothing there
+  and that is correct.
+
+`pnpm test` skips the `slow` project — two files that between them cost about
+six seconds and twelve of the 1,070 tests (see `vitest.config.ts`). They still
+run in CI and under `test:all`, which is what a push should use.
 
 `pnpm dev:next` exists but skips the WebSocket layer — presence, agent dispatch and
 voice all break under it. Only reach for it to isolate a pure-Next rendering issue.

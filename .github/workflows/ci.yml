@@ -36,8 +36,10 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # test:all, not test: the default skips the slow project, and CI is
+      # exactly where those two belong — nobody is waiting on it.
       - name: Test
-        run: pnpm test
+        run: pnpm test:all
 
       - name: Audit dependencies
         run: pnpm audit --audit-level=high

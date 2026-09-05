@@ -20,7 +20,7 @@
     "start": "NODE_ENV=production tsx server.ts",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest --run",
+    "test": "vitest --run --project unit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
@@ -29,7 +29,10 @@
     "reseed:erp": "tsx scripts/seed-erp.ts --force",
     "zoho:setup": "node scripts/zoho-setup.mjs",
     "build:map": "tsx scripts/build-map.ts && tsx scripts/build-assets.ts",
-    "assets": "tsx scripts/build-assets.ts"
+    "assets": "tsx scripts/build-assets.ts",
+    "test:all": "vitest --run",
+    "test:slow": "vitest --run --project slow",
+    "test:changed": "vitest --run --changed"
   },
   "lint-staged": {
     "*.{ts,tsx,mts,js,mjs,css}": [
