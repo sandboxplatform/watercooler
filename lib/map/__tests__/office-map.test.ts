@@ -19,13 +19,14 @@ import {
   paintShell,
   topWallRows,
   wallCollisions,
+  type TilesetRef,
 } from "../generate";
 import type { SourceMap } from "../harvest";
 import { findExterior } from "../../map-perimeter";
 
 const source = JSON.parse(
   readFileSync(join(process.cwd(), "public/maps/office2.json"), "utf8"),
-) as SourceMap & { tilesets: [] };
+) as SourceMap & { tilesets: TilesetRef[] };
 
 const spec = buildOfficeSpec(source);
 const map = generateMap(spec, []);
@@ -418,5 +419,54 @@ describe("paintShell", () => {
         }
       });
     }
+  });
+});
+
+/**
+ * Only the tilesets a map actually draws from.
+ *
+ * The source map carries all sixteen of the pack's sheets and every generated
+ * room inherited the lot, while placing tiles from two. The scene loads what
+ * the map declares, so entering a building decoded 183MB of RGBA to draw
+ * 10MB — most of the black screen on the way in, and untouched by caching,
+ * because the bytes were already on disk. The decode was the cost.
+ */
+describe("the tilesets a generated map declares", () => {
+  const withGame = buildOfficeSpec(source, { game: "pinball" });
+  const built = generateMap(withGame, source.tilesets);
+
+  const owner = (gid: number) =>
+    built.tilesets.reduce<{ name: string; firstgid: number } | null>(
+      (best, ts) => (ts.firstgid <= gid && (!best || ts.firstgid > best.firstgid) ? ts : best),
+      null,
+    );
+
+  it("keeps every tileset it places a tile from", () => {
+    const placed = new Set<number>();
+    for (const layer of built.layers)
+      if (layer.type === "tilelayer") for (const gid of layer.data) if (gid) placed.add(gid);
+    expect(placed.size).toBeGreaterThan(0);
+    for (const gid of placed) expect(owner(gid), `gid ${gid}`).not.toBeNull();
+  });
+
+  it("drops the ones it never touches", () => {
+    expect(built.tilesets.length).toBeLessThan(source.tilesets.length);
+    expect(built.tilesets.length).toBeLessThanOrEqual(3);
+  });
+
+  /**
+   * Dropping a tileset leaves a hole in the numbering, and that is fine —
+   * a tile is found by the greatest firstgid at or below it. Renumbering to
+   * close the gaps would mean rewriting every tile id in every layer, which
+   * is a much better way to break a map than to shrink one.
+   */
+  it("leaves the firstgid numbering alone rather than closing the gaps", () => {
+    const kept = built.tilesets.map((t) => t.firstgid);
+    for (const ts of built.tilesets) {
+      const original = source.tilesets.find((s) => s.name === ts.name)!;
+      expect(ts.firstgid, ts.name).toBe(original.firstgid);
+    }
+    // And they really are non-contiguous, or this is not testing anything.
+    expect(kept[kept.length - 1]).toBeGreaterThan(kept.length);
   });
 });

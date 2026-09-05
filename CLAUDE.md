@@ -451,6 +451,16 @@ characters come from `/api/characters/<id>`, which is a route and not a file.
 
 ### Maps
 
+**A map declares only the tilesets it draws from.** The source map carries all
+sixteen of the pack's sheets, and every generated room used to inherit the lot
+while placing tiles from two — so the scene, which loads whatever the map
+declares, decoded 183MB of RGBA to draw 10MB of it. That is most of the second
+or two of black screen on the way into a building, and caching does nothing for
+it: the bytes were already local, the decode is the cost. `tilesetsUsedBy` in
+`lib/map/generate.ts` trims the list; `firstgid` values are deliberately left
+alone, since a tile is found by the greatest `firstgid` at or below it and gaps
+are fine, whereas renumbering would mean rewriting every tile id in every layer.
+
 Maps are **generated, not hand-drawn**. `pnpm build:map` reads `public/maps/office2.json`
 as a tile source and writes lobbies, floors, stores, warehouses and garages from specs
 in `lib/map/` (`office.ts`, `floor.ts`, `premises.ts`, `generate.ts`) plus the tenant

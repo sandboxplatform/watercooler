@@ -270,6 +270,43 @@ function placementsOn(spec: RoomSpec, layer: Placement["layer"]): Placement[] {
   return spec.placements.filter((p) => p.layer === layer);
 }
 
+/**
+ * Only the tilesets a map actually places a tile from.
+ *
+ * The source map carries all sixteen of the pack's sheets, and every
+ * generated room was inheriting the lot while using two of them. The scene
+ * loads whatever the map declares, so entering a building decoded 183MB of
+ * RGBA to draw 10MB of it — which is most of the second or two of black
+ * screen on the way in, and no amount of caching touches it, because the
+ * bytes were already local. The decode is the cost.
+ *
+ * `firstgid` values are deliberately left alone. Tiled looks a tile up by
+ * finding the tileset with the greatest `firstgid` at or below it, so gaps in
+ * the numbering are fine — and renumbering would mean rewriting every tile id
+ * in every layer, which is a far better way to break a map than to shrink it.
+ */
+export function tilesetsUsedBy(
+  layers: Array<TileLayer | ObjectLayer>,
+  tilesets: TilesetRef[],
+): TilesetRef[] {
+  const placed = new Set<number>();
+  for (const layer of layers) {
+    if (layer.type !== "tilelayer") continue;
+    for (const gid of layer.data) if (gid) placed.add(gid);
+  }
+  const owner = (gid: number) =>
+    tilesets.reduce<TilesetRef | null>(
+      (best, ts) => (ts.firstgid <= gid && (!best || ts.firstgid > best.firstgid) ? ts : best),
+      null,
+    );
+  const used = new Set<string>();
+  for (const gid of placed) {
+    const ts = owner(gid);
+    if (ts) used.add(ts.name);
+  }
+  return tilesets.filter((ts) => used.has(ts.name));
+}
+
 export function generateMap(spec: RoomSpec, tilesets: TilesetRef[]): TiledMap {
   resetIds();
   const size = spec.tileSize;
@@ -395,7 +432,7 @@ export function generateMap(spec: RoomSpec, tilesets: TilesetRef[]): TiledMap {
     tiledversion: "1.11.2",
     nextlayerid: layerId,
     nextobjectid: nextId,
-    tilesets,
+    tilesets: tilesetsUsedBy(layers, tilesets),
     layers,
   };
 }
