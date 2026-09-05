@@ -98,6 +98,33 @@ export interface TransitionSpec {
   facing?: "up" | "down" | "left" | "right";
 }
 
+/**
+ * A wall inside the room, with gaps left to walk through.
+ *
+ * The shell paints one ring round the outside; this is how a floor gets more
+ * than one space in it — rooms off a hallway. It uses the same vocabulary as
+ * the ring, so an interior wall is the same art as the wall it joins.
+ *
+ * Each is drawn as the exterior wall of the same orientation, so an interior
+ * wall is the same art as the wall it joins. A **horizontal** partition is
+ * the cap/face/base stack with its shadow below — what the room's own top
+ * wall is — so the space beneath it looks at a wall face rather than at a
+ * dark line. `at` is the row the cap sits on, and the stack runs down from
+ * there. A **vertical** partition is the single dark column the left and
+ * right edges use: seen from straight above, which is what a side wall is in
+ * this art.
+ */
+export interface PartitionSpec {
+  orientation: "horizontal" | "vertical";
+  /** The row it occupies, or the left column of the pair. */
+  at: number;
+  /** Where it runs from and to along its length, in tiles: [from, to). */
+  from: number;
+  to: number;
+  /** Openings, as [from, to) on the same axis as `from`/`to`. */
+  doorways?: { from: number; to: number }[];
+}
+
 export interface RoomSpec {
   width: number;
   height: number;
@@ -119,4 +146,6 @@ export interface RoomSpec {
    * it is solid.
    */
   cutout?: { x: number; y: number; width: number; height: number };
+  /** Interior walls, for a floor laid out as rooms off a hallway. */
+  partitions?: PartitionSpec[];
 }

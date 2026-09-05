@@ -8,7 +8,7 @@
  * null return the scene does not check.
  */
 
-import type { Placement, Rect, RoomSpec } from "./spec";
+import type { PartitionSpec, Placement, Rect, RoomSpec } from "./spec";
 
 export interface TileLayer {
   type: "tilelayer";
@@ -152,7 +152,45 @@ export function paintShell(spec: RoomSpec): number[] {
     at(side, h - 1, v.cornerBL);
   }
 
+  // Interior walls last, over the floor the ring laid down. Each is drawn
+  // as the exterior wall of the same orientation: a horizontal one is the
+  // cap/face/base stack with its shadow, so the space below it looks at a
+  // wall exactly as it looks at the top of the room; a vertical one is the
+  // single dark column the left and right edges use.
+  const topRowsStack = [v.topCap, ...v.topFace, v.topBase];
+  for (const wall of spec.partitions ?? []) {
+    for (const [from, to] of solidRuns(wall)) {
+      for (let i = from; i < to; i++) {
+        if (wall.orientation === "horizontal") {
+          topRowsStack.forEach((gid, k) => at(i, wall.at + k, gid));
+          at(i, wall.at + topRowsStack.length, v.topShadow);
+        } else {
+          at(wall.at, i, v.topBase);
+        }
+      }
+    }
+  }
+
   return grid;
+}
+
+/**
+ * The stretches of a partition that are wall rather than doorway, as
+ * [from, to) pairs. Doorways are subtracted in order, so they may be given
+ * in any order and may sit at either end.
+ */
+export function solidRuns(wall: PartitionSpec): Array<[number, number]> {
+  const gaps = [...(wall.doorways ?? [])].sort((a, b) => a.from - b.from);
+  const runs: Array<[number, number]> = [];
+  let cursor = wall.from;
+  for (const gap of gaps) {
+    const start = Math.max(cursor, wall.from);
+    const end = Math.min(gap.from, wall.to);
+    if (end > start) runs.push([start, end]);
+    cursor = Math.max(cursor, gap.to);
+  }
+  if (wall.to > cursor) runs.push([Math.max(cursor, wall.from), wall.to]);
+  return runs;
 }
 
 /** How many rows the top wall stack occupies: cap, any face rows, then base. */
@@ -188,6 +226,23 @@ export function wallCollisions(spec: RoomSpec): Rect[] {
     { x: 0, y: 0, width: t, height: h },
     { x: w - t, y: 0, width: t, height: h },
   ];
+  // The stack is solid; the shadow row below it is floor you can stand on,
+  // exactly as the shadow under the room's own top wall is.
+  const partitionDepth = topWallRows(spec);
+  for (const wall of spec.partitions ?? []) {
+    for (const [from, to] of solidRuns(wall)) {
+      rects.push(
+        wall.orientation === "horizontal"
+          ? {
+              x: from * t,
+              y: wall.at * t,
+              width: (to - from) * t,
+              height: partitionDepth * t,
+            }
+          : { x: wall.at * t, y: from * t, width: t, height: (to - from) * t },
+      );
+    }
+  }
   const c = spec.cutout;
   if (c) {
     // The notch itself, plus the wall along its top and down its side.

@@ -23,12 +23,14 @@ import {
   mapFileFor,
   mayRideLift,
   occupantsOf,
+  OPERATIONS_FLOOR,
   type Address,
 } from "@/lib/world/floors";
 import { UNKNOWN_IDENTITY, type AccessIdentity } from "@/lib/identity";
 import { ArrivalWalk } from "@/lib/arrival";
 import { MAX_DESKS, deskBox, deskOrigin } from "@/lib/world/desks";
 import { HELP_COUNTER, TILE, WHITEBOARD } from "@/lib/map/office";
+import { OPS_HALL_WALL, OPS_ROOM_SIGNS } from "@/lib/map/floor";
 import { hasCampus, hasFloors, tenantFor } from "@/lib/world/tenants";
 import { GARAGE_BAYS } from "@/lib/map/premises";
 import { fetchPeople } from "@/lib/people-client";
@@ -403,6 +405,25 @@ export class OfficeScene extends Phaser.Scene {
 
     // The building's name on the wall, so a glance says whose lobby this is.
     if (address) this.addWallSign(address);
+    // Operations has two rooms off a hallway, so say which door is which:
+    // you come out of the lift facing them and nothing else would tell you.
+    if (
+      address?.floor.kind === "floor" &&
+      OPERATIONS_FLOOR.kind === "floor" &&
+      address.floor.level === OPERATIONS_FLOOR.level
+    ) {
+      for (const { label, door } of OPS_ROOM_SIGNS) {
+        this.add
+          .text(((door.from + door.to) / 2) * TILE, (OPS_HALL_WALL + 2) * TILE + 8, label, {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: "10px",
+            color: "#565972",
+          })
+          .setOrigin(0.5, 1)
+          .setDepth(3)
+          .setResolution(2);
+      }
+    }
 
     this.input.keyboard?.disableGlobalCapture();
     this.initTapToWalk();
