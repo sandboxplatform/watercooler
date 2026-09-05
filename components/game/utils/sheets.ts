@@ -1,6 +1,7 @@
 import { makeAnims } from "../config/animations";
 import * as Phaser from "phaser";
 import { buildSpriteFrames, sheetColumns } from "./MapHelpers";
+import { asset } from "@/lib/assets";
 
 /**
  * Makes sure a character sheet is a texture the scene can use.
@@ -21,7 +22,11 @@ export function ensureSheet(
     onReady(true);
     return;
   }
-  scene.load.image(key, path);
+  // Hashed here rather than by each caller: this is where a sheet's path
+  // becomes a request, and every scene that swaps somebody's look goes
+  // through it. A sheet is rewritten in place when it is redrawn, so without
+  // the hash a browser keeps the old one for an hour.
+  scene.load.image(key, asset(path));
   scene.load.once(Phaser.Loader.Events.COMPLETE, () => {
     const ok = scene.textures.exists(key);
     if (ok) buildSpriteFrames(scene, key);

@@ -30,6 +30,7 @@ import HelpDesk from "./HelpDesk";
 import Arcade from "./Arcade";
 import PingPong from "./PingPong";
 import TouchControls from "./TouchControls";
+import { asset } from "@/lib/assets";
 
 interface GameHudProps {
   sidebarOpen: boolean;
@@ -115,21 +116,21 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
       {
         id: "music",
         label: "Music",
-        icon: "/ui/icons/icon-music.png",
-        iconActive: "/ui/icons/icon-music-active.png",
+        icon: asset("/ui/icons/icon-music.png"),
+        iconActive: asset("/ui/icons/icon-music-active.png"),
       },
       {
         id: "connection",
         label: "Connection",
-        icon: "/ui/icons/icon-connection.png",
-        iconActive: "/ui/icons/icon-connection-active.png",
+        icon: asset("/ui/icons/icon-connection.png"),
+        iconActive: asset("/ui/icons/icon-connection-active.png"),
       },
       // Who you are in the world: opens the character studio.
       {
         id: "workers",
         label: "Character",
-        icon: "/ui/icons/icon-workers.png",
-        iconActive: "/ui/icons/icon-workers-active.png",
+        icon: asset("/ui/icons/icon-workers.png"),
+        iconActive: asset("/ui/icons/icon-workers-active.png"),
       },
     ],
     [],
@@ -144,7 +145,8 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
   }, []);
 
   const musicIconOverrides = useMemo(
-    () => (bgm.volume <= 0 ? { music: "/ui/icons/icon-music-muted.png" as string } : undefined),
+    () =>
+      bgm.volume <= 0 ? { music: asset("/ui/icons/icon-music-muted.png") as string } : undefined,
     [bgm.volume],
   );
 
@@ -199,7 +201,11 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
             title={sidebarOpen ? "Hide chat" : "Show chat"}
           >
             <img
-              src={sidebarOpen ? "/ui/icons/icon-chat-active.png" : "/ui/icons/icon-chat.png"}
+              src={
+                sidebarOpen
+                  ? asset("/ui/icons/icon-chat-active.png")
+                  : asset("/ui/icons/icon-chat.png")
+              }
               alt="Chat"
               width={28}
               height={28}

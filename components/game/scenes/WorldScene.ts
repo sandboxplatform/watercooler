@@ -27,6 +27,7 @@ import {
   type Building,
 } from "@/lib/world/tenants";
 import { SCENERY, WORLD_SIGNS, groundTiles, worldSolids } from "@/lib/world/scenery";
+import { asset } from "@/lib/assets";
 import {
   BOAT_KEY,
   addSolid,
@@ -93,16 +94,16 @@ export class WorldScene extends Phaser.Scene {
 
   preload() {
     preloadOutdoors(this);
-    this.load.image("world-pond", "/sprites/world/pond_288x192.png");
-    this.load.image("van", "/sprites/world/van_96x144.png");
-    this.load.image("world-castle", "/sprites/world/building_castle.png");
-    this.load.image("world-office", "/sprites/world/building_office.png");
-    this.load.image("world-supply", "/sprites/world/building_supply.png");
-    this.load.image("world-blocks", "/sprites/world/building_blocks.png");
-    this.load.image("world-campus", "/sprites/world/building_campus.png");
-    this.load.image("world-lab", "/sprites/world/building_lab.png");
+    this.load.image("world-pond", asset("/sprites/world/pond_288x192.png"));
+    this.load.image("van", asset("/sprites/world/van_96x144.png"));
+    this.load.image("world-castle", asset("/sprites/world/building_castle.png"));
+    this.load.image("world-office", asset("/sprites/world/building_office.png"));
+    this.load.image("world-supply", asset("/sprites/world/building_supply.png"));
+    this.load.image("world-blocks", asset("/sprites/world/building_blocks.png"));
+    this.load.image("world-campus", asset("/sprites/world/building_campus.png"));
+    this.load.image("world-lab", asset("/sprites/world/building_lab.png"));
     // Normally already loaded by the office; guarded for a direct arrival.
-    if (!this.textures.exists(SPRITE_KEY)) this.load.image(SPRITE_KEY, SPRITE_PATH);
+    if (!this.textures.exists(SPRITE_KEY)) this.load.image(SPRITE_KEY, asset(SPRITE_PATH));
   }
 
   create(data: WorldSceneData) {

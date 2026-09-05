@@ -16,7 +16,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "dev:next": "next dev",
-    "build": "next build",
+    "build": "tsx scripts/build-assets.ts && next build",
     "start": "NODE_ENV=production tsx server.ts",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -28,7 +28,8 @@
     "seed:erp": "tsx scripts/seed-erp.ts",
     "reseed:erp": "tsx scripts/seed-erp.ts --force",
     "zoho:setup": "node scripts/zoho-setup.mjs",
-    "build:map": "tsx scripts/build-map.ts"
+    "build:map": "tsx scripts/build-map.ts && tsx scripts/build-assets.ts",
+    "assets": "tsx scripts/build-assets.ts"
   },
   "lint-staged": {
     "*.{ts,tsx,mts,js,mjs,css}": [

@@ -21,6 +21,7 @@ import { TILE, organisationFor, type Rect } from "@/lib/world/tenants";
 import { campusFor, campusSpawnFor, type Campus, type CampusBuilding } from "@/lib/world/campus";
 import type { Whereabouts } from "@/lib/world/residents";
 import { groundGrid, propBody, signBody, tilesOf, waterBodies } from "@/lib/world/scenery";
+import { asset } from "@/lib/assets";
 import {
   addSolid,
   cutOutdoorFrames,
@@ -88,9 +89,9 @@ export class CampusScene extends Phaser.Scene {
     preloadOutdoors(this);
     for (const key of Object.keys(SIGN_Y)) {
       if (key === "site-office-2x") continue;
-      this.load.image(key, `/sprites/world/${key.replace(/-/g, "_")}.png`);
+      this.load.image(key, asset(`/sprites/world/${key.replace(/-/g, "_")}.png`));
     }
-    if (!this.textures.exists(SPRITE_KEY)) this.load.image(SPRITE_KEY, SPRITE_PATH);
+    if (!this.textures.exists(SPRITE_KEY)) this.load.image(SPRITE_KEY, asset(SPRITE_PATH));
   }
 
   create(data: CampusSceneData) {

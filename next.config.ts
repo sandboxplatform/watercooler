@@ -36,10 +36,10 @@ const securityHeaders = [
  * time is invisible on localhost and adds up over the internet, and the
  * music is three and a half megabytes that were being fetched again.
  *
- * Two tiers, because the trade differs sharply. The risk of caching is
- * stale art on screen: none of these paths carries a content hash, so a
- * regenerated sheet keeps its URL and a browser holding the old one shows
- * the old one.
+ * Three tiers. The risk of caching is stale art on screen, and what
+ * separates the tiers is whether a URL can go stale at all: a request
+ * carrying `?v=` names its own contents (see lib/assets), so holding it for
+ * ever is not a risk but the correct answer.
  */
 const cacheHeaders = [
   {
@@ -55,14 +55,35 @@ const cacheHeaders = [
   },
   {
     /**
-     * An hour for the art. Long enough that walking from room to room
-     * costs nothing — which is the case this exists for — and short enough
-     * that a rebuilt character or a regenerated map turns up on its own
-     * rather than needing a hard reload. `pnpm build:map` and
-     * `build-character.ts` both rewrite files in place, so this is the one
-     * that has to stay modest.
+     * A year for art asked for by content: `?v=` is a hash of the bytes
+     * (lib/assets), so the URL changes whenever the file does and a cache
+     * hit can only ever be a hit on the right file. Nothing to revalidate,
+     * ever, and no way to be shown yesterday's sprite.
+     *
+     * The `has` is what makes this safe. Headers match on path alone, so
+     * without it a request for the bare path — anything that slipped past
+     * `asset()` — would be pinned for a year too, turning a missed call
+     * site from an hour of staleness into a year of it.
+     *
+     * It pairs with the `missing` on the tier below. Next applies *every*
+     * matching rule and lets the last one win, so a versioned request
+     * matched both and came back with the hour. The two have to exclude
+     * each other, not merely be ordered.
      */
     source: "/:dir(characters|maps|tilesets|sprites|ui)/:path*",
+    has: [{ type: "query" as const, key: "v" }],
+    headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+  },
+  {
+    /**
+     * An hour for the same art asked for without a version — a hard-coded
+     * URL somewhere, or a file opened directly. Long enough that it costs
+     * nothing, short enough that a rewritten sheet turns up on its own.
+     * `pnpm build:map` and `build-character.ts` both rewrite files in
+     * place, which is why this tier cannot be generous.
+     */
+    source: "/:dir(characters|maps|tilesets|sprites|ui)/:path*",
+    missing: [{ type: "query" as const, key: "v" }],
     headers: [{ key: "Cache-Control", value: "public, max-age=3600" }],
   },
 ];

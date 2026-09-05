@@ -1,6 +1,7 @@
 "use client";
 
 import { FRAME_WIDTH, FRAME_HEIGHT } from "@/components/game/config/animations";
+import { asset } from "@/lib/assets";
 
 /**
  * The frame a portrait is cut from: the first idle-down pose.
@@ -54,7 +55,9 @@ export default function CharacterPortrait({
         style={{
           width: FRAME_WIDTH,
           height: FRAME_HEIGHT,
-          backgroundImage: `url(${spritePath})`,
+          // Hashed: a redrawn sheet keeps its filename, so without this the
+          // portrait shows the previous look until the cache lapses.
+          backgroundImage: `url(${asset(spritePath)})`,
           backgroundRepeat: "no-repeat",
           backgroundPosition: `-${PORTRAIT_COLUMN * FRAME_WIDTH}px -${PORTRAIT_ROW * FRAME_HEIGHT}px`,
           imageRendering: "pixelated",

@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { TILE, BOAT, type Rect } from "@/lib/world/tenants";
+import { asset } from "@/lib/assets";
 import {
   PROPS,
   propBody,
@@ -33,17 +34,17 @@ const GROUND: Record<Exclude<Ground, "water">, string> = {
 };
 
 export function preloadOutdoors(scene: Phaser.Scene) {
-  scene.load.image(GROUND.grass, "/sprites/world/grass_48.png");
-  scene.load.image(GROUND.paving, "/sprites/world/paving_48.png");
-  scene.load.image(GROUND.kerb, "/sprites/world/kerb_48.png");
-  scene.load.image(GROUND.asphalt, "/sprites/world/asphalt_48.png");
-  scene.load.image(GROUND.dock, "/sprites/world/dock_48.png");
-  scene.load.image(WATER_KEY, "/sprites/world/water_48.png");
-  scene.load.image(WATER2_KEY, "/sprites/world/water2_48.png");
-  scene.load.image(FOAM_KEY, "/sprites/world/foam_48.png");
-  scene.load.image(BOAT_KEY, "/sprites/world/boat_192x168.png");
-  scene.load.image(PROPS_KEY, "/sprites/world/props.png");
-  scene.load.json("world-props-frames", "/sprites/world/props.json");
+  scene.load.image(GROUND.grass, asset("/sprites/world/grass_48.png"));
+  scene.load.image(GROUND.paving, asset("/sprites/world/paving_48.png"));
+  scene.load.image(GROUND.kerb, asset("/sprites/world/kerb_48.png"));
+  scene.load.image(GROUND.asphalt, asset("/sprites/world/asphalt_48.png"));
+  scene.load.image(GROUND.dock, asset("/sprites/world/dock_48.png"));
+  scene.load.image(WATER_KEY, asset("/sprites/world/water_48.png"));
+  scene.load.image(WATER2_KEY, asset("/sprites/world/water2_48.png"));
+  scene.load.image(FOAM_KEY, asset("/sprites/world/foam_48.png"));
+  scene.load.image(BOAT_KEY, asset("/sprites/world/boat_192x168.png"));
+  scene.load.image(PROPS_KEY, asset("/sprites/world/props.png"));
+  scene.load.json("world-props-frames", asset("/sprites/world/props.json"));
 }
 
 /** Name the rectangles of the props sheet, and set up what moves: the fountain and the sea. */
