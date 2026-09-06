@@ -246,6 +246,15 @@ into somebody else's, and rotating one person's code turns out only them.
 | `ACCESS_CODE_COOP` | `coop`    | Brought in as Coop, at Sandbox ERP, wearing his own look          |
 | `ACCESS_CODE_ROB`  | `rob`     | The same, as Rob                                                  |
 
+**A visitor starts outside.** The root is the default room, and the default
+room is an office — somebody's building. A visitor has no building, so landing
+them inside one puts them in the only place on the map that is not theirs,
+with the door behind them. `landsOutside` in `lib/world/floors.ts` is the rule
+and `server.ts` redirects on it: the root only, a visitor only, and only a
+navigation — a typed `/r/<slug>` still opens that lobby, because a lobby is
+public and a shared link has to work. `WORLD_SPAWN` already stands them on the
+plaza.
+
 A visitor is offered the **shared cast** — the premade four and The Boss
 (`SHARED_CAST` in `lib/characters/library.ts`). Coop's and Rob's likenesses are
 theirs alone. That is enforced in three places, because hiding a choice in the
@@ -405,27 +414,31 @@ building that names none has no third floor at all, and `addressFromLocation`
 refuses `/floor/3` there. So Castle Atlantic has a Trello board and no
 support queue, and nothing had to be special-cased to arrange it.
 
-**An Operations floor is two rooms off a hallway**, not one open space. The
-lift lands you in the hallway at the bottom; **Operations** is the room
-directly above it, with the boards on its wall, and the **Project room** —
-where WaterCooler itself gets worked on — is beside it. Both doorways are
-lettered, because coming out of the lift is the only time you see them and
-nothing else would say which is which.
+**An Operations floor is a corridor with rooms off both sides.** The lift is
+at the left-hand end of it. Rooms fill in **bays** along the corridor, one
+above and one below each bay, left to right — so two rooms means one on each
+side, and a building with six gets three bays. The floor **grows sideways**:
+`opsWidth` and `opsRooms` in `lib/map/floor.ts` take a room count, the height
+never changes, and a company with more projects on the go gets a longer
+corridor rather than a redrawn floor. `OPS_ROOM_COUNT` is the only thing to
+change.
 
-It is 20x20 rather than the ordinary floor's 20x14: a hallway and the wall
-above it cost six rows, and two five-row rooms read as cupboards. Every floor
-carries its own size, so nothing else moved.
+Boards hang on the first room's wall and the shared whiteboard on the next
+one's, so both rooms have something in them. Nothing is lettered on the floor.
 
 `PartitionSpec` (`lib/map/spec.ts`) is how a room gets interior walls, and
 each is drawn as **the exterior wall of the same orientation** — a horizontal
-one is the cap/face/base stack with its shadow, so the hallway looks at a wall
-face exactly as the room looks at the top of the map; a vertical one is the
-band the wall stack ends in. The first attempt used `bottomRun` and the dark
-`edgeLeft`/`edgeRight` columns, which are right at the edge of the map with
-the void beyond them and read as a chasm in the middle of a room. Doorways are
-gaps in the run, and `solidRuns` subtracts them; a wall with no gap is a room
-nobody can reach, which looks perfectly fine on the map, so `floor.test.ts`
-floods the floor from the lift and insists every walkable tile is reached.
+one is the cap/face/base stack with its shadow, so the corridor looks at a
+wall face exactly as a room looks at the top of the map. An earlier attempt
+used `bottomRun` and the dark `edgeLeft`/`edgeRight` columns, which are right
+at the edge of the map with the void beyond them and read as a chasm in the
+middle of a room.
+
+A doorway is a gap in the run, and `solidRuns` subtracts them. That is the
+part worth a test: a wall with no gap is a room nobody can enter, and it looks
+perfectly correct on the map. `floor.test.ts` floods the floor from where the
+lift puts you and insists every walkable tile is reached, and that the middle
+of every room is among them.
 
 Each board keeps its own place along the wall whether or not the others are
 there, so a building with one has a gap rather than a board in the wrong
