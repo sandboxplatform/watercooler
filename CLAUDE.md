@@ -23,6 +23,7 @@ pnpm typecheck      # tsc --noEmit
 pnpm lint           # eslint
 pnpm format         # prettier --write .
 pnpm build:map      # regenerate public/maps/*.json from the room specs
+pnpm preview:map <file.json> <out.png> [scale]   # draw a map, without the game
 pnpm seed:erp       # seed the fictional company's SQLite database (--force to wipe)
 ```
 
@@ -414,14 +415,27 @@ building that names none has no third floor at all, and `addressFromLocation`
 refuses `/floor/3` there. So Castle Atlantic has a Trello board and no
 support queue, and nothing had to be special-cased to arrange it.
 
-**An Operations floor is a corridor with rooms off both sides.** The lift is
-at the left-hand end of it. Rooms fill in **bays** along the corridor, one
-above and one below each bay, left to right — so two rooms means one on each
-side, and a building with six gets three bays. The floor **grows sideways**:
-`opsWidth` and `opsRooms` in `lib/map/floor.ts` take a room count, the height
-never changes, and a company with more projects on the go gets a longer
-corridor rather than a redrawn floor. `OPS_ROOM_COUNT` is the only thing to
-change.
+**An Operations floor is a corridor with rooms off both sides.** Rooms fill in
+**bays** along it, one above and one below each bay, left to right — so four
+rooms is two bays and ten is five. The floor **grows sideways**: `opsWidth`
+and `opsRooms` in `lib/map/floor.ts` take a room count, the height never
+changes, and a company with more projects on the go gets a longer corridor
+rather than a redrawn floor. Sandbox ERP's is 46 tiles wide, Castle
+Atlantic's 31.
+
+How many is per building: `projects` on the tenant (`lib/world/tenants.ts`),
+counting the rooms besides Operations itself. **That number is in the map's
+file name** — `floor-ops-trello-zoho-6.json` — because the boards alone no
+longer identify a floor: two buildings with the same boards and different
+numbers of projects are different floors, and sharing a file would give one
+of them the wrong corridor.
+
+**The lift is set into the lower wall, directly beneath the door to
+Operations**, not at the end of the corridor. The ride has to land you
+somewhere that says where you are, and Operations is the room the floor is
+named after — so you step out facing its door. That is why the two doorways
+in a bay are offset: the lower rank's door has to stay clear of the wall the
+lift occupies, and a test asserts it does.
 
 Boards hang on the first room's wall and the shared whiteboard on the next
 one's, so both rooms have something in them. Nothing is lettered on the floor.

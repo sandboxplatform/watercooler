@@ -32,7 +32,8 @@
     "assets": "tsx scripts/build-assets.ts",
     "test:all": "vitest --run",
     "test:slow": "vitest --run --project slow",
-    "test:changed": "vitest --run --changed"
+    "test:changed": "vitest --run --changed",
+    "preview:map": "tsx scripts/preview-map.ts"
   },
   "lint-staged": {
     "*.{ts,tsx,mts,js,mjs,css}": [
