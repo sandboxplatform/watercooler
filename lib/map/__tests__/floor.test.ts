@@ -4,10 +4,10 @@ import { join } from "path";
 import {
   buildFloorSpec,
   HEIGHT,
-  OPS_DIVIDE,
-  OPS_DOORWAYS,
   OPS_HEIGHT,
-  OPS_WIDTH,
+  OPS_ROOM_COUNT,
+  opsRooms,
+  opsWidth,
   PLAYER_START,
   WIDTH,
 } from "../floor";
@@ -98,17 +98,46 @@ describe("an Operations floor", () => {
     return l.data;
   };
 
-  it("is taller than an ordinary floor, which is left alone", () => {
-    expect([ops.width, ops.height]).toEqual([OPS_WIDTH, OPS_HEIGHT]);
+  it("is its own size, and leaves an ordinary floor alone", () => {
+    expect([ops.width, ops.height]).toEqual([opsWidth(OPS_ROOM_COUNT), OPS_HEIGHT]);
     expect(ops.height).toBeGreaterThan(HEIGHT);
     const plain = buildFloorSpec(source);
     expect([plain.width, plain.height]).toEqual([WIDTH, HEIGHT]);
     expect(plain.partitions ?? []).toEqual([]);
   });
 
-  it("divides the space with a wall between the rooms and one above the hallway", () => {
-    const kinds = (ops.partitions ?? []).map((p) => p.orientation);
-    expect(kinds.sort()).toEqual(["horizontal", "vertical"]);
+  /** A wall above the corridor and one below it, each with its rank's doors. */
+  it("walls the corridor off from both ranks", () => {
+    const across = (ops.partitions ?? []).filter((p) => p.orientation === "horizontal");
+    expect(across).toHaveLength(2);
+    for (const wall of across) expect(wall.doorways?.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The shape's whole point: more projects, a longer corridor, nothing else
+   * redrawn. Two rooms to a bay, and the height never changes.
+   */
+  it("grows sideways as rooms are added, and not downwards", () => {
+    // Two rooms to a bay, so an odd count is as wide as the even one above it.
+    expect(opsWidth(1)).toBe(opsWidth(2));
+    expect(opsWidth(3)).toBe(opsWidth(4));
+    expect(opsWidth(4)).toBeGreaterThan(opsWidth(2));
+    expect(opsWidth(6)).toBeGreaterThan(opsWidth(4));
+    for (const n of [2, 4, 6]) {
+      const laid = opsRooms(n);
+      expect(laid).toHaveLength(n);
+      expect(laid.filter((r) => r.rank === "upper")).toHaveLength(n / 2);
+      expect(laid.filter((r) => r.rank === "lower")).toHaveLength(n / 2);
+    }
+  });
+
+  it("puts the lift at the left-hand end of the corridor", () => {
+    const lift = ops.transitions.find((t) => t.name === "elevator")!;
+    expect(lift.tx).toBe(1);
+    // Between the two horizontal walls, which is to say: in the corridor.
+    const [upper, lower] = (ops.partitions ?? []).filter((p) => p.orientation === "horizontal");
+    expect(lift.ty).toBeGreaterThan(upper.at);
+    expect(lift.ty).toBeLessThan(lower.at);
   });
 
   /** Every tile you can stand on has to be reachable from where the lift puts you. */
@@ -150,24 +179,27 @@ describe("an Operations floor", () => {
     for (let y = 0; y < ops.height; y++) for (let x = 0; x < W; x++) if (walkable(x, y)) total++;
     expect(seen.size, "reachable of walkable").toBe(total);
 
-    // And specifically: a tile well inside each room.
-    expect(seen.has(6 * W + 4), "inside Operations").toBe(true);
-    expect(seen.has(6 * W + 14), "inside the project room").toBe(true);
+    // And specifically: a tile in the middle of every room.
+    for (const [i, room] of opsRooms(OPS_ROOM_COUNT).entries()) {
+      const x = room.x + 3;
+      const y = room.y + 2;
+      expect(walkable(x, y), `room ${i} floor`).toBe(true);
+      expect(seen.has(y * W + x), `room ${i} reachable`).toBe(true);
+    }
   });
 
-  it("puts the boards in Operations and the whiteboard in the project room", () => {
+  /**
+   * The boards go on the first room's wall and the whiteboard on the next
+   * room's, so each room has something in it rather than one having all of it.
+   */
+  it("hangs the boards in the first room and the whiteboard in the second", () => {
+    const [first, second] = opsRooms(OPS_ROOM_COUNT);
     const named = (name: string) => ops.pois.find((p) => p.name === name)!;
-    expect(named("Project board").tx).toBeLessThan(OPS_DIVIDE);
-    expect(named("Help desk").tx).toBeLessThan(OPS_DIVIDE);
-    expect(named("Whiteboard").tx).toBeGreaterThan(OPS_DIVIDE);
-  });
-
-  /** Operations is the room over the lift, which is what makes the ride make sense. */
-  it("puts Operations directly above the lift", () => {
-    const lift = ops.transitions.find((t) => t.name === "elevator")!;
-    expect(lift.tx).toBeLessThan(OPS_DIVIDE);
-    expect(OPS_DOORWAYS.operations.from).toBeLessThan(OPS_DIVIDE);
-    expect(OPS_DOORWAYS.project.from).toBeGreaterThan(OPS_DIVIDE);
+    const inRoom = (poi: { tx: number; ty: number }, room: typeof first) =>
+      poi.tx >= room.x && poi.tx < room.x + 14 && poi.ty <= room.y;
+    expect(inRoom(named("Project board"), first)).toBe(true);
+    expect(inRoom(named("Help desk"), first)).toBe(true);
+    expect(inRoom(named("Whiteboard"), second)).toBe(true);
   });
 });
 

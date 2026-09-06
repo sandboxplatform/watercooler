@@ -10,7 +10,7 @@
  */
 
 import { harvest, type Region, type SourceMap } from "./harvest";
-import type { PoiSpec, RoomSpec } from "./spec";
+import type { PartitionSpec, PoiSpec, RoomSpec } from "./spec";
 import { TILE, WALLS, WHITEBOARD } from "./office";
 import type { BoardKind } from "../world/tenants";
 
@@ -75,53 +75,87 @@ const BOARDS: Record<BoardKind, { region: Region; poi: PoiSpec }> = {
 };
 
 /**
- * An Operations floor: two rooms off a hallway, rather than one open space.
+ * An Operations floor: a corridor with rooms opening off both sides.
  *
- * Taller than an ordinary floor, because the hallway and the wall above it
- * cost six rows and two five-row rooms read as cupboards. Nothing else is
- * affected — every floor carries its own width and height, and the desks the
- * scene places are on the agents' floor, which is unchanged.
+ * The lift is at the left-hand end of the corridor. Rooms fill in bays along
+ * it, one above and one below each bay, left to right — so a building with
+ * two rooms gets one on each side and a building with six gets three bays,
+ * and the floor **grows sideways** rather than being redrawn. That is the
+ * point of the shape: a company with more projects on the go gets a longer
+ * corridor.
  *
- *   rows 0-3    the top wall, with the boards on it
- *   rows 3-10   OPERATIONS  |  PROJECT ROOM
- *   rows 11-14  the wall between them and the hallway, with two doorways
- *   rows 14-18  the hallway
- *   row  19     the bottom wall; the lift is bottom left, where it always is
- *
- * The lift stays where it is on every other floor, so the ride still lands
- * you in the same corner of the building — and Operations is the room
- * directly above it.
+ *   rows 0-2      the top wall, boards on the first room's half of it
+ *   rows 3-9      the upper rank of rooms
+ *   rows 10-13    the wall they share with the corridor, doorways cut in it
+ *   rows 13-16    the corridor, lift at the left end
+ *   rows 17-20    the wall the lower rank shares with it, doorways likewise
+ *   rows 20-26    the lower rank
+ *   row  27       the bottom wall
  */
-export const OPS_WIDTH = 20;
-export const OPS_HEIGHT = 20;
+const ROOM_COLS = 14;
+const ROOM_ROWS = 7;
+const CORRIDOR_ROWS = 4;
 
-/** The two columns of wall between the rooms; Operations is to the left. */
-export const OPS_DIVIDE = 9;
-/** The row of wall between the rooms and the hallway. */
-export const OPS_HALL_WALL = 11;
+/** How deep a wall stack is, cap through base. Its shadow row is floor below. */
+const WALL_ROWS = 3;
 
-/** Where each room's doorway sits in that wall, as [from, to) columns. */
-export const OPS_DOORWAYS = {
-  operations: { from: 4, to: 6 },
-  project: { from: 14, to: 16 },
-} as const;
+/** The first walkable row of each band, worked out once so nothing drifts. */
+const UPPER_TOP = WALL_ROWS;
+const UPPER_WALL = UPPER_TOP + ROOM_ROWS;
+const CORRIDOR_TOP = UPPER_WALL + WALL_ROWS;
+const LOWER_WALL = CORRIDOR_TOP + CORRIDOR_ROWS;
+const LOWER_TOP = LOWER_WALL + WALL_ROWS;
 
-/** Where the lift puts you down: the hallway, in front of the doors. */
-export const OPS_PLAYER_START = { tx: 5, ty: 17, facing: "up" } as const;
+export const OPS_HEIGHT = LOWER_TOP + ROOM_ROWS + 1;
+
+/** How many bays a given number of rooms needs: two rooms to a bay. */
+export const opsBays = (rooms: number) => Math.max(1, Math.ceil(rooms / 2));
+
+/** The floor is as wide as its bays, plus the wall that closes the last one. */
+export const opsWidth = (rooms: number) => 1 + opsBays(rooms) * (ROOM_COLS + 1);
+
+/** Where the lift stands: the left end of the corridor, against the wall. */
+export const OPS_ELEVATOR = { tx: 1, ty: CORRIDOR_TOP, tw: 2, th: 2 } as const;
+
+/** Out of the lift and into the corridor. */
+export const OPS_PLAYER_START = { tx: 4, ty: CORRIDOR_TOP + 2, facing: "right" } as const;
+
+export interface OpsRoom {
+  /** Which side of the corridor it opens off. */
+  rank: "upper" | "lower";
+  /** Its leftmost floor column, and its first walkable row. */
+  x: number;
+  y: number;
+  /** The row a board hangs on: the cap of the wall above the room. */
+  wallRow: number;
+  /** The gap in the wall between it and the corridor, as [from, to) columns. */
+  door: { from: number; to: number };
+}
 
 /**
- * The shared whiteboard moves into the project room. Downstairs it has the
- * middle of the wall; here the middle is where the rooms are divided, and the
- * boards have Operations' half. Kept to the left of the room so it does not
- * sit under the building's name, which the scene letters at column 15.
+ * Where each room sits. Bay by bay, upper then lower, left to right.
+ *
+ * The doorway is two tiles wide and toward the middle of the room, so that
+ * two rooms facing each other across the corridor do not line their doors up
+ * into what reads as one wide gap.
  */
-export const OPS_WHITEBOARD_COLUMN = 11;
-
-/** Where each room's doorway is, for the scene to letter above it. */
-export const OPS_ROOM_SIGNS = [
-  { label: "OPERATIONS", door: OPS_DOORWAYS.operations },
-  { label: "PROJECT", door: OPS_DOORWAYS.project },
-] as const;
+export function opsRooms(count: number): OpsRoom[] {
+  const rooms: OpsRoom[] = [];
+  for (let i = 0; i < count; i++) {
+    const bay = Math.floor(i / 2);
+    const upper = i % 2 === 0;
+    const x = 1 + bay * (ROOM_COLS + 1);
+    const doorFrom = x + (upper ? 4 : ROOM_COLS - 6);
+    rooms.push({
+      rank: upper ? "upper" : "lower",
+      x,
+      y: upper ? UPPER_TOP : LOWER_TOP,
+      wallRow: upper ? 0 : LOWER_WALL,
+      door: { from: doorFrom, to: doorFrom + 2 },
+    });
+  }
+  return rooms;
+}
 
 export interface FloorOptions {
   /**
@@ -159,16 +193,80 @@ export function buildFloorSpec(source: SourceMap, options: FloorOptions = {}): R
   };
 }
 
-/** The two-room layout. See OPS_HEIGHT above for what goes where. */
+/**
+ * How many rooms an Operations floor has. Two for now — the one with the
+ * boards and one to work in — and the geometry takes any number, so a
+ * building with more projects on the go gets a longer corridor and nothing
+ * else changes.
+ */
+export const OPS_ROOM_COUNT = 2;
+
+/** The corridor layout. See the block above OPS_HEIGHT for what goes where. */
 function operationsSpec(source: SourceMap, boards: { region: Region; poi: PoiSpec }[]): RoomSpec {
-  // The whiteboard is lifted from the old map as ever, but hung in the
-  // project room rather than over the middle of one open wall.
-  const board: Region = { ...WHITEBOARD.region, dx: OPS_WHITEBOARD_COLUMN };
+  const rooms = opsRooms(OPS_ROOM_COUNT);
+  const width = opsWidth(OPS_ROOM_COUNT);
+
+  // The first room is the one with the boards on its wall; the next gets the
+  // shared whiteboard, so there is something to work at in both.
+  const [first, second] = rooms;
+  const hung = boards.map((board, i) => ({
+    ...board,
+    region: { ...board.region, dx: first.x + 2 + i * (board.region.sw + 1), dy: first.wallRow + 1 },
+    poi: {
+      ...board.poi,
+      tx: first.x + 3 + i * (board.region.sw + 1),
+      ty: first.wallRow + 2,
+    },
+  }));
+
+  const whiteboardRoom = second ?? first;
+  const board: Region = {
+    ...WHITEBOARD.region,
+    dx: whiteboardRoom.x + 2,
+    dy: whiteboardRoom.wallRow + 1,
+  };
   const picked = harvest(source, [board]);
   const whiteboard: PoiSpec = {
     ...WHITEBOARD.poi,
-    tx: OPS_WHITEBOARD_COLUMN + 1,
+    tx: whiteboardRoom.x + 3,
+    ty: whiteboardRoom.wallRow + 2,
   };
+
+  // One wall above the corridor and one below it, each with the doorways of
+  // the rooms on that side cut out of it.
+  const doorsOn = (rank: "upper" | "lower") =>
+    rooms.filter((r) => r.rank === rank).map((r) => r.door);
+
+  const partitions: PartitionSpec[] = [
+    {
+      orientation: "horizontal",
+      at: UPPER_WALL,
+      from: 1,
+      to: width - 1,
+      doorways: doorsOn("upper"),
+    },
+    {
+      orientation: "horizontal",
+      at: LOWER_WALL,
+      from: 1,
+      to: width - 1,
+      doorways: doorsOn("lower"),
+    },
+  ];
+
+  // A wall between neighbouring rooms in the same rank, closing each bay.
+  for (const rank of ["upper", "lower"] as const) {
+    const inRank = rooms.filter((r) => r.rank === rank);
+    const top = rank === "upper" ? UPPER_TOP : LOWER_TOP;
+    for (const room of inRank.slice(1)) {
+      partitions.push({
+        orientation: "vertical",
+        at: room.x - 1,
+        from: top,
+        to: top + ROOM_ROWS,
+      });
+    }
+  }
 
   const box = ({ region }: { region: Region }) => ({
     x: region.dx * TILE,
@@ -178,39 +276,15 @@ function operationsSpec(source: SourceMap, boards: { region: Region; poi: PoiSpe
   });
 
   return {
-    width: OPS_WIDTH,
+    width,
     height: OPS_HEIGHT,
     tileSize: TILE,
     walls: WALLS,
     placements: picked.placements,
-    pois: [whiteboard, ...boards.map((b) => b.poi)],
+    pois: [whiteboard, ...hung.map((b) => b.poi)],
     spawns: [{ ...OPS_PLAYER_START }],
-    collisions: boards.map(box),
-    partitions: [
-      {
-        orientation: "vertical",
-        at: OPS_DIVIDE,
-        from: 1,
-        to: OPS_HALL_WALL,
-      },
-      {
-        orientation: "horizontal",
-        at: OPS_HALL_WALL,
-        from: 1,
-        to: OPS_WIDTH - 1,
-        doorways: [OPS_DOORWAYS.operations, OPS_DOORWAYS.project],
-      },
-    ],
-    transitions: [
-      {
-        name: "elevator",
-        target: "elevator",
-        tx: 2,
-        ty: OPS_HEIGHT - 2,
-        tw: 2,
-        th: 2,
-        facing: "down",
-      },
-    ],
+    collisions: hung.map(box),
+    partitions,
+    transitions: [{ name: "elevator", target: "elevator", ...OPS_ELEVATOR, facing: "down" }],
   };
 }

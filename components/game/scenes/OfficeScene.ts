@@ -23,14 +23,12 @@ import {
   mapFileFor,
   mayRideLift,
   occupantsOf,
-  OPERATIONS_FLOOR,
   type Address,
 } from "@/lib/world/floors";
 import { UNKNOWN_IDENTITY, type AccessIdentity } from "@/lib/identity";
 import { ArrivalWalk } from "@/lib/arrival";
 import { MAX_DESKS, deskBox, deskOrigin } from "@/lib/world/desks";
 import { HELP_COUNTER, TILE, WHITEBOARD } from "@/lib/map/office";
-import { OPS_HALL_WALL, OPS_ROOM_SIGNS } from "@/lib/map/floor";
 import { hasCampus, hasFloors, tenantFor } from "@/lib/world/tenants";
 import { GARAGE_BAYS } from "@/lib/map/premises";
 import { fetchPeople } from "@/lib/people-client";
@@ -398,32 +396,19 @@ export class OfficeScene extends Phaser.Scene {
     // The board hangs on the wall; its sign goes above it, centred on the
     // board itself — its point is on the board's right-hand tile — with the
     // arrow on the wall's cap.
-    const boardCentreX = (WHITEBOARD.region.dx + WHITEBOARD.region.sw / 2) * 48;
+    //
+    // Both worked out from the point of interest rather than from
+    // WHITEBOARD.region, which is where the *lobby* hangs it. An Operations
+    // floor puts it on a different wall in a different room, and taking the
+    // constant left the sign floating at the top of the map with nothing
+    // under it while the board itself was two rooms away.
+    const half = (WHITEBOARD.region.sw / 2) * TILE;
     for (const board of this.boardZones) {
-      this.addSign({ x: boardCentreX, y: board.y }, "WHITEBOARD", 62);
+      this.addSign({ x: board.x - half, y: board.y }, "WHITEBOARD", board.y - TILE - 10);
     }
 
     // The building's name on the wall, so a glance says whose lobby this is.
     if (address) this.addWallSign(address);
-    // Operations has two rooms off a hallway, so say which door is which:
-    // you come out of the lift facing them and nothing else would tell you.
-    if (
-      address?.floor.kind === "floor" &&
-      OPERATIONS_FLOOR.kind === "floor" &&
-      address.floor.level === OPERATIONS_FLOOR.level
-    ) {
-      for (const { label, door } of OPS_ROOM_SIGNS) {
-        this.add
-          .text(((door.from + door.to) / 2) * TILE, (OPS_HALL_WALL + 2) * TILE + 8, label, {
-            fontFamily: '"Press Start 2P", monospace',
-            fontSize: "10px",
-            color: "#565972",
-          })
-          .setOrigin(0.5, 1)
-          .setDepth(3)
-          .setResolution(2);
-      }
-    }
 
     this.input.keyboard?.disableGlobalCapture();
     this.initTapToWalk();
