@@ -10,12 +10,14 @@ import { gameEvents } from "@/lib/events";
 import { focusableIn, nextFocusIndex } from "@/lib/gamepad/focus";
 import { fetchPeople } from "@/lib/people-client";
 import { addressFromLocation, elevatorStops, type Occupant } from "@/lib/world/floors";
+import { travelTo } from "@/lib/room-travel";
 
 /**
  * The lift's buttons.
  *
- * Opens when the person steps into the lift. Every floor is a page of its
- * own, so choosing one is a navigation. It is a menu for the keys as much
+ * Opens when the person steps into the lift. A floor is a room of its own
+ * but not a page of its own: choosing one pushes the URL and the scene
+ * swaps its map, so the ride costs a map rather than a page load. It is a menu for the keys as much
  * as the mouse: up and down (or W and S, or the stick) move between the
  * floors, Enter, Space or E goes, Escape (or B) closes.
  */
@@ -29,6 +31,19 @@ export default function ElevatorModal() {
   const close = () => {
     setOpen(false);
     gameEvents.emit("elevator-closed");
+  };
+
+  /**
+   * Ride to a floor, in the page.
+   *
+   * Every stop the lift offers is in this building and drawn by the same
+   * scene, so none of them needs the client rebuilt around it. The doors
+   * shut first: the panel closing is what hands the keys back, and the
+   * scene it was talking to is about to be thrown away.
+   */
+  const ride = (url: string) => {
+    close();
+    travelTo(url);
   };
 
   // First focus lands on the nearest floor that is not this one.
@@ -127,7 +142,7 @@ export default function ElevatorModal() {
                 key={stop.label}
                 type="button"
                 className="lift-stop"
-                onClick={() => window.location.assign(stop.url)}
+                onClick={() => ride(stop.url)}
               >
                 <span className="lift-stop__floor">
                   <span>{stop.label}</span>

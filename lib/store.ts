@@ -7,6 +7,7 @@ import {
   useCallback,
   useRef,
   useEffect,
+  useState,
   type Dispatch,
   type ReactNode,
 } from "react";
@@ -18,6 +19,7 @@ import { type PersistedSeatConfig, loadGatewayConfig, loadPlayerName } from "./p
 import { say } from "./room-speech";
 import type { SayScope } from "./presence-types";
 import { fetchRoomSnapshot, flushRoomWrites, saveRoomPatch } from "./room-client";
+import { watchRoomHistory } from "./room-travel";
 import {
   type Action,
   reducer,
@@ -149,6 +151,25 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   // ── Bootstrap: restore world state from the server + auto-connect ──
   const inflightTaskIdsRef = useRef<string[]>([]);
 
+  /**
+   * Bumped when the address bar names a different room without a page load.
+   *
+   * Riding the lift used to reload the client, which is what fetched the
+   * new room. Now nothing does unless this says so: every read and write in
+   * room-client reads the room off the URL at call time, so the endpoints
+   * are already right — it is the world in the store that is the floor
+   * below's until it is fetched again.
+   */
+  const [roomEpoch, setRoomEpoch] = useState(0);
+  useEffect(() => {
+    const stopWatching = watchRoomHistory();
+    const unsub = gameEvents.on("room-changed", () => setRoomEpoch((n) => n + 1));
+    return () => {
+      stopWatching();
+      unsub();
+    };
+  }, []);
+
   useEffect(() => {
     const savedConfig = loadGatewayConfig();
     if (savedConfig) gateway.configRef.current = savedConfig;
@@ -238,7 +259,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       void flushRoomWrites();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [roomEpoch]);
 
   // ── Seat sync: merge discovered seats with persisted configs ──
   useEffect(() => {
