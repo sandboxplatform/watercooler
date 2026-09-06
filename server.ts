@@ -51,7 +51,7 @@ import {
   urlWithoutCode,
 } from "./lib/server/access";
 import { parseRoomPath, floorRoomSlug } from "./lib/rooms";
-import { mayEnterRoom } from "./lib/world/floors";
+import { landsOutside, mayEnterRoom, OUTSIDE_PATH } from "./lib/world/floors";
 
 const log = createLogger("Server");
 
@@ -369,6 +369,36 @@ function blockedByFloor(req: IncomingMessage, res: ServerResponse): boolean {
 }
 
 /**
+ * A visitor arriving at the front door is sent outside, to the world map.
+ *
+ * The root is the default room, which is an *office* — somebody's building.
+ * A visitor has no building: no desk, no floors above the lobby, nothing
+ * upstairs that is theirs. Landing them inside one is landing them in the
+ * only place on the map that is not really for them, and with the door
+ * behind them rather than in front.
+ *
+ * The world map is where the buildings are, so it is where somebody who has
+ * not picked one starts. `WORLD_SPAWN` already puts them on the plaza.
+ *
+ * Only the root, and only a visitor. A typed `/r/<slug>` still opens that
+ * lobby, because a lobby is public and a shared link has to work; and
+ * somebody whose own code names their building is left alone, since for them
+ * the default room is not a stranger's office.
+ */
+function sentOutside(req: IncomingMessage, res: ServerResponse): boolean {
+  if (!gateEnabled()) return false;
+  // A prefetch or a fetch is left alone, as everywhere else here: only a
+  // navigation should have its destination changed under it.
+  if (!(req.headers.accept ?? "").includes("text/html")) return false;
+  const pathname = (req.url ?? "/").split("?")[0];
+  if (!landsOutside(pathname, identityOf(req.headers.cookie))) return false;
+
+  res.writeHead(302, { Location: OUTSIDE_PATH, "Cache-Control": "no-store" });
+  res.end();
+  return true;
+}
+
+/**
  * What the office is working on, for the agents' MCP tools.
  *
  * Same door as dispatch: loopback only, and a shared secret. The boards'
@@ -501,6 +531,8 @@ if (unconfigured) {
         if (blockedByGate(req, res)) return;
         // Past the door, but a private floor is still not everyone's.
         if (blockedByFloor(req, res)) return;
+        // And a visitor with no building of their own starts outside.
+        if (sentOutside(req, res)) return;
         handle(req, res);
       });
 

@@ -226,6 +226,28 @@ export function mayRideLift(slug: string, identity: AccessIdentity): boolean {
 }
 
 /**
+ * Whether somebody arriving here should be put outside instead.
+ *
+ * The root is the default room, and the default room is an *office* —
+ * somebody's building. A visitor has no building: no desk, no floors of
+ * their own above the lobby. Landing them inside one puts them in the only
+ * place on the map that is not really for them, with the door behind them
+ * rather than in front. The world map is where the buildings are, so it is
+ * where somebody who has not picked one belongs; `WORLD_SPAWN` already
+ * stands them on the plaza.
+ *
+ * Only the root. A typed `/r/<slug>` still opens that lobby, because a lobby
+ * is public and a shared link has to work. And only a visitor: somebody
+ * whose own code names their building is not a stranger in it.
+ */
+export function landsOutside(pathname: string, identity: AccessIdentity): boolean {
+  return pathname === "/" && identity === "visitor";
+}
+
+/** Where such a person is sent. */
+export const OUTSIDE_PATH = "/world";
+
+/**
  * Whether this identity may be in a room at all.
  *
  * The same rule as the lift, asked of a room slug instead of a building, so

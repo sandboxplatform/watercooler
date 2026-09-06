@@ -16,6 +16,8 @@ import {
   mayRideLift,
   OPERATIONS_FLOOR,
   floorTitle,
+  landsOutside,
+  OUTSIDE_PATH,
 } from "./floors";
 import { TENANTS, hasOperationsFloor, operationsBoards } from "./tenants";
 import { roomFromLocation } from "../rooms";
@@ -237,5 +239,49 @@ describe("the Operations floor", () => {
 
   it("is called Operations", () => {
     expect(floorTitle(OPERATIONS_FLOOR)).toBe("Floor 3 · Operations");
+  });
+});
+
+/**
+ * Where a person lands when they arrive at the front door.
+ *
+ * The root is the default room, which is an office. A visitor has no
+ * building, so being dropped inside one is being dropped in the one place
+ * that is not theirs — they start outside instead, on the world map.
+ */
+describe("landing outside", () => {
+  it("sends a visitor at the root out to the world map", () => {
+    expect(landsOutside("/", "visitor")).toBe(true);
+    expect(OUTSIDE_PATH).toBe("/world");
+  });
+
+  /** Their own code names their building, so the default room is not a stranger's. */
+  it("leaves somebody with a building of their own where they asked to be", () => {
+    expect(landsOutside("/", "coop")).toBe(false);
+    expect(landsOutside("/", "rob")).toBe(false);
+  });
+
+  /**
+   * Only the root. A lobby is public and a shared link has to work, so a
+   * typed or pasted room URL opens that room whoever follows it.
+   */
+  it("does not touch any other path", () => {
+    for (const path of [
+      "/world",
+      "/r/sandbox-erp",
+      "/r/chester-store",
+      "/campus/homestar",
+      "/unlock",
+      "/api/health",
+    ]) {
+      expect(landsOutside(path, "visitor"), path).toBe(false);
+    }
+  });
+
+  /** The world map is somewhere a visitor may actually be. */
+  it("sends them somewhere they are allowed", () => {
+    expect(mayEnterRoom(roomFromLocation({ pathname: OUTSIDE_PATH, search: "" }), "visitor")).toBe(
+      true,
+    );
   });
 });
