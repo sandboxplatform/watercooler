@@ -87,6 +87,14 @@ export interface Tenant {
    * support queue — so this is a set rather than a flag.
    */
   operations?: readonly BoardKind[];
+  /**
+   * Project rooms on the Operations floor, besides Operations itself.
+   *
+   * The corridor grows sideways to fit them, so this is the only number to
+   * change when a company takes on more work — ten at once is a long
+   * corridor and nothing else.
+   */
+  projects?: number;
 }
 
 const org = (slug: string) => organisationFor(slug)!;
@@ -96,8 +104,16 @@ function lobby(slug: string, orgSlug: string, extra: Partial<Tenant> = {}): Tena
 }
 
 export const TENANTS: readonly Tenant[] = [
-  lobby("castle-atlantic", "castle-atlantic", { game: "pong", operations: ["trello"] }),
-  lobby("sandbox-erp", "sandbox-erp", { game: "pinball", operations: ["trello", "zoho"] }),
+  lobby("castle-atlantic", "castle-atlantic", {
+    game: "pong",
+    operations: ["trello"],
+    projects: 3,
+  }),
+  lobby("sandbox-erp", "sandbox-erp", {
+    game: "pinball",
+    operations: ["trello", "zoho"],
+    projects: 5,
+  }),
   lobby("chester-warehouse", "chester", { location: "Warehouse", kind: "warehouse" }),
   lobby("chester-store", "chester", { location: "Store", kind: "store" }),
   lobby("blockhouse-warehouse", "blockhouse", { location: "Warehouse", kind: "warehouse" }),
@@ -159,6 +175,16 @@ export function hasFloors(tenant: Tenant): boolean {
 export function operationsBoards(tenant: Tenant | null | undefined): readonly BoardKind[] {
   if (!tenant || !hasFloors(tenant)) return [];
   return tenant.operations ?? [];
+}
+
+/**
+ * How many rooms a building's Operations floor has: Operations itself, and
+ * one for each project on the go. One when nothing is configured, because a
+ * floor with boards on the wall has at least the room they hang in.
+ */
+export function operationsRoomCount(tenant: Tenant | null | undefined): number {
+  if (!hasOperationsFloor(tenant)) return 0;
+  return 1 + Math.max(0, tenant?.projects ?? 0);
 }
 
 /** Whether a building has an Operations floor above its agents' floor. */

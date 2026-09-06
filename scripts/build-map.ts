@@ -15,7 +15,13 @@ import { generateMap, type TilesetRef } from "../lib/map/generate";
 import { buildOfficeSpec } from "../lib/map/office";
 import { buildFloorSpec } from "../lib/map/floor";
 import { buildGarageSpec, buildStoreSpec, buildWarehouseSpec } from "../lib/map/premises";
-import { TENANTS, operationsBoards, storeOf, tenantsOf } from "../lib/world/tenants";
+import {
+  TENANTS,
+  operationsBoards,
+  operationsRoomCount,
+  storeOf,
+  tenantsOf,
+} from "../lib/world/tenants";
 import { operationsMapFile } from "../lib/world/floors";
 import type { SourceMap } from "../lib/map/harvest";
 
@@ -51,16 +57,25 @@ const premises = TENANTS.filter((t) => t.kind && t.kind !== "office").map((t) =>
   return [`room-${t.slug}.json`, build] as const;
 });
 
-/** Every distinct set of boards hung on an Operations floor, once each. */
+/**
+ * One Operations floor per distinct shape actually in use — the boards on the
+ * wall and the number of rooms off the corridor. Two buildings running the
+ * same boards with the same number of projects share a map; change either and
+ * a new one is written, because both are in the file's name.
+ */
 const operationsFloors = [
   ...new Map(
-    TENANTS.map((t) => operationsBoards(t))
-      .filter((boards) => boards.length > 0)
-      .map((boards) => [operationsMapFile(boards), boards] as const),
+    TENANTS.filter((t) => operationsBoards(t).length > 0).map(
+      (t) =>
+        [
+          operationsMapFile(operationsBoards(t), operationsRoomCount(t)),
+          { boards: operationsBoards(t), rooms: operationsRoomCount(t) },
+        ] as const,
+    ),
   ),
-].map(([path, boards]) => {
+].map(([path, { boards, rooms }]) => {
   const file = path.replace("/maps/", "");
-  return [file, (src: SourceMap) => buildFloorSpec(src, { boards })] as const;
+  return [file, (src: SourceMap) => buildFloorSpec(src, { boards, rooms })] as const;
 });
 
 for (const [file, build] of [

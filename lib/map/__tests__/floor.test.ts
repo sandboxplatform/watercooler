@@ -131,13 +131,36 @@ describe("an Operations floor", () => {
     }
   });
 
-  it("puts the lift at the left-hand end of the corridor", () => {
+  /**
+   * The ride has to land you somewhere that says where you are, so the lift
+   * is set into the lower wall directly beneath the door to Operations — the
+   * room the floor is named after. You step out facing it.
+   */
+  it("sets the lift into the lower wall under the door to Operations", () => {
     const lift = ops.transitions.find((t) => t.name === "elevator")!;
-    expect(lift.tx).toBe(1);
-    // Between the two horizontal walls, which is to say: in the corridor.
+    const [operations] = opsRooms(OPS_ROOM_COUNT);
+    expect(lift.tx).toBe(operations.door.from);
+    expect(lift.tw ?? 1).toBe(operations.door.to - operations.door.from);
+
     const [upper, lower] = (ops.partitions ?? []).filter((p) => p.orientation === "horizontal");
+    // Standing room in the corridor, reaching into the wall below it.
     expect(lift.ty).toBeGreaterThan(upper.at);
-    expect(lift.ty).toBeLessThan(lower.at);
+    expect(lift.ty + (lift.th ?? 0)).toBeGreaterThan(lower.at);
+  });
+
+  /**
+   * And the wall it is set into has to be solid there, or the lift would sit
+   * in a doorway. The lower rank's doors are offset for exactly this reason.
+   */
+  it("keeps the lower rank's doorways clear of the lift", () => {
+    const lift = ops.transitions.find((t) => t.name === "elevator")!;
+    const lower = (ops.partitions ?? []).find(
+      (p) => p.orientation === "horizontal" && p.at > lift.ty,
+    )!;
+    for (const door of lower.doorways ?? []) {
+      const overlaps = door.from < lift.tx + (lift.tw ?? 1) && lift.tx < door.to;
+      expect(overlaps, `door ${door.from}-${door.to} vs lift ${lift.tx}`).toBe(false);
+    }
   });
 
   /** Every tile you can stand on has to be reachable from where the lift puts you. */

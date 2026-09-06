@@ -114,11 +114,31 @@ export const opsBays = (rooms: number) => Math.max(1, Math.ceil(rooms / 2));
 /** The floor is as wide as its bays, plus the wall that closes the last one. */
 export const opsWidth = (rooms: number) => 1 + opsBays(rooms) * (ROOM_COLS + 1);
 
-/** Where the lift stands: the left end of the corridor, against the wall. */
-export const OPS_ELEVATOR = { tx: 1, ty: CORRIDOR_TOP, tw: 2, th: 2 } as const;
+/**
+ * Where the lift stands: set into the lower wall, directly beneath the door
+ * to Operations.
+ *
+ * Not at the end of the corridor. The ride has to land you somewhere that
+ * tells you where you are, and the room with the boards in it is the one
+ * this floor is named after — so you step out facing its door. The zone
+ * covers the last corridor row and the wall's cap, as the lobby's does, so
+ * you can stand in front of the car rather than inside the wall.
+ */
+export function opsElevator(rooms: number) {
+  const [operations] = opsRooms(rooms);
+  return {
+    tx: operations.door.from,
+    ty: LOWER_WALL - 1,
+    tw: 2,
+    th: 2,
+  } as const;
+}
 
-/** Out of the lift and into the corridor. */
-export const OPS_PLAYER_START = { tx: 4, ty: CORRIDOR_TOP + 2, facing: "right" } as const;
+/** Out of the lift and into the corridor, facing the door it is under. */
+export function opsPlayerStart(rooms: number) {
+  const door = opsRooms(rooms)[0].door;
+  return { tx: door.from, ty: LOWER_WALL - 1, facing: "up" } as const;
+}
 
 export interface OpsRoom {
   /** Which side of the corridor it opens off. */
@@ -145,6 +165,9 @@ export function opsRooms(count: number): OpsRoom[] {
     const bay = Math.floor(i / 2);
     const upper = i % 2 === 0;
     const x = 1 + bay * (ROOM_COLS + 1);
+    // Offset the two doors in a bay so they do not line up into what reads
+    // as one wide gap — and so the lower rank's door never lands on the
+    // lift, which is set into that wall beneath the first upper door.
     const doorFrom = x + (upper ? 4 : ROOM_COLS - 6);
     rooms.push({
       rank: upper ? "upper" : "lower",
@@ -165,13 +188,20 @@ export interface FloorOptions {
    * the other would be rather than a board in the wrong spot.
    */
   boards?: readonly BoardKind[];
+  /**
+   * How many rooms the Operations floor has, Operations included. The
+   * corridor is as long as it needs to be — ten projects at once is a long
+   * walk and nothing else.
+   */
+  rooms?: number;
 }
 
 export function buildFloorSpec(source: SourceMap, options: FloorOptions = {}): RoomSpec {
   const boards = (options.boards ?? []).map((kind) => BOARDS[kind]);
   // Naming boards is what makes a floor an Operations floor, and an
   // Operations floor is the one with rooms off a hallway.
-  if (boards.length) return operationsSpec(source, boards);
+  if (boards.length)
+    return operationsSpec(source, boards, Math.max(1, options.rooms ?? OPS_ROOM_COUNT));
 
   const picked = harvest(source, REGIONS);
   return {
@@ -193,18 +223,17 @@ export function buildFloorSpec(source: SourceMap, options: FloorOptions = {}): R
   };
 }
 
-/**
- * How many rooms an Operations floor has. Two for now — the one with the
- * boards and one to work in — and the geometry takes any number, so a
- * building with more projects on the go gets a longer corridor and nothing
- * else changes.
- */
+/** When a caller does not say: Operations, and one room to work in. */
 export const OPS_ROOM_COUNT = 2;
 
 /** The corridor layout. See the block above OPS_HEIGHT for what goes where. */
-function operationsSpec(source: SourceMap, boards: { region: Region; poi: PoiSpec }[]): RoomSpec {
-  const rooms = opsRooms(OPS_ROOM_COUNT);
-  const width = opsWidth(OPS_ROOM_COUNT);
+function operationsSpec(
+  source: SourceMap,
+  boards: { region: Region; poi: PoiSpec }[],
+  roomCount: number,
+): RoomSpec {
+  const rooms = opsRooms(roomCount);
+  const width = opsWidth(roomCount);
 
   // The first room is the one with the boards on its wall; the next gets the
   // shared whiteboard, so there is something to work at in both.
@@ -219,7 +248,12 @@ function operationsSpec(source: SourceMap, boards: { region: Region; poi: PoiSpe
     },
   }));
 
-  const whiteboardRoom = second ?? first;
+  // Not the first room — the boards have that wall — and not the room whose
+  // wall the lift is set into, which is the first of the lower rank. The
+  // second bay's upper room has a clear wall; fall back only when there is
+  // no second bay.
+  const whiteboardRoom = rooms.find((r, i) => i > 0 && r.rank === "upper") ?? second ?? first;
+  void second;
   const board: Region = {
     ...WHITEBOARD.region,
     dx: whiteboardRoom.x + 2,
@@ -282,9 +316,11 @@ function operationsSpec(source: SourceMap, boards: { region: Region; poi: PoiSpe
     walls: WALLS,
     placements: picked.placements,
     pois: [whiteboard, ...hung.map((b) => b.poi)],
-    spawns: [{ ...OPS_PLAYER_START }],
+    spawns: [{ ...opsPlayerStart(roomCount) }],
     collisions: hung.map(box),
     partitions,
-    transitions: [{ name: "elevator", target: "elevator", ...OPS_ELEVATOR, facing: "down" }],
+    transitions: [
+      { name: "elevator", target: "elevator", ...opsElevator(roomCount), facing: "down" },
+    ],
   };
 }

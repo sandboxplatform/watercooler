@@ -18,8 +18,9 @@ import {
   floorTitle,
   landsOutside,
   OUTSIDE_PATH,
+  operationsMapFile,
 } from "./floors";
-import { TENANTS, hasOperationsFloor, operationsBoards } from "./tenants";
+import { TENANTS, hasOperationsFloor, operationsBoards, operationsRoomCount } from "./tenants";
 import { roomFromLocation } from "../rooms";
 
 const castle = TENANTS[0];
@@ -216,17 +217,28 @@ describe("the Operations floor", () => {
   });
 
   /**
-   * The map is named by the boards rather than the building, so the two
-   * buildings draw different rooms and a third running off the same boards
-   * as one of them needs no new file.
+   * Named by the shape rather than the building: the boards on the wall and
+   * the number of rooms off the corridor. Two buildings running the same
+   * boards with the same number of projects share a file; change either and
+   * a new one is written, because both are in the name.
    */
-  it("draws the room the boards make", () => {
-    expect(mapFileFor({ tenant: erp, floor: OPERATIONS_FLOOR })).toBe(
-      "/maps/floor-ops-trello-zoho.json",
-    );
-    expect(mapFileFor({ tenant: castle, floor: OPERATIONS_FLOOR })).toBe(
-      "/maps/floor-ops-trello.json",
-    );
+  it("draws the floor the boards and the room count make", () => {
+    const erpFile = mapFileFor({ tenant: erp, floor: OPERATIONS_FLOOR });
+    const castleFile = mapFileFor({ tenant: castle, floor: OPERATIONS_FLOOR });
+    expect(erpFile).toBe(`/maps/floor-ops-trello-zoho-${operationsRoomCount(erp)}.json`);
+    expect(castleFile).toBe(`/maps/floor-ops-trello-${operationsRoomCount(castle)}.json`);
+    expect(erpFile).not.toBe(castleFile);
+  });
+
+  /**
+   * The room count is what makes the corridor longer, so it has to reach the
+   * file name — two buildings with the same boards and different numbers of
+   * projects are different floors.
+   */
+  it("counts Operations itself among the rooms", () => {
+    expect(operationsRoomCount(erp)).toBeGreaterThan(1);
+    expect(operationsRoomCount(null)).toBe(0);
+    expect(operationsMapFile(["trello"], 4)).not.toBe(operationsMapFile(["trello"], 6));
   });
 
   it("is reachable by address only in a building that has one", () => {

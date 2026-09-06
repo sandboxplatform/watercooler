@@ -25,6 +25,7 @@ import {
   hasFloors,
   hasOperationsFloor,
   operationsBoards,
+  operationsRoomCount,
   tenantFor,
   type Tenant,
 } from "./tenants";
@@ -168,8 +169,8 @@ export function elevatorStops(address: Address, occupancy: Occupancy): ElevatorS
  * writes the files this names, and the scene asks for them by the same
  * rule.
  */
-export function operationsMapFile(boards: readonly string[]): string {
-  return `/maps/floor-ops-${[...boards].join("-")}.json`;
+export function operationsMapFile(boards: readonly string[], rooms: number): string {
+  return `/maps/floor-ops-${[...boards].join("-")}-${rooms}.json`;
 }
 
 export function mapFileFor(address: Address | null): string {
@@ -178,7 +179,7 @@ export function mapFileFor(address: Address | null): string {
     if (address.floor.level !== 3) return "/maps/floor.json";
     // Named by what hangs on the wall rather than by the building, so two
     // buildings running off the same boards share one map.
-    return operationsMapFile(operationsBoards(address.tenant));
+    return operationsMapFile(operationsBoards(address.tenant), operationsRoomCount(address.tenant));
   }
   if (!hasFloors(address.tenant)) return `/maps/room-${address.tenant.slug}.json`;
   return address.tenant.game ? `/maps/lobby-${address.tenant.slug}.json` : "/maps/lobby.json";
