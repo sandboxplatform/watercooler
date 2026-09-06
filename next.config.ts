@@ -89,7 +89,26 @@ const cacheHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  /**
+   * The self-contained tree, built only when the npm package is being made.
+   *
+   * `.next/standalone/` is what `files` ships and what `server.prod.mjs`
+   * runs, and nothing else wants it: `pnpm start` and the Docker image both
+   * run `server.ts` against a plain `.next`, because the custom server is
+   * what holds the WebSocket upgrades and the access gate.
+   *
+   * Asking for it unconditionally meant every build produced a second copy
+   * of the app nobody ran, and every production boot logged Next telling us
+   * to run it — `"next start" does not work with "output: standalone"
+   * configuration. Use "node .next/standalone/server.js" instead.` Taking
+   * that advice would start Next's own server in place of ours: no presence
+   * socket, no agent bridge, and no door on the whole world. The warning is
+   * good general advice and wrong here, which is the worst kind to leave in
+   * a log for someone to act on at three in the morning.
+   *
+   * `scripts/prepare-package.mjs` sets this when it builds for a publish.
+   */
+  output: process.env.BUILD_STANDALONE === "1" ? "standalone" : undefined,
   env: {
     // Keep this default in sync with AGENT_PROVIDER in server.ts
     NEXT_PUBLIC_AGENT_PROVIDER: process.env.AGENT_PROVIDER ?? "claude",

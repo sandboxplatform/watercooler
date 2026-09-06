@@ -1,11 +1,17 @@
 /**
- * Prepare the standalone build for npm publishing.
+ * Build and lay out the standalone tree for npm publishing.
  *
- * After `next build` with output: 'standalone':
+ * 0. Build with output: 'standalone', which only a publish asks for
  * 1. Flatten pnpm node_modules (resolve .pnpm symlinks into flat structure)
  * 2. Copy public/        → .next/standalone/public/
  * 3. Copy .next/static/  → .next/standalone/.next/static/
  * 4. Copy server.prod.mjs → .next/standalone/server.prod.mjs
+ *
+ * The build belongs here rather than beside this in `prepublishOnly`,
+ * because the tree this lays out only exists when the build was told to
+ * make one, and `BUILD_STANDALONE=1 next build` is shell syntax Windows
+ * does not have — the same thing that stopped `pnpm start` there. One
+ * script that owns both steps cannot be run half right.
  */
 
 import { existsSync, readdirSync, statSync, mkdirSync, rmSync, renameSync, cpSync } from "node:fs";
@@ -17,8 +23,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 const standalone = resolve(root, ".next", "standalone");
 
+console.log("Building with output: standalone...\n");
+execSync("pnpm exec next build", {
+  cwd: root,
+  stdio: "inherit",
+  env: { ...process.env, BUILD_STANDALONE: "1" },
+});
+
 if (!existsSync(standalone)) {
-  console.error("ERROR: .next/standalone/ not found. Run `next build` first.");
+  console.error("ERROR: .next/standalone/ not found after the build.");
   process.exit(1);
 }
 

@@ -24,7 +24,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "prepublishOnly": "next build && node scripts/prepare-package.mjs",
+    "prepublishOnly": "node scripts/prepare-package.mjs",
     "seed:erp": "tsx scripts/seed-erp.ts",
     "reseed:erp": "tsx scripts/seed-erp.ts --force",
     "zoho:setup": "node scripts/zoho-setup.mjs",
