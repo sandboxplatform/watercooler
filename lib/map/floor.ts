@@ -75,6 +75,31 @@ const BOARDS: Record<BoardKind, { region: Region; poi: PoiSpec }> = {
 };
 
 /**
+ * The board that makes a room Support.
+ *
+ * The support queue is the one board that stands for a job somebody does
+ * rather than a project everybody watches, so it does not hang in the room
+ * everybody walks through. Where a building runs one, the room it hangs in
+ * is Support; where it does not, there is no such room — the same way a
+ * building naming no boards has no Operations floor.
+ */
+export const SUPPORT_BOARD: BoardKind = "zoho";
+
+/**
+ * The second working room: the whiteboard's, and the support queue's where
+ * there is one, which is what makes it Support.
+ *
+ * Not the first room — Operations has that wall — and not the room whose
+ * wall the lift is set into, which is the first of the lower rank. The
+ * second bay's upper room has a clear wall; fall back only when there is no
+ * second bay.
+ */
+export function opsSupportRoom(rooms: number): OpsRoom {
+  const list = opsRooms(rooms);
+  return list.find((r, i) => i > 0 && r.rank === "upper") ?? list[1] ?? list[0];
+}
+
+/**
  * An Operations floor: a corridor with rooms opening off both sides.
  *
  * The lift is at the left-hand end of the corridor. Rooms fill in bays along
@@ -131,6 +156,59 @@ export function opsElevator(rooms: number) {
     ty: LOWER_WALL - 1,
     tw: 2,
     th: 2,
+  } as const;
+}
+
+/**
+ * Where this floor writes its name: the corridor's upper wall, on the
+ * Operations room's half of it.
+ *
+ * Every other room hangs its sign on the wall across the top of the map,
+ * because in every other room you can see that wall. Up there on this one
+ * it is behind the upper rank, and the corridor — the only part of the
+ * floor anybody walks — never has it in shot. The face of the wall the
+ * corridor looks at is in view along most of its length.
+ *
+ * Right of the doorway rather than over it: a sign across a gap labels the
+ * gap. The Operations room is the one the floor is named after and the one
+ * the lift lands you facing, so its half of the wall is the half to use.
+ */
+export function opsSign(rooms: number) {
+  const [operations] = opsRooms(rooms);
+  return {
+    tx: (operations.door.to + operations.x + ROOM_COLS) / 2,
+    ty: UPPER_WALL,
+  } as const;
+}
+
+/**
+ * Where Support letters its name: its own wall, past the boards on it.
+ *
+ * The whiteboard takes the first two tiles of that wall and the queue the
+ * next three, which leaves the right-hand half of it bare — so the name goes
+ * there rather than over either picture, and reads from the middle of the
+ * room it belongs to.
+ */
+export function opsSupportSign(rooms: number) {
+  const room = opsSupportRoom(rooms);
+  return { tx: room.x + 11, ty: room.wallRow } as const;
+}
+
+/**
+ * Doc's post in Support, and the floor he paces at it.
+ *
+ * A band across the middle of the room rather than a spot against a wall:
+ * there is no counter up here to stand behind, so what keeps him off the
+ * furniture is the bounds themselves — nothing collides a resident. Both are
+ * for the sprite's centre, as every station's are, and both are worked out
+ * from the room so they follow it when the corridor grows.
+ */
+export function opsSupportPost(rooms: number) {
+  const room = opsSupportRoom(rooms);
+  const left = room.x * TILE;
+  return {
+    post: { x: left + 7 * TILE, y: (room.y + 3) * TILE },
+    paces: { x: left + 2 * TILE, y: (room.y + 2) * TILE, width: 10 * TILE, height: 2 * TILE },
   } as const;
 }
 
@@ -197,12 +275,13 @@ export interface FloorOptions {
 }
 
 export function buildFloorSpec(source: SourceMap, options: FloorOptions = {}): RoomSpec {
-  const boards = (options.boards ?? []).map((kind) => BOARDS[kind]);
+  const kinds = options.boards ?? [];
   // Naming boards is what makes a floor an Operations floor, and an
   // Operations floor is the one with rooms off a hallway.
-  if (boards.length)
-    return operationsSpec(source, boards, Math.max(1, options.rooms ?? OPS_ROOM_COUNT));
+  if (kinds.length)
+    return operationsSpec(source, kinds, Math.max(1, options.rooms ?? OPS_ROOM_COUNT));
 
+  const boards = kinds.map((kind) => BOARDS[kind]);
   const picked = harvest(source, REGIONS);
   return {
     width: WIDTH,
@@ -229,36 +308,52 @@ export const OPS_ROOM_COUNT = 2;
 /** The corridor layout. See the block above OPS_HEIGHT for what goes where. */
 function operationsSpec(
   source: SourceMap,
-  boards: { region: Region; poi: PoiSpec }[],
+  kinds: readonly BoardKind[],
   roomCount: number,
 ): RoomSpec {
   const rooms = opsRooms(roomCount);
   const width = opsWidth(roomCount);
 
-  // The first room is the one with the boards on its wall; the next gets the
-  // shared whiteboard, so there is something to work at in both.
-  const [first, second] = rooms;
-  const hung = boards.map((board, i) => ({
-    ...board,
-    region: { ...board.region, dx: first.x + 2 + i * (board.region.sw + 1), dy: first.wallRow + 1 },
-    poi: {
-      ...board.poi,
-      tx: first.x + 3 + i * (board.region.sw + 1),
-      ty: first.wallRow + 2,
-    },
-  }));
+  const [first] = rooms;
+  const whiteboardRoom = opsSupportRoom(roomCount);
 
-  // Not the first room — the boards have that wall — and not the room whose
-  // wall the lift is set into, which is the first of the lower rank. The
-  // second bay's upper room has a clear wall; fall back only when there is
-  // no second bay.
-  const whiteboardRoom = rooms.find((r, i) => i > 0 && r.rank === "upper") ?? second ?? first;
-  void second;
+  /** Hang a board on a room's wall, `slot` boards along from its left edge. */
+  const hang = (board: { region: Region; poi: PoiSpec }, room: OpsRoom, at: number) => ({
+    ...board,
+    region: { ...board.region, dx: room.x + at, dy: room.wallRow + 1 },
+    poi: { ...board.poi, tx: room.x + at + 1, ty: room.wallRow + 2 },
+  });
+
+  /**
+   * The support queue hangs in Support, not in Operations.
+   *
+   * A board is a picture of the work it stands for, so the room it hangs in
+   * is what the room is for — and the queue is the one board that names a
+   * job somebody does rather than a project everybody watches. Trello stays
+   * on the Operations wall with the corridor outside it; Zoho goes in with
+   * the whiteboard, and that room is Support.
+   *
+   * It is the same wall it always was in a building running only Trello, so
+   * Castle Atlantic is untouched and has no Support room at all — the same
+   * way a building naming no boards has no Operations floor.
+   */
+  const queue = kinds.includes(SUPPORT_BOARD) ? BOARDS[SUPPORT_BOARD] : null;
+  const hung = kinds
+    .filter((kind) => kind !== SUPPORT_BOARD)
+    .map((kind, i) => hang(BOARDS[kind], first, 2 + i * (BOARDS[kind].region.sw + 1)));
+
+  // Whiteboard first along Support's wall, the queue next to it.
   const board: Region = {
     ...WHITEBOARD.region,
     dx: whiteboardRoom.x + 2,
     dy: whiteboardRoom.wallRow + 1,
   };
+  const inSupport = queue
+    ? [hang(queue, whiteboardRoom, 2 + WHITEBOARD.region.sw + 1)]
+    : ([] as ReturnType<typeof hang>[]);
+  // Only the whiteboard is cut from the source map. A board is a picture the
+  // scene draws over the wall, which is why its region is here for its box
+  // and its point of interest and has no layers to harvest.
   const picked = harvest(source, [board]);
   const whiteboard: PoiSpec = {
     ...WHITEBOARD.poi,
@@ -315,9 +410,9 @@ function operationsSpec(
     tileSize: TILE,
     walls: WALLS,
     placements: picked.placements,
-    pois: [whiteboard, ...hung.map((b) => b.poi)],
+    pois: [whiteboard, ...hung.map((b) => b.poi), ...inSupport.map((b) => b.poi)],
     spawns: [{ ...opsPlayerStart(roomCount) }],
-    collisions: hung.map(box),
+    collisions: [...hung, ...inSupport].map(box),
     partitions,
     transitions: [
       { name: "elevator", target: "elevator", ...opsElevator(roomCount), facing: "down" },

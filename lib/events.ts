@@ -88,6 +88,15 @@ export interface GameEventMap {
   "open-elevator": [];
   /** The lift's menu closed, chosen or not; the keys are the character's again. */
   "elevator-closed": [];
+  /**
+   * The address bar names a different room, and no page was loaded.
+   *
+   * Emitted by `lib/room-travel.ts` for a move the running scene can make
+   * itself — riding the lift — and by the back and forward buttons. The
+   * scene swaps its map, the store refetches the room, and presence rejoins
+   * on the socket it already has. See that file for why.
+   */
+  "room-changed": [room: string];
   /** Where the player is, for the top bar, when it is not the room in the URL: a campus, the world map. Null means the room. */
   "place-changed": [label: string | null];
   /**

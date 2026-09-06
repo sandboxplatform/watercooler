@@ -13,6 +13,7 @@
  */
 
 import type { PresenceHub } from "./presence-hub";
+import { currentBroadcast } from "./room-broadcast";
 import type { Facing } from "../presence-types";
 import {
   RESIDENTS,
@@ -265,6 +266,31 @@ export class ResidentSimulation {
       state.spot = randomPoint(yardArea(haunt.campus), this.random);
     }
     if (state.room) this.ensureInRoom(state);
+    this.remark(state, haunt);
+  }
+
+  /**
+   * What a resident says on arriving, for the ones with anything to say.
+   *
+   * Through the same broadcast the socket relays a person's speech over, so
+   * it arrives at every client as an ordinary remark and the room's bubbles
+   * draw it without knowing a resident is not a person. Only in a room: out
+   * on the world map they are walking about with nobody to say it to, and
+   * the map is not a place the line is about.
+   */
+  private remark(state: State, haunt: Haunt) {
+    const lines = state.resident.lines;
+    if (!lines || !state.room) return;
+    const say = currentBroadcast();
+    if (!say) return;
+    say(state.room, {
+      type: "said",
+      id: `resident:${state.resident.id}:${this.now()}`,
+      from: { id: presenceIdFor(state.resident), name: state.resident.name },
+      text: haunt.kind === "station" ? lines.onDuty : lines.away,
+      at: new Date(this.now()).toISOString(),
+      scope: "room",
+    });
   }
 
   private ensureInRoom(state: State) {

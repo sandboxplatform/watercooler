@@ -29,7 +29,14 @@ import { UNKNOWN_IDENTITY, type AccessIdentity } from "@/lib/identity";
 import { ArrivalWalk } from "@/lib/arrival";
 import { MAX_DESKS, deskBox, deskOrigin } from "@/lib/world/desks";
 import { HELP_COUNTER, TILE, WHITEBOARD } from "@/lib/map/office";
-import { hasCampus, hasFloors, tenantFor } from "@/lib/world/tenants";
+import { SUPPORT_BOARD, opsSign, opsSupportSign } from "@/lib/map/floor";
+import {
+  hasCampus,
+  hasFloors,
+  operationsBoards,
+  operationsRoomCount,
+  tenantFor,
+} from "@/lib/world/tenants";
 import { GARAGE_BAYS } from "@/lib/map/premises";
 import { fetchPeople } from "@/lib/people-client";
 import { ensureSheet } from "../utils/sheets";
@@ -104,6 +111,8 @@ export class OfficeScene extends Phaser.Scene {
    * but a gate that is open while it waits is not a gate.
    */
   private identity: AccessIdentity = UNKNOWN_IDENTITY;
+  /** Settles once the door has answered, so the lift can wait on it. */
+  private identityKnown: Promise<void> | null = null;
   /** False while a just-opened dialog waits for the stick and keys to be let go. */
   private boardPrompt: Phaser.GameObjects.Text | null = null;
   private whiteboardOpen = false;
@@ -301,7 +310,7 @@ export class OfficeScene extends Phaser.Scene {
     const address = addressFromLocation(window.location);
     if (address?.floor.kind === "floor") void this.furnishFloor(address, map, collisionRects);
 
-    void this.askWhoIAm();
+    this.identityKnown = this.askWhoIAm();
 
     // Arriving by a doorway — the lift, the front door, the door from the
     // room next door: start in it and walk out of it, rather than appear at
@@ -409,6 +418,7 @@ export class OfficeScene extends Phaser.Scene {
 
     // The building's name on the wall, so a glance says whose lobby this is.
     if (address) this.addWallSign(address);
+    if (address) this.addSupportSign(address);
 
     this.input.keyboard?.disableGlobalCapture();
     this.initTapToWalk();
@@ -510,17 +520,7 @@ export class OfficeScene extends Phaser.Scene {
         return;
       }
       if (target === "elevator") {
-        // Some buildings' floors are private. The lift is where that is felt,
-        // so it is where it is said — the server refuses the floor's room and
-        // its page regardless, and this is the part a person sees.
-        const here = addressFromLocation(window.location);
-        if (here && !mayRideLift(here.tenant.slug, this.identity)) {
-          log.info(`the lift in ${here.tenant.slug} is not this visitor's to ride`);
-          this.player?.say(LIFT_REFUSAL);
-          return;
-        }
-        this.elevatorOpen = true;
-        gameEvents.emit("open-elevator");
+        void this.ride();
         return;
       }
       if (target !== "world") {
@@ -550,6 +550,28 @@ export class OfficeScene extends Phaser.Scene {
 
     const unsubElevatorClosed = gameEvents.on("elevator-closed", () => {
       this.elevatorOpen = false;
+      this.player?.board(false);
+    });
+
+    /**
+     * Another floor of this building, without a page load.
+     *
+     * Restarting is the whole move: Phaser runs `preload` and `create`
+     * again, `mapFileFor` reads the URL that has just been pushed, and
+     * everything already in the texture cache — both tilesets, every
+     * character sheet — is skipped rather than fetched and decoded a
+     * second time. The tilemap is the one thing that must go, because
+     * every floor is cached under the same key and a stale one would be
+     * reused in silence.
+     *
+     * SHUTDOWN fires on the way, so `cleanup` unhooks all of this; the new
+     * `create` subscribes again. Presence needs nothing here — `create`
+     * ends with `place-entered`, which is what rejoins the room, on the
+     * socket that was never closed.
+     */
+    const unsubRoom = gameEvents.on("room-changed", () => {
+      this.cache.tilemap.remove("office");
+      this.scene.restart();
     });
     const unsubPinballClosed = gameEvents.on("pinball-closed", () => {
       this.pinballOpen = false;
@@ -587,6 +609,7 @@ export class OfficeScene extends Phaser.Scene {
       unsubDeskOpen();
       unsubDeskClosed();
       unsubElevatorClosed();
+      unsubRoom();
       unsubPongOpen();
       unsubPongClosed();
       unsubInteract();
@@ -631,6 +654,36 @@ export class OfficeScene extends Phaser.Scene {
     } catch {
       log.warn("could not ask who this is; treating them as a visitor");
     }
+  }
+
+  /**
+   * Open the lift — after the door has said who this is.
+   *
+   * Waiting on that answer is the whole point. `UNKNOWN_IDENTITY` is
+   * `visitor`, deliberately, because a gate that is open while it waits is
+   * not a gate; but deciding on that default is a different thing from
+   * defaulting to it. Arriving straight at a floor's URL stands you in the
+   * lift, so the zone fires in the same breath as `create()` and the answer
+   * is still in flight — which had Coop's own lift telling Coop he shall not
+   * pass, on Coop's own floor. The default still governs, for exactly as
+   * long as it takes to ask.
+   */
+  private async ride() {
+    await this.identityKnown;
+    if (!this.scene.isActive()) return;
+
+    // Some buildings' floors are private. The lift is where that is felt,
+    // so it is where it is said — the server refuses the floor's room and
+    // its page regardless, and this is the part a person sees.
+    const here = addressFromLocation(window.location);
+    if (here && !mayRideLift(here.tenant.slug, this.identity)) {
+      log.info(`the lift in ${here.tenant.slug} is not this visitor's to ride`);
+      this.player?.say(LIFT_REFUSAL);
+      return;
+    }
+    this.elevatorOpen = true;
+    this.player?.board(true);
+    gameEvents.emit("open-elevator");
   }
 
   private async furnishFloor(
@@ -740,14 +793,49 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /** The tenant's name and where you are, lettered large on the top wall. */
+  /**
+   * "SUPPORT", lettered on the wall of the room the support queue hangs in.
+   *
+   * Nothing else on this floor is named, and nothing else needs to be: a
+   * project room is whichever project is on the board in it. Support is a
+   * job rather than a project, the queue is the only board that stands for
+   * one, and Doc works in there — so the room says so.
+   *
+   * A building running no support queue has no such room and gets no sign,
+   * which is Castle Atlantic.
+   */
+  private addSupportSign(address: Address) {
+    const ops = address.floor.kind === "floor" && address.floor.level === 3;
+    if (!ops || !operationsBoards(address.tenant).includes(SUPPORT_BOARD)) return;
+    const at = opsSupportSign(operationsRoomCount(address.tenant));
+    this.add
+      .text(at.tx * TILE, at.ty * TILE + 96, "SUPPORT", {
+        fontFamily: '"Press Start 2P", monospace',
+        fontSize: "16px",
+        color: "#3a3a50",
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(3)
+      .setResolution(2);
+  }
+
   private addWallSign(address: Address) {
     // Right of the board in a lobby, where the wall is widest; right of the
     // shop window in a store, warehouse or garage. The longest names fit
     // either at this size.
     const lobby = hasFloors(address.tenant);
-    const x = lobby ? 15 * 48 : 17 * 48;
+    // An Operations floor is a corridor, and the wall across the top of the
+    // map is behind the rooms — so it writes its name on the wall the
+    // corridor actually looks at. Both lines hang off the wall's top row,
+    // at the same offsets they use against the top of every other map.
+    const ops =
+      address.floor.kind === "floor" && address.floor.level === 3
+        ? opsSign(operationsRoomCount(address.tenant))
+        : null;
+    const x = ops ? ops.tx * TILE : lobby ? 15 * 48 : 17 * 48;
+    const wallTop = ops ? ops.ty * TILE : 0;
     this.add
-      .text(x, 92, address.tenant.name.toUpperCase(), {
+      .text(x, wallTop + 92, address.tenant.name.toUpperCase(), {
         fontFamily: '"Press Start 2P", monospace',
         fontSize: "16px",
         color: "#3a3a50",
@@ -759,7 +847,7 @@ export class OfficeScene extends Phaser.Scene {
     this.add
       .text(
         x,
-        100,
+        wallTop + 100,
         [address.tenant.location, describeFloor(address)].filter(Boolean).join(" · ").toUpperCase(),
         {
           fontFamily: '"Press Start 2P", monospace',

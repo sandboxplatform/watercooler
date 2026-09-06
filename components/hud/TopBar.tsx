@@ -1,10 +1,5 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { gameEvents } from "@/lib/events";
-import { addressFromLocation, describeFloor } from "@/lib/world/floors";
-import { tenantTitle } from "@/lib/world/tenants";
-
 import Image from "next/image";
 import type { SeatState } from "@/types/game";
 import type { HudPanelId, HudDockItem } from "./HudDock";
@@ -27,16 +22,19 @@ function seatDotColor(seat: SeatState): string {
   return "green";
 }
 
-/** The room never changes without a page load, so there is nothing to subscribe to. */
-const noSubscribe = () => () => {};
-/** "Castle Atlantic · Lobby": the building and the floor, as a stable string. */
-const readPlace = () => {
-  const address = addressFromLocation(window.location);
-  if (!address) return null;
-  const floor = describeFloor(address);
-  return floor ? `${tenantTitle(address.tenant)} · ${floor}` : tenantTitle(address.tenant);
-};
-
+/**
+ * The strip along the top: who is working, and the tools.
+ *
+ * The left corner used to carry the game's name and the building and floor
+ * you were standing in. Both are gone. An Operations floor puts its rooms
+ * hard against the top of the map, so a panel pinned over that corner sits
+ * on top of the thing you walked up there to read — and the floor already
+ * says where you are, on a sign on its own wall, which is where a room in
+ * this game is supposed to tell you anything.
+ *
+ * `place-changed` still fires from the scenes that are not a room; nothing
+ * listens to it now.
+ */
 export default function TopBar({
   seats,
   toolItems,
@@ -45,22 +43,10 @@ export default function TopBar({
   iconOverrides,
   onSeatClick,
 }: TopBarProps) {
-  const roomPlace = useSyncExternalStore(noSubscribe, readPlace, () => null);
-  // A scene that is not the room in the URL — the world map, a campus —
-  // says where you are itself.
-  const [scenePlace, setScenePlace] = useState<string | null>(null);
-  useEffect(() => gameEvents.on("place-changed", (label) => setScenePlace(label)), []);
-  const place = scenePlace ?? roomPlace;
   const assignedSeats = seats.filter((s) => s.assigned);
 
   return (
     <div className="layout-top">
-      {/* Left: logo */}
-      <div className="layout-topbar__title">
-        <span className="layout-topbar__logo">WATERCOOLER</span>
-        {place && <span className="hud-tenant">{place}</span>}
-      </div>
-
       {/* Center: agent pills (each pill is its own floating element) */}
       <div className="layout-topbar__agents">
         {assignedSeats.map((seat) => (

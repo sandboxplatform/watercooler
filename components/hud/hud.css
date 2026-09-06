@@ -381,33 +381,17 @@
   pointer-events: none;
 }
 
-/* Logo group (top-left) */
-.layout-topbar__title {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 12px;
-  background: rgba(37, 34, 25, 0.88);
-  backdrop-filter: blur(6px);
-  border: 1px solid var(--pixel-border);
-  border-radius: var(--pixel-radius);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
-  pointer-events: auto;
-  flex-shrink: 0;
-}
-
-.layout-topbar__logo {
-  font-family: var(--pixel-font);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--pixel-accent);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-/* Agent pills group (top-center) */
+/*
+ * Agent pills group (top-center)
+ *
+ * The name plate that used to hold the left corner is gone, so this takes
+ * the slack instead: without the `flex: 1` the strip's space-between would
+ * pull the pills over to the empty left edge.
+ */
 .layout-topbar__agents {
   display: flex;
+  flex: 1;
+  justify-content: center;
   align-items: center;
   gap: 4px;
   overflow-x: auto;
@@ -763,11 +747,6 @@
   .hud-flyout {
     width: min(300px, calc(100vw - 32px));
     max-height: min(50vh, calc(100vh - 140px));
-  }
-
-  .layout-topbar__logo {
-    font-size: 9px;
-    letter-spacing: 1px;
   }
 
   .topbar-agent-pill {
@@ -1906,20 +1885,6 @@
   font-size: 8px;
   color: var(--pixel-muted);
   white-space: nowrap;
-}
-
-/* Which business this office belongs to, beside the title */
-.hud-tenant {
-  margin-left: 10px;
-  padding: 2px 7px;
-  font-size: 8px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--pixel-accent);
-  border: 1px solid var(--pixel-border);
-  border-radius: var(--pixel-radius-sm);
-  background: var(--pixel-panel);
-  vertical-align: middle;
 }
 
 /* ── Choosing what the agents run on ─────────────────── */

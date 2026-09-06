@@ -9,11 +9,13 @@ import {
   residentById,
 } from "../../world/residents";
 import { worldSolids } from "../../world/scenery";
-import { WORLD_HEIGHT, WORLD_WIDTH } from "../../world/tenants";
+import { WORLD_HEIGHT, WORLD_WIDTH, operationsRoomCount, tenantFor } from "../../world/tenants";
 import { WORLD_ROOM_SLUG } from "../../rooms";
-import { HELP_COUNTER, TILE } from "../../map/office";
+import { TILE } from "../../map/office";
+import { opsSupportRoom } from "../../map/floor";
 import { FRAME_HEIGHT } from "../../../components/game/config/animations";
 import { facingFor } from "../../facing";
+import { setRoomBroadcast } from "../room-broadcast";
 
 const yoshi = RESIDENTS[0];
 const mark = residentById("mark")!;
@@ -285,13 +287,13 @@ function rolls(seed = 7) {
 
 describe("someone on a station", () => {
   /**
-   * Doc's day is the counter and the map, nothing between, so `startAt` has
+   * Doc's day is Support and the map, nothing between, so `startAt` has
    * no office to find for him and hands back his first haunt — the post.
    */
-  it("opens the lobby and stands at the post, facing the room", () => {
+  it("opens the room and stands at the post, facing into it", () => {
     const { rooms, host } = world();
     const sim = new ResidentSimulation(host, { now: () => 0, random: () => 0.5 });
-    const lobby = rooms.get("sandbox-erp")!;
+    const lobby = rooms.get(doc.station!.room)!;
     const player = lobby.hub.snapshot().find((p) => p.id === presenceIdFor(doc))!;
     expect(player.name).toBe("Doc");
     expect(player.x).toBe(doc.station!.x);
@@ -308,7 +310,7 @@ describe("someone on a station", () => {
    * floor instead of the room's. Nothing collides a resident, so staying
    * inside the patch is the only thing keeping him out of his own desk.
    */
-  it("paces the patch round the counter without leaving it", () => {
+  it("paces the patch in Support without leaving it", () => {
     let clock = 0;
     const { rooms, host } = world(() => clock);
     // A varying source, not a constant: handed the same number every time he
@@ -322,7 +324,7 @@ describe("someone on a station", () => {
       clock += 120;
       sim.tick(clock);
       const player = rooms
-        .get("sandbox-erp")!
+        .get(doc.station!.room)!
         .hub.snapshot()
         .find((p) => p.id === presenceIdFor(doc))!;
       expect(player.x).toBeGreaterThanOrEqual(paces.x);
@@ -337,30 +339,35 @@ describe("someone on a station", () => {
     expect(seen.size).toBeGreaterThan(20);
   });
 
-  /** The counter is drawn over him, so a step into it is a step out of sight. */
-  it("never paces into the counter itself", () => {
+  /**
+   * Nothing collides a resident, so the bounds are all that keep him inside
+   * Support: out through the top is the wall his own boards hang on, out
+   * through the bottom is the corridor.
+   */
+  it("never paces out through Support's walls", () => {
     let clock = 0;
     const { rooms, host } = world(() => clock);
     const sim = new ResidentSimulation(host, { now: () => clock, random: () => 0.35 });
-    const counter = HELP_COUNTER.region;
-    const box = {
-      x: counter.dx * TILE,
-      y: counter.dy * TILE,
-      right: (counter.dx + counter.sw) * TILE,
-      bottom: (counter.dy + counter.sh) * TILE,
+    const room = opsSupportRoom(operationsRoomCount(tenantFor("sandbox-erp")));
+    const walls = {
+      left: room.x * TILE,
+      right: (room.x + 14) * TILE,
+      top: room.y * TILE,
+      bottom: (room.y + 7) * TILE,
     };
     for (let i = 0; i < 400; i++) {
       clock += 120;
       sim.tick(clock);
       const player = rooms
-        .get("sandbox-erp")!
+        .get(doc.station!.room)!
         .hub.snapshot()
         .find((p) => p.id === presenceIdFor(doc))!;
-      // The sheet's bottom edge, which is what would show through the desk.
+      // The sheet's bottom edge, which is what would show through a wall.
       const feet = player.y + FRAME_HEIGHT / 2;
-      const over =
-        player.x >= box.x && player.x <= box.right && feet > box.y && player.y < box.bottom;
-      expect(over, `${player.x},${player.y}`).toBe(false);
+      expect(player.x, `${player.x},${player.y}`).toBeGreaterThan(walls.left);
+      expect(player.x, `${player.x},${player.y}`).toBeLessThan(walls.right);
+      expect(player.y, `${player.x},${player.y}`).toBeGreaterThan(walls.top);
+      expect(feet, `${player.x},${player.y}`).toBeLessThan(walls.bottom);
     }
   });
 
@@ -369,7 +376,7 @@ describe("someone on a station", () => {
    * over in a few ticks; what is being checked is that he leaves the lobby's
    * hub when he goes and is a walker on the world map when he gets there.
    */
-  it("goes out to the map and comes back behind the counter", () => {
+  it("goes out to the map and comes back to the post", () => {
     let clock = 0;
     const { rooms, host } = world(() => clock);
     const sim = new ResidentSimulation(host, {
@@ -384,7 +391,7 @@ describe("someone on a station", () => {
       sim.tick(clock);
       const place = sim.whereabouts().find((w) => w.id === "doc")!.place;
       seen.add(place);
-      const lobby = rooms.get("sandbox-erp")!.hub.snapshot();
+      const lobby = rooms.get(doc.station!.room)!.hub.snapshot();
       if (place === "room") {
         // Gone: out of the lobby altogether, and on the map with the walkers.
         expect(lobby.some((p) => p.id === presenceIdFor(doc))).toBe(false);
@@ -402,5 +409,65 @@ describe("someone on a station", () => {
     }
     expect([...seen].sort()).toEqual(["room", "station"]);
     expect(awayFromLobby).toBe(true);
+  });
+});
+
+/**
+ * Doc is the only resident who says anything, and what he says depends on
+ * where he is: at his post in Support, or off for a wander.
+ *
+ * It goes out over the same broadcast a person's speech is relayed on, so
+ * the room draws it in an ordinary bubble without knowing he is not a
+ * person. Nothing is said when no socket is attached — every other test in
+ * this file runs that way, and a resident talking to an empty process is
+ * not worth a crash.
+ */
+describe("what a resident says", () => {
+  function listening() {
+    const heard: { room: string; text: string; from: string }[] = [];
+    setRoomBroadcast((room, message) => {
+      if (message.type !== "said") return;
+      heard.push({ room, text: message.text, from: message.from.id });
+    });
+    return heard;
+  }
+
+  it("says the on-duty line on arriving at the post", () => {
+    const heard = listening();
+    const { host } = world();
+    new ResidentSimulation(host, { now: () => 0, random: () => 0.5 });
+    const mine = heard.filter((h) => h.from === presenceIdFor(doc));
+    expect(mine).toHaveLength(1);
+    expect(mine[0].text).toBe("I'm about to be hooked up to Mettara!");
+    expect(mine[0].room).toBe(doc.station!.room);
+    setRoomBroadcast(null);
+  });
+
+  it("says the fresh-air line once he is off the floor", () => {
+    let clock = 0;
+    const heard = listening();
+    const { host } = world(() => clock);
+    const sim = new ResidentSimulation(host, {
+      now: () => clock,
+      random: () => 0.5,
+      dwellScale: 0.0001,
+    });
+    for (let i = 0; i < 400; i++) {
+      clock += 120;
+      sim.tick(clock);
+    }
+    const said = new Set(heard.filter((h) => h.from === presenceIdFor(doc)).map((h) => h.text));
+    expect(said).toContain("I just needed some fresh air!");
+    expect(said).toContain("I'm about to be hooked up to Mettara!");
+    setRoomBroadcast(null);
+  });
+
+  /** Everyone else walks past without a word. */
+  it("leaves the residents with no lines silent", () => {
+    const heard = listening();
+    const { host } = world();
+    new ResidentSimulation(host, { now: () => 0, random: () => 0.5 });
+    expect(heard.every((h) => h.from === presenceIdFor(doc))).toBe(true);
+    setRoomBroadcast(null);
   });
 });

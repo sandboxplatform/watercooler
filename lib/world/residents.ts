@@ -21,10 +21,13 @@ import {
   hasCampus,
   hasFloors,
   tenantsOf,
+  operationsRoomCount,
+  tenantFor,
   type BuildingKind,
 } from "./tenants";
 import { CENTRE_AVENUE, EAST_AVENUE, NORTH_ROAD, SOUTH_ROAD, WEST_AVENUE } from "./scenery";
-import { HELP_COUNTER, TILE, WIDTH as LOBBY_COLS } from "../map/office";
+import { TILE, WIDTH as LOBBY_COLS } from "../map/office";
+import { opsSupportPost } from "../map/floor";
 import { standingSpot } from "./desks";
 import { CAMPUSES } from "./campus";
 
@@ -57,6 +60,14 @@ export interface Resident {
    * nowhere else. `home` stays null, so they take no desk upstairs.
    */
   station?: Station;
+  /**
+   * What they remark on arriving somewhere, if they are the remarking kind.
+   *
+   * Two lines, because a station is a two-place routine: `onDuty` at the
+   * post, `away` anywhere else. Most residents have neither and say nothing,
+   * which is the right amount for somebody walking past.
+   */
+  lines?: { onDuty: string; away: string };
 }
 
 /** A post in a room, by the sprite's centre, and the way they face at it. */
@@ -75,6 +86,18 @@ export interface Station {
    */
   paces?: Rect;
 }
+
+/** The Operations floor, where Support is. */
+export const OPERATIONS_LEVEL = 3;
+
+/**
+ * Doc's post, read off the floor he stands on rather than written out here.
+ *
+ * Sandbox ERP's corridor is as long as its project count, so the room moves
+ * when that changes; asking the floor for the spot is what keeps him inside
+ * the walls when it does.
+ */
+const SUPPORT_POST = opsSupportPost(operationsRoomCount(tenantFor("sandbox-erp")));
 
 export const RESIDENTS: readonly Resident[] = [
   {
@@ -125,8 +148,8 @@ export const RESIDENTS: readonly Resident[] = [
     home: "homestar-sales",
     spriteKey: "character_mark",
   },
-  // Behind the counter in Sandbox ERP's lobby, or out on the map. No desk
-  // upstairs: the help desk is where his work is.
+  // In Support on Sandbox ERP's Operations floor, or out on the map. No desk
+  // on the agents' floor: the room with the support queue in it is his work.
   {
     id: "doc",
     name: "Doc",
@@ -134,12 +157,18 @@ export const RESIDENTS: readonly Resident[] = [
     org: "sandbox-erp",
     home: null,
     spriteKey: "character_doc",
+    // Support, on the Operations floor, rather than the lobby counter he was
+    // built for. The counter is still down there; nobody works it now.
     station: {
-      room: "sandbox-erp",
-      x: HELP_COUNTER.post.x,
-      y: HELP_COUNTER.post.y,
+      room: floorRoomSlug("sandbox-erp", OPERATIONS_LEVEL),
+      x: SUPPORT_POST.post.x,
+      y: SUPPORT_POST.post.y,
       facing: "down",
-      paces: HELP_COUNTER.paces,
+      paces: SUPPORT_POST.paces,
+    },
+    lines: {
+      onDuty: "I'm about to be hooked up to Mettara!",
+      away: "I just needed some fresh air!",
     },
   },
   // Works nowhere and goes indoors never: he is out on the road, always.

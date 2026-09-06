@@ -7,6 +7,7 @@ import {
   OPS_HEIGHT,
   OPS_ROOM_COUNT,
   opsRooms,
+  opsSupportRoom,
   opsWidth,
   PLAYER_START,
   WIDTH,
@@ -215,14 +216,26 @@ describe("an Operations floor", () => {
    * The boards go on the first room's wall and the whiteboard on the next
    * room's, so each room has something in it rather than one having all of it.
    */
-  it("hangs the boards in the first room and the whiteboard in the second", () => {
-    const [first, second] = opsRooms(OPS_ROOM_COUNT);
+  it("hangs the project board in Operations and the queue in Support with the whiteboard", () => {
+    const [first] = opsRooms(OPS_ROOM_COUNT);
+    const support = opsSupportRoom(OPS_ROOM_COUNT);
     const named = (name: string) => ops.pois.find((p) => p.name === name)!;
     const inRoom = (poi: { tx: number; ty: number }, room: typeof first) =>
       poi.tx >= room.x && poi.tx < room.x + 14 && poi.ty <= room.y;
     expect(inRoom(named("Project board"), first)).toBe(true);
-    expect(inRoom(named("Help desk"), first)).toBe(true);
-    expect(inRoom(named("Whiteboard"), second)).toBe(true);
+    // The support queue is what makes a room Support, so it hangs there and
+    // not on the Operations wall it used to share with the project board.
+    expect(inRoom(named("Help desk"), support)).toBe(true);
+    expect(inRoom(named("Help desk"), first)).toBe(false);
+    expect(inRoom(named("Whiteboard"), support)).toBe(true);
+  });
+
+  it("leaves the two boards in Support clear of each other", () => {
+    const box = (name: string) => {
+      const poi = ops.pois.find((p) => p.name === name)!;
+      return poi.tx;
+    };
+    expect(box("Help desk")).toBeGreaterThan(box("Whiteboard"));
   });
 });
 

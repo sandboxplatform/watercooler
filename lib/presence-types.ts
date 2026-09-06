@@ -31,8 +31,15 @@ export const IDLE_TIMEOUT_MS = 15_000;
  */
 export const MOVE_SPEED_PX_S = 160;
 
-/** Shift is a toggle, and this is the other setting: a shade under twice. */
-export const SPRINT_SPEED_PX_S = 280;
+/**
+ * Shift is a toggle, and this is the other setting: a bit over twice walking.
+ *
+ * It was 280, a shade under twice, which is a brisk jog and not what the mode
+ * is for — the point of it is crossing several rooms, and the world map is
+ * wide. The server's teleport clamp is derived from this number rather than
+ * written beside it, so raising it does not need a second edit.
+ */
+export const SPRINT_SPEED_PX_S = 364;
 
 /**
  * Allowance over the fastest legitimate speed before a move is a teleport.

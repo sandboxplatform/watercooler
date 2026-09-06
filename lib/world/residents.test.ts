@@ -19,10 +19,23 @@ import {
   yardArea,
   WORLD_WANDER_SPOTS,
 } from "./residents";
-import { roomFromLocation } from "../rooms";
+import { parseFloorRoomSlug, roomFromLocation } from "../rooms";
 import { CUTOUT, HELP_COUNTER, TILE, WIDTH } from "../map/office";
-import { HEIGHT as FLOOR_ROWS, WIDTH as FLOOR_COLS } from "../map/floor";
-import { SHORE_ROW, TENANTS, WORLD_HEIGHT, WORLD_WIDTH, organisationFor } from "./tenants";
+import {
+  HEIGHT as FLOOR_ROWS,
+  WIDTH as FLOOR_COLS,
+  opsSupportPost,
+  opsSupportRoom,
+} from "../map/floor";
+import {
+  SHORE_ROW,
+  TENANTS,
+  WORLD_HEIGHT,
+  WORLD_WIDTH,
+  operationsRoomCount,
+  organisationFor,
+  tenantFor,
+} from "./tenants";
 import { worldSolids } from "./scenery";
 import { routeAcross } from "./route";
 import { CAMPUSES } from "./campus";
@@ -52,9 +65,12 @@ describe("the residents", () => {
           r.name,
         ).toBe(true);
       if (r.station) {
-        // A post is in a real room, and it is instead of a desk, not as well.
+        // A post is in a real room — a lobby, or a floor of one — and it is
+        // instead of a desk, not as well.
+        const floor = parseFloorRoomSlug(r.station.room);
+        const building = floor ? floor.slug : r.station.room;
         expect(
-          TENANTS.some((t) => t.slug === r.station!.room),
+          TENANTS.some((t) => t.slug === building),
           r.name,
         ).toBe(true);
         expect(r.home, r.name).toBeNull();
@@ -172,21 +188,49 @@ describe("wandering mode", () => {
 
 describe("working a station", () => {
   const doc = residentById("doc")!;
+  const SUPPORT_ROOMS = operationsRoomCount(tenantFor("sandbox-erp"));
+  const SUPPORT = opsSupportPost(SUPPORT_ROOMS);
 
-  it("is Doc behind the counter in Sandbox ERP's lobby, and only him so far", () => {
+  it("is Doc in Support on the Operations floor, and only him so far", () => {
     expect(RESIDENTS.filter((r) => r.station).map((r) => r.name)).toEqual(["Doc"]);
     expect(doc.station).toEqual({
-      room: "sandbox-erp",
-      x: HELP_COUNTER.post.x,
-      y: HELP_COUNTER.post.y,
+      room: "sandbox-erp-floor-3",
+      x: SUPPORT.post.x,
+      y: SUPPORT.post.y,
       facing: "down",
-      paces: HELP_COUNTER.paces,
+      paces: SUPPORT.paces,
     });
+  });
+
+  /**
+   * The room he works is the room the support queue hangs in, which is what
+   * makes it Support. Read off the floor rather than written down, so a
+   * longer corridor moves him with it.
+   */
+  it("stands him inside the Support room, well clear of its walls", () => {
+    const room = opsSupportRoom(SUPPORT_ROOMS);
+    const left = room.x * TILE;
+    const top = room.y * TILE;
+    expect(SUPPORT.post.x).toBeGreaterThan(left);
+    expect(SUPPORT.post.x).toBeLessThan(left + 14 * TILE);
+    expect(SUPPORT.paces.x).toBeGreaterThan(left);
+    expect(SUPPORT.paces.x + SUPPORT.paces.width).toBeLessThan(left + 14 * TILE);
+    expect(SUPPORT.paces.y).toBeGreaterThan(top);
+    expect(SUPPORT.paces.y + SUPPORT.paces.height).toBeLessThan(top + 7 * TILE);
+  });
+
+  /** Two lines, one for each end of a two-place routine. */
+  it("gives him something to say at each end of the day", () => {
+    expect(doc.lines).toEqual({
+      onDuty: "I'm about to be hooked up to Mettara!",
+      away: "I just needed some fresh air!",
+    });
+    expect(RESIDENTS.filter((r) => r.lines).map((r) => r.name)).toEqual(["Doc"]);
   });
 
   it("is two places and no more: the post, and the world map", () => {
     expect(hauntsOf(doc).map(hauntKey)).toEqual(["station", "room:world"]);
-    expect(roomForHaunt(doc, { kind: "station" })).toBe("sandbox-erp");
+    expect(roomForHaunt(doc, { kind: "station" })).toBe("sandbox-erp-floor-3");
     expect(roomForHaunt(doc, hauntsOf(doc)[1])).toBe("world");
   });
 
@@ -208,15 +252,12 @@ describe("working a station", () => {
    * sheet lower and he is drawn over his own counter, since a prop sits at
    * depth 4 and he sits at the height of his feet.
    */
-  it("paces behind the counter and out past both ends of it, never over it", () => {
+  it("paces a band across the room with the post inside it", () => {
     const paces = doc.station!.paces!;
-    const { dx, dy, sw } = HELP_COUNTER.region;
-    expect(paces.y + paces.height).toBe(HELP_COUNTER.post.y);
-    expect(paces.y + paces.height).toBeLessThan(dy * TILE);
-    expect(paces.x).toBeLessThan(dx * TILE);
-    expect(paces.x + paces.width).toBeGreaterThan((dx + sw) * TILE);
+    expect(doc.station!.x).toBeGreaterThanOrEqual(paces.x);
+    expect(doc.station!.x).toBeLessThanOrEqual(paces.x + paces.width);
     // Two rows deep, so it is pacing rather than sliding along a line.
-    expect(paces.height).toBe(TILE);
+    expect(paces.height).toBe(2 * TILE);
   });
 
   /** Two haunts, so it is always the other one — the day is post, map, post. */
@@ -263,13 +304,13 @@ describe("working a station", () => {
    */
   it("keeps out of the band everyone else wanders, and the cut-out corner", () => {
     const band = WANDER_AREAS.lobby;
-    const paces = doc.station!.paces!;
-    const { dy } = HELP_COUNTER.region;
+    const { dx, dy, sw } = HELP_COUNTER.region;
     expect(dy * TILE).toBeGreaterThanOrEqual(band.y + band.height);
-    expect(paces.y).toBeGreaterThanOrEqual(band.y + band.height);
+    expect(HELP_COUNTER.paces.y).toBeGreaterThanOrEqual(band.y + band.height);
     // East of the bite taken out of the room, so the floor is really there.
-    expect(paces.x).toBeGreaterThan((CUTOUT.x + CUTOUT.width) * TILE);
-    expect(paces.y).toBeGreaterThanOrEqual(CUTOUT.y * TILE - TILE);
+    expect(HELP_COUNTER.paces.x).toBeGreaterThan((CUTOUT.x + CUTOUT.width) * TILE);
+    expect(HELP_COUNTER.paces.y).toBeGreaterThanOrEqual(CUTOUT.y * TILE - TILE);
+    expect((dx + sw) * TILE).toBeGreaterThan(HELP_COUNTER.paces.x);
   });
 });
 

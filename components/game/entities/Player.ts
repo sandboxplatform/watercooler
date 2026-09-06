@@ -127,6 +127,24 @@ export class Player {
     this.sprite.anims.play(this.animKey("idle"));
   }
 
+  /**
+   * Step into the lift, or back out of it.
+   *
+   * The car is a hole in the wall and the character is drawn in front of it,
+   * so while the floors are being chosen a person stands in the doorway
+   * idling — breathing away on the landing as though he had thought better
+   * of it. He is in the lift: there is nothing to draw.
+   *
+   * The animation is stopped as well as hidden. A hidden sprite goes on
+   * running its cycle, which costs nothing to look at but leaves the walk
+   * mid-stride when he steps back out.
+   */
+  board(inside: boolean) {
+    this.sprite.setVisible(!inside);
+    if (inside) this.sprite.anims.stop();
+    else this.sprite.anims.play(this.animKey("idle"));
+  }
+
   /** Show what this player just said, above their own head. */
   say(text: string, ttl = 6000) {
     this.bubble?.show(text, this.sprite.x, this.sprite.y - FRAME_HEIGHT * 0.6, ttl);

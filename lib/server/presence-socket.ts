@@ -41,6 +41,7 @@ import {
 } from "../presence-types";
 
 import { ResidentSimulation } from "./residents";
+import { currentBroadcast, setRoomBroadcast } from "./room-broadcast";
 
 const log = createLogger("Presence");
 
@@ -100,22 +101,12 @@ interface Room {
 
 let occupancyLookup: (slug: string) => number = () => 0;
 
-/**
- * How anything in the process reaches a room's sockets.
- *
- * Kept on a global rather than in a module variable because a Next route
- * handler is loaded into its own module graph: `app/api/.../route.ts`
- * importing this file gets a *second* copy of it, whose module state is not
- * the one the WebSocket server filled in. The process is the same, so a
- * shared symbol is what the two copies have in common — without it, a score
- * saved by an API route would sit in the database until someone refreshed.
- */
-type RoomBroadcast = (slug: string, message: ServerMessage) => void;
-const BROADCAST_KEY = Symbol.for("watercooler.presence.broadcast");
-
-function currentBroadcast(): RoomBroadcast | null {
-  return (globalThis as Record<symbol, unknown>)[BROADCAST_KEY] as RoomBroadcast | null;
-}
+// How anything in the process reaches a room's sockets: ./room-broadcast,
+// which holds the broadcaster this file fills in below. It lives in its own
+// module for two reasons — a Next route handler loads this file into its own
+// module graph and would get a second copy whose state the socket never
+// filled in, and the resident simulation needs to speak into a room without
+// importing this file, which already imports it.
 
 /** How many humans are in a room right now. Zero when the socket is not up. */
 export function humansInRoom(slug: string): number {
@@ -169,8 +160,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
    */
   const owesPong = new Set<string>();
 
-  (globalThis as Record<symbol, unknown>)[BROADCAST_KEY] = ((slug, message) =>
-    broadcast(slug, message)) satisfies RoomBroadcast;
+  setRoomBroadcast((slug, message) => broadcast(slug, message));
 
   const roomFor = (slug: string): Room => {
     let room = rooms.get(slug);
