@@ -14,7 +14,7 @@ everyone who opens the site walks into the same places and sees each other there
 ```bash
 pnpm install
 pnpm dev            # custom server (tsx server.ts) on :3000 — use this, not `next dev`
-pnpm build          # next build (standalone output)
+pnpm build          # next build (plain .next; the standalone tree is a publish thing)
 pnpm start          # production, same custom server
 pnpm test           # vitest, fast project only (~27s)
 pnpm test:all       # every test, including the slow project — run before pushing
@@ -24,6 +24,7 @@ pnpm lint           # eslint
 pnpm format         # prettier --write .
 pnpm build:map      # regenerate public/maps/*.json from the room specs
 pnpm preview:map <file.json> <out.png> [scale]   # draw a map, without the game
+pnpm check:sheets [Name...]   # measure the figure inside every installed character sheet
 pnpm seed:erp       # seed the fictional company's SQLite database (--force to wipe)
 ```
 
@@ -397,6 +398,33 @@ Slugs become directory names for agent sandboxes, which is why
 `normaliseRoomSlug` excludes separators and traversal outright rather than
 trusting callers.
 
+**Changing room is a page load, except in a lift.** A room is a URL, so
+moving between them was `location.assign` and the whole client came up
+again. Measured on a warm cache in production that was about 1.2s to ride
+one floor: 232ms to first paint, then half a second of Phaser parsing and
+booting before the new map was so much as asked for, 47 requests, and 7KB
+actually off the network. Nothing was being fetched — the app was being
+rebuilt around a room next door.
+
+`lib/room-travel.ts` is the one place that does it in the page: push the
+URL, then say so with `room-changed`. Three things listen.
+
+| Who            | Does                                                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `OfficeScene`  | Drops the cached tilemap and restarts, so `preload` reads the URL just pushed and everything already in the texture cache is skipped |
+| `lib/store.ts` | Refetches the room, since `room-client` reads the slug off the URL at call time and only the store held the floor below's world      |
+| presence       | Nothing. The socket carries no room in its URL, and `create` already ends with `place-entered`, which rejoins                        |
+
+Same journey after: no page load, 2 requests, 1KB, done at 428ms — and that
+is the room-state round trip, not rebuilding anything. Both tilesets are
+9.4MB of decoded RGBA, now decoded once a session instead of once a floor.
+
+**Only the lift.** Its stops are all in one building and all drawn by
+`OfficeScene`, which is what makes swapping the map sound; the front door
+and the campus gates open a different scene and still navigate. Back and
+forward are handled too (`watchRoomHistory`), or the address bar would name
+one floor while the game drew another.
+
 ### Floors
 
 A building with floors has a lobby, Floor 1 for its people's desks and
@@ -437,8 +465,19 @@ named after — so you step out facing its door. That is why the two doorways
 in a bay are offset: the lower rank's door has to stay clear of the wall the
 lift occupies, and a test asserts it does.
 
-Boards hang on the first room's wall and the shared whiteboard on the next
-one's, so both rooms have something in them. Nothing is lettered on the floor.
+**The project board hangs in Operations; the support queue hangs in
+Support.** A board is a picture of the work it stands for, so the room it
+hangs in is what the room is for — and the queue is the one board that names
+a job somebody does rather than a project everybody watches. Support is the
+second working room, the one with the shared whiteboard, and the queue hangs
+beside it: `opsSupportRoom` and `SUPPORT_BOARD` in `lib/map/floor.ts`.
+
+That room is the only one lettered — `SUPPORT`, on its own wall, past the
+boards so it labels wall rather than a picture (`opsSupportSign`, drawn by
+`addSupportSign`). Nothing else on the floor is named and nothing else needs
+to be: a project room is whichever project is on the board in it. A building
+running no support queue has no such room and gets no sign, which is Castle
+Atlantic.
 
 `PartitionSpec` (`lib/map/spec.ts`) is how a room gets interior walls, and
 each is drawn as **the exterior wall of the same orientation** — a horizontal
@@ -558,8 +597,10 @@ components/
   panel/                terminal and session-history modals
 lib/
   events.ts store.ts reducer.ts    the state + event spine
+  room-travel.ts                   moving between rooms without a page load
   cli-bridge.ts cli-providers.ts   agent execution
   server/                          server-only: room store, presence hub/socket, residents, uploads
+  server/room-broadcast.ts         the way anything server-side speaks into a room
   map/ world/                      map generation and world layout
   arcade/ pinball/ pong/           the games (Oak Island, Flappy, Snake, Breakout, Solitaire)
   pixel/ characters/               sheet validation, PNG codec, palettes, recolouring
@@ -651,13 +692,22 @@ station's patch belongs to its counter rather than to the kind of room. Without
 nothing collides a resident, so they are the only thing keeping one out of their
 own furniture.
 
-Doc works the one station that exists: the help desk down in the wide bottom of
-Sandbox ERP's lobby — the part that carries on past the bitten-out corner, where
-nothing else is. Four tiles of counter with somebody's work all over it, one row
-of floor in front to walk up to it from and two behind to pace. Its footprint,
-its point of interest, his post and his pacing are all `HELP_COUNTER` in
-`lib/map/office.ts`; `buildOfficeSpec(src, { helpDesk: true })` puts it in a
-lobby, and only Sandbox ERP's asks for it. The art
+Doc works the one station that exists: **Support**, on Sandbox ERP's
+Operations floor — the room the support queue hangs in, which is what makes
+it Support. His post and the band he paces are `opsSupportPost` in
+`lib/map/floor.ts`, read off the room rather than written down, so a longer
+corridor carries him with it. He also has `lines`, the only resident who
+does: he remarks on arriving, and which of the two depends on whether he is
+at the post or out on the map.
+
+The help desk counter in the lobby is still there and nobody works it. Four
+tiles of counter with somebody's work all over it, down in the wide bottom
+of Sandbox ERP's lobby — the part that carries on past the bitten-out
+corner, where nothing else is — with one row of floor in front to walk up to
+it from and two behind. Its footprint, its point of interest and the post
+and pacing it was built for are all `HELP_COUNTER` in `lib/map/office.ts`;
+`buildOfficeSpec(src, { helpDesk: true })` puts it in a lobby, and only
+Sandbox ERP's asks for it. The art
 (`scripts/make-help-desk.ts` → `public/sprites/help_desk_counter_192x96.png`) is
 generated for the same reason the lift and the games are: the interiors pack has
 no reception counter.
@@ -703,10 +753,21 @@ of the texture memory. 2688x1968 is 5.3M pixels of which nine tenths are
 empty, against 0.33M for 1152x288. The wide shape survives because the pack's
 cast and everything built before this are that size.
 
-The figure sits about **72px tall** in its 96px frame, feet inside frame rows
-72-91 and horizontally within x 12-36 — that rectangle is the collision body
-the game derives from every frame — centred on x 24, at one scale on one
-baseline across all 48 slots. **Row 1, column 18** (the first idle-down frame)
+The figure sits **64px tall** in its 96px frame, rows 28-91, with the feet
+inside rows 72-91 and horizontally within x 12-36 — that rectangle is the
+collision body the game derives from every frame — centred on x 24, at one
+scale on one baseline across all 48 slots. Feet on row 91 is the one number
+nothing may vary: a character a few pixels up floats.
+
+It was 72px until the cast began being redrawn, and eight pixels reads as one
+person being shorter than the people standing beside them. `pnpm check:sheets`
+measures it, because `sheetFaults` settles the _format_ — canvas, frames
+drawn, transparent background — and says nothing about the drawing inside the
+frame, which is how two short sheets passed every check and shipped. It
+reports rather than refuses: what proportions the cast has is the artist's
+call. Once every sheet agrees, `STANDARD` belongs in `sheetFaults` and the
+check becomes a refusal like the rest. Bud and Michael are exempt — an egg and
+a chicken are not held to a human height. **Row 1, column 18** (the first idle-down frame)
 is lifted straight out as the HUD portrait and gallery card, so make that one
 a clean front view.
 
@@ -784,8 +845,9 @@ the current behaviour.
 - Secrets come from the environment. `.env.local` is gitignored; never commit keys.
 - No `dangerouslySetInnerHTML`. A CSP is set in `next.config.ts` — new outbound
   connections need `CSP_CONNECT_SRC`, not a loosened policy.
-- Cache headers live beside it. A room change is a page load, and `public/` is
-  served `max-age=0` by default, so it used to revalidate around fifty assets
+- Cache headers live beside it. A room change is a page load — except between
+  floors of one building, which `lib/room-travel.ts` does in the page — and
+  `public/` is served `max-age=0` by default, so it used to revalidate around fifty assets
   and re-fetch three and a half megabytes of music every time. `/audio/` is
   immutable for a year — change the music by pointing at a different file, not
   by replacing bytes. **The art carries a content hash** (`lib/assets`), so
@@ -832,10 +894,30 @@ here and it likely needs updating there too.
 
 ## Deployment
 
-`output: "standalone"`, Dockerfile, Railway (`railway.json`). `prepublishOnly` builds
-and runs `scripts/prepare-package.mjs`; the published package ships only `bin/` and
-`.next/standalone/`. The image copies `vendor/mettara-lib/`, so a deploy carries the
-Mettara SDK (see above).
+Dockerfile, Railway (`railway.json`). `prepublishOnly` runs
+`scripts/prepare-package.mjs`, which builds _and_ lays the tree out; the
+published package ships only `bin/` and `.next/standalone/`. The image copies
+`vendor/mettara-lib/`, so a deploy carries the Mettara SDK (see above).
+
+**`output: "standalone"` is asked for only by a publish** —
+`BUILD_STANDALONE=1`, which that script sets. Nothing else wants the tree:
+`pnpm start` and the image both run `server.ts` against a plain `.next`,
+because the custom server is what holds the socket upgrades and the gate.
+Asking for it always meant every build wrote a second copy of the app nobody
+ran, and every production boot logged Next advising `node
+.next/standalone/server.js` — which would start Next's own server in place of
+ours, with no presence socket, no agent bridge and no door on the world.
+
+**The image's runtime stage copies a named list of files, not the repo.** A
+new file the server needs at runtime has to be named there or the container
+comes up with nothing to run. `scripts/start.mjs` was added and the image
+went out without it once.
+
+`pnpm start` is a launcher (`scripts/start.mjs`) rather than
+`NODE_ENV=production tsx server.ts`, which is shell syntax Windows does not
+have: `pnpm start` failed there while CI and the image, both Linux, stayed
+green. It means the machine this is developed on can run the build it ships,
+which is how a production-only change gets checked rather than trusted.
 
 Cloud deploys run `AGENT_PROVIDER=claude-api`: there is no signed-in user on the host
 and a subscription cannot be shared, so the API key is the credential and the spend

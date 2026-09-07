@@ -323,9 +323,11 @@ on every request, so all of this happens server-side and the token never
 reaches the browser. And a token can see every board its account can — so
 generate it from an account that is only on the boards you want readable.
 
-### The help desk beside it
+### The help desk, through the corridor
 
-The same wall carries a second board: the support queue from Zoho Desk.
+Sandbox ERP's third floor is a corridor with rooms off both sides, and the
+second working room is **Support** — lettered on its wall, with the shared
+whiteboard and the support queue from Zoho Desk in it. Doc works in there.
 Walk up and press E and the tickets appear in columns by status — open
 first, then anything on hold or escalated, with the closed ones last. Each
 ticket shows its number, priority as a coloured dot, channel, due date, who

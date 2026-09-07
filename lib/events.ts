@@ -97,7 +97,16 @@ export interface GameEventMap {
    * on the socket it already has. See that file for why.
    */
   "room-changed": [room: string];
-  /** Where the player is, for the top bar, when it is not the room in the URL: a campus, the world map. Null means the room. */
+  /**
+   * Where the player is, when it is not the room in the URL: a campus, the
+   * world map. Null means the room.
+   *
+   * **Nothing listens.** The top bar's name plate read it, and that came out
+   * — an Operations floor puts rooms against the top of the map and the
+   * panel sat on them, and the floor letters its own name on a wall now.
+   * The three scenes go on emitting it, the way the room's spend does, for
+   * whatever wants to say where somebody is next.
+   */
   "place-changed": [label: string | null];
   /**
    * The person chose a different look for themselves. The sheet is fetched

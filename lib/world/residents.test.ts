@@ -20,7 +20,7 @@ import {
   WORLD_WANDER_SPOTS,
 } from "./residents";
 import { parseFloorRoomSlug, roomFromLocation } from "../rooms";
-import { CUTOUT, HELP_COUNTER, TILE, WIDTH } from "../map/office";
+import { CUTOUT, TILE, WIDTH } from "../map/office";
 import {
   HEIGHT as FLOOR_ROWS,
   WIDTH as FLOOR_COLS,
@@ -39,7 +39,7 @@ import {
 import { worldSolids } from "./scenery";
 import { routeAcross } from "./route";
 import { CAMPUSES } from "./campus";
-import { FRAME_HEIGHT, WORKER_SPRITES } from "../../components/game/config/animations";
+import { WORKER_SPRITES } from "../../components/game/config/animations";
 
 const yoshi = residentById("yoshi")!;
 const mark = residentById("mark")!;
@@ -278,39 +278,6 @@ describe("working a station", () => {
     const [minAt] = DWELL_MS.station;
     const [, maxAway] = DWELL_MS.room;
     expect(minAt).toBeGreaterThan(maxAway);
-  });
-
-  /**
-   * Behind the counter and centred on it, with the bottom edge of his sheet
-   * exactly on the counter's top edge — no overlap in either direction.
-   *
-   * Overlapping would read better, and is not available: a prop is drawn at
-   * depth 4 and a presence player at the height of their own feet, so the
-   * counter cannot cover him at any height that does not also cover the
-   * person walking up to it. A gap instead would leave him standing in the
-   * middle of the floor with a desk somewhere in front.
-   */
-  it("puts him behind the counter, touching it, not beside it", () => {
-    const { dx, dy, sw } = HELP_COUNTER.region;
-    const { x, y } = HELP_COUNTER.post;
-    expect(x).toBe((dx + sw / 2) * TILE);
-    expect(y + FRAME_HEIGHT / 2).toBe(dy * TILE);
-  });
-
-  /**
-   * The lobby's own wanderers keep to a band in the middle of the room and
-   * walk through anything in it, so the counter and the pacing have to be
-   * clear of that band altogether — it is below it, in the bottom of the 7.
-   */
-  it("keeps out of the band everyone else wanders, and the cut-out corner", () => {
-    const band = WANDER_AREAS.lobby;
-    const { dx, dy, sw } = HELP_COUNTER.region;
-    expect(dy * TILE).toBeGreaterThanOrEqual(band.y + band.height);
-    expect(HELP_COUNTER.paces.y).toBeGreaterThanOrEqual(band.y + band.height);
-    // East of the bite taken out of the room, so the floor is really there.
-    expect(HELP_COUNTER.paces.x).toBeGreaterThan((CUTOUT.x + CUTOUT.width) * TILE);
-    expect(HELP_COUNTER.paces.y).toBeGreaterThanOrEqual(CUTOUT.y * TILE - TILE);
-    expect((dx + sw) * TILE).toBeGreaterThan(HELP_COUNTER.paces.x);
   });
 });
 

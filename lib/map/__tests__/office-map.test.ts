@@ -13,6 +13,8 @@ import {
   WIDTH,
 } from "../office";
 import { PLAYER_SPAWN_OFFSET_X } from "../../constants";
+import { WANDER_AREAS } from "../../world/residents";
+import { FRAME_HEIGHT } from "../../../components/game/config/animations";
 import {
   deriveCollisions,
   generateMap,
@@ -355,6 +357,37 @@ describe("with a help desk on the floor", () => {
     // post, half a sheet above the counter's top edge.
     expect(paces.y + paces.height).toBe(HELP_COUNTER.post.y);
     expect(paces.y + paces.height + 48).toBe(box.y);
+  });
+
+  /**
+   * Centred on the counter, with the bottom edge of the sheet exactly on the
+   * counter's top edge — no overlap in either direction.
+   *
+   * Overlapping would read better and is not available: a prop is drawn at
+   * depth 4 and a presence player at the height of their own feet, so the
+   * counter cannot cover whoever works it at any height that does not also
+   * cover the person walking up to it. A gap instead would leave them
+   * standing in the middle of the floor with a desk somewhere in front.
+   */
+  it("puts the post behind the counter, touching it, not beside it", () => {
+    const { x, y } = HELP_COUNTER.post;
+    expect(x).toBe((dx + sw / 2) * TILE);
+    expect(y + FRAME_HEIGHT / 2).toBe(dy * TILE);
+  });
+
+  /**
+   * The lobby's own wanderers keep to a band in the middle of the room and
+   * walk through anything in it, so the counter and the pacing have to be
+   * clear of that band altogether — it is below it, in the bottom of the 7.
+   */
+  it("keeps out of the band everyone else wanders, and the cut-out corner", () => {
+    const band = WANDER_AREAS.lobby;
+    expect(dy * TILE).toBeGreaterThanOrEqual(band.y + band.height);
+    expect(HELP_COUNTER.paces.y).toBeGreaterThanOrEqual(band.y + band.height);
+    // East of the bite taken out of the room, so the floor is really there.
+    expect(HELP_COUNTER.paces.x).toBeGreaterThan((CUTOUT.x + CUTOUT.width) * TILE);
+    expect(HELP_COUNTER.paces.y).toBeGreaterThanOrEqual(CUTOUT.y * TILE - TILE);
+    expect((dx + sw) * TILE).toBeGreaterThan(HELP_COUNTER.paces.x);
   });
 
   it("is still an open room to walk about in", () => {

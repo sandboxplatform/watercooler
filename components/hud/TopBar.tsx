@@ -31,9 +31,6 @@ function seatDotColor(seat: SeatState): string {
  * on top of the thing you walked up there to read — and the floor already
  * says where you are, on a sign on its own wall, which is where a room in
  * this game is supposed to tell you anything.
- *
- * `place-changed` still fires from the scenes that are not a room; nothing
- * listens to it now.
  */
 export default function TopBar({
   seats,
