@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckSquare, Clock, MessageSquare, Paperclip, RefreshCw, Text, X } from "lucide-react";
 import FullscreenButton, { useFullscreen } from "./FullscreenButton";
-import { gameEvents } from "@/lib/events";
+import { usePanel } from "@/lib/hooks/usePanel";
 import { createLogger } from "@/lib/logger";
 import type { BoardCard, BoardSummary, BoardView } from "@/lib/trello/board";
 
@@ -111,17 +111,11 @@ function Card({ card }: { card: BoardCard }) {
  * people reading it is one request.
  */
 export default function ProjectBoard() {
-  const [open, setOpen] = useState(false);
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [loading, setLoading] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const fullscreen = useFullscreen(overlayRef);
-
-  const close = useCallback(() => {
-    setOpen(false);
-    gameEvents.emit("project-board-closed");
-  }, []);
 
   const load = useCallback(async (boardId: string | null) => {
     setLoading(true);
@@ -138,9 +132,10 @@ export default function ProjectBoard() {
     }
   }, []);
 
-  // ── Opening: the scene says when somebody walks up to the board ──
-  useEffect(() => {
-    const unsubscribe = gameEvents.on("open-project-board", () => {
+  // Which board hangs here is remembered per browser, so it is read as the
+  // panel opens rather than held in state that outlives a room change.
+  const { open, close } = usePanel("project-board", {
+    onOpen: () => {
       let remembered: string | null = null;
       try {
         remembered = localStorage.getItem(PICKED_BOARD);
@@ -148,14 +143,9 @@ export default function ProjectBoard() {
         // Storage off: the board is picked again each time.
       }
       setPicked(remembered);
-      setOpen(true);
       void load(remembered);
-    });
-    if (new URLSearchParams(window.location.search).get("board") === "1") {
-      gameEvents.emit("open-project-board");
-    }
-    return unsubscribe;
-  }, [load]);
+    },
+  });
 
   // While it is on the wall, keep it current.
   useEffect(() => {
@@ -163,18 +153,6 @@ export default function ProjectBoard() {
     const timer = setInterval(() => void load(picked), REFRESH_MS);
     return () => clearInterval(timer);
   }, [open, picked, load]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close();
-      }
-    };
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [open, close]);
 
   const choose = (id: string) => {
     try {

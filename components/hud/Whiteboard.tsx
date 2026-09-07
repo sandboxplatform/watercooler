@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Eraser, Minus, MousePointer2, Square, Circle, Trash2, X } from "lucide-react";
-import { gameEvents } from "@/lib/events";
 import { onRoomMessage, sendRoom } from "@/lib/room-socket";
 import { currentRoom } from "@/lib/room-client";
 import {
@@ -15,6 +14,7 @@ import {
   type Stroke,
 } from "@/lib/whiteboard";
 import { loadPlayerName } from "@/lib/persistence";
+import { usePanel } from "@/lib/hooks/usePanel";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("Whiteboard");
@@ -82,7 +82,6 @@ function drawStroke(ctx: CanvasRenderingContext2D, stroke: Stroke) {
  * opened, so it is the same board for the next person who walks up to it.
  */
 export default function Whiteboard() {
-  const [open, setOpen] = useState(false);
   const [tool, setTool] = useState<BoardTool>("pen");
   const [color, setColor] = useState<string>(BOARD_COLORS[0]);
   const [width, setWidth] = useState<number>(BOARD_WIDTHS[1]);
@@ -141,16 +140,9 @@ export default function Whiteboard() {
     draftRef.current = null;
   }, [baseCanvas]);
 
-  // ── Opening: the scene says when somebody walks up and presses E ──
-  useEffect(() => {
-    const unsubscribe = gameEvents.on("open-whiteboard", () => setOpen(true));
-    // ?board=1 opens it directly, for linking someone straight to the board.
-    // Routed through the same event as walking up to it, so there is one way in.
-    if (new URLSearchParams(window.location.search).get("board") === "1") {
-      gameEvents.emit("open-whiteboard");
-    }
-    return unsubscribe;
-  }, []);
+  // Escape is handled below rather than by the hook: this panel swallows
+  // every key while it is up, not only the one that closes it.
+  const { open, close } = usePanel("whiteboard", { escape: false });
 
   // ── Catch up with whatever is already on the board ──
   useEffect(() => {
@@ -209,20 +201,11 @@ export default function Whiteboard() {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       event.stopPropagation();
-      if (event.key === "Escape") {
-        setOpen(false);
-        gameEvents.emit("whiteboard-closed");
-      }
+      if (event.key === "Escape") close();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open]);
-
-  const close = () => {
-    setOpen(false);
-    // The office ignores movement while the board is up
-    gameEvents.emit("whiteboard-closed");
-  };
+  }, [open, close]);
 
   if (!open) return null;
 

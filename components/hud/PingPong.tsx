@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import FullscreenButton, { useFullscreen } from "./FullscreenButton";
 import PadLegend from "./PadLegend";
 import { useMachinePad } from "@/lib/hooks/useMachinePad";
+import { usePanel } from "@/lib/hooks/usePanel";
 import { PAD_OWN_ATTR } from "@/lib/gamepad/dialogs";
 import { XBOX } from "@/lib/gamepad/buttons";
 import { padMonitor } from "@/lib/gamepad/monitor";
@@ -107,7 +108,6 @@ function tableYFromPointer(event: React.PointerEvent<HTMLElement>): number {
 }
 
 export default function PingPong() {
-  const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>({ at: "menu" });
   // Starts from whoever is already here: the roster is announced as it
   // changes, and a panel opened in a quiet moment would otherwise see nobody
@@ -145,34 +145,27 @@ export default function PingPong() {
     sendRoom({ type: "pong", to, payload });
   }, []);
 
-  const close = useCallback(() => {
-    const current = modeRef.current;
-    if (current.at === "match")
-      send(current.against.id, { kind: "quit", matchId: current.matchId });
-    if (current.at === "waiting")
-      send(current.against.id, { kind: "quit", matchId: current.matchId });
-    setOpen(false);
-    setMode({ at: "menu" });
-    gameRef.current = null;
-    gameEvents.emit("pingpong-closed");
-  }, [send]);
-
-  // ── Opening ──
-  useEffect(() => {
-    const unsubscribe = gameEvents.on("open-pingpong", () => {
+  // Escape is not the hook's: it backs out of a match to the menu before
+  // it leaves the room. See the key handler.
+  const { open, close, show } = usePanel("pingpong", {
+    onOpen: () => {
       setMode({ at: "menu" });
       gameRef.current = null;
       // Who is here, read at the moment the menu opens. The roster is
       // announced as it changes and this panel is mounted from the start, so
       // waiting to be told means an empty list until somebody moves.
       setPlayers(getPlayers());
-      setOpen(true);
-    });
-    if (new URLSearchParams(window.location.search).get("pingpong") === "1") {
-      gameEvents.emit("open-pingpong");
-    }
-    return unsubscribe;
-  }, []);
+    },
+    onClose: () => {
+      // Walking out mid-match is a forfeit; tell the other side before going.
+      const current = modeRef.current;
+      if (current.at === "match" || current.at === "waiting")
+        send(current.against.id, { kind: "quit", matchId: current.matchId });
+      setMode({ at: "menu" });
+      gameRef.current = null;
+    },
+    escape: false,
+  });
 
   // The initial state above reads whoever is already here, so this only has
   // to carry the changes from then on
@@ -437,7 +430,9 @@ export default function PingPong() {
       against: challenge.from,
     });
     setChallenge(null);
-    setOpen(true);
+    // Through the event, not setOpen: the office is what holds the character
+    // still while this is up, and it only hears about the event.
+    show();
   };
 
   const declineChallenge = () => {

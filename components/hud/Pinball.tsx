@@ -6,8 +6,8 @@ import { arcadeMusic } from "@/lib/arcade/music";
 import FullscreenButton, { useFullscreen } from "./FullscreenButton";
 import PadLegend from "./PadLegend";
 import { useMachinePad } from "@/lib/hooks/useMachinePad";
+import { usePanel } from "@/lib/hooks/usePanel";
 import { PAD_OWN_ATTR } from "@/lib/gamepad/dialogs";
-import { gameEvents } from "@/lib/events";
 import { currentRoom } from "@/lib/room-client";
 import { loadPlayerName } from "@/lib/persistence";
 import { createLogger } from "@/lib/logger";
@@ -161,7 +161,6 @@ function drawTable(
 }
 
 export default function Pinball() {
-  const [open, setOpen] = useState(false);
   const [scores, setScores] = useState<HighScore[]>([]);
   const [display, setDisplay] = useState({
     score: 0,
@@ -185,13 +184,6 @@ export default function Pinball() {
     () => false,
   );
 
-  const close = useCallback(() => {
-    setOpen(false);
-    touchesRef.current.clear();
-    arcadeMusic.closePinball();
-    gameEvents.emit("pinball-closed");
-  }, []);
-
   const loadScores = useCallback(async () => {
     try {
       const response = await fetch(`/api/room/pinball?room=${encodeURIComponent(currentRoom())}`);
@@ -208,21 +200,17 @@ export default function Pinball() {
     setDisplay({ score: 0, ballsLeft: BALLS_PER_GAME, status: "ready", multiplier: 1 });
   }, []);
 
-  // ── Opening: the scene says when somebody walks up to the cauldron ──
-  useEffect(() => {
-    const unsubscribe = gameEvents.on("open-pinball", () => {
+  const { open, close } = usePanel("pinball", {
+    onOpen: () => {
       startGame();
       void loadScores();
-      setOpen(true);
       arcadeMusic.openPinball();
-    });
-    // ?pinball=1 opens it directly, the way ?board=1 opens the whiteboard.
-    // Routed through the same event, so there is only one way in.
-    if (new URLSearchParams(window.location.search).get("pinball") === "1") {
-      gameEvents.emit("open-pinball");
-    }
-    return unsubscribe;
-  }, [startGame, loadScores]);
+    },
+    onClose: () => {
+      touchesRef.current.clear();
+      arcadeMusic.closePinball();
+    },
+  });
 
   // The controller, by the bindings printed on the table: B or View leaves,
   // X fills the screen, Y is the music, Menu plays again once the balls are
@@ -235,19 +223,6 @@ export default function Pinball() {
       if (gameRef.current?.status === "over") startGame();
     },
   });
-
-  // Escape closes, the way every other panel in the game does.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close();
-      }
-    };
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [open, close]);
 
   // Flippers and plunger. Held state rather than presses: a flipper is a
   // button you hold, and the plunger charges for as long as you pull it.

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Clock, Headset, RefreshCw, User, X } from "lucide-react";
 import FullscreenButton, { useFullscreen } from "./FullscreenButton";
-import { gameEvents } from "@/lib/events";
+import { usePanel } from "@/lib/hooks/usePanel";
 import { createLogger } from "@/lib/logger";
 import { PRIORITY_COLOURS, type DeskTicket, type DeskView } from "@/lib/zoho/tickets";
 
@@ -85,16 +85,10 @@ function Ticket({ ticket }: { ticket: DeskTicket }) {
  * a minute, so a floor full of people reading it is one request.
  */
 export default function HelpDesk() {
-  const [open, setOpen] = useState(false);
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [loading, setLoading] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const fullscreen = useFullscreen(overlayRef);
-
-  const close = useCallback(() => {
-    setOpen(false);
-    gameEvents.emit("help-desk-closed");
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,34 +103,14 @@ export default function HelpDesk() {
     }
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = gameEvents.on("open-help-desk", () => {
-      setOpen(true);
-      void load();
-    });
-    if (new URLSearchParams(window.location.search).get("desk") === "1") {
-      gameEvents.emit("open-help-desk");
-    }
-    return unsubscribe;
-  }, [load]);
+  const { open, close } = usePanel("help-desk", { onOpen: () => void load() });
 
+  // While it is on the wall, keep the queue current.
   useEffect(() => {
     if (!open) return;
     const timer = setInterval(() => void load(), REFRESH_MS);
     return () => clearInterval(timer);
   }, [open, load]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close();
-      }
-    };
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [open, close]);
 
   if (!open) return null;
 

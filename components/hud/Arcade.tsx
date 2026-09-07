@@ -6,9 +6,9 @@ import FullscreenButton, { useFullscreen } from "./FullscreenButton";
 import PadLegend from "./PadLegend";
 import { useMachinePad } from "@/lib/hooks/useMachinePad";
 import { PAD_OWN_ATTR } from "@/lib/gamepad/dialogs";
-import { gameEvents } from "@/lib/events";
 import { currentRoom } from "@/lib/room-client";
 import { loadPlayerName } from "@/lib/persistence";
+import { usePanel } from "@/lib/hooks/usePanel";
 import { createLogger } from "@/lib/logger";
 import { ARCADE_GAMES, type AnyArcadeGame } from "@/lib/arcade";
 import { NO_INPUT, SCREEN, type ArcadeGameId, type ArcadeInput } from "@/lib/arcade/types";
@@ -49,7 +49,6 @@ function padInput(): Pick<ArcadeInput, "up" | "down" | "left" | "right" | "actio
  * Escape backs out of a game to the menu, and out of the menu to the room.
  */
 export default function Arcade() {
-  const [open, setOpen] = useState(false);
   const [gameId, setGameId] = useState<ArcadeGameId | null>(null);
   const [cursor, setCursor] = useState(0);
   const [scores, setScores] = useState<Record<string, HighScore[]>>({});
@@ -70,14 +69,6 @@ export default function Arcade() {
   const pointerRef = useRef<number | null>(null);
   const submittedRef = useRef(false);
 
-  const close = useCallback(() => {
-    setOpen(false);
-    setGameId(null);
-    gameRef.current = null;
-    arcadeMusic.close();
-    gameEvents.emit("arcade-closed");
-  }, []);
-
   const loadScores = useCallback(async () => {
     const room = encodeURIComponent(currentRoom());
     const loaded: Record<string, HighScore[]> = {};
@@ -94,6 +85,23 @@ export default function Arcade() {
     );
     setScores(loaded);
   }, []);
+
+  // Escape is not the hook's: in a game it backs out to the menu first,
+  // and only from the menu does it leave the room. See the key handler.
+  const { open, close } = usePanel("arcade", {
+    onOpen: () => {
+      setCursor(0);
+      setGameId(null);
+      void loadScores();
+      arcadeMusic.open();
+    },
+    onClose: () => {
+      setGameId(null);
+      gameRef.current = null;
+      arcadeMusic.close();
+    },
+    escape: false,
+  });
 
   const start = useCallback((id: ArcadeGameId) => {
     const game = ARCADE_GAMES.find((g) => g.id === id);
@@ -136,21 +144,6 @@ export default function Arcade() {
       if (!gameRef.current) setCursor((c) => (c + 1) % ARCADE_GAMES.length);
     },
   });
-
-  // ── Opening: the scene says when somebody walks up to the cabinet ──
-  useEffect(() => {
-    const unsubscribe = gameEvents.on("open-arcade", () => {
-      setCursor(0);
-      setGameId(null);
-      void loadScores();
-      setOpen(true);
-      arcadeMusic.open();
-    });
-    if (new URLSearchParams(window.location.search).get("arcade") === "1") {
-      gameEvents.emit("open-arcade");
-    }
-    return unsubscribe;
-  }, [loadScores]);
 
   // Keys: Escape backs out; in the menu arrows pick and Enter starts; in a
   // game the arrows, WASD and Space are held state for the loop.
