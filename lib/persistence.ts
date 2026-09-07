@@ -16,6 +16,7 @@ import {
   LS_ONBOARDING_DONE,
   LS_SIDEBAR_WIDTH,
   LS_SPRINTING,
+  LS_WORLD_ZOOM,
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
@@ -112,6 +113,22 @@ export function loadSprinting(): boolean {
 
 export function saveSprinting(sprinting: boolean) {
   lsSet(LS_SPRINTING, sprinting);
+}
+
+/**
+ * How far out the world map was left, or null for never having been touched.
+ *
+ * In the browser rather than on the person, for the reason sprinting is: a
+ * door builds a whole new scene, so anything kept on the character is lost
+ * at every one — which is exactly the moment this is for.
+ */
+export function loadWorldZoom(): number | null {
+  const saved = lsGet<number | null>(LS_WORLD_ZOOM, null);
+  return typeof saved === "number" ? saved : null;
+}
+
+export function saveWorldZoom(zoom: number) {
+  lsSet(LS_WORLD_ZOOM, zoom);
 }
 
 export function loadOnboardingDone(): boolean {

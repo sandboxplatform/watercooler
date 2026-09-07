@@ -643,6 +643,24 @@ being clear of the buildings, the props and the sea, and reachable from every
 other; the simulation's own tests walk Michael for twelve minutes and assert he
 never crosses a solid.
 
+**The camera.** Every place opens at the zoom that fits the lobby, so people
+and signs are the same size out of doors as in, and the wheel goes further out
+on a map. Two things are not that:
+
+- **The world map opens where it was left.** `reopenZoom` in `lib/camera.ts`
+  is the rule and `loadWorldZoom` the store, in the browser for the reason
+  sprinting is — a door builds a whole new scene, which is exactly the moment
+  this is for. The saved value is clamped rather than trusted, because the
+  zoom floor comes off the viewport and the window it was saved from may have
+  been another shape. Rooms are still fitted every time, which is the point of
+  fitting them; campuses too.
+- **Pinch zooms on glass.** Raw touch events on the canvas, like the wheel,
+  because Phaser is given one active pointer by default and would not report a
+  second finger at all. A trackpad's pinch needs none of this — a browser
+  reports that as a wheel with ctrl held. `pinching` is what stops the same
+  two fingers also dragging the camera and reading as a tap on the floor,
+  which would send the character walking off while somebody is looking closer.
+
 **Sprinting** is a mode, not a held key: left Shift toggles it (`togglesSprint`
 in `lib/sprint.ts`, bound by `ShiftLeft` so right Shift is untouched, and
 ignored while a field or a dialog has the keyboard). The mode is kept in the

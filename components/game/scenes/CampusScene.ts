@@ -266,6 +266,10 @@ export class CampusScene extends Phaser.Scene {
     this.input.on("pointerup", (p: Phaser.Input.Pointer) => {
       const start = down;
       down = null;
+      // A pinch is two fingers Phaser reports as ordinary pointers, and one
+      // of them barely moves — which is a tap, and would send the character
+      // walking off while somebody is only trying to look closer.
+      if (this.cameraController.pinching) return;
       if (!start || !isTap(start, { x: p.x, y: p.y, at: p.upTime })) return;
       const world = p.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
       const from = this.feet();

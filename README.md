@@ -403,6 +403,19 @@ under a board that says "Welcome to Ireland", sheep on the grass, and one
 whitewashed house: Apeiron Media, laid out inside like Castle Atlantic,
 ping pong table and all. Walk back onto the end of the dock to sail home.
 
+### Looking around
+
+The scroll wheel zooms, and so does a pinch — two fingers on a phone or any
+other touchscreen, or the trackpad gesture your laptop already makes. The
+ground between your fingers stays under them, so you pull open the part of
+the map you are looking at. Drag with the mouse or one finger to look around
+without walking.
+
+**The world map remembers how far out you were standing.** Walk into a
+building, do whatever you went in for, come out — and the map is where you
+left it. Rooms are always fitted to the screen instead, so the door, the lift
+and the games are all in reach.
+
 ### Walking and sprinting
 
 Arrow keys or WASD walk; on a phone, tap the floor and your character walks

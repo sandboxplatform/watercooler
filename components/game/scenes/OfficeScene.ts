@@ -1040,6 +1040,10 @@ export class OfficeScene extends Phaser.Scene {
       const start = down;
       down = null;
       if (!start) return;
+      // A pinch is two fingers Phaser reports as ordinary pointers, and one
+      // of them barely moves — which is a tap, and would send the character
+      // walking off while somebody is only trying to look closer.
+      if (this.cameraController.pinching) return;
       if (!isTap(start, { x: pointer.x, y: pointer.y, at: pointer.upTime })) return;
 
       // Anything with a panel over the office is driving its own input

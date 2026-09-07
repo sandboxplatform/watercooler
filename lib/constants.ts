@@ -94,6 +94,8 @@ export const LS_SIDEBAR_WIDTH = "watercooler:sidebar-width";
  * choice about how they get about, not a property of the room.
  */
 export const LS_SPRINTING = "watercooler:sprinting";
+/** How far out the world map was left. Rooms are fitted; the map is a choice. */
+export const LS_WORLD_ZOOM = "watercooler:world-zoom";
 
 /** How wide the chat and activity column can be dragged. */
 export const SIDEBAR_MIN_WIDTH = 280;
@@ -245,3 +247,13 @@ export function formatRelativeTime(iso?: string) {
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
 }
+
+/**
+ * How long the wheel has to settle before the world map's zoom is written.
+ *
+ * One gesture is dozens of wheel events and localStorage is synchronous, so
+ * this is the difference between one write and fifty. Short enough that
+ * walking to a door always outlasts it, and the flush on the way out covers
+ * the rest.
+ */
+export const ZOOM_SAVE_DEBOUNCE_MS = 250;

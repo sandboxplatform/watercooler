@@ -158,6 +158,10 @@ export class WorldScene extends Phaser.Scene {
       WORLD_HEIGHT,
       {
         coverMap: true,
+        // The map opens where it was left. Every building is a page of its
+        // own, so an errand indoors used to hand the map back at its fitted
+        // zoom however far out you had chosen to stand.
+        remembersZoom: true,
       },
     );
     this.cameraController.init();
@@ -276,6 +280,10 @@ export class WorldScene extends Phaser.Scene {
     this.input.on("pointerup", (p: Phaser.Input.Pointer) => {
       const start = down;
       down = null;
+      // A pinch is two fingers Phaser reports as ordinary pointers, and one
+      // of them barely moves — which is a tap, and would send the character
+      // walking off while somebody is only trying to look closer.
+      if (this.cameraController.pinching) return;
       if (!start || !isTap(start, { x: p.x, y: p.y, at: p.upTime })) return;
       const world = p.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
       const from = this.feet();

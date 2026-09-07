@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ROOM_FRAME, fitZoom, frameZoom } from "../camera";
+import { ROOM_FRAME, fitZoom, frameZoom, reopenZoom } from "../camera";
 
 // The lobby is 20x19 tiles at 48px.
 const MAP_W = 960;
@@ -37,5 +37,58 @@ describe("frameZoom", () => {
     const open = frameZoom(800, 1000, 0.5, 2);
     const collapsed = frameZoom(1500, 1000, 0.5, 2);
     expect(collapsed).toBeGreaterThan(open);
+  });
+});
+
+/**
+ * The world map opens where it was left.
+ *
+ * A room is fitted every time on purpose — the door, the lift and the games
+ * all reachable at once. The map is bigger than a screen, so how far out to
+ * stand is a choice, and an errand into a building should not undo it.
+ */
+describe("reopenZoom", () => {
+  const FLOOR = 0.5;
+  const MAX = 4;
+
+  it("has nothing to say when nothing was saved", () => {
+    expect(reopenZoom(null, 1, FLOOR, MAX)).toBeNull();
+  });
+
+  it("gives back a saved zoom that still fits", () => {
+    expect(reopenZoom(2, 1, FLOOR, MAX)).toBe(2);
+  });
+
+  /**
+   * The floor comes off the viewport, so a zoom saved on a wide window can
+   * be further out than a narrow one is allowed to go.
+   */
+  it("pulls a zoom from a wider window up to this window's floor", () => {
+    expect(reopenZoom(0.2, 1, FLOOR, MAX)).toBe(FLOOR);
+  });
+
+  it("caps one that is too far in", () => {
+    expect(reopenZoom(99, 1, FLOOR, MAX)).toBe(MAX);
+  });
+
+  /** Whatever is in the browser is whatever somebody put there. */
+  it("ignores nonsense rather than trusting it", () => {
+    for (const bad of [NaN, Infinity, -Infinity, 0, -2]) {
+      expect(reopenZoom(bad, 1, FLOOR, MAX), String(bad)).toBeNull();
+    }
+  });
+
+  /**
+   * A value that rounds to the fitted zoom is the fitted zoom. Restoring it
+   * would let floating-point drift accumulate across a session of doors.
+   */
+  it("treats a hair off the fitted zoom as the fitted zoom", () => {
+    expect(reopenZoom(1.0000001, 1, FLOOR, MAX)).toBeNull();
+    expect(reopenZoom(1.5, 1, FLOOR, MAX)).toBe(1.5);
+  });
+
+  /** Clamping happens first, so a saved value below a fitted floor is not "the fit". */
+  it("clamps before comparing, so the floor can be the answer", () => {
+    expect(reopenZoom(0.1, 2, 1, MAX)).toBe(1);
   });
 });
