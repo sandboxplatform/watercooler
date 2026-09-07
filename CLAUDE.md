@@ -103,6 +103,31 @@ Every provider emulates the gateway protocol in-process, so the app connects to
 itself on startup and needs no gateway URL or token. Provider definitions are
 in `lib/cli-providers.ts`; the run loop is `lib/cli-bridge.ts`.
 
+**A run starts in exactly one place.** `runAgent` in `lib/cli-bridge.ts`
+owns the whole lifecycle — the service provider that answers in place or the
+CLI that is spawned, the time limit, stdout and stderr, the exit, and the
+count of what is running — and hands back one settled outcome. It reports
+nothing to a room, because that is the only real difference between the two
+ways work begins:
+
+| Path                  | Reports by                      | Also                                             |
+| --------------------- | ------------------------------- | ------------------------------------------------ |
+| Assigned face to face | `sendEvent` to the one client   | Passes `onSpawn`, so the HUD can stop it         |
+| Delegated by an agent | `broadcastEvent` to all of them | Resolves with the text, for the agent that asked |
+
+It was written twice, about ninety lines each, and keeping two copies in
+step is what the run count made expensive: `atCapacity` reads it, so a copy
+that leaked a place would quietly close the room. Both copies also gave the
+place back in two handlers, and a child that fails to spawn emits `error`
+and then `close` — with three other agents working, one bad spawn took the
+count from four to two and let a fifth past a ceiling of four. `Math.max`
+had been hiding it whenever the failing run was the only one.
+
+`lib/__tests__/cli-bridge.test.ts` pins the delegated path, which reaches
+the same lifecycle through a plain function call: the ceiling, the budget,
+the spend recorded, the session resumed, and a place given back however a
+run ends. The direct path answers a WebSocket client and is not covered.
+
 `AGENT_PROVIDER=mettara` only says Mettara is _wanted_ — the server still boots on
 the Claude implementation, and the HUD's connection panel is what actually switches.
 That choice is remembered in the room database (`lib/server/provider-choice.ts`), so
@@ -433,8 +458,11 @@ what makes one is naming the boards that hang on its wall:
 
 ```ts
 // lib/world/tenants.ts
-lobby("sandbox-erp", "sandbox-erp", { game: "pinball", operations: ["trello", "zoho"] }),
-lobby("castle-atlantic", "castle-atlantic", { game: "pong", operations: ["trello"] }),
+lobby("sandbox-erp", "sandbox-erp", {
+  game: "pinball", also: ["arcade"], helpDesk: true,   // the lobby
+  operations: ["trello", "zoho"], projects: 5,         // the floor above
+}),
+lobby("castle-atlantic", "castle-atlantic", { game: "pong", operations: ["trello"], projects: 3 }),
 ```
 
 `trello` is the project board and `zoho` the support queue — each a picture
@@ -501,7 +529,7 @@ spot. The map is named by the boards rather than the building —
 running off the same boards share one map and a third needs no new file.
 `pnpm build:map` writes one per set actually in use, read off `TENANTS`.
 
-The `?board=1` and `?desk=1` query parameters open either panel from
+The `?project=1` and `?desk=1` query parameters open either panel from
 anywhere, which is a development shortcut rather than a way into the room:
 what is on the wall is what the floor's map carries.
 
@@ -547,14 +575,27 @@ localStorage in `preload` so nobody appears as the default for a frame first.
 Everyone else arrives on demand: seats through `WorkerManager`, which already
 fetched what was missing, and other people through `dressRemotePlayers`.
 
-That last one had to be written. `systems/scene-presence.ts` does the same job
-and says in its own docstring that it is "for a scene that is not the office" —
-the office wires presence by hand, and its path had no fallback because every
-sheet used to be preloaded. Removing the preload without spotting that showed
-up as **two residents who looked like each other**: `RemotePlayerManager`
-substitutes the default sheet for a missing texture, so the failure was silent
-rather than a missing-texture box. If you touch preloading, check that people
-still look like themselves — a room that renders is not proof that it is right.
+**Every scene shares one presence path.** `systems/scene-presence.ts` —
+`attachPresence` — keeps the remote characters in step with the roster, puts
+their words and voice mark over their heads, fetches a sheet the scene has not
+loaded, and tells the socket where our own character stands. The office used to
+wire all of that by hand, and the divergence is what made removing the preload
+show up as **two residents who looked like each other**: the office's own path
+had no sheet fetch, and `RemotePlayerManager` substitutes the default sheet for
+a missing texture, so the failure was silent rather than a missing-texture box.
+
+Two things the office needs and says so at the call site:
+
+| Option          | Why                                                                                                                                                                                                                                                                                                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `depth: "flat"` | A room stacks people at one depth. Its props sit at 4 and the local player at 5, so a resident given a depth off their own feet is drawn over the counter they stand behind. Outdoors leaves it unset and everyone sorts by their feet, which is the only thing that reads right when somebody walks below a building. |
+| `ownSay`        | This browser's own remark, over its own character                                                                                                                                                                                                                                                                      |
+
+The handle's `say(id, text)` is for a scene with something of its own to
+put over somebody — the office announcing an achievement. If you touch
+preloading, check that people still look like themselves: a room that
+renders is not proof that it is right, and Sara and Bud both work at
+Sandbox ERP in different sheets, which is the pair to look at.
 
 **A map declares only the tilesets it draws from.** The source map carries all
 sixteen of the pack's sheets, and every generated room used to inherit the lot
@@ -572,6 +613,75 @@ in `lib/map/` (`office.ts`, `floor.ts`, `premises.ts`, `generate.ts`) plus the t
 list in `lib/world/tenants.ts`. Edit the spec, not the generated JSON — regeneration
 will overwrite anything you change by hand.
 
+**Every per-building map comes off `TENANTS`**, so adding a building is a
+line there and a `pnpm build:map`:
+
+| Map                      | Written for                                  | From                                 |
+| ------------------------ | -------------------------------------------- | ------------------------------------ |
+| `lobby-<slug>.json`      | A lobby with anything in it                  | `furnishedLobby` + `lobbyFurnishing` |
+| `lobby.json`             | Every lobby with nothing in it, between them | —                                    |
+| `room-<slug>.json`       | Each store, warehouse and garage             | `kind`                               |
+| `floor-ops-<boards>-<n>` | One per set of boards and number of projects | `operations` + `projects`            |
+
+The lobbies were the last thing here still hand-listed, each hand-wired in
+the build script with its own `{ game, also, helpDesk }` while `mapFileFor`
+worked the file name out from the tenant. So the furniture lived somewhere
+nothing else could see it, and declaring a game without also editing the
+script gave a building a map that was never written — a room that 404s, with
+nothing to say why. `floors.test.ts` now walks every tenant's lobby and
+floors and insists `mapFileFor` names a file that is on disk, which also
+catches a building added without regenerating.
+
+### Fixtures
+
+The things in a room you walk up to and press E at — the boards, the games,
+the support queue. One entry each in `lib/fixtures.ts`: which points of
+interest on the map are it, the art that stands on them, the sign above, how
+close you have to be, what the prompt says, the `?<param>=1` that opens it
+from anywhere, and the pair of events that open and close its panel.
+
+It sits in `lib/` beside the event bus because **both layers read it**, and
+that is the point — neither side writes down what the other emits:
+
+| Who                        | Takes from it                                                                                                                                |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `systems/FixtureManager`   | Finds the points, stands the art, hangs the signs, prompts, emits the open event, and knows which panels are up so the character holds still |
+| `usePanel` in `lib/hooks/` | Each panel's open event, close event and query parameter                                                                                     |
+
+Adding something to walk up to is an entry there, its two events in
+`lib/events.ts`, and a panel in `components/hud/` that calls
+`usePanel("<id>")`. Nothing in `OfficeScene` changes.
+
+It was six hand-written copies of all of that — roughly 90 lines apiece
+spread over four files — and the cost showed twice. The whiteboard and the
+project board both claimed `?board=1`; every panel is mounted in every room,
+so one parameter opened the two of them stacked on each other. And accepting
+a ping pong challenge called the panel's own `setOpen(true)` without emitting
+anything, so the office went on letting the character walk about behind a
+live match. Both are the same mistake: a panel that knows how to show itself
+but not how to say so. `usePanel` has no way to open a panel except the
+event — `show()` emits it — which is why the hook is the fix rather than
+tidier copies.
+
+Nothing in the registry may import Phaser, which is what lets
+`lib/__tests__/fixtures.test.ts` hold it to being coherent in the suite's
+node environment: unique ids, unique parameters, an open event paired with
+its close, an entry for every id in the union, and no point of interest
+claimed by two fixtures. That last one is why the help desk's match is
+anchored — the lobby's "Help desk counter" is a different thing in a
+different room.
+
+Escape closing a panel is the hook's, and off for the three that read their
+own keys: the arcade and the ping pong table back out of a game to the menu
+before they leave the room, and the whiteboard swallows every key rather
+than only that one.
+
+The boss's terminal looks like a fixture and is not one. It is only there
+when the room has seats, it defers to a worker standing nearby, and its
+prompt hangs off the corner of the seat rather than over a thing, so it
+stays in the scene rather than adding three optional fields used by one
+entry.
+
 ### Storage
 
 Two SQLite databases (`node:sqlite`), deliberately separate:
@@ -582,6 +692,42 @@ Two SQLite databases (`node:sqlite`), deliberately separate:
   company's data, seeded idempotently on first boot. Agents can write to it, so it
   can be wiped and regenerated without touching anyone's room.
 
+**The room store's shape is versioned.** `MIGRATIONS` in
+`lib/server/room-store.ts` is every change to it in order, the index being
+the version it brings the database _to_, and `PRAGMA user_version` records
+how far a file has climbed. Adding one is an entry there; it runs once, in
+its own transaction with the version stamped inside it, so a database is
+either at the version before or the one after and never halfway between.
+
+That is what makes room for a change that is not another column — a rename,
+a backfill, an index rebuilt. There was nowhere to put one before, because
+nothing recorded what shape a database was in: migration was a list of
+`ALTER TABLE` statements in a `try {} catch {}` that swallowed everything,
+re-attempted on every open for ever. It worked, and it could not tell the
+ordinary case of the column already being there from a typo, a locked file
+or a full disk — all three came back as the same silence, and a database
+that had failed to migrate went on being written to.
+
+Two things follow from it:
+
+- **A migration that fails takes the server with it**, naming itself and the
+  SQL error. The alternative is writing rows into a shape that was never
+  finished.
+- **A database newer than the build is refused**, saying both versions.
+  Rolling a build back is fair in an emergency, but the older one cannot
+  know whether it can still write the newer shape, and guessing wrong
+  corrupts a room quietly.
+
+The baseline migration asks before it adds, because everything from before
+the ladder sits at version 0 with the tables and — depending on its age —
+some of the columns. From version 2 on, the version is the answer and a
+migration can assume the one before it ran.
+
+The suite has a room database of its own, in the OS temp directory, set by
+`ROOM_DB_PATH` in `vitest.config.ts`: `presence-identity` drives a real
+server, a real server opens the room store, and left alone that is the one
+in `.data/` with somebody's actual rooms and board scribbles in it.
+
 ## Layout
 
 ```
@@ -589,14 +735,15 @@ app/                    App Router pages + API routes (room, characters, people,
 components/
   game/
     PhaserGame.tsx      dynamic import, ssr:false; creates the Game in useEffect, destroys on return
-    scenes/             OfficeScene, WorldScene, CampusScene, EntryScene
+    scenes/             OfficeScene, EntryScene, and OutdoorScene → WorldScene, CampusScene
     entities/           Player, RemotePlayer, Worker (split under worker/), ChatBubble, InteractionMenu
-    systems/            camera, doors, gamepad, interaction, pathfinding bridge, presence
+    systems/            camera, doors, gamepad, interaction, pathfinding bridge, presence, fixtures
     config/             animations, emotes — frame counts and timings live here, not inline
   hud/                  every React panel, plus hud.css (the pixel HUD)
   panel/                terminal and session-history modals
 lib/
   events.ts store.ts reducer.ts    the state + event spine
+  fixtures.ts                      what you walk up to and press E at, read by both layers
   room-travel.ts                   moving between rooms without a page load
   cli-bridge.ts cli-providers.ts   agent execution
   server/                          server-only: room store, presence hub/socket, residents, uploads
@@ -610,6 +757,40 @@ public/maps|tilesets|sprites|characters|audio|ui
 scripts/                build-map, seed-erp, sprite and world-art generators
 types/game.ts           shared game types
 ```
+
+### Outdoors
+
+The world map and a campus are the same place in every way but the drawing
+of it, and `scenes/OutdoorScene.ts` is that place: arriving out of a door
+and taking a few steps down the path, walking by keys or stick or tap,
+everyone else drawn from the room socket, the residents taking the air
+asked for from the server, the camera that follows and zooms, and a doorway
+that either starts another scene or loads a lobby's page.
+
+A place says four things for itself:
+
+| Hook        | Answers                                                                                            |
+| ----------- | -------------------------------------------------------------------------------------------------- |
+| `loadArt`   | The pictures it is drawn from, on top of the outdoor pack                                          |
+| `layOut`    | Lay the ground and put up the buildings; hand back size, spawn, doors, solids, label, path, camera |
+| `standing`  | Which of the residents the server reported are here, and where to stand them                       |
+| `goThrough` | A doorway it opens itself by starting a scene, rather than loading a page                          |
+
+`scenes/outdoors.ts` is the drawing half — ground, water and its foam,
+props, signs, the ferry, a building with its name on the band the art
+leaves blank, a resident with their name under them — and both places call
+it. So a third outdoor place is a `layOut` and its art, not another scene.
+
+It was two files that had drifted into being the same file twice: eleven
+identical fields and eight identical methods apiece, about 200 lines of
+them. The cost was the usual one — only `CampusScene` cleared the map that
+indexes drawn residents when it started, so the world map stopped drawing
+anybody standing outside on a second visit, and there is nothing about that
+to notice except an empty green.
+
+`OfficeScene` is deliberately not one of these. A room has a tilemap,
+seats, fixtures and a lift; it shares presence through `attachPresence`
+rather than its whole shape.
 
 ### Residents and wandering
 
@@ -859,6 +1040,21 @@ Tests sit in `__tests__/` beside the code they cover, plus `*.test.ts` files in
 `lib/world/`. Coverage is substantial — when you change reducer, gateway-handler,
 room-store, map or arcade logic, there is almost certainly a test already asserting
 the current behaviour.
+
+**A hook needs a DOM, and only a hook does.** The suite runs on `node`, which
+is right for everything that is plain logic — and most of this codebase is,
+deliberately: the arcade's games, the pinball table, routing, facing, the
+maps. A React hook is the exception, because React will not give one its
+dispatcher outside a renderer. So `jsdom` is a dev dependency,
+`lib/hooks/__tests__/render-hook.ts` is the whole harness — a root, a
+component that does nothing but call the hook, and `act` from React itself —
+and a file that wants it says so with `// @vitest-environment jsdom` on its
+first line. Per file, so nothing else pays for it.
+
+`useTaskRouter` is the one covered so far, and the piece worth having is the
+queue: one task runs per session at a time, the rest wait, and the line only
+moves because `task-completed`, `task-failed` and `task-aborted` all drain
+it. Nothing else in the app knows a second task has to be held.
 
 ## Conventions
 
