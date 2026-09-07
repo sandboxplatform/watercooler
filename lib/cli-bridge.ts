@@ -32,6 +32,7 @@ import {
   resolveBin,
   type CliParsedResult,
   type CliProvider,
+  type CliRunOptions,
   type ModelChoice,
 } from "./cli-providers";
 
@@ -361,6 +362,163 @@ function buildPersonality(room: string, params: Record<string, unknown>): string
   return `${parts.join(" ")} ${COMPANY_BRIEFING}${buildWorkerRosterContext(room, label)}`;
 }
 
+/** What starting a run needs, whoever asked for it. */
+interface RunRequest {
+  provider: CliProvider;
+  /** For the log lines only; the caller owns what the room is told. */
+  runId: string;
+  options: CliRunOptions;
+  /**
+   * Environment for a spawned CLI, on top of this process's own. A directly
+   * assigned run gets the lot — the port, the roster, the dispatch secret,
+   * its room — because it may delegate; a dispatched one is given far less,
+   * for the same reason it is given no MCP config: it does not delegate
+   * onward.
+   */
+  env?: Record<string, string>;
+  /** The child, the moment it exists, so an abort can find it. */
+  onSpawn?: (child: ChildProcess) => void;
+  /** What to say when the run is stopped for taking too long. */
+  timeoutMessage: (seconds: number) => string;
+}
+
+/** How a run ended. */
+type RunOutcome =
+  | {
+      ok: true;
+      parsed: CliParsedResult | null;
+      /** What the CLI printed, for a caller that can show it unparsed. */
+      raw: string;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Runs one turn and says how it went. The only place a run is started.
+ *
+ * Every way a run can end is one settled promise: a service that answered or
+ * threw, a CLI that could not be spawned, that errored, that ran over its
+ * time, that exited non-zero, or that exited cleanly. Nothing here reports
+ * anything to a room — a directly assigned run answers one client and a
+ * delegated one is broadcast to all of them, which is the whole of the
+ * difference between the two and the reason this stops short of it.
+ *
+ * It was written twice — about ninety lines each of spawn, guard,
+ * accumulate, close and count — and the copies had drifted in the small
+ * ways two copies do: one read a kill signal as a case of its own, one
+ * added "for dispatch" to the same spawn error, one incremented the run
+ * count before the spawn and unwound it in the catch while the other
+ * counted only after. None of that was broken; all of it was two things to
+ * keep in step. The one difference that mattered is kept and is now said
+ * out loud: only a directly assigned run passes `onSpawn`, because only
+ * those can be stopped from the HUD.
+ */
+function runAgent(req: RunRequest): Promise<RunOutcome> {
+  const { provider, runId, options } = req;
+
+  return new Promise<RunOutcome>((resolve) => {
+    // A service provider has no process to spawn: it answers in place.
+    if (provider.kind === "service") {
+      if (!provider.run) {
+        resolve({ ok: false, error: `${provider.displayName} has no run implementation.` });
+        return;
+      }
+      log.info(`Calling ${provider.displayName} for run ${runId}`);
+      runningCount += 1;
+      const settle = (outcome: RunOutcome) => {
+        runningCount = Math.max(0, runningCount - 1);
+        resolve(outcome);
+      };
+      provider.run(options).then(
+        (parsed) => settle({ ok: true, parsed, raw: "" }),
+        (err: unknown) => settle({ ok: false, error: (err as Error)?.message ?? String(err) }),
+      );
+      return;
+    }
+
+    if (!provider.buildRun || !provider.parseResult) {
+      resolve({ ok: false, error: `${provider.displayName} has no CLI implementation.` });
+      return;
+    }
+
+    const spec = provider.buildRun(options);
+    log.info(`Spawning ${provider.displayName} for run ${runId} in ${spec.cwd ?? process.cwd()}`);
+
+    let child: ChildProcess;
+    try {
+      child = spawn(spec.bin, spec.args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        cwd: spec.cwd,
+        env: { ...process.env, ...req.env },
+      });
+    } catch (err) {
+      const error = `Failed to spawn ${provider.binName}: ${(err as Error).message}`;
+      log.error(error);
+      resolve({ ok: false, error });
+      return;
+    }
+
+    // Counted only once the child exists, so a spawn that threw does not
+    // hold a place in the queue for ever.
+    runningCount += 1;
+    req.onSpawn?.(child);
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout!.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr!.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+
+    let timedOut = false;
+    const cancelTimeout = guardRunTime(child, (seconds) => {
+      timedOut = true;
+      log.error(`run ${runId} exceeded ${seconds}s and was stopped`);
+      resolve({ ok: false, error: req.timeoutMessage(seconds) });
+    });
+
+    /**
+     * Give the place back, once.
+     *
+     * A child that fails to spawn emits `error` and then `close`, so this is
+     * reached twice for one run. Both copies of this code decremented in
+     * both handlers, and `Math.max` hid it whenever that run was the only
+     * one — but with three others working, one ENOENT took the count from
+     * four to two and let a fifth agent past a ceiling that was supposed to
+     * be four. One place to count now, and it counts once.
+     */
+    let released = false;
+    const done = () => {
+      cancelTimeout();
+      if (released) return;
+      released = true;
+      runningCount = Math.max(0, runningCount - 1);
+    };
+
+    child.on("error", (err) => {
+      done();
+      log.error(`${provider.binName} process error for run ${runId}:`, err.message);
+      resolve({ ok: false, error: err.message });
+    });
+
+    child.on("close", (code) => {
+      done();
+      // The timeout has already settled this run; the kill it sent is not a
+      // second failure.
+      if (timedOut) return;
+      if (code !== 0) {
+        resolve({
+          ok: false,
+          error: stderr.trim() || `${provider.binName} exited with code ${code}`,
+        });
+        return;
+      }
+      resolve({ ok: true, parsed: provider.parseResult!(stdout), raw: stdout.trim() });
+    });
+  });
+}
+
 function handleChatSend(state: ClientState, id: string, params: Record<string, unknown>) {
   const provider = activeProvider;
   const sessionKey = (params.sessionKey as string) ?? "default";
@@ -440,137 +598,48 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   const finish = (parsed: CliParsedResult | null, failure: string | null) =>
     finishRun({ provider, state, params, runId, sessionKey, message, startedAt, parsed, failure });
 
-  // A service provider has no process to spawn: it answers in place.
-  if (provider.kind === "service") {
-    if (!provider.run) {
-      finish(null, `${provider.displayName} has no run implementation.`);
+  void runAgent({
+    provider,
+    runId,
+    options: runOptions,
+    env: {
+      WATERCOOLER_PORT: process.env.PORT ?? "3000",
+      WATERCOOLER_WORKERS: JSON.stringify(getWorkerRoster(state.room)),
+      WATERCOOLER_DISPATCH_SECRET: dispatchSecret,
+      // Delegated work must land in the room that asked for it: the roster,
+      // the sandbox and the spend ceiling are all per room.
+      WATERCOOLER_ROOM: state.room,
+      // Stamped onto anything the agent writes, so a person can see who did it
+      WATERCOOLER_SEAT: seatLabel ?? "an agent",
+      ERP_DB_PATH: erpDatabasePath(),
+    },
+    // Kept so an abort from the HUD can find and kill it.
+    onSpawn: (child) => {
+      state.runningProcesses.set(runId, child);
+      const forget = () => state.runningProcesses.delete(runId);
+      child.once("close", forget);
+      child.once("error", forget);
+    },
+    timeoutMessage: (seconds) => `The agent was stopped after ${seconds}s with no reply.`,
+  }).then((outcome) => {
+    if (!outcome.ok) {
+      finish(null, outcome.error);
       return;
     }
-    log.info(`Calling ${provider.displayName} for run ${runId}`);
-    runningCount += 1;
-    provider
-      .run(runOptions)
-      .then((parsed) => {
-        runningCount = Math.max(0, runningCount - 1);
-        finish(parsed, null);
-      })
-      .catch((err: unknown) => {
-        runningCount = Math.max(0, runningCount - 1);
-        finish(null, (err as Error)?.message ?? String(err));
-      });
-    return;
-  }
-
-  if (!provider.buildRun || !provider.parseResult) {
-    finish(null, `${provider.displayName} has no CLI implementation.`);
-    return;
-  }
-
-  const spec = provider.buildRun(runOptions);
-
-  log.info(`Spawning ${provider.displayName} for run ${runId} in ${spec.cwd ?? process.cwd()}`);
-
-  const port = process.env.PORT ?? "3000";
-  let child: ChildProcess;
-  try {
-    child = spawn(spec.bin, spec.args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      cwd: spec.cwd,
-      env: {
-        ...process.env,
-        WATERCOOLER_PORT: port,
-        WATERCOOLER_WORKERS: JSON.stringify(getWorkerRoster(state.room)),
-        WATERCOOLER_DISPATCH_SECRET: dispatchSecret,
-        // Delegated work must land in the room that asked for it: the roster,
-        // the sandbox and the spend ceiling are all per room.
-        WATERCOOLER_ROOM: state.room,
-        // Stamped onto anything the agent writes, so a person can see who did it
-        WATERCOOLER_SEAT: (params.seatLabel as string | undefined) ?? "an agent",
-        ERP_DB_PATH: erpDatabasePath(),
-      },
-    });
-  } catch (err) {
-    const errMsg = `Failed to spawn ${provider.binName}: ${(err as Error).message}`;
-    log.error(errMsg);
-    sendEvent(state, "agent", {
-      runId,
-      sessionKey,
-      stream: "lifecycle",
-      data: { phase: "error", error: errMsg },
-    });
-    sendEvent(state, "chat", { runId, sessionKey, state: "error" });
-    return;
-  }
-
-  state.runningProcesses.set(runId, child);
-  runningCount += 1;
-
-  let timedOut = false;
-  const cancelTimeout = guardRunTime(child, (seconds) => {
-    timedOut = true;
-    log.error(`run ${runId} exceeded ${seconds}s and was stopped`);
-    sendEvent(state, "agent", {
-      runId,
-      sessionKey,
-      stream: "lifecycle",
-      data: { phase: "error", error: `The agent was stopped after ${seconds}s with no reply.` },
-    });
-    sendEvent(state, "chat", { runId, sessionKey, state: "error" });
-  });
-
-  let stdout = "";
-  let stderr = "";
-
-  child.stdout!.on("data", (chunk: Buffer) => {
-    stdout += chunk.toString();
-  });
-
-  child.stderr!.on("data", (chunk: Buffer) => {
-    stderr += chunk.toString();
-  });
-
-  child.on("error", (err) => {
-    cancelTimeout();
-    log.error(`${provider.binName} process error for run ${runId}:`, err.message);
-    state.runningProcesses.delete(runId);
-    runningCount = Math.max(0, runningCount - 1);
-    sendEvent(state, "agent", {
-      runId,
-      sessionKey,
-      stream: "lifecycle",
-      data: { phase: "error", error: err.message },
-    });
-    sendEvent(state, "chat", { runId, sessionKey, state: "error" });
-  });
-
-  child.on("close", (code) => {
-    cancelTimeout();
-    state.runningProcesses.delete(runId);
-    runningCount = Math.max(0, runningCount - 1);
-
-    // The timeout already told everyone; a kill signal is not a second failure
-    if (timedOut) return;
-
-    if (code === null || code !== 0) {
-      finish(null, stderr.trim() || `${provider.binName} exited with code ${code}`);
-      return;
-    }
-
-    const parsed = provider.parseResult!(stdout);
-    if (!parsed) {
+    if (!outcome.parsed) {
       log.error(
         `${provider.binName} produced unparseable output for run ${runId}:`,
-        stdout.slice(0, 500),
+        outcome.raw.slice(0, 500),
       );
       finish(null, `Failed to parse ${provider.displayName} output`);
       return;
     }
-
-    finish(parsed, null);
+    finish(outcome.parsed, null);
   });
 }
 
 /**
+ * Reports the end of a run, however it ran./**
  * Reports the end of a run, however it ran.
  *
  * `failure` set means the run never produced an answer — a non-zero exit, an
@@ -889,42 +958,43 @@ function cleanupMcpConfig() {
  * Returns the result text. Emits subagent-like lifecycle events so the
  * frontend shows the task animation on the target worker.
  */
-export function dispatchToWorker(
+export async function dispatchToWorker(
   seatId: string,
   task: string,
   room: string = DEFAULT_ROOM_SLUG,
 ): Promise<{ result: string; error?: string }> {
   const provider = activeProvider;
-  return new Promise((resolve) => {
-    const seat = getWorkerRoster(room).find((w) => w.seatId === seatId);
-    if (!seat) {
-      resolve({ result: "", error: `Unknown seatId: ${seatId}` });
-      return;
-    }
+  const seat = getWorkerRoster(room).find((w) => w.seatId === seatId);
+  if (!seat) return { result: "", error: `Unknown seatId: ${seatId}` };
 
-    // Delegation respects the same key, capacity and budget rules; otherwise a
-    // single agent could fan out past every limit by dispatching.
-    const blocked = providerBlocked(room);
-    if (blocked) {
-      log.warn(`refusing dispatch to ${seat.label}: ${blocked}`);
-      resolve({ result: "", error: blocked });
-      return;
-    }
+  // Delegation respects the same key, capacity and budget rules; otherwise a
+  // single agent could fan out past every limit by dispatching.
+  const blocked = providerBlocked(room);
+  if (blocked) {
+    log.warn(`refusing dispatch to ${seat.label}: ${blocked}`);
+    return { result: "", error: blocked };
+  }
 
-    const runId = `${provider.id}_sub_${Date.now()}_${++runCounter}`;
-    const sessionKey = `subagent:dispatch:${seatId}:${runId}`;
+  const runId = `${provider.id}_sub_${Date.now()}_${++runCounter}`;
+  const sessionKey = `subagent:dispatch:${seatId}:${runId}`;
 
-    // Emit lifecycle start so frontend assigns to the target worker
-    broadcastEvent("agent", {
-      runId,
-      sessionKey,
-      stream: "lifecycle",
-      data: { phase: "start", label: `${seat.label}: ${task.slice(0, 40)}`, seatId },
-    });
+  // Say it has started, so the HUD puts the work on the right worker.
+  broadcastEvent("agent", {
+    runId,
+    sessionKey,
+    stream: "lifecycle",
+    data: { phase: "start", label: `${seat.label}: ${task.slice(0, 40)}`, seatId },
+  });
 
-    // Resume this seat's own session if it has run before
-    const seatSessionKey = `dispatch:${seatId}`;
-    const runOptions = {
+  // Resume this seat's own session if it has run before.
+  const seatSessionKey = `dispatch:${seatId}`;
+  log.info(`Dispatching to ${seat.label} (${seatId}), run ${runId}`);
+  const startedAt = Date.now();
+
+  const outcome = await runAgent({
+    provider,
+    runId,
+    options: {
       message: task,
       personality: buildPersonality(room, { seatLabel: seat.label, seatRole: seat.roleTitle }),
       sessionId: dispatchSessions.get(seatSessionKey),
@@ -934,182 +1004,63 @@ export function dispatchToWorker(
       workspaceDir: provider.usesWorkspaces ? ensureSeatWorkspace(seat.label, room) : undefined,
       seatLabel: seat.label,
       sessionKey: seatSessionKey,
-    };
-
-    log.info(`Dispatching to ${seat.label} (${seatId}), run ${runId}`);
-    const startedAt = Date.now();
-
-    /**
-     * Reports a finished delegation, whichever kind of provider ran it.
-     * `rawFallback` is the CLI's stdout, used when the output could not be
-     * parsed but still holds something worth showing.
-     */
-    const complete = (parsed: CliParsedResult | null, failure: string | null, rawFallback = "") => {
-      if (failure) {
-        log.error(`dispatch failed for run ${runId}:`, failure);
-        broadcastEvent("agent", {
-          runId,
-          sessionKey,
-          stream: "lifecycle",
-          data: { phase: "error", error: failure },
-        });
-        resolve({ result: "", error: failure });
-        return;
-      }
-
-      recordSpend(room, parsed);
-      announceAchievements(room, {
-        room,
-        seatId,
-        seatLabel: seat.label,
-        durationMs: Date.now() - startedAt,
-        costUsd: parsed?.costUsd,
-        // Work that arrived here came from another agent, not a person
-        dispatched: true,
-        humansPresent: humansInRoom(room),
-      });
-      const responseText = parsed ? parsed.text : rawFallback;
-
-      // Store session for future resume
-      if (parsed?.sessionId) {
-        dispatchSessions.set(seatSessionKey, parsed.sessionId);
-      }
-
-      if (parsed?.isError) {
-        log.error(`Dispatch to ${seat.label} returned an error: ${responseText}`);
-        broadcastEvent("agent", {
-          runId,
-          sessionKey,
-          stream: "lifecycle",
-          data: { phase: "error", error: responseText },
-        });
-        resolve({ result: "", error: responseText });
-        return;
-      }
-
-      // Emit lifecycle end + final chat for frontend
-      broadcastEvent("agent", {
-        runId,
-        sessionKey,
-        stream: "lifecycle",
-        data: { phase: "end" },
-      });
-      broadcastEvent("chat", {
-        runId,
-        sessionKey,
-        state: "final",
-        message: { content: [{ type: "text", text: responseText }] },
-      });
-
-      log.info(`Dispatch to ${seat.label} completed (run ${runId})`);
-      resolve({ result: responseText });
-    };
-
-    // A service provider answers in place — there is no child to watch.
-    if (provider.kind === "service") {
-      if (!provider.run) {
-        complete(null, `${provider.displayName} has no run implementation.`);
-        return;
-      }
-      runningCount += 1;
-      provider
-        .run(runOptions)
-        .then((parsed) => {
-          runningCount = Math.max(0, runningCount - 1);
-          complete(parsed, null);
-        })
-        .catch((err: unknown) => {
-          runningCount = Math.max(0, runningCount - 1);
-          complete(null, (err as Error)?.message ?? String(err));
-        });
-      return;
-    }
-
-    if (!provider.buildRun || !provider.parseResult) {
-      complete(null, `${provider.displayName} has no CLI implementation.`);
-      return;
-    }
-
-    const spec = provider.buildRun(runOptions);
-
-    runningCount += 1;
-    let child: ChildProcess;
-    try {
-      child = spawn(spec.bin, spec.args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        cwd: spec.cwd,
-        env: {
-          ...process.env,
-          WATERCOOLER_SEAT: seat.label,
-          ERP_DB_PATH: erpDatabasePath(),
-        },
-      });
-    } catch (err) {
-      runningCount = Math.max(0, runningCount - 1);
-      const errMsg = `Failed to spawn ${provider.binName} for dispatch: ${(err as Error).message}`;
-      log.error(errMsg);
-      broadcastEvent("agent", {
-        runId,
-        sessionKey,
-        stream: "lifecycle",
-        data: { phase: "error", error: errMsg },
-      });
-      resolve({ result: "", error: errMsg });
-      return;
-    }
-
-    let timedOut = false;
-    const cancelTimeout = guardRunTime(child, (seconds) => {
-      timedOut = true;
-      log.error(`dispatch to ${seat.label} exceeded ${seconds}s and was stopped`);
-      broadcastEvent("agent", {
-        runId,
-        sessionKey,
-        stream: "lifecycle",
-        data: {
-          phase: "error",
-          error: `${seat.label} was stopped after ${seconds}s with no reply.`,
-        },
-      });
-      resolve({ result: "", error: `Stopped after ${seconds}s with no reply` });
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout!.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
-    });
-    child.stderr!.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-
-    child.on("error", (err) => {
-      cancelTimeout();
-      runningCount = Math.max(0, runningCount - 1);
-      log.error(`dispatch process error for run ${runId}:`, err.message);
-      broadcastEvent("agent", {
-        runId,
-        sessionKey,
-        stream: "lifecycle",
-        data: { phase: "error", error: err.message },
-      });
-      resolve({ result: "", error: err.message });
-    });
-
-    child.on("close", (code) => {
-      cancelTimeout();
-      runningCount = Math.max(0, runningCount - 1);
-      // The timeout already resolved this run
-      if (timedOut) return;
-      if (code !== 0) {
-        complete(null, stderr.trim() || `${provider.binName} exited with code ${code}`);
-        return;
-      }
-
-      complete(provider.parseResult!(stdout), null, stdout.trim());
-    });
+    },
+    // Far less than a directly assigned run is given, and for the same
+    // reason it gets no MCP config: it does not delegate onward.
+    env: { WATERCOOLER_SEAT: seat.label, ERP_DB_PATH: erpDatabasePath() },
+    timeoutMessage: (seconds) => `${seat.label} was stopped after ${seconds}s with no reply.`,
   });
+
+  /** Tell the room it went wrong, and the agent that asked. */
+  const failed = (error: string) => {
+    broadcastEvent("agent", {
+      runId,
+      sessionKey,
+      stream: "lifecycle",
+      data: { phase: "error", error },
+    });
+    return { result: "", error };
+  };
+
+  if (!outcome.ok) {
+    log.error(`dispatch failed for run ${runId}:`, outcome.error);
+    return failed(outcome.error);
+  }
+
+  const parsed = outcome.parsed;
+  recordSpend(room, parsed);
+  announceAchievements(room, {
+    room,
+    seatId,
+    seatLabel: seat.label,
+    durationMs: Date.now() - startedAt,
+    costUsd: parsed?.costUsd,
+    // Work that arrived here came from another agent, not a person
+    dispatched: true,
+    humansPresent: humansInRoom(room),
+  });
+  // What the CLI printed, for output that could not be parsed but still
+  // holds something worth handing back.
+  const responseText = parsed ? parsed.text : outcome.raw;
+
+  // Store the session so the next task to this seat resumes it.
+  if (parsed?.sessionId) dispatchSessions.set(seatSessionKey, parsed.sessionId);
+
+  if (parsed?.isError) {
+    log.error(`Dispatch to ${seat.label} returned an error: ${responseText}`);
+    return failed(responseText);
+  }
+
+  broadcastEvent("agent", { runId, sessionKey, stream: "lifecycle", data: { phase: "end" } });
+  broadcastEvent("chat", {
+    runId,
+    sessionKey,
+    state: "final",
+    message: { content: [{ type: "text", text: responseText }] },
+  });
+
+  log.info(`Dispatch to ${seat.label} completed (run ${runId})`);
+  return { result: responseText };
 }
 
 /** Validate the dispatch secret from an HTTP request. */
