@@ -161,6 +161,69 @@ export function placeSign(
   addSolid(walls, signBody(sign));
 }
 
+/**
+ * A building's picture, the wall it puts up, and its name on the sign band
+ * the art leaves blank.
+ *
+ * Both maps hang the name the same way — centred on the band, carrying its
+ * own strip of the band's colour so a long name stays readable past the
+ * band's ends — but they read it from different places and at different
+ * sizes, so the caller works out the words and where they go. What comes
+ * back is nothing: the door zone is the caller's, since a lobby's door and
+ * a campus gate lead to different kinds of place.
+ */
+export function placeBuilding(
+  scene: Phaser.Scene,
+  building: { frame: Rect; art: string; solid: Rect },
+  walls: Phaser.Physics.Arcade.StaticGroup,
+  sign: { text: string; y: number; size: string },
+) {
+  const { frame, art, solid } = building;
+  const foot = frame.y + frame.height;
+  scene.add.image(frame.x, frame.y, art).setOrigin(0, 0).setDepth(foot);
+  addSolid(walls, solid);
+  scene.add
+    .text(frame.x + frame.width / 2, frame.y + sign.y, sign.text, {
+      fontFamily: '"Press Start 2P", monospace',
+      fontSize: sign.size,
+      color: "#1b1b2a",
+      align: "center",
+      backgroundColor: "#e0b870",
+      padding: { x: 6, y: 3 },
+    })
+    .setOrigin(0.5, 0.5)
+    .setDepth(foot + 1)
+    .setResolution(2);
+}
+
+/**
+ * Somebody standing about out of doors, with their name under them.
+ *
+ * Not a presence player: a resident out here is not in any room, so the
+ * scene asks the server where everyone is and stands them at the spot it
+ * gives. Returns the pieces, for taking down again when they move on.
+ */
+export function placeResident(
+  scene: Phaser.Scene,
+  resident: { spriteKey: string; name: string },
+  at: { x: number; y: number },
+): Phaser.GameObjects.GameObject[] {
+  const sprite = scene.add.sprite(at.x, at.y - 43, resident.spriteKey, 0).setDepth(at.y);
+  sprite.play(`${resident.spriteKey}:idle-down`);
+  const tag = scene.add
+    .text(at.x, at.y + 6, resident.name, {
+      fontFamily: '"Press Start 2P", monospace',
+      fontSize: "8px",
+      color: "#ffe9a8",
+      backgroundColor: "rgba(0,0,0,0.7)",
+      padding: { x: 4, y: 2 },
+    })
+    .setOrigin(0.5, 0)
+    .setDepth(at.y + 1)
+    .setResolution(2);
+  return [sprite, tag];
+}
+
 /** The ferry, moored with its bow up, its name on the board along the near side. */
 export function placeBoat(
   scene: Phaser.Scene,

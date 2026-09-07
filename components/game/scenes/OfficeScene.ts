@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { Player } from "../entities/Player";
 import { resetWanderClock } from "../entities/Worker";
-import { SPRITE_KEY, SPRITE_PATH, WORKER_SPRITES, MOVE_SPEED } from "../config/animations";
+import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED } from "../config/animations";
 import { EMOTE_SHEET_KEY, EMOTE_SHEET_PATH, EMOTE_FRAME_SIZE } from "../config/emotes";
 import { Pathfinder } from "../utils/Pathfinder";
 import {
@@ -28,7 +28,7 @@ import {
 import { UNKNOWN_IDENTITY, type AccessIdentity } from "@/lib/identity";
 import { ArrivalWalk } from "@/lib/arrival";
 import { MAX_DESKS, deskBox, deskOrigin } from "@/lib/world/desks";
-import { HELP_COUNTER, TILE, WHITEBOARD } from "@/lib/map/office";
+import { HELP_COUNTER, TILE } from "@/lib/map/office";
 import { SUPPORT_BOARD, opsSign, opsSupportSign } from "@/lib/map/floor";
 import {
   hasCampus,
@@ -44,8 +44,6 @@ import { createLogger } from "@/lib/logger";
 import {
   BOSS_INTERACT_DISTANCE,
   PLAYER_SPAWN_OFFSET_X,
-  BUCKET_INTERACT_DISTANCE,
-  CAULDRON_INTERACT_DISTANCE,
   PF_PADDING,
   PRESS_E_STYLE,
   BOSS_PROMPT_OFFSET_X,
@@ -58,8 +56,10 @@ import { InteractionManager } from "../systems/InteractionManager";
 import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
 import { dialogOpen, typingInAField } from "@/lib/gamepad/dialogs";
-import { RemotePlayerManager } from "../systems/RemotePlayerManager";
+import { attachPresence, type ScenePresence } from "../systems/scene-presence";
 import { DoorManager } from "../systems/DoorManager";
+import { FixtureManager } from "../systems/FixtureManager";
+import { addSign } from "../utils/signs";
 import { initSceneEventBridge } from "../systems/SceneEventBridge";
 import { asset } from "@/lib/assets";
 
@@ -74,24 +74,8 @@ export class OfficeScene extends Phaser.Scene {
   private player!: Player;
   private terminalZone: { x: number; y: number } | null = null;
   private promptText: Phaser.GameObjects.Text | null = null;
-  /** Boards you can walk up to and draw on. */
-  private boardZones: Array<{ x: number; y: number }> = [];
-  private cauldronZone: { x: number; y: number } | null = null;
-  private cauldronPrompt: Phaser.GameObjects.Text | null = null;
-  private pinballOpen = false;
-  private arcadeZone: { x: number; y: number } | null = null;
-  private arcadePrompt: Phaser.GameObjects.Text | null = null;
-  private arcadeOpen = false;
-  /** The project board on the Operations floor's wall. */
-  private projectZone: { x: number; y: number } | null = null;
-  private projectPrompt: Phaser.GameObjects.Text | null = null;
-  private projectOpen = false;
   /** Whether this lobby staffs a help desk, from its map. */
   private counterHere = false;
-  /** The help desk board beside it. */
-  private deskZone: { x: number; y: number } | null = null;
-  private deskPrompt: Phaser.GameObjects.Text | null = null;
-  private deskOpen = false;
   private navigator = new TapNavigator();
   private pathfinder: Pathfinder | null = null;
   /** The steps taken on arrival, before the keys are the player's. */
@@ -99,9 +83,6 @@ export class OfficeScene extends Phaser.Scene {
   private walkMarker: Phaser.GameObjects.Arc | null = null;
   /** Set for one frame when something asks for an interaction without a key. */
   private virtualInteract = false;
-  private bucketZone: { x: number; y: number } | null = null;
-  private bucketPrompt: Phaser.GameObjects.Text | null = null;
-  private pingPongOpen = false;
   private elevatorOpen = false;
   /**
    * Who the door let this browser in as, for the lift.
@@ -113,16 +94,14 @@ export class OfficeScene extends Phaser.Scene {
   private identity: AccessIdentity = UNKNOWN_IDENTITY;
   /** Settles once the door has answered, so the lift can wait on it. */
   private identityKnown: Promise<void> | null = null;
-  /** False while a just-opened dialog waits for the stick and keys to be let go. */
-  private boardPrompt: Phaser.GameObjects.Text | null = null;
-  private whiteboardOpen = false;
   private eKey!: Phaser.Input.Keyboard.Key;
   private gamepad!: GamepadInput;
-  private remotePlayers!: RemotePlayerManager;
-  /** Sheets already being fetched for people in the room, so none is asked for twice. */
-  private fetchingSheets = new Set<string>();
-  /** The last roster, replayed once a sheet arrives so the wearer is redrawn. */
-  private lastRoster: Parameters<RemotePlayerManager["sync"]>[0] = [];
+  /**
+   * Everyone else in the room, on the same helper the world map and the
+   * campuses use. The office used to wire this by hand and that is how two
+   * residents came to be drawn as each other.
+   */
+  private presence: ScenePresence | null = null;
   private cleanupPresence: (() => void) | null = null;
   private terminalOpen = false;
 
@@ -133,6 +112,8 @@ export class OfficeScene extends Phaser.Scene {
   private workerManager!: WorkerManager;
   private interactionManager!: InteractionManager;
   private doorManager!: DoorManager;
+  /** Everything in the room you walk up to and press E at. */
+  private fixtures!: FixtureManager;
   private cleanupEventBridge: (() => void) | null = null;
 
   constructor() {
@@ -192,11 +173,8 @@ export class OfficeScene extends Phaser.Scene {
 
     // Generated by scripts/make-elevator-sprite.mjs — two tiles wide, because
     // a lift car is, and the same five-frame format as the swing door.
-    this.load.image("pingpong-table", asset("/sprites/pingpong_table_96x72.png"));
-    this.load.image("pinball-machine", asset("/sprites/pinball_machine_96x120.png"));
-    this.load.image("arcade-cabinet", asset("/sprites/arcade_cabinet_96x120.png"));
-    this.load.image("project-board", asset("/sprites/project_board_144x96.png"));
-    this.load.image("help-desk", asset("/sprites/help_desk_144x96.png"));
+    // Every fixture's art in one pass, off config/fixtures.ts.
+    FixtureManager.preload(this);
     // Furniture, not a board: the counter Doc works in Sandbox ERP's lobby.
     this.load.image("help-desk-counter", asset("/sprites/help_desk_counter_192x96.png"));
     this.load.image("van", asset("/sprites/world/van_96x144.png"));
@@ -268,26 +246,7 @@ export class OfficeScene extends Phaser.Scene {
     const { bossSpawn, workerSpawns } = parseSpawns(map);
     const pois = parsePOIs(map);
 
-    // Any board in the office opens the same shared canvas
-    this.boardZones = pois
-      .filter((poi) => /white ?board|black ?board|chalk ?board/i.test(poi.name))
-      .map((poi) => ({ x: poi.x, y: poi.y }));
-
-    // The cauldron is a pinball table, for reasons the office has never
-    // explained, and the bucket is a ping pong table on the same logic.
-    const cauldron = pois.find((poi) => /cauldron|pinball/i.test(poi.name));
-    this.cauldronZone = cauldron ? { x: cauldron.x, y: cauldron.y } : null;
-    const bucket = pois.find((poi) => /bucket|pong/i.test(poi.name));
-    this.bucketZone = bucket ? { x: bucket.x, y: bucket.y } : null;
-    const arcade = pois.find((poi) => /arcade/i.test(poi.name));
-    this.arcadeZone = arcade ? { x: arcade.x, y: arcade.y } : null;
-    const project = pois.find((poi) => /project board/i.test(poi.name));
-    this.projectZone = project ? { x: project.x, y: project.y } : null;
-    // Anchored, not fuzzy: the lobby's "Help desk counter" is a different
-    // thing in a different room, and drawing the support-queue board on top
-    // of it is what a loose match here does.
-    const desk = pois.find((poi) => /^help desk$/i.test(poi.name));
-    this.deskZone = desk ? { x: desk.x, y: desk.y } : null;
+    // Furniture, not a fixture: the counter has nothing to press E at.
     this.counterHere = pois.some((poi) => /^help desk counter$/i.test(poi.name));
 
     // Beside the desk, not in it — the nook has walls on three sides
@@ -297,13 +256,23 @@ export class OfficeScene extends Phaser.Scene {
       bossSpawn.y,
       bossSpawn.facing,
     );
-    // The socket joins this room here, where the character stands, rather
-    // than wherever the last scene left it.
-    gameEvents.emit("place-entered", {
-      x: this.player.sprite.x,
-      y: this.player.sprite.y,
-      facing: this.player.direction,
-    });
+    // Everyone else in the room, and the socket told we are in it now:
+    // `attachPresence` emits `place-entered` from the position given here,
+    // where the character stands, rather than wherever the last scene left
+    // it. A lift ride restarts this scene, so anything still attached from
+    // the floor below goes first.
+    this.presence?.detach();
+    this.presence = attachPresence(
+      this,
+      { x: this.player.sprite.x, y: this.player.sprite.y, facing: this.player.direction },
+      {
+        ownSay: (text) => this.player?.say(text),
+        // A room stacks people at one depth. Its props sit at 4 and the
+        // local player at 5, so a resident given a depth off their own feet
+        // is drawn over the counter they stand behind.
+        depth: "flat",
+      },
+    );
     this.physics.add.collider(this.player.sprite, collisionGroup);
 
     // Upstairs, everyone with a desk gets one, with their name on it.
@@ -348,41 +317,11 @@ export class OfficeScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
     this.player.sprite.setCollideWorldBounds(true);
 
-    // Say what things are, from across the room. Each game stands on the two
-    // tile rows above its point, which is the floor in front of it.
-    if (this.bucketZone) {
-      const table = this.add.image(this.bucketZone.x, this.bucketZone.y - 66, "pingpong-table");
-      table.setDepth(4);
-      this.addSign(this.bucketZone, "PONG", table.getTopCenter().y);
-    }
-    if (this.cauldronZone) {
-      // Right up against the top wall: its point is one row below its foot.
-      const machine = this.add.image(
-        this.cauldronZone.x,
-        this.cauldronZone.y - 60,
-        "pinball-machine",
-      );
-      machine.setDepth(4);
-      this.addSign(this.cauldronZone, "PINBALL", machine.getTopCenter().y);
-    }
-    if (this.arcadeZone) {
-      // Against the same wall as the pinball machine, one row above its point.
-      const cabinet = this.add.image(this.arcadeZone.x, this.arcadeZone.y - 60, "arcade-cabinet");
-      cabinet.setDepth(4);
-      this.addSign(this.arcadeZone, "ARCADE", cabinet.getTopCenter().y);
-    }
-    if (this.projectZone) {
-      // Hangs on the wall like the whiteboard: its point is the lower tile,
-      // so the picture sits half a tile above it.
-      const board = this.add.image(this.projectZone.x, this.projectZone.y - 24, "project-board");
-      board.setDepth(4);
-      this.addSign(this.projectZone, "PROJECT BOARD", board.getTopCenter().y);
-    }
-    if (this.deskZone) {
-      const board = this.add.image(this.deskZone.x, this.deskZone.y - 24, "help-desk");
-      board.setDepth(4);
-      this.addSign(this.deskZone, "HELP DESK", board.getTopCenter().y);
-    }
+    // Say what things are, from across the room. Each fixture stands on
+    // its point of interest, with its sign above whatever that covers —
+    // where, how high and what the sign reads are all in config/fixtures.ts.
+    this.fixtures = new FixtureManager(this);
+    this.fixtures.place(pois);
     if (this.counterHere) {
       // Placed from the spec rather than from its point of interest: the
       // footprint is what the collision box was cut from, so drawing it
@@ -402,20 +341,6 @@ export class OfficeScene extends Phaser.Scene {
         "below",
       );
     }
-    // The board hangs on the wall; its sign goes above it, centred on the
-    // board itself — its point is on the board's right-hand tile — with the
-    // arrow on the wall's cap.
-    //
-    // Both worked out from the point of interest rather than from
-    // WHITEBOARD.region, which is where the *lobby* hangs it. An Operations
-    // floor puts it on a different wall in a different room, and taking the
-    // constant left the sign floating at the top of the map with nothing
-    // under it while the board itself was two rooms away.
-    const half = (WHITEBOARD.region.sw / 2) * TILE;
-    for (const board of this.boardZones) {
-      this.addSign({ x: board.x - half, y: board.y }, "WHITEBOARD", board.y - TILE - 10);
-    }
-
     // The building's name on the wall, so a glance says whose lobby this is.
     if (address) this.addWallSign(address);
     if (address) this.addSupportSign(address);
@@ -448,62 +373,12 @@ export class OfficeScene extends Phaser.Scene {
 
     resetWanderClock();
     this.gamepad = new GamepadInput(this);
-    this.remotePlayers = new RemotePlayerManager(this);
-
-    const unsubPresence = gameEvents.on("presence-updated", (players) => {
-      this.lastRoster = players;
-      this.remotePlayers.sync(players);
-      this.dressRemotePlayers(players);
-    });
-    const unsubSpeaking = gameEvents.on("voice-speaking", (id, speaking) => {
-      this.remotePlayers.setSpeaking(id, speaking);
-    });
-    const unsubLeft = gameEvents.on("presence-left", (id) => {
-      this.remotePlayers.remove(id);
-    });
-    const unsubSaid = gameEvents.on("player-said", (playerId, text) => {
-      this.remotePlayers.say(playerId, text);
-    });
-    const unsubSelfSaid = gameEvents.on("self-said", (text) => {
-      this.player?.say(text);
-    });
-    // Listening for the open events rather than only setting the flag where
-    // they are emitted means a game opened any other way — the ?pinball=1 and
-    // ?board=1 links, say — still stops the character walking about behind it.
-    const unsubDeskOpen = gameEvents.on("open-help-desk", () => {
-      this.deskOpen = true;
-    });
-    const unsubDeskClosed = gameEvents.on("help-desk-closed", () => {
-      this.deskOpen = false;
-    });
-
-    const unsubProjectOpen = gameEvents.on("open-project-board", () => {
-      this.projectOpen = true;
-    });
-    const unsubProjectClosed = gameEvents.on("project-board-closed", () => {
-      this.projectOpen = false;
-    });
-
-    const unsubArcadeOpen = gameEvents.on("open-arcade", () => {
-      this.arcadeOpen = true;
-    });
-    const unsubArcadeClosed = gameEvents.on("arcade-closed", () => {
-      this.arcadeOpen = false;
-    });
-    const unsubPinballOpen = gameEvents.on("open-pinball", () => {
-      this.pinballOpen = true;
-    });
+    // Every fixture's open and close events, in one subscription with one
+    // teardown — see FixtureManager.subscribe for why that matters here.
+    const unsubFixtures = this.fixtures.subscribe();
 
     const unsubInteract = gameEvents.on("interact-pressed", () => {
       this.virtualInteract = true;
-    });
-
-    const unsubPongOpen = gameEvents.on("open-pingpong", () => {
-      this.pingPongOpen = true;
-    });
-
-    const unsubPongClosed = gameEvents.on("pingpong-closed", () => {
-      this.pingPongOpen = false;
     });
 
     const unsubSprite = gameEvents.on("player-sprite-chosen", (spriteKey, spritePath) => {
@@ -544,10 +419,6 @@ export class OfficeScene extends Phaser.Scene {
       this.wearCharacter(remembered.key, remembered.path);
     }
 
-    const unsubBoardOpen = gameEvents.on("open-whiteboard", () => {
-      this.whiteboardOpen = true;
-    });
-
     const unsubElevatorClosed = gameEvents.on("elevator-closed", () => {
       this.elevatorOpen = false;
       this.player?.board(false);
@@ -573,13 +444,6 @@ export class OfficeScene extends Phaser.Scene {
       this.cache.tilemap.remove("office");
       this.scene.restart();
     });
-    const unsubPinballClosed = gameEvents.on("pinball-closed", () => {
-      this.pinballOpen = false;
-    });
-
-    const unsubBoardClosed = gameEvents.on("whiteboard-closed", () => {
-      this.whiteboardOpen = false;
-    });
     const unsubBadge = gameEvents.on("achievement-earned", (achievement) => {
       // Agents celebrate at their desk; people celebrate wherever they stand
       if (achievement.subjectType === "agent") {
@@ -587,31 +451,15 @@ export class OfficeScene extends Phaser.Scene {
         worker?.showBubble(`${achievement.icon} ${achievement.title}`, 5000);
         return;
       }
-      this.remotePlayers.say(achievement.subjectId, `${achievement.icon} ${achievement.title}`);
+      this.presence?.say(achievement.subjectId, `${achievement.icon} ${achievement.title}`);
     });
     this.cleanupPresence = () => {
-      unsubPresence();
-      unsubLeft();
-      unsubSpeaking();
-      unsubSaid();
-      unsubSelfSaid();
       unsubBadge();
       unsubSprite();
       unsubDoor();
-      unsubBoardOpen();
-      unsubBoardClosed();
-      unsubPinballOpen();
-      unsubPinballClosed();
-      unsubArcadeOpen();
-      unsubArcadeClosed();
-      unsubProjectOpen();
-      unsubProjectClosed();
-      unsubDeskOpen();
-      unsubDeskClosed();
+      unsubFixtures();
       unsubElevatorClosed();
       unsubRoom();
-      unsubPongOpen();
-      unsubPongClosed();
       unsubInteract();
     };
     this.initBossSeat(bossSpawn, workerSpawns.length > 0);
@@ -867,35 +715,17 @@ export class OfficeScene extends Phaser.Scene {
    * by default, given the top of its picture; or on the floor below it,
    * where the picture is on a wall.
    */
+  /**
+   * Doors, wall names and the help desk counter. A fixture's own sign is
+   * hung by FixtureManager, off the same helper.
+   */
   private addSign(
     at: { x: number; y: number },
     label: string,
     edge: number,
     side: "above" | "below" = "above",
   ) {
-    const textY = side === "above" ? edge - 8 : edge;
-    const arrowY = side === "above" ? edge - 36 : edge - 30;
-    this.add
-      .text(at.x, textY, label, {
-        fontFamily: '"ArkPixel", "Press Start 2P", monospace',
-        fontSize: "10px",
-        color: "#ffe9a8",
-        backgroundColor: "rgba(27,27,42,0.85)",
-        padding: { x: 6, y: 3 },
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(12)
-      .setResolution(2);
-    if (!this.textures.exists("boss-arrow")) return;
-    if (!this.anims.exists("boss-arrow-bounce")) {
-      this.anims.create({
-        key: "boss-arrow-bounce",
-        frames: this.anims.generateFrameNumbers("boss-arrow", { start: 0, end: 5 }),
-        frameRate: 8,
-        repeat: -1,
-      });
-    }
-    this.add.sprite(at.x, arrowY, "boss-arrow", 0).setDepth(12).play("boss-arrow-bounce");
+    addSign(this, at, label, edge, side);
   }
 
   /**
@@ -919,63 +749,8 @@ export class OfficeScene extends Phaser.Scene {
       .setVisible(false);
     this.promptText.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
 
-    this.boardPrompt = this.add
-      .text(0, 0, "Press E to draw", PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
-      .setResolution(window.devicePixelRatio * 2)
-      .setOrigin(0.5, 1)
-      .setDepth(20)
-      .setVisible(false);
-    this.boardPrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
-
-    this.cauldronPrompt = this.add
-      .text(0, 0, "Press E to play", PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
-      .setResolution(window.devicePixelRatio * 2)
-      .setOrigin(0.5, 1)
-      .setDepth(20)
-      .setVisible(false);
-    this.cauldronPrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
-
-    this.deskPrompt = this.add
-      .text(
-        0,
-        0,
-        "Press E to read the queue",
-        PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle,
-      )
-      .setResolution(window.devicePixelRatio * 2)
-      .setOrigin(0.5, 1)
-      .setDepth(20)
-      .setVisible(false);
-    this.deskPrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
-
-    this.projectPrompt = this.add
-      .text(
-        0,
-        0,
-        "Press E to read the board",
-        PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle,
-      )
-      .setResolution(window.devicePixelRatio * 2)
-      .setOrigin(0.5, 1)
-      .setDepth(20)
-      .setVisible(false);
-    this.projectPrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
-
-    this.arcadePrompt = this.add
-      .text(0, 0, "Press E to play", PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
-      .setResolution(window.devicePixelRatio * 2)
-      .setOrigin(0.5, 1)
-      .setDepth(20)
-      .setVisible(false);
-    this.arcadePrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
-
-    this.bucketPrompt = this.add
-      .text(0, 0, "Press E for ping pong", PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
-      .setResolution(window.devicePixelRatio * 2)
-      .setOrigin(0.5, 1)
-      .setDepth(20)
-      .setVisible(false);
-    this.bucketPrompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    // A prompt for each fixture the room carries, made from its entry.
+    this.fixtures.createPrompts();
 
     const kb = this.input.keyboard;
     if (!kb) return;
@@ -990,7 +765,8 @@ export class OfficeScene extends Phaser.Scene {
 
     this.cleanupPresence?.();
     this.cleanupPresence = null;
-    this.remotePlayers?.destroyAll();
+    this.presence?.detach();
+    this.presence = null;
 
     this.workerManager?.destroyAll();
     this.interactionManager?.destroy();
@@ -1047,16 +823,7 @@ export class OfficeScene extends Phaser.Scene {
       if (!isTap(start, { x: pointer.x, y: pointer.y, at: pointer.upTime })) return;
 
       // Anything with a panel over the office is driving its own input
-      if (
-        this.terminalOpen ||
-        this.whiteboardOpen ||
-        this.pinballOpen ||
-        this.pingPongOpen ||
-        this.arcadeOpen ||
-        this.projectOpen ||
-        this.deskOpen
-      )
-        return;
+      if (this.terminalOpen || this.fixtures.anyOpen()) return;
       if (this.interactionManager.interactionMenu.visible) return;
 
       const world = pointer.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
@@ -1086,37 +853,6 @@ export class OfficeScene extends Phaser.Scene {
    * by key. Loading a key twice is a no-op, which makes re-picking a character
    * instant.
    */
-  /**
-   * Fetch the sheets the people in the room are wearing, and show them again.
-   *
-   * Only the player's own look is preloaded now, so anyone else arrives
-   * wearing a texture this scene has not got. `RemotePlayerManager` falls
-   * back to the default sheet for a missing one, which is why the gap showed
-   * as two residents who looked like each other rather than as a crash — the
-   * quietest possible symptom, and the reason this is worth a comment.
-   *
-   * The office wires its own presence rather than using `attachPresence`
-   * (see systems/scene-presence.ts, which says as much), so it needs its own
-   * copy of this. Both fetch once per key and re-sync when the sheet lands.
-   */
-  private dressRemotePlayers(players: { spriteKey: string }[]) {
-    for (const player of players) {
-      const key = player.spriteKey;
-      if (!key || this.textures.exists(key) || this.fetchingSheets.has(key)) continue;
-      const path = WORKER_SPRITES.find((w) => w.key === key)?.path;
-      if (!path) continue;
-      this.fetchingSheets.add(key);
-      ensureSheet(this, key, path, (ok) => {
-        this.fetchingSheets.delete(key);
-        if (!ok) {
-          log.error(`sheet ${key} failed to load for a person in the room`);
-          return;
-        }
-        if (this.scene.isActive()) this.remotePlayers.sync(this.lastRoster);
-      });
-    }
-  }
-
   private wearCharacter(spriteKey: string, spritePath: string) {
     ensureSheet(this, spriteKey, spritePath, (ok) => {
       if (!ok) {
@@ -1178,7 +914,7 @@ export class OfficeScene extends Phaser.Scene {
 
     // Remote characters keep easing toward their last reported position even
     // while this player is in a menu or typing.
-    this.remotePlayers.update(delta);
+    this.presence?.update(delta);
 
     if (this.interactionManager.interactionMenu.visible) {
       this.interactionManager.interactionMenu.update(this.gamepad);
@@ -1213,13 +949,8 @@ export class OfficeScene extends Phaser.Scene {
     // belong to the dialog, and the character stands still under it.
     if (
       this.terminalOpen ||
-      this.whiteboardOpen ||
-      this.pinballOpen ||
-      this.pingPongOpen ||
-      this.arcadeOpen ||
-      this.projectOpen ||
-      this.deskOpen ||
       this.elevatorOpen ||
+      this.fixtures.anyOpen() ||
       dialogOpen() ||
       typingInAField()
     ) {
@@ -1268,128 +999,10 @@ export class OfficeScene extends Phaser.Scene {
       return;
     }
 
-    // Whiteboards: walk up, press E, draw
-    const nearestBoard = this.boardZones
-      .map((zone) => ({
-        zone,
-        distance: Phaser.Math.Distance.Between(
-          this.player.sprite.x,
-          this.player.sprite.y,
-          zone.x,
-          zone.y,
-        ),
-      }))
-      .sort((a, b) => a.distance - b.distance)[0];
-
-    const atBoard = !!nearestBoard && nearestBoard.distance < BOSS_INTERACT_DISTANCE;
-    if (this.boardPrompt) {
-      this.boardPrompt.setVisible(atBoard && !this.whiteboardOpen);
-      if (atBoard) {
-        this.boardPrompt.setPosition(nearestBoard.zone.x, nearestBoard.zone.y - 8);
-      }
-    }
-
-    if (atBoard && interactPressed) {
-      this.boardPrompt?.setVisible(false);
-      gameEvents.emit("open-whiteboard");
-      return;
-    }
-
-    // The water bucket: walk up, press E, play ping pong
-    if (this.bucketZone) {
-      const distance = Phaser.Math.Distance.Between(
-        this.player.sprite.x,
-        this.player.sprite.y,
-        this.bucketZone.x,
-        this.bucketZone.y,
-      );
-      const atBucket = distance < BUCKET_INTERACT_DISTANCE;
-
-      this.bucketPrompt?.setVisible(atBucket && !this.pingPongOpen);
-      if (atBucket) this.bucketPrompt?.setPosition(this.bucketZone.x, this.bucketZone.y - 36);
-
-      if (atBucket && interactPressed) {
-        this.bucketPrompt?.setVisible(false);
-        gameEvents.emit("open-pingpong");
-        return;
-      }
-    }
-
-    // The project board: walk up, press E, read what the team is doing
-    if (this.projectZone) {
-      const distance = Phaser.Math.Distance.Between(
-        this.player.sprite.x,
-        this.player.sprite.y,
-        this.projectZone.x,
-        this.projectZone.y,
-      );
-      const atProject = distance < BOSS_INTERACT_DISTANCE;
-      this.projectPrompt?.setVisible(atProject && !this.projectOpen);
-      if (atProject) this.projectPrompt?.setPosition(this.projectZone.x, this.projectZone.y - 8);
-      if (atProject && interactPressed) {
-        this.projectPrompt?.setVisible(false);
-        gameEvents.emit("open-project-board");
-        return;
-      }
-    }
-
-    // The help desk board: walk up, press E, read the support queue
-    if (this.deskZone) {
-      const distance = Phaser.Math.Distance.Between(
-        this.player.sprite.x,
-        this.player.sprite.y,
-        this.deskZone.x,
-        this.deskZone.y,
-      );
-      const atDesk = distance < BOSS_INTERACT_DISTANCE;
-      this.deskPrompt?.setVisible(atDesk && !this.deskOpen);
-      if (atDesk) this.deskPrompt?.setPosition(this.deskZone.x, this.deskZone.y - 8);
-      if (atDesk && interactPressed) {
-        this.deskPrompt?.setVisible(false);
-        gameEvents.emit("open-help-desk");
-        return;
-      }
-    }
-
-    // The arcade cabinet: walk up, press E, pick a game
-    if (this.arcadeZone) {
-      const distance = Phaser.Math.Distance.Between(
-        this.player.sprite.x,
-        this.player.sprite.y,
-        this.arcadeZone.x,
-        this.arcadeZone.y,
-      );
-      const atArcade = distance < CAULDRON_INTERACT_DISTANCE;
-      this.arcadePrompt?.setVisible(atArcade && !this.arcadeOpen);
-      if (atArcade) this.arcadePrompt?.setPosition(this.arcadeZone.x, this.arcadeZone.y - 44);
-      if (atArcade && interactPressed) {
-        this.arcadePrompt?.setVisible(false);
-        gameEvents.emit("open-arcade");
-        return;
-      }
-    }
-
-    // The cauldron: walk up, press E, play pinball
-    if (this.cauldronZone) {
-      const distance = Phaser.Math.Distance.Between(
-        this.player.sprite.x,
-        this.player.sprite.y,
-        this.cauldronZone.x,
-        this.cauldronZone.y,
-      );
-      const atCauldron = distance < CAULDRON_INTERACT_DISTANCE;
-
-      this.cauldronPrompt?.setVisible(atCauldron && !this.pinballOpen);
-      if (atCauldron) {
-        this.cauldronPrompt?.setPosition(this.cauldronZone.x, this.cauldronZone.y - 44);
-      }
-
-      if (atCauldron && interactPressed) {
-        this.cauldronPrompt?.setVisible(false);
-        gameEvents.emit("open-pinball");
-        return;
-      }
-    }
+    // Everything you walk up to and press E at: the boards, the games,
+    // the support queue. One loop over config/fixtures.ts, which is where
+    // the distances, the prompts and the panels each one opens live.
+    if (this.fixtures.update(this.player.sprite, interactPressed)) return;
 
     // Boss terminal interaction (only when no worker is nearby)
     if (!this.interactionManager.nearestWorker && this.terminalZone && this.promptText) {

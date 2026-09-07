@@ -1,23 +1,10 @@
 import * as Phaser from "phaser";
-import { Player } from "../entities/Player";
-import { TapNavigator, isTap } from "../systems/TapNavigator";
-import { GamepadInput } from "../systems/GamepadInput";
-import { CameraController } from "../systems/CameraController";
-import { attachPresence, type ScenePresence } from "../systems/scene-presence";
-import { dialogOpen } from "@/lib/gamepad/dialogs";
-import { Pathfinder } from "../utils/Pathfinder";
-import { ensureAnims, ensureSheet } from "../utils/sheets";
-import { buildSpriteFrames } from "../utils/MapHelpers";
-import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED, WORKER_SPRITES } from "../config/animations";
-import { PF_PADDING } from "@/lib/constants";
-import { DoorLatch, type DoorZone } from "@/lib/doors";
-import { ArrivalWalk } from "@/lib/arrival";
+import { OutdoorScene, type OutdoorPlace, type Standing } from "./OutdoorScene";
+import type { DoorZone } from "@/lib/doors";
 import { LOBBY, floorUrl } from "@/lib/world/floors";
-import { rememberedCharacter } from "@/lib/characters/choice";
 import { OUTSIDE_SPOT, type Whereabouts } from "@/lib/world/residents";
 import { createLogger } from "@/lib/logger";
-import { gameEvents } from "@/lib/events";
-import { WORLD_PATH, showAddress } from "@/lib/world/paths";
+import { WORLD_PATH } from "@/lib/world/paths";
 import {
   BUILDINGS,
   WORLD_HEIGHT,
@@ -28,17 +15,7 @@ import {
 } from "@/lib/world/tenants";
 import { SCENERY, WORLD_SIGNS, groundTiles, worldSolids } from "@/lib/world/scenery";
 import { asset } from "@/lib/assets";
-import {
-  BOAT_KEY,
-  addSolid,
-  cutOutdoorFrames,
-  layGround,
-  placeProp,
-  placeSign,
-  preloadOutdoors,
-} from "./outdoors";
-
-const log = createLogger("World");
+import { BOAT_KEY, addSolid, layGround, placeBuilding, placeProp, placeSign } from "./outdoors";
 
 /** Where each building's name goes: the blank sign the picture leaves, from the frame's top. */
 const SIGN_Y: Record<string, number> = {
@@ -52,6 +29,8 @@ const SIGN_Y: Record<string, number> = {
 };
 /** A door zone target that starts a scene rather than loading a page. */
 const CAMPUS_TARGET = "campus:";
+/** How far apart residents stand when the server gave no spot for them. */
+const OUTSIDE_SPACING = 40;
 
 export interface WorldSceneData {
   /** The tenant or campus whose building the person just walked out of, if any. */
@@ -69,31 +48,17 @@ export interface WorldSceneData {
  * conversation, so the boundary between businesses is the room boundary.
  * Walking through a campus gate goes onto its yard, another scene here.
  *
- * Deliberately a lobby and not a place: no presence, no chat, nothing to do
- * but choose a door.
+ * Everything it has in common with a campus — walking, presence, doorways,
+ * the camera, the residents taking the air — is in `OutdoorScene`.
  */
-export class WorldScene extends Phaser.Scene {
-  private player!: Player;
-  private gamepad!: GamepadInput;
-  private navigator = new TapNavigator();
-  private latch = new DoorLatch();
-  private zones: DoorZone[] = [];
-  private pathfinder: Pathfinder | null = null;
-  private leaving = false;
-  /** The steps taken on coming out of a door, before the keys are the player's. */
-  private arrival = new ArrivalWalk();
-  /** Residents currently out on the green, by id. */
-  private residents = new Map<string, Phaser.GameObjects.GameObject[]>();
-  /** The other people out here. */
-  private presence: ScenePresence | null = null;
-  private cameraController!: CameraController;
+export class WorldScene extends OutdoorScene<WorldSceneData> {
+  protected readonly log = createLogger("World");
 
   constructor() {
     super({ key: "WorldScene" });
   }
 
-  preload() {
-    preloadOutdoors(this);
+  protected loadArt() {
     this.load.image("world-pond", asset("/sprites/world/pond_288x192.png"));
     this.load.image("van", asset("/sprites/world/van_96x144.png"));
     this.load.image("world-castle", asset("/sprites/world/building_castle.png"));
@@ -102,169 +67,52 @@ export class WorldScene extends Phaser.Scene {
     this.load.image("world-blocks", asset("/sprites/world/building_blocks.png"));
     this.load.image("world-campus", asset("/sprites/world/building_campus.png"));
     this.load.image("world-lab", asset("/sprites/world/building_lab.png"));
-    // Normally already loaded by the office; guarded for a direct arrival.
-    if (!this.textures.exists(SPRITE_KEY)) this.load.image(SPRITE_KEY, asset(SPRITE_PATH));
   }
 
-  create(data: WorldSceneData) {
-    this.leaving = false;
-    this.latch.reset();
-    // A walk that was still under way when a door fired must not resume here.
-    this.navigator.cancel();
-    // Reached in-page from a lobby: say so in the bar, so a reload comes back here.
-    showAddress(WORLD_PATH);
-    if (!this.anims.exists("idle-down")) buildSpriteFrames(this, SPRITE_KEY);
-    cutOutdoorFrames(this);
-
-    const ground = groundTiles();
-    layGround(this, ground);
-    const walls = this.physics.add.staticGroup();
-    this.zones = BUILDINGS.map((b) => this.placeBuilding(b, walls));
+  protected layOut(data: WorldSceneData, walls: Phaser.Physics.Arcade.StaticGroup): OutdoorPlace {
+    layGround(this, groundTiles());
+    const doors = BUILDINGS.map((b) => this.putUp(b, walls));
     for (const prop of SCENERY) placeProp(this, prop, walls);
     for (const sign of WORLD_SIGNS) placeSign(this, sign, walls);
     // The buildings and props are already walls of their own; the sea is
     // solid too, so nobody walks off the dock.
     const solids = worldSolids();
     for (const water of solids.slice(BUILDINGS.length + SCENERY.length)) addSolid(walls, water);
-    this.pathfinder = new Pathfinder(WORLD_WIDTH, WORLD_HEIGHT, solids, PF_PADDING);
 
     const at = spawnFor(data?.from);
     const left = buildingFrom(data?.from);
-    this.player = new Player(this, at.x, at.y, left?.arrive ?? "down");
-    // Out of a building's door: a few steps down the path before the keys
-    // are yours, so the key held through the door does not walk you back in.
-    // Off the ferry: up the dock, away from the gangway.
-    this.arrival.reset();
-    if (left) this.arrival.begin(left.arrive ?? "down", 96);
-    this.player.sprite.setCollideWorldBounds(true);
-    this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-    this.physics.add.collider(this.player.sprite, walls);
+    this.log.info(`outside, arriving from ${data?.from ?? "the road"}`);
 
-    // Look like yourself out here too.
-    const remembered = rememberedCharacter();
-    if (remembered && remembered.key !== SPRITE_KEY) {
-      ensureSheet(this, remembered.key, remembered.path, (ok) => {
-        if (ok) this.player.wearSprite(this, remembered.key);
-      });
-    }
-
-    // The rooms' camera: their zoom to start, the wheel to zoom in and
-    // out, a drag to look around — but never so far out that it looks past
-    // the world's edge.
-    this.cameraController = new CameraController(
-      this,
-      this.player.sprite,
-      WORLD_WIDTH,
-      WORLD_HEIGHT,
-      {
+    return {
+      width: WORLD_WIDTH,
+      height: WORLD_HEIGHT,
+      // Off a building's path, or up the dock away from the ferry's gangway.
+      spawn: { x: at.x, y: at.y, facing: left?.arrive ?? "down" },
+      // Only out of a door: arriving by the road, the keys are yours at once.
+      walkIn: Boolean(left),
+      doors,
+      solids,
+      label: "World map",
+      path: WORLD_PATH,
+      camera: {
         coverMap: true,
         // The map opens where it was left. Every building is a page of its
         // own, so an errand indoors used to hand the map back at its fitted
         // zoom however far out you had chosen to stand.
         remembersZoom: true,
       },
-    );
-    this.cameraController.init();
-
-    this.gamepad = new GamepadInput(this);
-    this.initTapToWalk();
-    gameEvents.emit("place-changed", "World map");
-
-    // Everyone else on the map, and the socket told we are on it now.
-    this.presence?.detach();
-    this.presence = attachPresence(
-      this,
-      { x: at.x, y: at.y, facing: left?.arrive ?? "down" },
-      (text) => this.player?.say(text),
-    );
-    // Stopped for another scene, or taken down with the game: either way
-    // the listeners go, or a dead scene keeps trying to draw people.
-    // A new look chosen out here is put on at once, as it is indoors.
-    const unsubLook = gameEvents.on("player-sprite-chosen", (spriteKey, spritePath) => {
-      ensureSheet(this, spriteKey, spritePath, (ok) => {
-        if (ok && this.scene.isActive()) this.player.wearSprite(this, spriteKey);
-      });
-    });
-    const letGo = () => {
-      unsubLook();
-      this.presence?.detach();
-      this.presence = null;
     };
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, letGo);
-    this.events.once(Phaser.Scenes.Events.DESTROY, letGo);
-    log.info(`outside, arriving from ${data?.from ?? "the road"}`);
-
-    // Anyone taking the air. Outside has no room, so ask where everyone is.
-    void this.showResidents();
-    this.time.addEvent({ delay: 10_000, loop: true, callback: () => void this.showResidents() });
   }
 
-  private async showResidents() {
-    let outside: Whereabouts[] = [];
-    try {
-      const res = await fetch("/api/residents");
-      const body = (await res.json()) as { residents?: Whereabouts[] };
-      outside = (body.residents ?? []).filter((r) => r.place === "outside");
-    } catch {
-      return;
-    }
-    if (!this.scene.isActive()) return;
-
-    for (const [id, parts] of this.residents) {
-      if (outside.some((r) => r.id === id)) continue;
-      for (const part of parts) part.destroy();
-      this.residents.delete(id);
-    }
-    outside.forEach((resident, i) => {
-      if (this.residents.has(resident.id)) return;
-      const path = WORKER_SPRITES.find((w) => w.key === resident.spriteKey)?.path;
-      if (!path) return;
-      this.residents.set(resident.id, []);
-      ensureSheet(this, resident.spriteKey, path, (ok) => {
-        if (!ok || !this.scene.isActive() || !this.residents.has(resident.id)) return;
-        ensureAnims(this, resident.spriteKey);
-        // Where the server put them; by the fountain when it did not say.
-        const spot = resident.spot ?? { x: OUTSIDE_SPOT.x + i * 40, y: OUTSIDE_SPOT.y };
-        const sprite = this.add.sprite(spot.x, spot.y - 43, resident.spriteKey, 0).setDepth(spot.y);
-        sprite.play(`${resident.spriteKey}:idle-down`);
-        const tag = this.add
-          .text(spot.x, spot.y + 6, resident.name, {
-            fontFamily: '"Press Start 2P", monospace',
-            fontSize: "8px",
-            color: "#ffe9a8",
-            backgroundColor: "rgba(0,0,0,0.7)",
-            padding: { x: 4, y: 2 },
-          })
-          .setOrigin(0.5, 0)
-          .setDepth(spot.y + 1)
-          .setResolution(2);
-        this.residents.set(resident.id, [sprite, tag]);
-      });
+  /** A building's picture and name, and the doorway into it. */
+  private putUp(b: Building, walls: Phaser.Physics.Arcade.StaticGroup): DoorZone {
+    // The same size as a campus building's, so the two maps read alike —
+    // except the ferry's board, which is small, and so is its lettering.
+    placeBuilding(this, b, walls, {
+      text: b.org.name.toUpperCase(),
+      y: SIGN_Y[b.art],
+      size: b.art === BOAT_KEY ? "8px" : "18px",
     });
-  }
-
-  private placeBuilding(b: Building, walls: Phaser.Physics.Arcade.StaticGroup): DoorZone {
-    const foot = b.frame.y + b.frame.height;
-    this.add.image(b.frame.x, b.frame.y, b.art).setOrigin(0, 0).setDepth(foot);
-    addSolid(walls, b.solid);
-
-    // The name, on the sign the picture leaves blank: the same size as a
-    // campus building's, so the two maps read alike. The text carries its
-    // own strip of the band's colour, so a long name stays readable past
-    // the band's ends. The ferry's board is small, and so is its lettering.
-    this.add
-      .text(b.frame.x + b.frame.width / 2, b.frame.y + SIGN_Y[b.art], b.org.name.toUpperCase(), {
-        fontFamily: '"Press Start 2P", monospace',
-        fontSize: b.art === BOAT_KEY ? "8px" : "18px",
-        color: "#1b1b2a",
-        align: "center",
-        backgroundColor: "#e0b870",
-        padding: { x: 6, y: 3 },
-      })
-      .setOrigin(0.5, 0.5)
-      .setDepth(foot + 1)
-      .setResolution(2);
-
     const target =
       b.entrance.kind === "lobby"
         ? floorUrl(b.entrance.tenant, LOBBY, "door")
@@ -272,96 +120,22 @@ export class WorldScene extends Phaser.Scene {
     return { name: b.org.slug, target, ...b.door, facing: "up" };
   }
 
-  private initTapToWalk() {
-    let down: { x: number; y: number; at: number } | null = null;
-    this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
-      down = { x: p.x, y: p.y, at: p.downTime };
-    });
-    this.input.on("pointerup", (p: Phaser.Input.Pointer) => {
-      const start = down;
-      down = null;
-      // A pinch is two fingers Phaser reports as ordinary pointers, and one
-      // of them barely moves — which is a tap, and would send the character
-      // walking off while somebody is only trying to look closer.
-      if (this.cameraController.pinching) return;
-      if (!start || !isTap(start, { x: p.x, y: p.y, at: p.upTime })) return;
-      const world = p.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
-      const from = this.feet();
-      // Around the furniture if we can; straight at it if the spot is boxed in.
-      const path = this.pathfinder?.findPath(from.x, from.y, world.x, world.y);
-      this.navigator.follow(path?.length ? path : [{ x: world.x, y: world.y }]);
-    });
+  protected standing(all: Whereabouts[]): Standing[] {
+    return all
+      .filter((r) => r.place === "outside")
+      .map((resident, i) => ({
+        resident,
+        // Where the server put them; by the fountain when it did not say.
+        at: resident.spot ?? {
+          x: OUTSIDE_SPOT.x + i * OUTSIDE_SPACING,
+          y: OUTSIDE_SPOT.y,
+        },
+      }));
   }
 
-  private feet() {
-    const body = this.player.sprite.body as Phaser.Physics.Arcade.Body;
-    return { x: body.center.x, y: body.center.y };
-  }
-
-  /** The pad's push on the character; nothing while a dialog has the screen. */
-  private padVelocity() {
-    return dialogOpen() ? { vx: 0, vy: 0 } : this.gamepad.velocity(this.player.speed);
-  }
-
-  update(_time: number, delta: number) {
-    if (this.leaving) return;
-    // Read the pad every frame, or it never reports anything out here.
-    this.gamepad.poll();
-    this.presence?.update(delta);
-    if (this.arrival.holdsInput) {
-      if (this.arrival.walking) {
-        this.player.drive(this.arrival.step(delta, MOVE_SPEED));
-      } else {
-        const wanted = this.player.inputVelocity(this.padVelocity());
-        this.arrival.release(wanted.vx !== 0 || wanted.vy !== 0);
-        this.player.drive(this.arrival.allow(wanted));
-        for (const zone of this.latch.step(this.zones, this.feet())) this.enter(zone);
-      }
-      this.player.sprite.setDepth((this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom);
-      this.reportPosition();
-      return;
-    }
-    const padVelocity = this.padVelocity();
-    const steering = this.navigator.active
-      ? this.navigator.step(this.feet(), this.player.speed)
-      : null;
-    if (
-      this.navigator.active &&
-      (this.player.hasKeyboardInput() || padVelocity.vx || padVelocity.vy)
-    ) {
-      this.navigator.cancel();
-    }
-    this.player.update(steering ?? padVelocity);
-    // Sort against the props by where the feet are.
-    this.player.sprite.setDepth((this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom);
-    this.reportPosition();
-    // Walking after a look around brings the camera back to you.
-    if (!this.cameraController.cameraFollowing && this.player.isMoving()) {
-      this.cameraController.resumeCameraFollow();
-    }
-
-    for (const zone of this.latch.step(this.zones, this.feet())) this.enter(zone);
-  }
-
-  /** Where we are, for the room socket to pass on to everyone else out here. */
-  private reportPosition() {
-    gameEvents.emit("player-moved", {
-      x: this.player.sprite.x,
-      y: this.player.sprite.y,
-      facing: this.player.direction,
-      moving: this.player.isMoving(),
-    });
-  }
-
-  /** Through a door: onto a campus here, or off to a lobby's page. */
-  private enter(zone: DoorZone) {
-    this.leaving = true;
-    this.player.update({ vx: 0, vy: 0 });
-    log.info(`entering ${zone.name}`);
-    if (zone.target.startsWith(CAMPUS_TARGET)) {
-      this.scene.start("CampusScene", { campus: zone.target.slice(CAMPUS_TARGET.length) });
-      return;
-    }
-    window.location.assign(zone.target);
+  protected goThrough(zone: DoorZone): boolean {
+    if (!zone.target.startsWith(CAMPUS_TARGET)) return false;
+    this.scene.start("CampusScene", { campus: zone.target.slice(CAMPUS_TARGET.length) });
+    return true;
   }
 }
