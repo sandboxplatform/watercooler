@@ -16,10 +16,20 @@
  * characters and eyeballing each one against the last is the same mistake with
  * more steps, so this counts it instead.
  *
- * It reports rather than refuses. Deciding what the cast's proportions should
- * be is the artist's call, and this only says whether a sheet matches the one
- * that has been chosen. Once every sheet agrees, STANDARD belongs in
- * `sheetFaults` and the check becomes a refusal like the rest.
+ * It reports rather than refuses, and it stays that way. Deciding what the
+ * cast's proportions should be is the artist's call, and this only says
+ * whether a sheet matches the one that has been chosen.
+ *
+ * Moving STANDARD into `sheetFaults` was the plan and is the wrong idea:
+ * that is a universal check with no notion of who is a person, so a height
+ * rule in there would refuse Bud and Michael — an egg and a chicken, both
+ * 42px, and both deliberately shorter. A check that needs an exemption list
+ * belongs where the list can live, which is here.
+ *
+ * Run it on a delivery *before* installing one. The generator has drifted
+ * twice, both times by the same amount in all 48 frames of every sheet in
+ * the batch: eight pixels, then four. The fix is four pixels of art, and
+ * finding out after a commit is how a cast ends up two heights.
  */
 
 import { readdirSync, readFileSync } from "fs";

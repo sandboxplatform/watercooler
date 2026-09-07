@@ -777,17 +777,26 @@ collision body the game derives from every frame — centred on x 24, at one
 scale on one baseline across all 48 slots. Feet on row 91 is the one number
 nothing may vary: a character a few pixels up floats.
 
-It was 72px until the cast began being redrawn, and eight pixels reads as one
-person being shorter than the people standing beside them. `pnpm check:sheets`
+It was 72px until the cast was redrawn, and eight pixels reads as one person
+being shorter than the people standing beside them. `pnpm check:sheets`
 measures it, because `sheetFaults` settles the _format_ — canvas, frames
 drawn, transparent background — and says nothing about the drawing inside the
-frame, which is how two short sheets passed every check and shipped. It
-reports rather than refuses: what proportions the cast has is the artist's
-call. Once every sheet agrees, `STANDARD` belongs in `sheetFaults` and the
-check becomes a refusal like the rest. Bud and Michael are exempt — an egg and
-a chicken are not held to a human height. **Row 1, column 18** (the first idle-down frame)
-is lifted straight out as the HUD portrait and gallery card, so make that one
-a clean front view.
+frame, which is how two short sheets passed every check and shipped. The
+generator has drifted twice now, both times by the same amount in every one
+of the 48 frames of every sheet in the batch, so **run it on a delivery
+before installing one**: the fix is four pixels of art, and finding out after
+a commit is how a cast ends up two heights.
+
+**It reports; it does not refuse, and it should stay that way.** Which
+proportions the cast has is the artist's call, and `sheetFaults` is a
+universal check with no notion of who is a person — Bud is 42px and Michael
+is 42px, an egg and a chicken, and a height rule in there would refuse them
+both. That was going to be promoted into `sheetFaults` once every sheet
+agreed; it should not be. The exemption list belongs with the report, which
+is where it is.
+
+**Row 1, column 18** (the first idle-down frame) is lifted straight out as
+the HUD portrait and gallery card, so make that one a clean front view.
 
 A sheet's grid is **measured, not assumed** — `sheetColumns` counts it off the
 image, and `makeAnims` takes that count, because Phaser numbers frames across
