@@ -90,15 +90,16 @@ CREATE TABLE IF NOT EXISTS seats (
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
-  room         TEXT NOT NULL,
-  task_id      TEXT NOT NULL,
-  seat_id      TEXT,
-  session_key  TEXT,
-  status       TEXT,
-  requested_by TEXT,
-  created_at   TEXT NOT NULL,
-  position     INTEGER NOT NULL,
-  data         TEXT NOT NULL,
+  room              TEXT NOT NULL,
+  task_id           TEXT NOT NULL,
+  seat_id           TEXT,
+  session_key       TEXT,
+  status            TEXT,
+  requested_by      TEXT,
+  requested_by_name TEXT,
+  created_at        TEXT NOT NULL,
+  position          INTEGER NOT NULL,
+  data              TEXT NOT NULL,
   PRIMARY KEY (room, task_id)
 );
 
@@ -206,6 +207,65 @@ CREATE TABLE IF NOT EXISTS accounts (
 );
 `;
 
+/** The columns a table actually has, for a migration that must not assume. */
+function columnNames(db: DatabaseSync, table: string): Set<string> {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  return new Set(rows.map((row) => row.name));
+}
+
+/**
+ * Add a column only where it is missing.
+ *
+ * The checked form of what used to be `try { ALTER } catch {}`. That could
+ * not tell "the column is already there", which is the ordinary case, from a
+ * typo, a locked file or a disk that is full — every one of them came back
+ * as the same silence, and a database that failed to migrate went on being
+ * written to.
+ */
+function addColumn(db: DatabaseSync, table: string, column: string, definition: string) {
+  if (columnNames(db, table).has(column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  log.info(`added ${table}.${column}`);
+}
+
+interface Migration {
+  /** What it does, for the log and for reading the ladder. */
+  name: string;
+  up(db: DatabaseSync): void;
+}
+
+/**
+ * Every change to the shape of the database, in order.
+ *
+ * The index is the version a migration brings the database *to*:
+ * `MIGRATIONS[0]` takes it from 0 to 1. `PRAGMA user_version` records how
+ * far it has climbed, so each one runs exactly once and there is a place to
+ * put a change that is not simply another column — a rename, a backfill, an
+ * index that has to be rebuilt. There was nowhere for one of those before,
+ * because nothing recorded what shape a database was in.
+ *
+ * A migration may be run against a database that already has what it is
+ * adding: everything before the ladder existed sits at version 0 with the
+ * tables and, depending on its age, some of the columns. So the baseline
+ * asks before it adds. From version 2 on, the version is the answer and a
+ * migration can assume the one before it ran.
+ */
+const MIGRATIONS: readonly Migration[] = [
+  {
+    name: "baseline",
+    up: (db) => {
+      db.exec(SCHEMA);
+      // Two columns that arrived before the ladder did, so a database made
+      // by an older build has the tables without them.
+      addColumn(db, "rooms", "spend_usd", "REAL NOT NULL DEFAULT 0");
+      addColumn(db, "tasks", "requested_by_name", "TEXT");
+    },
+  },
+];
+
+/** The shape this build expects. */
+export const SCHEMA_VERSION = MIGRATIONS.length;
+
 interface DataRow {
   data: string;
 }
@@ -245,24 +305,74 @@ export class RoomStore {
   constructor(path: string) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
-    this.db.exec("PRAGMA journal_mode = WAL");
-    this.db.exec("PRAGMA foreign_keys = ON");
-    this.db.exec(SCHEMA);
-    this.migrate();
-    log.info(`opened ${path}`);
+    try {
+      this.db.exec("PRAGMA journal_mode = WAL");
+      this.db.exec("PRAGMA foreign_keys = ON");
+      this.migrate();
+    } catch (err) {
+      // An open handle on a database this build has refused to touch is
+      // worth nothing and holds the file, so let it go before saying why.
+      this.db.close();
+      throw err;
+    }
+    log.info(`opened ${path} at schema ${SCHEMA_VERSION}`);
   }
 
-  /** Additive migrations for databases created by an earlier version. */
+  /**
+   * Let the file go.
+   *
+   * The server never calls this — the store is one handle for the life of
+   * the process — but a test that opens a database on disk cannot delete it
+   * afterwards while something still holds it, which on Windows is an error
+   * rather than a nicety.
+   */
+  close() {
+    this.db.close();
+  }
+
+  private get version(): number {
+    const row = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
+    return row.user_version;
+  }
+
+  /**
+   * Walk the database up to the shape this build expects.
+   *
+   * Each migration runs in its own transaction with the version stamped
+   * inside it, so a database is either at the version before or the version
+   * after and never halfway between. A migration that throws takes the
+   * server down with it, which is the point: the alternative is going on to
+   * write rows into a shape that was never finished.
+   */
   private migrate() {
-    for (const statement of [
-      "ALTER TABLE rooms ADD COLUMN spend_usd REAL NOT NULL DEFAULT 0",
-      "ALTER TABLE tasks ADD COLUMN requested_by_name TEXT",
-    ]) {
+    const from = this.version;
+
+    if (from > SCHEMA_VERSION) {
+      // Rolling a build back is a fair thing to do in an emergency, but this
+      // one cannot say whether the newer shape is one it can still write to,
+      // and guessing wrong corrupts a room quietly. So it refuses and says
+      // what it found: roll forward, or restore the database from before.
+      throw new Error(
+        `This database is at schema ${from} and this build only knows ${SCHEMA_VERSION}. ` +
+          `Run a newer build, or restore a backup taken at ${SCHEMA_VERSION} or below.`,
+      );
+    }
+
+    for (let version = from; version < SCHEMA_VERSION; version += 1) {
+      const migration = MIGRATIONS[version];
+      this.db.exec("BEGIN");
       try {
-        this.db.exec(statement);
-      } catch {
-        // Already present, which is the common case
+        migration.up(this.db);
+        // Not a parameter: PRAGMA takes none. The value is an array index.
+        this.db.exec(`PRAGMA user_version = ${version + 1}`);
+        this.db.exec("COMMIT");
+      } catch (err) {
+        this.db.exec("ROLLBACK");
+        throw new Error(
+          `Migration ${version + 1} (${migration.name}) failed: ${(err as Error).message}`,
+        );
       }
+      log.info(`migrated to schema ${version + 1}: ${migration.name}`);
     }
   }
 
