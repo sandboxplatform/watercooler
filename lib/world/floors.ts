@@ -22,6 +22,7 @@ import { floorRoomSlug, parseFloorRoomSlug, parseRoomPath } from "../rooms";
 import type { AccessIdentity } from "../identity";
 import {
   ORGANISATIONS,
+  furnishedLobby,
   hasFloors,
   hasOperationsFloor,
   operationsBoards,
@@ -182,7 +183,12 @@ export function mapFileFor(address: Address | null): string {
     return operationsMapFile(operationsBoards(address.tenant), operationsRoomCount(address.tenant));
   }
   if (!hasFloors(address.tenant)) return `/maps/room-${address.tenant.slug}.json`;
-  return address.tenant.game ? `/maps/lobby-${address.tenant.slug}.json` : "/maps/lobby.json";
+  // Furnished lobbies are particular to their building; the empty ones all
+  // share one map. `furnishedLobby` is also what build:map writes from, so
+  // the file named here is a file that exists.
+  return furnishedLobby(address.tenant)
+    ? `/maps/lobby-${address.tenant.slug}.json`
+    : "/maps/lobby.json";
 }
 
 /** Whether a slug names an organisation someone can call home. */

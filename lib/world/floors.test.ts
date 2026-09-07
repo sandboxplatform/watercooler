@@ -19,9 +19,21 @@ import {
   landsOutside,
   OUTSIDE_PATH,
   operationsMapFile,
+  LOBBY,
+  type Floor,
 } from "./floors";
-import { TENANTS, hasOperationsFloor, operationsBoards, operationsRoomCount } from "./tenants";
+import {
+  TENANTS,
+  furnishedLobby,
+  hasFloors,
+  hasOperationsFloor,
+  lobbyFurnishing,
+  operationsBoards,
+  operationsRoomCount,
+} from "./tenants";
 import { roomFromLocation } from "../rooms";
+import { existsSync } from "fs";
+import { join } from "path";
 
 const castle = TENANTS[0];
 const people = [
@@ -295,5 +307,78 @@ describe("landing outside", () => {
     expect(mayEnterRoom(roomFromLocation({ pathname: OUTSIDE_PATH, search: "" }), "visitor")).toBe(
       true,
     );
+  });
+});
+
+describe("every room's map is a map that exists", () => {
+  /**
+   * Reads `public/maps`, which is generated and committed, so this is the
+   * one check that catches a building added without `pnpm build:map` — and
+   * the one that would have caught a lobby declaring a game while the build
+   * script's hand-written list knew nothing about it.
+   *
+   * Note it reads files at runtime, so `pnpm test:changed` will not select
+   * it from a change to the tenant list alone. Run `pnpm test` after adding
+   * a building.
+   */
+  const drawn = (path: string) => existsSync(join(process.cwd(), "public", path));
+
+  /** Every room a person can stand in: each lobby, and the floors above it. */
+  const everywhere = TENANTS.flatMap((tenant) => {
+    const floors: Floor[] = [LOBBY];
+    if (hasFloors(tenant)) {
+      floors.push(PEOPLE_FLOOR, AGENTS_FLOOR);
+      if (hasOperationsFloor(tenant)) floors.push(OPERATIONS_FLOOR);
+    }
+    return floors.map((floor) => ({ tenant, floor }));
+  });
+
+  it("covers every tenant", () => {
+    // A guard on the guard: an empty list would pass every assertion below.
+    expect(everywhere.length).toBeGreaterThanOrEqual(TENANTS.length);
+  });
+
+  it.each(everywhere)("draws $tenant.slug $floor.kind from a generated map", (address) => {
+    const file = mapFileFor(address);
+    expect(drawn(file), `${address.tenant.slug}: ${file}`).toBe(true);
+  });
+
+  it("draws the room with no address from one too", () => {
+    expect(drawn(mapFileFor(null))).toBe(true);
+  });
+});
+
+describe("how a lobby is furnished", () => {
+  it("gives a furnished lobby its own map and the empty ones one between them", () => {
+    const furnished = TENANTS.filter((t) => hasFloors(t) && furnishedLobby(t));
+    const empty = TENANTS.filter((t) => hasFloors(t) && !furnishedLobby(t));
+
+    expect(furnished.map((t) => t.slug)).toEqual([
+      "castle-atlantic",
+      "sandbox-erp",
+      "apeiron-media",
+    ]);
+    for (const tenant of furnished) {
+      expect(mapFileFor({ tenant, floor: LOBBY })).toBe(`/maps/lobby-${tenant.slug}.json`);
+    }
+    for (const tenant of empty) {
+      expect(mapFileFor({ tenant, floor: LOBBY }), tenant.slug).toBe("/maps/lobby.json");
+    }
+  });
+
+  it("carries Sandbox ERP's arcade cabinet and help desk, which used to live in the build script", () => {
+    const erp = TENANTS.find((t) => t.slug === "sandbox-erp")!;
+    expect(lobbyFurnishing(erp)).toEqual({
+      game: "pinball",
+      also: ["arcade"],
+      helpDesk: true,
+    });
+  });
+
+  it("counts a lobby furnished by anything in it, not only by a game", () => {
+    expect(furnishedLobby({ slug: "x", org: "x", name: "X" })).toBe(false);
+    expect(furnishedLobby({ slug: "x", org: "x", name: "X", game: "pong" })).toBe(true);
+    expect(furnishedLobby({ slug: "x", org: "x", name: "X", helpDesk: true })).toBe(true);
+    expect(furnishedLobby({ slug: "x", org: "x", name: "X", also: ["arcade"] })).toBe(true);
   });
 });

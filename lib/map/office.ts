@@ -196,7 +196,7 @@ export interface OfficeOptions {
   /** The game in the top right corner. */
   game?: Game;
   /** Any more games, beside the first. */
-  also?: Game[];
+  also?: readonly Game[];
   /** A staffed help desk out on the floor. */
   helpDesk?: boolean;
 }

@@ -16,7 +16,7 @@
  * Shared by the scenes and the HUD, so nothing here touches Phaser.
  */
 
-import type { Game } from "../map/office";
+import type { Game, OfficeOptions } from "../map/office";
 
 export type OrgStyle = "castle" | "office" | "supply" | "blocks" | "campus" | "lab" | "irish";
 
@@ -78,6 +78,18 @@ export interface Tenant {
   /** The game in the lobby's corner, if it has one. */
   game?: Game;
   /**
+   * Any more games, beside the one in the corner. Sandbox ERP runs an
+   * arcade cabinet alongside its pinball machine.
+   */
+  also?: readonly Game[];
+  /**
+   * A staffed help desk counter out on the lobby floor.
+   *
+   * Only Sandbox ERP's has one, and Doc works it. Not the support-queue
+   * board of the same name, which hangs upstairs — see `operations`.
+   */
+  helpDesk?: boolean;
+  /**
    * The boards on the wall of the building's Operations floor, the third
    * one above the people and the agents.
    *
@@ -111,6 +123,8 @@ export const TENANTS: readonly Tenant[] = [
   }),
   lobby("sandbox-erp", "sandbox-erp", {
     game: "pinball",
+    also: ["arcade"],
+    helpDesk: true,
     operations: ["trello", "zoho"],
     projects: 5,
   }),
@@ -172,6 +186,31 @@ export function hasFloors(tenant: Tenant): boolean {
  * warehouse has no floors at all, and a lobby only gets a third floor by
  * naming what goes on its wall.
  */
+/**
+ * How a building's lobby is furnished, as `buildOfficeSpec` wants it.
+ *
+ * The one place the answer lives. `pnpm build:map` builds each lobby from
+ * this and `mapFileFor` names the file from it, so a building cannot end
+ * up asking for a map that was generated with different furniture — or, as
+ * happened, never generated at all: the game was declared here and the
+ * lobby was hand-listed in the build script, and the two only agreed
+ * because somebody remembered both.
+ */
+export function lobbyFurnishing(tenant: Tenant): OfficeOptions {
+  return { game: tenant.game, also: tenant.also, helpDesk: tenant.helpDesk };
+}
+
+/**
+ * Whether a lobby is furnished at all, and so needs a map of its own.
+ *
+ * An unfurnished one is every empty lobby in the world and they share
+ * `lobby.json`; anything standing in a corner makes it particular to its
+ * building.
+ */
+export function furnishedLobby(tenant: Tenant): boolean {
+  return Boolean(tenant.game || tenant.also?.length || tenant.helpDesk);
+}
+
 export function operationsBoards(tenant: Tenant | null | undefined): readonly BoardKind[] {
   if (!tenant || !hasFloors(tenant)) return [];
   return tenant.operations ?? [];

@@ -17,6 +17,9 @@ import { buildFloorSpec } from "../lib/map/floor";
 import { buildGarageSpec, buildStoreSpec, buildWarehouseSpec } from "../lib/map/premises";
 import {
   TENANTS,
+  furnishedLobby,
+  hasFloors,
+  lobbyFurnishing,
   operationsBoards,
   operationsRoomCount,
   storeOf,
@@ -58,6 +61,25 @@ const premises = TENANTS.filter((t) => t.kind && t.kind !== "office").map((t) =>
 });
 
 /**
+ * One lobby per building that furnishes it — a game in the corner, a help
+ * desk out on the floor — built from what the tenant declares.
+ *
+ * Derived rather than listed, like everything else here. It was a literal
+ * list of three, each hand-wired with its own `{ game, also, helpDesk }`,
+ * while `mapFileFor` decided the file name from the tenant: declaring a
+ * game and forgetting this list gave a building a map that was never
+ * written, and the furniture itself lived in a build script where nothing
+ * else could see it. `floors.test.ts` now holds every tenant's map to
+ * existing, which is the check that was missing.
+ *
+ * An unfurnished lobby is not here: they all share lobby.json below.
+ */
+const lobbies = TENANTS.filter((t) => hasFloors(t) && furnishedLobby(t)).map((t) => {
+  const options = lobbyFurnishing(t);
+  return [`lobby-${t.slug}.json`, (src: SourceMap) => buildOfficeSpec(src, options)] as const;
+});
+
+/**
  * One Operations floor per distinct shape actually in use — the boards on the
  * wall and the number of rooms off the corridor. Two buildings running the
  * same boards with the same number of projects share a map; change either and
@@ -80,15 +102,10 @@ const operationsFloors = [
 
 for (const [file, build] of [
   ["office3.json", (src: SourceMap) => buildOfficeSpec(src)],
+  // Every lobby nobody has put anything in, which is most of them.
   ["lobby.json", (src: SourceMap) => buildOfficeSpec(src)],
-  ["lobby-castle-atlantic.json", (src: SourceMap) => buildOfficeSpec(src, { game: "pong" })],
-  // The island's house: Castle Atlantic's layout, ping pong table and all.
-  ["lobby-apeiron-media.json", (src: SourceMap) => buildOfficeSpec(src, { game: "pong" })],
-  // The only lobby with a staffed help desk: Doc works this one.
-  [
-    "lobby-sandbox-erp.json",
-    (src: SourceMap) => buildOfficeSpec(src, { game: "pinball", also: ["arcade"], helpDesk: true }),
-  ],
+  // And one apiece for the buildings that have, off TENANTS.
+  ...lobbies,
   ["floor.json", buildFloorSpec],
   // An Operations floor per set of boards actually hung anywhere: the same
   // room each time, with those boards on the wall. Named by the boards
