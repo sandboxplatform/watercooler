@@ -65,8 +65,19 @@ export class PresenceHub {
     return humans;
   }
 
+  /**
+   * Whether the room is full, which is a question about people.
+   *
+   * The cap counts humans, exactly as `count` does. It used to count
+   * everybody in the hub, so the residents standing about in a room each
+   * took one of its four places — and a lobby with two of them in it had
+   * room for two visitors. That went unnoticed while a resident was
+   * indoors only; the moment the world map became their room as well,
+   * seven of them could be out there at once and the map filled up and
+   * refused the next arrival, resident or person.
+   */
   get isFull(): boolean {
-    return this.players.size >= this.capacity;
+    return this.count >= this.capacity;
   }
 
   join(id: string, request: JoinRequest): JoinResult {

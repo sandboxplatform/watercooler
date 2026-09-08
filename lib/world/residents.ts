@@ -13,7 +13,7 @@
  */
 
 import type { Facing } from "../presence-types";
-import { floorRoomSlug, WORLD_ROOM_SLUG } from "../rooms";
+import { campusRoomSlug, floorRoomSlug, WORLD_ROOM_SLUG } from "../rooms";
 import {
   BUILDINGS,
   WORLD_SPAWN,
@@ -280,13 +280,24 @@ export function hauntsOf(resident: Resident): Haunt[] {
   return haunts;
 }
 
-/** The presence room a resident is in at a haunt; none outside or on a yard. */
+/**
+ * The presence room a resident is in at a haunt — and every haunt has one.
+ *
+ * The world map and the campuses are presence rooms like any other, so
+ * somebody taking the air is an ordinary player out there: walked by the
+ * server, drawn from the roster, in one place for everyone watching. They
+ * used to be neither — outside and a yard had no room, and the scenes asked
+ * `/api/residents` where to *paint* them instead. Two ways of being
+ * somewhere is what let a resident appear at a spot rather than walk to it,
+ * and what left the fixing of an overlap to whichever browser drew it.
+ */
 export function roomForHaunt(resident: Resident, haunt: Haunt): string | null {
   if (haunt.kind === "office")
     return resident.home ? floorRoomSlug(resident.home, AGENTS_LEVEL) : null;
   if (haunt.kind === "station") return resident.station?.room ?? null;
   if (haunt.kind === "room") return haunt.room;
-  return null;
+  if (haunt.kind === "campus") return campusRoomSlug(haunt.campus);
+  return WORLD_ROOM_SLUG;
 }
 
 export interface Rect {
@@ -294,6 +305,33 @@ export interface Rect {
   y: number;
   width: number;
   height: number;
+}
+
+// ── Elbow room ──────────────────────────────────────────
+
+/**
+ * How much room a resident takes: nobody comes to rest this close to
+ * anybody else.
+ *
+ * Nothing collides a resident — they are drawn where the server says — so
+ * being kept apart is a matter of never being *sent* somewhere somebody
+ * already is. That is what this distance is for: every place one of them is
+ * walked to is checked against where the others are standing and where they
+ * are on their way to, and a place with somebody in it is passed over.
+ *
+ * A sheet is 48 wide and a head narrower than that, so a body's width of
+ * clearance reads as two people standing near each other rather than as one
+ * person with somebody else's hat on.
+ */
+export const PERSONAL_SPACE_PX = 40;
+
+/** Whether somewhere is far enough from everybody already standing about. */
+export function roomToStand(
+  at: { x: number; y: number },
+  taken: readonly { x: number; y: number }[],
+  space = PERSONAL_SPACE_PX,
+): boolean {
+  return taken.every((other) => Math.hypot(at.x - other.x, at.y - other.y) >= space);
 }
 
 /**
@@ -395,16 +433,22 @@ export const WANDER_AREAS: Record<Exclude<Area, "world">, Rect> = {
 };
 
 /**
- * Where a resident may wander at a haunt; nowhere at the desk, outside or on
- * a yard, and nowhere as an area on the world map — that one has spots
- * instead, since a patch of ground the size of the world would put a
- * wanderer in the sea.
+ * Where a resident may wander at a haunt; nowhere at the desk, nowhere
+ * outside — where they have a place of their own to stand — and nowhere as
+ * an area on the world map, since a patch of ground the size of the world
+ * would put a wanderer in the sea. That one has spots instead.
  *
- * A station's patch belongs to the post rather than to the kind of room, so
- * that one needs the resident: it is the floor around their own counter.
+ * A yard is small enough to be bounds, so somebody on a campus walks about
+ * it rather than standing where they came in. A station's patch belongs to
+ * the post rather than to the kind of room, so that one needs the resident:
+ * it is the floor around their own counter.
  */
 export function wanderArea(haunt: Haunt, resident?: Resident): Rect | null {
   if (haunt.kind === "station") return resident?.station?.paces ?? null;
+  if (haunt.kind === "campus") {
+    const yard = yardArea(haunt.campus);
+    return yard.width > 0 ? yard : null;
+  }
   if (haunt.kind !== "room" || haunt.area === "world") return null;
   return WANDER_AREAS[haunt.area];
 }
@@ -488,8 +532,14 @@ function placeInRow(index: number): { x: number; y: number } {
 }
 
 /**
- * Where a resident may stand on the world map, by the feet: their own
- * place by the fountain, or beside the path to their building's door.
+ * Where a resident may stand on the world map: their own place by the
+ * fountain, or beside the path to their building's door.
+ *
+ * The first is theirs alone — the row is walked by the position each holds
+ * in the cast — so however many of these two places are taken, a resident
+ * always has one nobody else wants. Only the second is shared, and it is
+ * shared by the people who work in the same building: Sara and Bud both
+ * chose the doorstep of Sandbox ERP and stood in each other.
  */
 export function outsideSpots(resident: Resident): { x: number; y: number }[] {
   const index = Math.max(
@@ -497,9 +547,43 @@ export function outsideSpots(resident: Resident): { x: number; y: number }[] {
     RESIDENTS.findIndex((r) => r.id === resident.id),
   );
   const spots = [placeInRow(index)];
-  const building = BUILDINGS.find((b) => b.org.slug === resident.org);
-  if (building) spots.push({ x: building.outside.x + 60, y: building.outside.y + 43 });
+  const doorstep = doorstepOf(resident);
+  // A step down the path from the door and off to one side of it: every
+  // door on the map has a lamp standing beside it, and the doorstep itself
+  // is where somebody coming out is put down.
+  if (doorstep) spots.push({ x: doorstep.x + 60, y: doorstep.y + 43 });
   return spots;
+}
+
+/**
+ * The ground in front of their own building's door: where a resident comes
+ * out onto the map, and where they walk back to before going in.
+ *
+ * Null for somebody whose organisation has no building on the map, who
+ * arrives and leaves at the spawn like anybody with no door of their own.
+ */
+export function doorstepOf(resident: Resident): { x: number; y: number } | null {
+  return BUILDINGS.find((b) => b.org.slug === resident.org)?.outside ?? null;
+}
+
+/**
+ * The way in and out of a haunt, for the one place that has a way planned
+ * across it: the world map, where a resident comes and goes by their own
+ * building's door.
+ *
+ * Both ends of a stay use it. Arriving, they are stood here and walk to
+ * wherever they are going, because that is where somebody coming out of a
+ * door would be; leaving, they walk back to it before they go, so they are
+ * last seen at the door rather than winking out on the grass.
+ *
+ * A yard has no such door, and deliberately: `routeAcross` is planned over
+ * the world's solids, and a campus's buildings are not in them — a walk from
+ * a campus gate to the paving would be a straight line through whatever
+ * stands between. A yard is entered the way a room is, and wandered inside
+ * its own paving once there.
+ */
+export function doorwayFor(resident: Resident, haunt: Haunt): { x: number; y: number } | null {
+  return haunt.kind === "outside" ? doorstepOf(resident) : null;
 }
 
 /** What the server tells the scenes about a resident right now. */
@@ -511,11 +595,11 @@ export interface Whereabouts {
   /** Null for someone who works nowhere, such as a wanderer. */
   org: string | null;
   place: PlaceKind;
-  /** The presence room they are in, for rooms and the office. */
+  /** The presence room they are in — every haunt has one, so this is where they are. */
   room: string | null;
   /** The yard they are on, for a campus. */
   campus: string | null;
-  /** Where they stand, by the feet, on the world map or a yard. */
+  /** Where they are standing in that room, in its own pixels. */
   spot: { x: number; y: number } | null;
   since: number;
 }

@@ -1,12 +1,11 @@
 import * as Phaser from "phaser";
-import { OutdoorScene, type OutdoorPlace, type Standing } from "./OutdoorScene";
+import { OutdoorScene, type OutdoorPlace } from "./OutdoorScene";
 import type { DoorZone } from "@/lib/doors";
 import { LOBBY, floorUrl } from "@/lib/world/floors";
 import { createLogger } from "@/lib/logger";
 import { campusPath } from "@/lib/world/paths";
 import { TILE, organisationFor } from "@/lib/world/tenants";
 import { campusFor, campusSpawnFor, type Campus, type CampusBuilding } from "@/lib/world/campus";
-import type { Whereabouts } from "@/lib/world/residents";
 import { groundGrid, propBody, signBody, tilesOf, waterBodies } from "@/lib/world/scenery";
 import { asset } from "@/lib/assets";
 import { addSolid, layGround, placeBoat, placeBuilding, placeProp, placeSign } from "./outdoors";
@@ -173,12 +172,6 @@ export class CampusScene extends OutdoorScene<CampusSceneData> {
       ...b.door,
       facing: b.side === "bottom" ? "up" : b.side,
     };
-  }
-
-  protected standing(all: Whereabouts[]): Standing[] {
-    return all
-      .filter((r) => r.place === "campus" && r.campus === this.campus.slug && r.spot)
-      .map((resident) => ({ resident, at: resident.spot! }));
   }
 
   protected goThrough(zone: DoorZone): boolean {

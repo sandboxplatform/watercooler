@@ -1026,23 +1026,28 @@ types/game.ts           shared game types
 The world map and a campus are the same place in every way but the drawing
 of it, and `scenes/OutdoorScene.ts` is that place: arriving out of a door
 and taking a few steps down the path, walking by keys or stick or tap,
-everyone else drawn from the room socket, the residents taking the air
-asked for from the server, the camera that follows and zooms, and a doorway
-that either starts another scene or loads a lobby's page.
+everyone else drawn from the room socket — the residents taking the air
+among them — the camera that follows and zooms, and a doorway that either
+starts another scene or loads a lobby's page.
 
-A place says four things for itself:
+A place says three things for itself:
 
 | Hook        | Answers                                                                                                       |
 | ----------- | ------------------------------------------------------------------------------------------------------------- |
 | `loadArt`   | The pictures it is drawn from, on top of the outdoor pack                                                     |
 | `layOut`    | Lay the ground and put up the buildings; hand back size, spawn, doors, entrances, solids, label, path, camera |
-| `standing`  | Which of the residents the server reported are here, and where to stand them                                  |
 | `goThrough` | A doorway it opens itself by starting a scene, rather than loading a page                                     |
 
+There used to be a fourth, `standing`, and a `/api/residents` poll behind
+it: outside was no room, so each browser asked the server where the
+residents were and painted them itself. It is gone with the route — the
+outdoors are presence rooms, so a resident out here arrives through the
+socket like anybody else.
+
 `scenes/outdoors.ts` is the drawing half — ground, water and its foam,
-props, signs, the ferry, a building with its name on the band the art
-leaves blank, a resident with their name under them — and both places call
-it. So a third outdoor place is a `layOut` and its art, not another scene.
+props, signs, the ferry, and a building with its name on the band the art
+leaves blank — and both places call it. So a third outdoor place is a
+`layOut` and its art, not another scene.
 
 **Out of doors the buildings are the menu.** This is a UI before it is a
 world: pointing at a building has to mean "take me there", so a tap
@@ -1096,11 +1101,45 @@ rather than its whole shape.
 
 Residents (`lib/world/residents.ts`) are the agents who live in the buildings;
 `ResidentSimulation` walks them through their **haunts** — desk, their
-organisation's rooms, its campus yard, outside — staying `DWELL_MS` at each. In
-a room they join that room's presence hub as a player, so everyone there sees
-them walk; outside they simply stand at a spot from `outsideSpots` — one of
-two, their place in the row in front of the fountain or the path to their own
-building's door.
+organisation's rooms, its campus yard, outside — staying `DWELL_MS` at each.
+
+**Every haunt is a presence room, the outdoors included.** They join that
+room's hub as a player, so everybody there sees the same person take the
+same steps. The map used to be the exception: outside was no room, and each
+browser asked `/api/residents` where they were and drew them itself, every
+ten seconds and never in between. That is what made a resident two things —
+somebody who walks indoors and a picture outside — and both of the faults
+that came of it were invisible to the server:
+
+- **Two of them in one place.** Sara and Bud both have the doorstep of
+  Sandbox ERP among their two places outside (`outsideSpots`: their own
+  spot in the row in front of the fountain, and the path to their own
+  building's door). Both were sent to it and neither asked whether it was
+  taken, so they stood inside each other for the length of a stay.
+- **Nobody walked.** They appeared at a spot, and appeared at another one
+  when the stay was up.
+
+Two rules replace them, both in the simulation because **nothing collides a
+resident**: they are only ever _sent_ somewhere nobody is standing and
+nobody is heading (`roomToStand`, `PERSONAL_SPACE_PX`), and a step that
+would end up inside somebody is not taken — they wait for the way to clear
+and go elsewhere if it stays blocked. A step that takes them _further_ from
+whoever they are too close to is always allowed, or anybody who ended up
+overlapping would be pinned there.
+
+**Out of doors they come and go by their own front door.** `doorwayFor`
+is the doorstep of their organisation's building: they are stood there on
+arriving and walk to wherever they are standing today, and when the stay is
+up they walk back to it before they go in. Only the world map has one — a
+route is planned over `worldSolids()`, and a campus's own buildings are not
+in them, so a yard is entered the way a room is and wandered inside its
+paving once there.
+
+Because a resident is a player in every room now, the hub's `isFull` counts
+humans rather than everybody in it, as `count` always did. It counted
+everybody, so the residents in a lobby each took one of its four places;
+that went unnoticed until seven of them could be on the world map at once
+and it started refusing arrivals.
 
 **Solid is the wrong question for where somebody stands.** Out of doors
 everything sorts by the bottom of its own picture, so a person whose feet are

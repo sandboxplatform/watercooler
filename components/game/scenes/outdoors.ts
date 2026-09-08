@@ -1,7 +1,6 @@
 import * as Phaser from "phaser";
 import { TILE, BOAT, type Rect } from "@/lib/world/tenants";
 import { asset } from "@/lib/assets";
-import { keepLegible } from "../systems/legible";
 import {
   PROPS,
   propBody,
@@ -203,39 +202,6 @@ export function placeBuilding(
     .setOrigin(0.5, 0.5)
     .setDepth(foot + 1)
     .setResolution(2);
-}
-
-/**
- * Somebody standing about out of doors, with their name under them.
- *
- * Not a presence player: a resident out here is not in any room, so the
- * scene asks the server where everyone is and stands them at the spot it
- * gives. Returns the pieces, for taking down again when they move on.
- */
-export function placeResident(
-  scene: Phaser.Scene,
-  resident: { spriteKey: string; name: string },
-  at: { x: number; y: number },
-): Phaser.GameObjects.GameObject[] {
-  const sprite = scene.add.sprite(at.x, at.y - 43, resident.spriteKey, 0).setDepth(at.y);
-  sprite.play(`${resident.spriteKey}:idle-down`);
-  const tag = scene.add
-    .text(at.x, at.y + 6, resident.name, {
-      fontFamily: '"Press Start 2P", monospace',
-      fontSize: "8px",
-      color: "#ffe9a8",
-      backgroundColor: "rgba(0,0,0,0.7)",
-      padding: { x: 4, y: 2 },
-    })
-    .setOrigin(0.5, 0)
-    .setDepth(at.y + 1)
-    .setResolution(2);
-  // A name is a label, so it keeps its size however far out the map is
-  // zoomed. The words painted on the signboards and across the buildings'
-  // name bands are not — those are sized to the picture they sit on, and
-  // blowing them up would put them over the edge of it.
-  keepLegible(scene, tag);
-  return [sprite, tag];
 }
 
 /**

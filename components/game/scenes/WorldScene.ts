@@ -1,8 +1,7 @@
 import * as Phaser from "phaser";
-import { OutdoorScene, type OutdoorPlace, type Standing } from "./OutdoorScene";
+import { OutdoorScene, type OutdoorPlace } from "./OutdoorScene";
 import type { DoorZone } from "@/lib/doors";
 import { LOBBY, floorUrl } from "@/lib/world/floors";
-import { OUTSIDE_SPOT, type Whereabouts } from "@/lib/world/residents";
 import { createLogger } from "@/lib/logger";
 import { WORLD_PATH } from "@/lib/world/paths";
 import {
@@ -37,8 +36,6 @@ const SIGN_Y: Record<string, number> = {
 };
 /** A door zone target that starts a scene rather than loading a page. */
 const CAMPUS_TARGET = "campus:";
-/** How far apart residents stand when the server gave no spot for them. */
-const OUTSIDE_SPACING = 40;
 
 export interface WorldSceneData {
   /** The tenant or campus whose building the person just walked out of, if any. */
@@ -131,19 +128,6 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
         ? floorUrl(b.entrance.tenant, LOBBY, "door")
         : `${CAMPUS_TARGET}${b.entrance.campus}`;
     return { name: b.org.slug, target, ...b.door, facing: "up" };
-  }
-
-  protected standing(all: Whereabouts[]): Standing[] {
-    return all
-      .filter((r) => r.place === "outside")
-      .map((resident, i) => ({
-        resident,
-        // Where the server put them; by the fountain when it did not say.
-        at: resident.spot ?? {
-          x: OUTSIDE_SPOT.x + i * OUTSIDE_SPACING,
-          y: OUTSIDE_SPOT.y,
-        },
-      }));
   }
 
   protected goThrough(zone: DoorZone): boolean {

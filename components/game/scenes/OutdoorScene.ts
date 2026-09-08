@@ -6,21 +6,20 @@ import { CameraController } from "../systems/CameraController";
 import { attachPresence, type ScenePresence } from "../systems/scene-presence";
 import { dialogOpen } from "@/lib/gamepad/dialogs";
 import { Pathfinder } from "../utils/Pathfinder";
-import { ensureAnims, ensureSheet } from "../utils/sheets";
+import { ensureSheet } from "../utils/sheets";
 import { buildSpriteFrames } from "../utils/MapHelpers";
-import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED, WORKER_SPRITES } from "../config/animations";
+import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED } from "../config/animations";
 import { PF_PADDING } from "@/lib/constants";
 import { DoorLatch, type DoorZone } from "@/lib/doors";
 import { ArrivalWalk, type Direction } from "@/lib/arrival";
 import { rememberedCharacter } from "@/lib/characters/choice";
-import type { Whereabouts } from "@/lib/world/residents";
 import type { Rect } from "@/lib/world/tenants";
 import { enterableAt, walkInTo, type Enterable } from "@/lib/world/entrances";
 import { showAddress } from "@/lib/world/paths";
 import { gameEvents } from "@/lib/events";
 import { asset } from "@/lib/assets";
 import type { Logger } from "@/lib/logger";
-import { cutOutdoorFrames, placeResident, preloadOutdoors } from "./outdoors";
+import { cutOutdoorFrames, preloadOutdoors } from "./outdoors";
 import { legible } from "../systems/legible";
 
 /**
@@ -28,10 +27,15 @@ import { legible } from "../systems/legible";
  *
  * The two are the same place in every way but the drawing of it. You arrive
  * out of a door and take a few steps down the path, you walk with the keys
- * or a stick or a tap, everyone else out here is drawn from the room
- * socket, the residents taking the air are asked for from the server, the
- * camera follows and the wheel zooms, and walking into a doorway either
- * starts another scene or loads a lobby's page. All of that is here, once.
+ * or a stick or a tap, everyone else out here — the residents taking the
+ * air among them — is drawn from the room socket, the camera follows and
+ * the wheel zooms, and walking into a doorway either starts another scene
+ * or loads a lobby's page. All of that is here, once.
+ *
+ * Residents used to be the exception: they had no room out of doors, so
+ * each browser asked the server where they were and painted them itself,
+ * every ten seconds and never in between. They are ordinary players now,
+ * walked by the server through the same socket as everybody else.
  *
  * What a place says for itself is `layOut`: lay the ground, put up the
  * buildings and the props, and hand back where the character starts, what
@@ -44,13 +48,12 @@ import { legible } from "../systems/legible";
  * This was two files that had drifted into being the same file twice — the
  * same eleven fields and eight methods apiece — and one of the copies had
  * quietly stopped redrawing residents on a second visit, because only the
- * other one cleared the map that indexed them.
+ * other one cleared the map that indexed them. That map is gone with the
+ * hand-drawing it served.
  */
 
 /** How far you walk out of a doorway before the keys are yours. */
 const ARRIVAL_STEPS = 96;
-/** How often to ask the server who is standing about out here. */
-const RESIDENT_REFRESH_MS = 10_000;
 
 /** What a place hands back once it has laid itself out. */
 export interface OutdoorPlace {
@@ -83,12 +86,6 @@ export interface OutdoorPlace {
   camera?: { coverMap?: boolean; remembersZoom?: boolean };
 }
 
-/** A resident the server says is here, and where to stand them. */
-export interface Standing {
-  resident: Whereabouts;
-  at: { x: number; y: number };
-}
-
 export abstract class OutdoorScene<Data> extends Phaser.Scene {
   protected player!: Player;
   protected gamepad!: GamepadInput;
@@ -101,8 +98,6 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
   protected leaving = false;
   /** The steps taken on coming out of a door, before the keys are the player's. */
   protected arrival = new ArrivalWalk();
-  /** Residents currently standing about here, by id. */
-  protected residents = new Map<string, Phaser.GameObjects.GameObject[]>();
   /** The other people out here, from the room socket. */
   protected presence: ScenePresence | null = null;
   protected cameraController!: CameraController;
@@ -125,9 +120,6 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     walls: Phaser.Physics.Arcade.StaticGroup,
   ): OutdoorPlace | null;
 
-  /** Which of the residents the server reported are standing here, and where. */
-  protected abstract standing(all: Whereabouts[]): Standing[];
-
   /**
    * A doorway this place opens itself, by starting another scene. True when
    * it has been dealt with; false to load the zone's target as a page.
@@ -146,9 +138,6 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     this.latch.reset();
     // A walk that was still under way when a door fired must not resume here.
     this.navigator.cancel();
-    // The sprites from the last visit went down with the scene; the map that
-    // indexed them did not, and a resident still in it is never drawn again.
-    this.residents.clear();
     if (!this.anims.exists("idle-down")) buildSpriteFrames(this, SPRITE_KEY);
     cutOutdoorFrames(this);
 
@@ -215,47 +204,6 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, letGo);
     this.events.once(Phaser.Scenes.Events.DESTROY, letGo);
-
-    // Anyone taking the air. Outside is no room, so ask where everyone is.
-    void this.showResidents();
-    this.time.addEvent({
-      delay: RESIDENT_REFRESH_MS,
-      loop: true,
-      callback: () => void this.showResidents(),
-    });
-  }
-
-  /** Draw the residents the server says are here, and take away those who left. */
-  private async showResidents() {
-    let all: Whereabouts[] = [];
-    try {
-      const res = await fetch("/api/residents");
-      const body = (await res.json()) as { residents?: Whereabouts[] };
-      all = body.residents ?? [];
-    } catch {
-      return;
-    }
-    if (!this.scene.isActive()) return;
-    const here = this.standing(all);
-
-    for (const [id, parts] of this.residents) {
-      if (here.some((s) => s.resident.id === id)) continue;
-      for (const part of parts) part.destroy();
-      this.residents.delete(id);
-    }
-    for (const { resident, at } of here) {
-      if (this.residents.has(resident.id)) continue;
-      const path = WORKER_SPRITES.find((w) => w.key === resident.spriteKey)?.path;
-      if (!path) continue;
-      // Claimed before the sheet is asked for, so a second pass while it is
-      // still coming does not ask again.
-      this.residents.set(resident.id, []);
-      ensureSheet(this, resident.spriteKey, path, (ok) => {
-        if (!ok || !this.scene.isActive() || !this.residents.has(resident.id)) return;
-        ensureAnims(this, resident.spriteKey);
-        this.residents.set(resident.id, placeResident(this, resident, at));
-      });
-    }
   }
 
   private initTapToWalk() {

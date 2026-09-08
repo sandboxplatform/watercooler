@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { PresenceHub } from "../presence-hub";
-import { ResidentSimulation, presenceIdFor } from "../residents";
+import { ResidentSimulation, WANDER_SPEED_PX_S, presenceIdFor } from "../residents";
 import {
+  PERSONAL_SPACE_PX,
   RESIDENTS,
   WANDER_AREAS,
   WORLD_WANDER_SPOTS,
   deskSpot,
+  doorstepOf,
   residentById,
+  roomToStand,
+  yardArea,
+  type Whereabouts,
 } from "../../world/residents";
 import { worldSolids } from "../../world/scenery";
 import { WORLD_HEIGHT, WORLD_WIDTH, operationsRoomCount, tenantFor } from "../../world/tenants";
@@ -101,9 +106,16 @@ describe("a resident's day", () => {
     expect(rooms.get("castle-atlantic-floor-2")!.hub.has(presenceIdFor(yoshi))).toBe(true);
   });
 
-  it("is in no room while outside", () => {
+  /**
+   * The world map is a room like any other, so somebody taking the air is a
+   * player on it — walked by the server, seen in the same place by everyone
+   * looking. They used to be in no room at all out there, drawn by each
+   * browser at a spot the server named, which is what let two of them be
+   * drawn at the same spot.
+   */
+  it("joins the world map's room when it goes outside, by its own front door", () => {
     let clock = 0;
-    const { rooms, host } = world();
+    const { rooms, host } = world(() => clock);
     const sim = new ResidentSimulation(host, {
       now: () => clock,
       random: () => 0.99,
@@ -111,10 +123,17 @@ describe("a resident's day", () => {
     });
     clock = 5 * 60_000;
     sim.tick(clock);
-    expect(sim.whereabouts()[0].place).toBe("outside");
-    expect(sim.whereabouts()[0].room).toBeNull();
-    expect(sim.whereabouts()[0].spot).not.toBeNull();
-    for (const room of rooms.values()) expect(room.hub.has(presenceIdFor(yoshi))).toBe(false);
+    const where = sim.whereabouts()[0];
+    expect(where.place).toBe("outside");
+    expect(where.room).toBe(WORLD_ROOM_SLUG);
+    const player = rooms
+      .get(WORLD_ROOM_SLUG)!
+      .hub.snapshot()
+      .find((p) => p.id === presenceIdFor(yoshi))!;
+    expect(player.resident).toBe(true);
+    // On the doorstep of Castle Atlantic, which is where he came out.
+    expect(player).toMatchObject(doorstepOf(yoshi)!);
+    expect(rooms.get("castle-atlantic")!.hub.has(presenceIdFor(yoshi))).toBe(false);
   });
 
   it("puts Steve in the warehouse and Mark at his Sales desk to begin with", () => {
@@ -145,8 +164,11 @@ describe("a resident's day", () => {
     }
     expect(onYard).not.toBeNull();
     expect(onYard!.campus).toBe("homestar");
-    expect(onYard!.room).toBeNull();
-    expect(onYard!.spot!.x).toBeGreaterThan(0);
+    // A yard is a room too, so the people on it see him walk about it.
+    expect(onYard!.room).toBe("campus-homestar");
+    const yard = yardArea("homestar");
+    expect(onYard!.spot!.x).toBeGreaterThanOrEqual(yard.x);
+    expect(onYard!.spot!.x).toBeLessThanOrEqual(yard.x + yard.width);
   });
 
   it("rejoins a room that was closed and reopened", () => {
@@ -469,5 +491,108 @@ describe("what a resident says", () => {
     new ResidentSimulation(host, { now: () => 0, random: () => 0.5 });
     expect(heard.every((h) => h.from === presenceIdFor(doc))).toBe(true);
     setRoomBroadcast(null);
+  });
+});
+
+/**
+ * The two rules that keep a resident one person in one place.
+ *
+ * Sara and Bud stood inside each other on the grass outside Sandbox ERP:
+ * both had their building's doorstep as a place to stand outside, both were
+ * sent to it, and nothing anywhere asked whether it was taken. Neither of
+ * them walked there either — outside was drawn rather than walked, so they
+ * simply appeared, and appeared somewhere else when their stay was up.
+ *
+ * A whole day is driven here rather than a moment of one, because both
+ * faults needed two residents to want the same thing at the same time,
+ * which is a thing that happens between one stay and the next.
+ */
+describe("keeping out of each other", () => {
+  const seeded = (seed: number) => () =>
+    (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+
+  /** Everybody's whereabouts, tick by tick, at the rate the server ticks. */
+  function aDay(ticks: number, dwellScale = 0.02, random = seeded(19)) {
+    let clock = 0;
+    const { host } = world(() => clock);
+    const sim = new ResidentSimulation(host, { now: () => clock, random, dwellScale });
+    const frames: Whereabouts[][] = [];
+    for (let i = 0; i < ticks; i++) {
+      clock += 120;
+      sim.tick(clock);
+      frames.push(sim.whereabouts());
+    }
+    return frames;
+  }
+
+  it("never puts two of them in the same space, wherever they are", () => {
+    for (const [tick, frame] of aDay(3000).entries()) {
+      for (const [i, one] of frame.entries()) {
+        for (const other of frame.slice(i + 1)) {
+          if (one.room !== other.room || !one.room) continue;
+          expect(
+            roomToStand(one.spot!, [other.spot!]),
+            `${one.name} and ${other.name} in ${one.room} at tick ${tick}`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  /**
+   * Nobody jumps. A resident's position may only change by what a walk
+   * covers in a tick, for as long as they stay in one place — the hub
+   * clamps a *reported* move to walking speed, so this is asked of the
+   * simulation's own idea of where everybody is, which nothing clamps.
+   */
+  it("moves nobody further in a tick than a walk covers", () => {
+    const stride = (WANDER_SPEED_PX_S * 120) / 1000;
+    const frames = aDay(3000);
+    for (let tick = 1; tick < frames.length; tick++) {
+      for (const [i, now] of frames[tick].entries()) {
+        const before = frames[tick - 1][i];
+        // A change of room is a door, not a step across the ground.
+        if (before.room !== now.room) continue;
+        const step = Math.hypot(now.spot!.x - before.spot!.x, now.spot!.y - before.spot!.y);
+        expect(step, `${now.name} in ${now.room} at tick ${tick}`).toBeLessThanOrEqual(
+          stride + 0.001,
+        );
+      }
+    }
+  });
+
+  /**
+   * Out of doors they come and go by their own front door: the walk across
+   * the green is part of leaving, so the last thing anybody sees of them is
+   * stepping inside rather than winking out on the grass.
+   */
+  it("comes out of its own door and walks back to it before going in", () => {
+    const frames = aDay(6000, 0.5, seeded(5));
+    let arrivals = 0;
+    let departures = 0;
+    for (let tick = 1; tick < frames.length; tick++) {
+      for (const [i, now] of frames[tick].entries()) {
+        const before = frames[tick - 1][i];
+        if (before.room === now.room) continue;
+        const resident = residentById(now.id)!;
+        const door = doorstepOf(resident);
+        if (!door) continue;
+        // At the door, or the step aside somebody else's arrival costs.
+        const atTheDoor = (at: { x: number; y: number }, when: string) =>
+          expect(
+            Math.hypot(at.x - door.x, at.y - door.y),
+            `${now.name} ${when} at ${Math.round(at.x)},${Math.round(at.y)}, tick ${tick}`,
+          ).toBeLessThanOrEqual(3 * PERSONAL_SPACE_PX);
+        if (now.place === "outside") {
+          atTheDoor(now.spot!, "came out");
+          arrivals++;
+        } else if (before.place === "outside") {
+          atTheDoor(before.spot!, "went in from");
+          departures++;
+        }
+      }
+    }
+    expect(arrivals).toBeGreaterThan(0);
+    expect(departures).toBeGreaterThan(0);
   });
 });

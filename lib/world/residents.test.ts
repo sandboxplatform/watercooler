@@ -333,12 +333,17 @@ describe("haunts", () => {
     ]);
   });
 
-  it("have a presence room only for rooms and the office", () => {
+  /**
+   * Every one of them, the outdoors included. A resident is a player in
+   * whatever place they are in, which is what makes them one thing that
+   * walks rather than a person indoors and a picture outside.
+   */
+  it("have a presence room, wherever they are", () => {
     expect(roomForHaunt(yoshi, { kind: "room", room: "castle-atlantic", area: "lobby" })).toBe(
       "castle-atlantic",
     );
-    expect(roomForHaunt(mark, { kind: "campus", campus: "homestar" })).toBeNull();
-    expect(roomForHaunt(yoshi, { kind: "outside" })).toBeNull();
+    expect(roomForHaunt(mark, { kind: "campus", campus: "homestar" })).toBe("campus-homestar");
+    expect(roomForHaunt(yoshi, { kind: "outside" })).toBe("world");
   });
 });
 
@@ -375,10 +380,13 @@ describe("the routine", () => {
     }
   });
 
-  it("stays put at the desk, outside and on the yard", () => {
+  it("stays put at the desk and at its own place outside, and walks a yard", () => {
     expect(wanderArea({ kind: "office" })).toBeNull();
+    // Outside they have a place of their own to stand in; the walk there is
+    // a route rather than a patch of ground to mill about in.
     expect(wanderArea({ kind: "outside" })).toBeNull();
-    expect(wanderArea({ kind: "campus", campus: "homestar" })).toBeNull();
+    expect(wanderArea({ kind: "campus", campus: "homestar" })).toEqual(yardArea("homestar"));
+    expect(wanderArea({ kind: "campus", campus: "nowhere" })).toBeNull();
   });
 
   it("stands on the paved yard of the campus", () => {
