@@ -385,6 +385,12 @@ written `600+` rather than quietly as `600`. If your desk names its
 statuses differently, set `ZOHO_PULSE_STATUSES` to three of its own, in
 the order they should hang.
 
+**"Today" is your desk's day.** It runs on the desk's own clock rather than
+the server's, so the boundary does not move when the app is deployed
+somewhere else: it takes `ZOHO_TIMEZONE` if you set one, else the timezone
+on your Zoho organisation, else the one most of your agents keep. The panel
+names which, and says so plainly if it had to fall back to the server.
+
 Zoho uses OAuth rather than a simple key, so it takes a few minutes to set
 up. In Zoho's API console (`api-console.zoho.com`, or `.eu`, `.in`,
 `.com.au`, `.jp` to match your account):

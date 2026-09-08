@@ -34,21 +34,56 @@ const BANKS = [
   {
     bank: "today" as const,
     name: "Today",
-    aside: (pulse: Pulse) => `since ${sinceLabel(pulse.since)}`,
+    aside: (pulse: Pulse) => `since ${sinceLabel(pulse.since, pulse.timeZone)}`,
   },
 ];
 
-/** "since midnight" is only true if you know which midnight. */
-function sinceLabel(iso: string): string {
+/**
+ * Where "today" came from, said plainly — but only when it is worth saying.
+ *
+ * A desk whose timezone was found needs no explaining; one that fell back to
+ * the server's clock does, because that is the case where the day boundary
+ * is an accident of where the container runs.
+ */
+function zoneNote(pulse: Pulse): string | null {
+  if (pulse.zone === "server") {
+    return "Zoho does not say which timezone this desk keeps, so today is measured on the server's clock. Set ZOHO_TIMEZONE to say.";
+  }
+  if (pulse.zone === "agents") {
+    return `Today runs on ${pulse.timeZone}, the timezone most of the desk's agents keep.`;
+  }
+  return null;
+}
+
+/**
+ * "since midnight" is only true if you know which midnight — and on whose
+ * clock.
+ *
+ * Written in the desk's own timezone rather than the reader's, with the
+ * zone named, because that is the clock the counts were measured on. A
+ * reader in Toronto looking at a Halifax desk would otherwise see the
+ * boundary as 11pm the night before and reasonably conclude the numbers
+ * were wrong.
+ */
+function sinceLabel(iso: string, timeZone: string | null): string {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return "";
-  return at.toLocaleString(undefined, {
+  const parts: Intl.DateTimeFormatOptions = {
     weekday: "short",
     day: "numeric",
     month: "short",
     hour: "numeric",
     minute: "2-digit",
-  });
+  };
+  try {
+    return at.toLocaleString(
+      undefined,
+      timeZone ? { ...parts, timeZone, timeZoneName: "short" } : parts,
+    );
+  } catch {
+    // A zone this browser does not know: the instant still stands.
+    return at.toLocaleString(undefined, parts);
+  }
 }
 
 /**
@@ -199,6 +234,7 @@ export default function SupportPulse() {
                 Each bar is that number&rsquo;s share of its own group, so the three above compare
                 with each other and the two below compare with each other. Nothing here is a
                 percentage of anything else.
+                {zoneNote(pulse) && <> {zoneNote(pulse)}</>}
               </p>
             </>
           ) : (

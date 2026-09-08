@@ -99,6 +99,17 @@ const STANDING: readonly PulseId[] = ["new", "queue", "in-progress"];
 
 export type PulseCounts = Record<PulseId, number>;
 
+/**
+ * Where the answer to "which timezone is the desk in" came from.
+ *
+ * Reported rather than kept quiet, because the four are not equally good
+ * and the difference shows up as a day boundary in the wrong place. Zoho
+ * leaves the organisation's own field null on plenty of accounts, and the
+ * agents are then the best thing there is: they are the people who work
+ * the queue, so their clock is the one "today" means.
+ */
+export type ZoneSource = "configured" | "organisation" | "agents" | "server";
+
 export interface Pulse {
   counts: PulseCounts;
   /**
@@ -111,13 +122,133 @@ export interface Pulse {
   statuses: string[];
   /** Midnight the two day counters are measured from, as an ISO instant. */
   since: string;
+  /** The desk's timezone, or null where it fell back to the server's clock. */
+  timeZone: string | null;
+  /** How that was decided. */
+  zone: ZoneSource;
 }
 
-/** Midnight this morning, where the server stands. */
+/**
+ * Midnight this morning, where the server stands.
+ *
+ * The last resort. A support desk's day belongs to the people working it,
+ * not to whichever region the container happens to run in — the same push
+ * that puts this on a host in one timezone would otherwise move the day
+ * boundary of every count on the wall.
+ */
 export function dayStart(now: number): number {
   const at = new Date(now);
   at.setHours(0, 0, 0, 0);
   return at.getTime();
+}
+
+/** The date and time a clock in `timeZone` reads at an instant. */
+function wallClock(at: number, timeZone: string) {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      // h23, not hour12:false — some ICU builds write midnight as "24"
+      // under the latter, which would put the boundary a day out.
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).formatToParts(new Date(at));
+  } catch {
+    // An unrecognised zone throws rather than answering. A desk that names
+    // one this runtime has never heard of gets the server's day and says so.
+    return null;
+  }
+  const read = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  const wall = {
+    year: read("year"),
+    month: read("month"),
+    day: read("day"),
+    hour: read("hour"),
+    minute: read("minute"),
+    second: read("second"),
+  };
+  return Object.values(wall).every(Number.isFinite) ? wall : null;
+}
+
+/**
+ * How far `timeZone` is from UTC at an instant, in milliseconds.
+ *
+ * Read off a formatter rather than a table: the platform already knows
+ * every zone's history and every daylight-saving rule, and a second
+ * implementation of that is a second thing to be wrong.
+ */
+export function zoneOffset(at: number, timeZone: string): number | null {
+  const wall = wallClock(at, timeZone);
+  if (!wall) return null;
+  const asUTC = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second);
+  // The formatter drops milliseconds, so they come off both sides.
+  return asUTC - Math.floor(at / 1000) * 1000;
+}
+
+/** Whether an instant is exactly midnight on a clock in `timeZone`. */
+function isMidnightIn(at: number, timeZone: string): boolean {
+  const wall = wallClock(at, timeZone);
+  return wall !== null && wall.hour === 0 && wall.minute === 0 && wall.second === 0;
+}
+
+/**
+ * Midnight this morning where the desk is.
+ *
+ * Two passes, because the offset now is not the offset at midnight on the
+ * two days a year the clocks change: the first pass uses the offset in
+ * force at `now`, and the second re-derives it from the answer that gave.
+ * Whichever of the two actually reads as midnight there is the one taken,
+ * which is a check rather than a hope — and if neither does (a zone whose
+ * clocks change *at* midnight, so that midnight did not happen today), the
+ * first pass stands, an hour out on one day rather than a day out.
+ *
+ * No zone, or one the runtime does not know, falls back to the server's own
+ * midnight; `Pulse.zone` is what says which happened.
+ */
+export function dayStartIn(now: number, timeZone: string | null): number {
+  if (!timeZone) return dayStart(now);
+  const wall = wallClock(now, timeZone);
+  const offset = zoneOffset(now, timeZone);
+  if (!wall || offset === null) return dayStart(now);
+
+  const midnightThere = Date.UTC(wall.year, wall.month - 1, wall.day);
+  const first = midnightThere - offset;
+  const refined = zoneOffset(first, timeZone);
+  if (refined === null || refined === offset) return first;
+  const second = midnightThere - refined;
+  return isMidnightIn(second, timeZone) ? second : first;
+}
+
+/**
+ * The timezone the most of a desk's people keep, which is the desk's.
+ *
+ * Zoho gives every agent their own, and on a desk of four they do not all
+ * agree — three in Halifax and one in Toronto, on the one this was written
+ * against. The majority is the desk; ties go to whichever name sorts first,
+ * so the boundary is the same on every read rather than drifting with the
+ * order Zoho happened to list them in.
+ */
+export function commonZone(zones: readonly (string | null | undefined)[]): string | null {
+  const counts = new Map<string, number>();
+  for (const zone of zones) {
+    const name = zone?.trim();
+    if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  let most = 0;
+  for (const [name, count] of [...counts].sort(([a], [b]) => a.localeCompare(b))) {
+    if (count > most) {
+      most = count;
+      best = name;
+    }
+  }
+  return best;
 }
 
 /**
@@ -180,9 +311,18 @@ export function toPulse(input: {
   opened: readonly Record<string, unknown>[];
   closed: readonly Record<string, unknown>[];
   capped: readonly PulseId[];
-  now: number;
+  /**
+   * Midnight the day counters measure from, as an instant. Handed in rather
+   * than worked out here, because the sweeps that gathered `opened` and
+   * `closed` stopped at this same boundary — deriving it twice is two
+   * chances for the counts and the line under them to disagree.
+   */
+  since: number;
+  /** The desk's timezone that boundary came from, and how it was decided. */
+  timeZone: string | null;
+  zone: ZoneSource;
 }): Pulse {
-  const from = dayStart(input.now);
+  const from = input.since;
   const byStatus = countStatuses(input.standing, input.statuses);
   const counts = {
     new: 0,
@@ -200,6 +340,8 @@ export function toPulse(input: {
     capped: [...input.capped],
     statuses: [...input.statuses],
     since: new Date(from).toISOString(),
+    timeZone: input.timeZone,
+    zone: input.zone,
   };
 }
 

@@ -3,11 +3,14 @@ import {
   PULSE_METRICS,
   atOrAfter,
   countSince,
+  commonZone,
   countStatuses,
   dayStart,
+  dayStartIn,
   pulseBars,
   pulseFigure,
   toPulse,
+  zoneOffset,
 } from "../pulse";
 
 /**
@@ -36,6 +39,140 @@ describe("dayStart", () => {
   it("does not move within a day", () => {
     const morning = dayStart(at("2026-09-08T08:00:00Z"));
     expect(dayStart(morning + 60_000)).toBe(morning);
+  });
+});
+
+describe("dayStartIn", () => {
+  /**
+   * The whole point: the same instant is a different day depending on whose
+   * clock you ask, and the desk's is the one that decides. Halifax is four
+   * hours behind UTC in winter and three in summer, so 02:00 UTC is still
+   * yesterday evening there.
+   */
+  it("is midnight where the desk is, not where the server is", () => {
+    // 02:00 UTC on the 8th is 23:00 on the 7th in Halifax (UTC-3 in
+    // September), so the desk's day started at 03:00 UTC on the 7th.
+    const start = dayStartIn(at("2026-09-08T02:00:00Z"), "America/Halifax");
+    expect(new Date(start).toISOString()).toBe("2026-09-07T03:00:00.000Z");
+  });
+
+  it("agrees with UTC when the desk keeps UTC", () => {
+    expect(new Date(dayStartIn(at("2026-09-08T12:34:56Z"), "UTC")).toISOString()).toBe(
+      "2026-09-08T00:00:00.000Z",
+    );
+  });
+
+  it("lands on midnight in the desk's own zone", () => {
+    for (const zone of ["America/Halifax", "America/Toronto", "Europe/London", "Asia/Kolkata"]) {
+      const start = dayStartIn(at("2026-09-08T12:00:00Z"), zone);
+      const reads = new Intl.DateTimeFormat("en-GB", {
+        timeZone: zone,
+        hourCycle: "h23",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(start));
+      expect(reads, zone).toBe("00:00");
+    }
+  });
+
+  /** Half-hour and three-quarter-hour offsets are where naive maths breaks. */
+  it("handles a zone that is not a whole number of hours from UTC", () => {
+    for (const zone of ["Asia/Kolkata", "Australia/Eucla", "Pacific/Chatham"]) {
+      const start = dayStartIn(at("2026-09-08T12:00:00Z"), zone);
+      expect(start % 60_000, zone).toBe(0);
+      expect(new Date(start).getTime(), zone).toBeLessThanOrEqual(at("2026-09-08T12:00:00Z"));
+    }
+  });
+
+  /**
+   * The two days a year the clocks move, the offset in force now is not the
+   * offset that was in force at midnight. Checked from after the change on
+   * both of them.
+   */
+  it("still lands on midnight on the days the clocks change", () => {
+    const zone = "America/Halifax";
+    // Spring forward: 02:00 becomes 03:00 on 8 March 2026.
+    const spring = dayStartIn(at("2026-03-08T18:00:00Z"), zone);
+    // Fall back: 02:00 becomes 01:00 on 1 November 2026.
+    const autumn = dayStartIn(at("2026-11-01T18:00:00Z"), zone);
+    for (const [name, start] of [
+      ["spring", spring],
+      ["autumn", autumn],
+    ] as const) {
+      const reads = new Intl.DateTimeFormat("en-GB", {
+        timeZone: zone,
+        hourCycle: "h23",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(start));
+      expect(reads, name).toBe("00:00");
+    }
+  });
+
+  it("does not move within the desk's own day", () => {
+    const zone = "America/Halifax";
+    const morning = dayStartIn(at("2026-09-08T13:00:00Z"), zone);
+    expect(dayStartIn(morning + 60_000, zone)).toBe(morning);
+    expect(dayStartIn(morning + 20 * 3_600_000, zone)).toBe(morning);
+  });
+
+  /** No zone, or one this runtime has never heard of: the server's own day. */
+  it("falls back to the server's midnight", () => {
+    const now = at("2026-09-08T12:00:00Z");
+    expect(dayStartIn(now, null)).toBe(dayStart(now));
+    expect(dayStartIn(now, "Middle/Earth")).toBe(dayStart(now));
+    expect(dayStartIn(now, "")).toBe(dayStart(now));
+  });
+});
+
+describe("zoneOffset", () => {
+  it("reads a whole-hour offset", () => {
+    expect(zoneOffset(at("2026-09-08T12:00:00Z"), "UTC")).toBe(0);
+    // September: Atlantic Daylight Time, three hours behind.
+    expect(zoneOffset(at("2026-09-08T12:00:00Z"), "America/Halifax")).toBe(-3 * 3_600_000);
+    // January: Atlantic Standard Time, four.
+    expect(zoneOffset(at("2026-01-08T12:00:00Z"), "America/Halifax")).toBe(-4 * 3_600_000);
+  });
+
+  it("reads a half-hour offset", () => {
+    expect(zoneOffset(at("2026-09-08T12:00:00Z"), "Asia/Kolkata")).toBe(5.5 * 3_600_000);
+  });
+
+  it("ignores the milliseconds the formatter cannot see", () => {
+    const offset = zoneOffset(at("2026-09-08T12:00:00Z") + 456, "America/Halifax");
+    expect(offset).toBe(-3 * 3_600_000);
+  });
+
+  it("answers null for a zone it does not know", () => {
+    expect(zoneOffset(at("2026-09-08T12:00:00Z"), "Middle/Earth")).toBeNull();
+  });
+});
+
+describe("commonZone", () => {
+  /**
+   * The desk this was written against: four agents, three in Halifax and
+   * one in Toronto. The majority is the desk.
+   */
+  it("takes the timezone the most of the desk's people keep", () => {
+    expect(
+      commonZone(["America/Halifax", "America/Toronto", "America/Halifax", "America/Halifax"]),
+    ).toBe("America/Halifax");
+  });
+
+  /** Deterministic, so the day boundary does not drift with Zoho's ordering. */
+  it("breaks a tie the same way every time", () => {
+    const tied = ["America/Toronto", "America/Halifax"];
+    expect(commonZone(tied)).toBe("America/Halifax");
+    expect(commonZone([...tied].reverse())).toBe("America/Halifax");
+  });
+
+  it("ignores agents with no timezone on them", () => {
+    expect(commonZone([null, undefined, "", "  ", "Europe/London"])).toBe("Europe/London");
+  });
+
+  it("answers null when nobody has one", () => {
+    expect(commonZone([])).toBeNull();
+    expect(commonZone([null, undefined, ""])).toBeNull();
   });
 });
 
@@ -128,8 +265,7 @@ describe("countSince", () => {
 });
 
 describe("toPulse", () => {
-  const now = at("2026-09-08T12:00:00Z");
-  const from = dayStart(now);
+  const from = dayStartIn(at("2026-09-08T12:00:00Z"), "America/Halifax");
   const today = new Date(from + 3_600_000).toISOString();
   const yesterday = new Date(from - 3_600_000).toISOString();
 
@@ -140,7 +276,9 @@ describe("toPulse", () => {
       opened: [],
       closed: [],
       capped: [],
-      now,
+      since: from,
+      timeZone: "America/Halifax",
+      zone: "agents",
       ...over,
     });
 
@@ -182,8 +320,10 @@ describe("toPulse", () => {
     expect(view.counts["in-progress"]).toBe(0);
   });
 
-  it("says which midnight today is measured from", () => {
+  it("says which midnight today is measured from, and whose", () => {
     expect(pulse().since).toBe(new Date(from).toISOString());
+    expect(pulse().timeZone).toBe("America/Halifax");
+    expect(pulse().zone).toBe("agents");
   });
 
   it("carries the capped counters through", () => {

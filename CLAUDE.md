@@ -619,6 +619,46 @@ named is the left-hand bay whatever it is called. Sandbox ERP's desk carries
 New, Queue and In Progress among its nine, which is where the default comes
 from.
 
+**"Today" is the desk's day, not the server's.** A support desk's day
+belongs to the people working it, and the same build runs on a laptop in
+one timezone and a container in another — left on the host's clock, a
+deploy would move the day boundary of two counts on the wall without
+anything changing about the desk. `dayStartIn` in `lib/zoho/pulse.ts` is
+the boundary and `fetchDeskZone` finds the zone, in this order:
+
+| Source         | Where from                      | Why not first                             |
+| -------------- | ------------------------------- | ----------------------------------------- |
+| `configured`   | `ZOHO_TIMEZONE`                 | —                                         |
+| `organisation` | `timeZone` on `/organizations`  | Zoho leaves it **null** on many accounts  |
+| `agents`       | The commonest zone on `/agents` | Their clock, not the desk's, in principle |
+| `server`       | The host's own midnight         | An accident of where the container runs   |
+
+`Pulse.zone` reports which of the four answered, and the panel says so
+where it matters — a desk on `agents` names the zone, and one that fell all
+the way through to `server` says that is what happened rather than looking
+like an answer. Sandbox ERP's org field is null and its four agents are
+three Halifax to one Toronto, so it lands on `agents` and
+`America/Halifax`; a majority rather than the first one listed, with ties
+broken alphabetically so the boundary does not drift with Zoho's ordering.
+
+Three things in there are easy to get wrong and all of them look fine:
+
+- **`hourCycle: "h23"`, not `hour12: false`.** Some ICU builds write
+  midnight as `"24"` under the latter, which puts the boundary a day out.
+- **Two passes over the offset.** The offset in force _now_ is not the one
+  in force at midnight on the two days a year the clocks move, so the
+  answer is re-derived from itself and the version that actually reads as
+  midnight there is the one kept. That is a check rather than a hope, and
+  where neither reads as midnight — a zone whose clocks change _at_
+  midnight — the first pass stands: an hour out on one day, rather than a
+  day out.
+- **The offset comes off a formatter,** not a table. The platform already
+  knows every zone's history; a second implementation of that is a second
+  thing to be wrong.
+
+A zone lookup that fails is **not cached**, so a Zoho blip during the first
+read does not pin the day to the server's clock until somebody restarts.
+
 `PartitionSpec` (`lib/map/spec.ts`) is how a room gets interior walls, and
 each is drawn as **the exterior wall of the same orientation** — a horizontal
 one is the cap/face/base stack with its shadow, so the corridor looks at a
@@ -1387,6 +1427,7 @@ From `CONTRIBUTING.md`, and worth holding to when adding anything:
 | `AGENT_WORKSPACE_ROOT`                                                   | `.agent-workspaces`                     | Where seat sandboxes go                                                  |
 | `ERP_DB_PATH` / `UPLOADS_DIR`                                            | `.data/erp.sqlite` / beside the room db | Storage paths                                                            |
 | `ZOHO_PULSE_STATUSES`                                                    | `New,Queue,In Progress`                 | The three standing statuses on Support's wall, in the order they hang    |
+| `ZOHO_TIMEZONE`                                                          | asked of the desk                       | Which clock "today" runs on; otherwise the org's, else its agents'       |
 | `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                             | —                                       | Required by the `mettara` provider                                       |
 | `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`              | —                                       | Auth.js sign-in; off when absent                                         |
 | `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT                                   |

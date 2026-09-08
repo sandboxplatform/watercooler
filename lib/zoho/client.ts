@@ -16,10 +16,12 @@ import {
   CLOSED_STATUS,
   DEFAULT_PULSE_STATUSES,
   atOrAfter,
-  dayStart,
+  commonZone,
+  dayStartIn,
   toPulse,
   type Pulse,
   type PulseId,
+  type ZoneSource,
 } from "./pulse";
 
 const log = createLogger("Zoho");
@@ -46,6 +48,11 @@ export interface ZohoConfig {
   region: string;
   /** One department's queue, when named; otherwise the whole desk. */
   departmentId: string | null;
+  /**
+   * The timezone the desk's day runs in, when somebody has said. Null means
+   * work it out from the desk itself — see `fetchDeskZone`.
+   */
+  timeZone: string | null;
 }
 
 export function readZohoConfig(env: NodeJS.ProcessEnv = process.env): ZohoConfig | null {
@@ -61,6 +68,7 @@ export function readZohoConfig(env: NodeJS.ProcessEnv = process.env): ZohoConfig
     orgId,
     region: env.ZOHO_REGION?.trim() || "com",
     departmentId: env.ZOHO_DEPARTMENT_ID?.trim() || null,
+    timeZone: env.ZOHO_TIMEZONE?.trim() || null,
   };
 }
 
@@ -241,6 +249,73 @@ export function readPulseStatuses(env: NodeJS.ProcessEnv = process.env): string[
   return named && named.length > 0 ? named.slice(0, 3) : [...DEFAULT_PULSE_STATUSES];
 }
 
+/**
+ * The desk's timezone, once. It does not change while a server is up, and
+ * two of the three ways of finding it cost a request.
+ */
+let deskZone: { timeZone: string | null; zone: ZoneSource } | null = null;
+
+/** Test seam, and a way to re-ask after the keys change. */
+export function forgetDeskZone() {
+  deskZone = null;
+}
+
+/**
+ * Which timezone the desk keeps its day in.
+ *
+ * `ZOHO_TIMEZONE` wins: an explicit answer beats a derived one, and it is
+ * the way out if a desk's people are scattered and the majority below is
+ * not the answer anybody wants. Otherwise Zoho's own field on the
+ * organisation, which is the right place for it — and null on plenty of
+ * accounts, including the one this was written against. Failing that, the
+ * timezone the most of the desk's agents keep: they are the people working
+ * the queue, so their clock is what "today" means on a support board.
+ *
+ * A failure is not cached, so a Zoho blip during the first read does not
+ * pin the day to the server's clock until somebody restarts.
+ */
+export async function fetchDeskZone(
+  config: ZohoConfig,
+): Promise<{ timeZone: string | null; zone: ZoneSource }> {
+  if (config.timeZone) return { timeZone: config.timeZone, zone: "configured" };
+  if (deskZone) return deskZone;
+
+  const found = await resolveDeskZone(config);
+  if (found.timeZone) deskZone = found;
+  return found;
+}
+
+async function resolveDeskZone(
+  config: ZohoConfig,
+): Promise<{ timeZone: string | null; zone: ZoneSource }> {
+  try {
+    const orgs = await get("/organizations", { limit: "50" }, config);
+    const list = Array.isArray(orgs.data)
+      ? (orgs.data as { id?: unknown; timeZone?: unknown }[])
+      : [];
+    const mine = list.find((org) => String(org.id) === config.orgId) ?? list[0];
+    const named = typeof mine?.timeZone === "string" ? mine.timeZone.trim() : "";
+    if (named) return { timeZone: named, zone: "organisation" };
+  } catch (err) {
+    log.warn("could not read the organisation's timezone:", (err as Error).message);
+  }
+
+  try {
+    const agents = await get("/agents", { limit: "50" }, config);
+    const list = Array.isArray(agents.data)
+      ? (agents.data as { timeZone?: string; status?: string }[])
+      : [];
+    // Only the people actually working: a leaver's clock is not the desk's.
+    const active = list.filter((agent) => (agent.status ?? "ACTIVE").toUpperCase() === "ACTIVE");
+    const common = commonZone((active.length > 0 ? active : list).map((agent) => agent.timeZone));
+    if (common) return { timeZone: common, zone: "agents" };
+  } catch (err) {
+    log.warn("could not read the agents' timezones:", (err as Error).message);
+  }
+
+  return { timeZone: null, zone: "server" };
+}
+
 type Page = Record<string, unknown> & { status?: string };
 
 /**
@@ -294,7 +369,12 @@ async function sweep(
  */
 export async function fetchPulse(config: ZohoConfig, now: number = Date.now()): Promise<Pulse> {
   const statuses = readPulseStatuses();
-  const from = dayStart(now);
+  // The desk's midnight, not the server's: a support desk's day belongs to
+  // the people working it, and this same build runs on a host in another
+  // timezone. Worked out once, so the sweeps below stop where the counts
+  // say they stopped.
+  const { timeZone, zone } = await fetchDeskZone(config);
+  const from = dayStartIn(now, timeZone);
   const scope: Record<string, string> = config.departmentId
     ? { departmentId: config.departmentId }
     : {};
@@ -329,6 +409,8 @@ export async function fetchPulse(config: ZohoConfig, now: number = Date.now()): 
     opened: opened.tickets,
     closed: closed.tickets,
     capped,
-    now,
+    since: from,
+    timeZone,
+    zone,
   });
 }
