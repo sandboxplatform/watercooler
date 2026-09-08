@@ -36,7 +36,7 @@ import {
   organisationFor,
   tenantFor,
 } from "./tenants";
-import { worldSolids } from "./scenery";
+import { SCENERY, clearToStand, worldSolids } from "./scenery";
 import { routeAcross } from "./route";
 import { CAMPUSES } from "./campus";
 import { WORKER_SPRITES } from "../../components/game/config/animations";
@@ -398,5 +398,48 @@ describe("the routine", () => {
     // Each resident's fountain place is its own.
     const fountain = RESIDENTS.map((r) => outsideSpots(r)[0].x);
     expect(new Set(fountain).size).toBe(RESIDENTS.length);
+  });
+
+  /**
+   * Nobody stands half inside a building.
+   *
+   * The row in front of the fountain was `{ x: 760, y: 668 } + n * 40`, a
+   * literal that was in front of the fountain until the plaza moved behind
+   * `CENTRE_X`. It then sat at the foot of Chester's wall, and the first two
+   * residents to take the air stood in the bottom strip of the building's
+   * picture with only their name tags showing beneath it.
+   *
+   * Solid is not the question, which is why nothing caught it: only the wall
+   * is solid and the strip under it is ordinary ground. Out of doors
+   * everything sorts by the bottom of its own picture, so feet above a
+   * building's or a prop's bottom edge are feet behind it.
+   */
+  it("never stands anybody where they would be drawn behind something", () => {
+    for (const resident of RESIDENTS) {
+      for (const [i, spot] of outsideSpots(resident).entries()) {
+        expect(clearToStand(spot), `${resident.name} spot ${i} at ${spot.x},${spot.y}`).toBe(true);
+      }
+    }
+  });
+
+  it("keeps the row in front of the fountain, stepping over what is in it", () => {
+    const fountain = SCENERY.find((p) => p.kind === "fountain")!;
+    const row = RESIDENTS.map((r) => outsideSpots(r)[0]);
+    // One line, to the right of where it starts, below the fountain itself.
+    expect(new Set(row.map((s) => s.y)).size).toBe(1);
+    expect(row[0].y).toBeGreaterThan(fountain.y);
+    expect(Math.abs(row[0].x - fountain.x)).toBeLessThan(300);
+    for (let i = 1; i < row.length; i++) expect(row[i].x).toBeGreaterThan(row[i - 1].x);
+    // The bench in front of the fountain is stepped over rather than stood
+    // in, so the gaps are not all the same width. That is the skip working.
+    const gaps = new Set(row.slice(1).map((s, i) => s.x - row[i].x));
+    expect(gaps.size).toBeGreaterThan(1);
+  });
+
+  /** A wanderer's places are held to it too: Michael stands on these. */
+  it("never puts a wander spot behind a building or a prop", () => {
+    for (const [i, spot] of WORLD_WANDER_SPOTS.entries()) {
+      expect(clearToStand(spot), `spot ${i} at ${spot.x},${spot.y}`).toBe(true);
+    }
   });
 });

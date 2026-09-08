@@ -402,6 +402,38 @@ export function worldSolids(): Rect[] {
   ];
 }
 
+/** The whole picture a prop is drawn from: bottom-centred on its position. */
+export function propPicture(p: PlacedProp): Rect {
+  const spec = PROPS[p.kind] as PropSpec;
+  return {
+    x: p.x - spec.width / 2,
+    y: p.y - spec.height,
+    width: spec.width,
+    height: spec.height,
+  };
+}
+
+/**
+ * Whether somebody standing here would be seen standing here.
+ *
+ * Solid is not the question. Out of doors everything sorts by the bottom of
+ * its own picture, so a person whose feet are above a building's or a prop's
+ * bottom edge is drawn *behind* it — and the bottom strip of a picture is
+ * walkable ground, since only the wall is solid. Yoshi took his place beside
+ * Chester and vanished into the wall with his name tag showing underneath.
+ *
+ * So this asks about the pictures, which are bigger than the bodies: no
+ * building frame, no prop, and nothing solid either. Somewhere a person can
+ * stand and be looked at.
+ */
+export function clearToStand(at: { x: number; y: number }): boolean {
+  const holds = (r: Rect) =>
+    at.x >= r.x && at.x < r.x + r.width && at.y >= r.y && at.y < r.y + r.height;
+  if (BUILDINGS.some((b) => holds(b.frame))) return false;
+  if (SCENERY.some((p) => holds(propPicture(p)))) return false;
+  return !worldSolids().some(holds);
+}
+
 /** Whether every building's door on the world map can be reached from the spawn. */
 export function everyDoorReachable(cell = 24): boolean {
   return allReachable(

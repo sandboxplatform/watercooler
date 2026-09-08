@@ -938,7 +938,28 @@ Residents (`lib/world/residents.ts`) are the agents who live in the buildings;
 `ResidentSimulation` walks them through their **haunts** — desk, their
 organisation's rooms, its campus yard, outside — staying `DWELL_MS` at each. In
 a room they join that room's presence hub as a player, so everyone there sees
-them walk; outside they simply stand at a spot from `outsideSpots`.
+them walk; outside they simply stand at a spot from `outsideSpots` — one of
+two, their place in the row in front of the fountain or the path to their own
+building's door.
+
+**Solid is the wrong question for where somebody stands.** Out of doors
+everything sorts by the bottom of its own picture, so a person whose feet are
+above a building's or a prop's bottom edge is drawn _behind_ it — and that
+strip of ground is walkable, because only the wall is solid. `clearToStand`
+in `lib/world/scenery.ts` is the right question: no building frame, no prop
+picture, nothing solid. Somewhere a person can stand and be looked at.
+
+The row was `{ x: 760, y: 668 } + n * 40`, which was in front of the fountain
+when the plaza began at the origin; the plaza then moved behind `CENTRE_X`
+and the literal did not. It ended up at the foot of Chester's wall, and the
+first two residents to take the air stood inside the bottom strip of the
+building's picture with only their name tags showing underneath it. Nothing
+objected, because nothing there is solid. It is taken off the fountain now,
+and **the row is walked rather than multiplied out** — `placeInRow` steps
+past anywhere somebody would be hidden, which is what makes it hold when the
+cast grows or a bench moves rather than being true today. It steps over the
+bench in front of the fountain as it stands. `residents.test.ts` holds every
+resident's every spot, and every wander spot, to `clearToStand`.
 
 **Wandering mode** is `wanders: true` on a resident. It is a mode, not a kind of
 character — put it on anybody and their whole routine collapses to one haunt,

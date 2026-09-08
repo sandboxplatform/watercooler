@@ -17,6 +17,7 @@ import { floorRoomSlug, WORLD_ROOM_SLUG } from "../rooms";
 import {
   BUILDINGS,
   WORLD_SPAWN,
+  WORLD_WIDTH,
   TILE as WORLD_TILE,
   hasCampus,
   hasFloors,
@@ -25,7 +26,15 @@ import {
   tenantFor,
   type BuildingKind,
 } from "./tenants";
-import { CENTRE_AVENUE, EAST_AVENUE, NORTH_ROAD, SOUTH_ROAD, WEST_AVENUE } from "./scenery";
+import {
+  CENTRE_AVENUE,
+  EAST_AVENUE,
+  NORTH_ROAD,
+  SCENERY,
+  SOUTH_ROAD,
+  WEST_AVENUE,
+  clearToStand,
+} from "./scenery";
 import { TILE, WIDTH as LOBBY_COLS } from "../map/office";
 import { opsSupportPost } from "../map/floor";
 import { standingSpot } from "./desks";
@@ -293,8 +302,24 @@ export interface Rect {
  * anywhere solid: each is the open floor of its kind of room, clear of
  * the furniture and the lift.
  */
-/** Where residents stand when they are outside: in front of the fountain, by the feet. */
-export const OUTSIDE_SPOT = { x: 760, y: 668 };
+/**
+ * Where residents stand when they are outside: in front of the fountain, by
+ * the feet, with the row running right from here.
+ *
+ * Taken off the fountain rather than written down, because it was written
+ * down — `{ x: 760, y: 668 }`, which was in front of the fountain when the
+ * plaza began at the origin. The plaza then moved behind `CENTRE_X` and the
+ * constant did not, so the row ended up at the foot of Chester's wall, half
+ * a mile west of the thing it is named after and inside the bottom strip of
+ * the building's picture. Yoshi and Sara stood in there with only their name
+ * tags showing.
+ */
+const FOUNTAIN = SCENERY.find((p) => p.kind === "fountain")!;
+export const OUTSIDE_SPOT = { x: FOUNTAIN.x - 140, y: FOUNTAIN.y + 60 };
+/** How far apart they stand along it. */
+const OUTSIDE_SPACING = 40;
+/** Far enough right to seat any cast; the walk stops at the map's edge anyway. */
+const OUTSIDE_ROW_LIMIT = 200;
 
 /**
  * The middle of a two-tile promenade or avenue, by the feet, in world pixels
@@ -438,6 +463,31 @@ export function dwell(place: PlaceKind, random: () => number = Math.random): num
 // ── Outside ─────────────────────────────────────────────
 
 /**
+ * The row in front of the fountain: the nth place along it that somebody
+ * can actually be seen standing in.
+ *
+ * Walked rather than multiplied out, because `OUTSIDE_SPOT.x + n * 40`
+ * marches right across the map into whatever is there. `clearToStand` is
+ * about the pictures rather than the walls — a person whose feet are above a
+ * building's or a prop's bottom edge is drawn behind it, and that ground is
+ * walkable, so nothing else would object. Skipping is what makes this hold
+ * when the cast grows or a bench moves, rather than being true today.
+ */
+function placeInRow(index: number): { x: number; y: number } {
+  let clear = -1;
+  for (let step = 0; step < OUTSIDE_ROW_LIMIT; step++) {
+    const at = { x: OUTSIDE_SPOT.x + step * OUTSIDE_SPACING, y: OUTSIDE_SPOT.y };
+    if (at.x >= WORLD_WIDTH) break;
+    if (!clearToStand(at)) continue;
+    if (++clear === index) return at;
+  }
+  // A row with no room left in it at all: better in the open at the end of
+  // it than stacked on somebody, and `residents.test.ts` says it cannot
+  // happen for the cast as it stands.
+  return { x: OUTSIDE_SPOT.x, y: OUTSIDE_SPOT.y };
+}
+
+/**
  * Where a resident may stand on the world map, by the feet: their own
  * place by the fountain, or beside the path to their building's door.
  */
@@ -446,7 +496,7 @@ export function outsideSpots(resident: Resident): { x: number; y: number }[] {
     0,
     RESIDENTS.findIndex((r) => r.id === resident.id),
   );
-  const spots = [{ x: OUTSIDE_SPOT.x + index * 40, y: OUTSIDE_SPOT.y }];
+  const spots = [placeInRow(index)];
   const building = BUILDINGS.find((b) => b.org.slug === resident.org);
   if (building) spots.push({ x: building.outside.x + 60, y: building.outside.y + 43 });
   return spots;
