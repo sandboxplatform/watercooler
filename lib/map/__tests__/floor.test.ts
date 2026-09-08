@@ -4,12 +4,17 @@ import { join } from "path";
 import {
   buildFloorSpec,
   HEIGHT,
+  HELP_DESK,
   OPS_HEIGHT,
   OPS_ROOM_COUNT,
+  type OpsRoom,
   opsRooms,
   opsSupportRoom,
+  opsSupportSign,
+  opsWhiteboardRoom,
   opsWidth,
   PLAYER_START,
+  SUPPORT_PULSE,
   WIDTH,
 } from "../floor";
 import { deriveCollisions, generateMap, paintShell, solidRuns, wallCollisions } from "../generate";
@@ -213,29 +218,66 @@ describe("an Operations floor", () => {
   });
 
   /**
-   * The boards go on the first room's wall and the whiteboard on the next
-   * room's, so each room has something in it rather than one having all of it.
+   * A board hangs in the room it is about, and no room carries the lot.
+   *
+   * Six rooms rather than the pair above, because that is the shape the
+   * rule is for: with one bay Support and the room next door to it are the
+   * same wall's worth of columns, so nothing here could tell them apart.
+   * Six is what Sandbox ERP runs.
    */
-  it("hangs the project board in Operations and the queue in Support with the whiteboard", () => {
-    const [first] = opsRooms(OPS_ROOM_COUNT);
-    const support = opsSupportRoom(OPS_ROOM_COUNT);
-    const named = (name: string) => ops.pois.find((p) => p.name === name)!;
-    const inRoom = (poi: { tx: number; ty: number }, room: typeof first) =>
-      poi.tx >= room.x && poi.tx < room.x + 14 && poi.ty <= room.y;
-    expect(inRoom(named("Project board"), first)).toBe(true);
-    // The support queue is what makes a room Support, so it hangs there and
-    // not on the Operations wall it used to share with the project board.
-    expect(inRoom(named("Help desk"), support)).toBe(true);
-    expect(inRoom(named("Help desk"), first)).toBe(false);
-    expect(inRoom(named("Whiteboard"), support)).toBe(true);
-  });
+  describe("with a room for each of its projects", () => {
+    const long = buildFloorSpec(source, { boards: ["trello", "zoho"], rooms: 6 });
+    const [operations] = opsRooms(6);
+    const support = opsSupportRoom(6);
+    const nextDoor = opsWhiteboardRoom(6);
+    const named = (name: string) => long.pois.find((p) => p.name === name)!;
+    /** A board's own room: its columns, and the wall of its own rank. */
+    const inRoom = (poi: { tx: number; ty: number }, room: OpsRoom) =>
+      poi.tx >= room.x && poi.tx < room.x + 14 && poi.ty === room.wallRow + 2;
 
-  it("leaves the two boards in Support clear of each other", () => {
-    const box = (name: string) => {
-      const poi = ops.pois.find((p) => p.name === name)!;
-      return poi.tx;
-    };
-    expect(box("Help desk")).toBeGreaterThan(box("Whiteboard"));
+    it("hangs the project board in Operations and the queue and counts in Support", () => {
+      expect(inRoom(named("Project board"), operations)).toBe(true);
+      // The support queue is what makes a room Support, so it hangs there
+      // and not on the Operations wall it used to share with the board.
+      expect(inRoom(named("Help desk"), support)).toBe(true);
+      expect(inRoom(named("Help desk"), operations)).toBe(false);
+      // The counts are the same desk counted, so they hang with it.
+      expect(inRoom(named("Support pulse"), support)).toBe(true);
+    });
+
+    it("hangs the whiteboard in the empty room next door to Support", () => {
+      expect(nextDoor.x).toBeGreaterThan(support.x);
+      expect(nextDoor.rank).toBe(support.rank);
+      expect(inRoom(named("Whiteboard"), nextDoor)).toBe(true);
+      expect(inRoom(named("Whiteboard"), support)).toBe(false);
+    });
+
+    /**
+     * The point of moving it: four clear tiles in the middle of Support's
+     * wall for the room's name, which the scene letters at the size every
+     * other name in the world is drawn at. A name across a picture labels
+     * the picture, so the gap is what this holds down.
+     */
+    it("leaves the middle of Support's wall clear for its name", () => {
+      const queue = named("Help desk").tx;
+      const counts = named("Support pulse").tx;
+      const sign = opsSupportSign(6).tx;
+      // Half of each board's own width either side of its point, from the
+      // spec the map was generated off.
+      const queueRight = queue + Math.ceil(HELP_DESK.region.sw / 2);
+      const countsLeft = counts - Math.floor(SUPPORT_PULSE.region.sw / 2);
+      expect(countsLeft - queueRight).toBeGreaterThanOrEqual(4);
+      expect(sign).toBeGreaterThan(queueRight);
+      expect(sign).toBeLessThan(countsLeft);
+      // The middle of the wall, which is also the middle of that gap.
+      expect(sign).toBe(support.x + 7);
+      expect(sign - queueRight).toBe(countsLeft - sign);
+    });
+
+    it("runs the counts to Support's right-hand corner", () => {
+      const counts = named("Support pulse").tx + Math.ceil(SUPPORT_PULSE.region.sw / 2);
+      expect(counts).toBe(support.x + 14);
+    });
   });
 });
 

@@ -608,8 +608,8 @@ lift occupies, and a test asserts it does.
 Support.** A board is a picture of the work it stands for, so the room it
 hangs in is what the room is for — and the queue is the one board that names
 a job somebody does rather than a project everybody watches. Support is the
-second working room, the one with the shared whiteboard, and the queue hangs
-beside it: `opsSupportRoom` and `SUPPORT_BOARD` in `lib/map/floor.ts`.
+second working room, the one Doc works in, and the queue and its counts have
+that wall: `opsSupportRoom` and `SUPPORT_BOARD` in `lib/map/floor.ts`.
 
 That room is the only one lettered — `SUPPORT`, on its own wall
 (`opsSupportSign`, drawn by `addSupportSign`). Nothing else on the floor is
@@ -617,14 +617,23 @@ named and nothing else needs to be: a project room is whichever project is
 on the board in it. A building running no support queue has no such room and
 gets no sign, which is Castle Atlantic.
 
-**Fourteen tiles of wall, four things on it, and the layout written down
-once** — `SUPPORT_WALL` in `lib/map/floor.ts`. The name, the whiteboard, the
-queue and the five counts, a tile of wall between each, and the pictures add
-up to twelve of the fourteen; the name gets the two on the left because
-that is the only stretch nothing else wants. It is the one sign in the world
-drawn smaller than the building's own name, because seven letters at sixteen
-pixels want nearly three tiles and the letter that does not fit ends up
-behind the whiteboard's frame.
+**Fourteen tiles of wall, three things on it, and the layout written down
+once** — `SUPPORT_WALL` in `lib/map/floor.ts`. The queue takes the left, the
+five counts run to the right-hand corner, and the name has the four tiles in
+the middle: the middle of the wall is where a room's own name reads as the
+room's, and it is the only stretch nothing else wants. Drawn at the size the
+building's name is drawn downstairs, because it now has the room to be.
+
+**The whiteboard is next door** — `opsWhiteboardRoom`, centred on that room's
+wall, since it is the one thing in it. It used to have Support's wall too,
+which left the name two tiles and twelve pixels to fit them, and a letter of
+it behind the board's frame. It is also the only board on the floor that
+stands for nothing in particular, so of the four things wanting that wall it
+is the one to move; the empty room to the right of Support is where it went,
+and a building running no queue keeps it where it always hung. Its point of
+interest is the board's right-hand tile, so the sign over it carries a nudge
+of **half a tile** — half the board's _width_ is what that was, which hung
+the sign and its bobbing arrow a whole tile off centre in a lobby.
 
 **The five counts are a second way of looking at the same queue,** so they
 come with the queue rather than being declared: `SUPPORT_PULSE` is not a

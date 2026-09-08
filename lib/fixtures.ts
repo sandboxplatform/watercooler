@@ -30,7 +30,7 @@ import {
   BUCKET_INTERACT_DISTANCE,
   CAULDRON_INTERACT_DISTANCE,
 } from "./constants";
-import { TILE, WHITEBOARD } from "./map/office";
+import { TILE } from "./map/office";
 import { arcadeGame } from "./arcade";
 import { arcadeGameIn } from "./world/tenants";
 
@@ -140,9 +140,14 @@ export const FIXTURES: readonly FixtureSpec[] = [
     // it while the board itself was two rooms away.
     sign: {
       label: "WHITEBOARD",
-      // Its point is on the board's right-hand tile; the sign centres on
-      // the board.
-      nudgeX: -(WHITEBOARD.region.sw / 2) * TILE,
+      // Its point is the board's right-hand tile, so the middle of the
+      // board is half a tile to the left of it — whatever the board is
+      // wide, since the point is a tile rather than a share of the width.
+      // Half the width is what this was, which hung the sign and its arrow
+      // a full tile off centre in a lobby and half a tile off on an
+      // Operations floor: close enough to read as a wonky sign rather than
+      // as the wrong number.
+      nudgeX: -TILE / 2,
       lift: TILE + 10,
     },
   },

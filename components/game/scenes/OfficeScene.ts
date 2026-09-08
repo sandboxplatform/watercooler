@@ -658,12 +658,13 @@ export class OfficeScene extends Phaser.Scene {
    * A building running no support queue has no such room and gets no sign,
    * which is Castle Atlantic.
    *
-   * Smaller than the building's own name on the wall downstairs, and the
-   * one sign in the world that is: three pictures hang on this wall and
-   * they leave it two tiles. Seven letters at sixteen pixels want nearer
-   * three, and the letter that does not fit ends up behind the
-   * whiteboard's frame — a name lettered across a picture labels the
-   * picture.
+   * The middle of the wall, at the size the building's own name is drawn
+   * downstairs. It was two tiles at the left end and twelve pixels to fit
+   * them, which is the compromise the whiteboard's frame forced: seven
+   * letters at sixteen pixels want nearer three tiles, and the letter that
+   * did not fit ended up behind the board. With the whiteboard next door
+   * the middle of the wall is four clear tiles, so the name is drawn like
+   * every other name in the world — `opsSupportSign` is where it hangs.
    */
   private addSupportSign(address: Address) {
     const ops = address.floor.kind === "floor" && address.floor.level === 3;
@@ -672,7 +673,7 @@ export class OfficeScene extends Phaser.Scene {
     this.add
       .text(at.tx * TILE, at.ty * TILE + 96, "SUPPORT", {
         fontFamily: '"Press Start 2P", monospace',
-        fontSize: "12px",
+        fontSize: "16px",
         color: "#3a3a50",
       })
       .setOrigin(0.5, 1)
