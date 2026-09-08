@@ -118,8 +118,8 @@ export type Game = "pong" | "pinball" | ArcadeGameId;
  * is the building's business, and its sign says so.
  */
 const CABINET = {
-  region: { label: "arcade cabinet", sx: 0, sy: 0, sw: 2, sh: 2, dx: 15, dy: 3, layers: [] },
-  poi: { name: "Arcade cabinet", tx: 16, ty: 5, facing: "up" },
+  region: { label: "arcade cabinet", sx: 0, sy: 0, sw: 2, sh: 2, dx: 16, dy: 3, layers: [] },
+  poi: { name: "Arcade cabinet", tx: 17, ty: 5, facing: "up" },
 } satisfies { region: Region; poi: PoiSpec };
 
 export const GAMES: Record<Game, { region: Region; poi: PoiSpec }> = {
@@ -133,8 +133,8 @@ export const GAMES: Record<Game, { region: Region; poi: PoiSpec }> = {
   pinball: {
     // Likewise: public/sprites/pinball_machine_96x120.png. Right up against
     // the top wall, so its footprint starts on the wall's shadow row.
-    region: { label: "pinball machine", sx: 0, sy: 0, sw: 2, sh: 2, dx: 15, dy: 3, layers: [] },
-    poi: { name: "Pinball machine", tx: 16, ty: 5, facing: "up" },
+    region: { label: "pinball machine", sx: 0, sy: 0, sw: 2, sh: 2, dx: 16, dy: 3, layers: [] },
+    poi: { name: "Pinball machine", tx: 17, ty: 5, facing: "up" },
   },
   // Spread rather than five copies, so a game added to `ARCADE_GAME_IDS`
   // has a cabinet without anyone remembering to write one here.
