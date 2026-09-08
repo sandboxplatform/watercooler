@@ -1,7 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_BASE_URL, mettaraPreflight, readMettaraConfig, sourceUserId } from "../config";
+import {
+  DEFAULT_BASE_URL,
+  mettaraPreflight,
+  readMettaraConfig,
+  seatEmail,
+  sourceUserId,
+} from "../config";
 import { getCliProvider, isCliProviderId } from "../../cli-providers";
 import { getProviderLabel, isCliProvider } from "../../utils";
+
+/** Everything the preflight wants, so a test can vary one thing at a time. */
+const READY = {
+  METTARA_API_SECRET: "s",
+  METTARA_PLATFORM_ID: "p",
+  METTARA_EMAIL_DOMAIN: "example-co.uk",
+};
 
 describe("mettara config", () => {
   it("is unconfigured until both credentials are present", () => {
@@ -39,7 +52,32 @@ describe("mettara config", () => {
   it("names the missing variable in the preflight message", () => {
     expect(mettaraPreflight({})).toContain("METTARA_API_SECRET");
     expect(mettaraPreflight({ METTARA_API_SECRET: "s" })).toContain("METTARA_PLATFORM_ID");
-    expect(mettaraPreflight({ METTARA_API_SECRET: "s", METTARA_PLATFORM_ID: "p" })).toBeNull();
+    expect(mettaraPreflight(READY)).toBeNull();
+  });
+
+  /**
+   * Mettara provisions each seat as a user and will not do it on an address
+   * it cannot deliver to. `@watercooler.local` was hard-coded here, so no
+   * seat could ever be provisioned — and the service refuses it with the same
+   * opaque `400 Invalid request` it gives a bad signature, which is why this
+   * has to be caught before the run rather than read off the failure.
+   */
+  it("wants a deliverable domain to address the seats on", () => {
+    expect(mettaraPreflight({ ...READY, METTARA_EMAIL_DOMAIN: undefined })).toContain(
+      "METTARA_EMAIL_DOMAIN",
+    );
+    expect(mettaraPreflight({ ...READY, METTARA_EMAIL_DOMAIN: "  " })).toContain(
+      "METTARA_EMAIL_DOMAIN",
+    );
+    for (const domain of ["watercooler.local", "box.internal", "example.com", "nodots"]) {
+      expect(mettaraPreflight({ ...READY, METTARA_EMAIL_DOMAIN: domain })).toContain(domain);
+    }
+  });
+
+  it("takes the domain with or without its at sign, and lower-cases it", () => {
+    const config = readMettaraConfig({ ...READY, METTARA_EMAIL_DOMAIN: "@Sandbox.CO" });
+    expect(config?.emailDomain).toBe("sandbox.co");
+    expect(seatEmail("Yoshi", "sandbox.co")).toBe("yoshi@sandbox.co");
   });
 
   it("derives a stable identity from a seat label", () => {

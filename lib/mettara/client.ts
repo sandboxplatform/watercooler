@@ -16,7 +16,7 @@
 
 import { readFile } from "node:fs/promises";
 import { createLogger } from "../logger";
-import { readMettaraConfig, sourceUserId, type MettaraConfig } from "./config";
+import { readMettaraConfig, seatEmail, sourceUserId, type MettaraConfig } from "./config";
 
 const log = createLogger("Mettara");
 
@@ -40,8 +40,14 @@ interface Conversation {
   id: string;
 }
 
-interface SentMessage {
+/**
+ * One frame of a streamed reply. `content` is the answer; `activity` and
+ * `reasoning` are the assistant thinking out loud, and belong nowhere near a
+ * worker's speech bubble.
+ */
+interface Delta {
   content: string;
+  type: "content" | "activity" | "reasoning";
 }
 
 export interface Sdk {
@@ -69,13 +75,21 @@ export interface Sdk {
       aiTechnicalName: string,
       name?: string,
     ): Promise<Conversation>;
-    sendMessage(
+    /**
+     * The turn is taken streamed rather than in one call, because the
+     * non-streaming reply is not usable: its `content` is every frame the
+     * assistant emitted run together — the status text included — with the
+     * answer itself repeated at the end. Asking Mettara for "PONG" comes back
+     * as `"Analyzingis thinking...PONGPONG"`. Streamed, the frames arrive
+     * typed, and only the `content` ones are the answer.
+     */
+    streamMessage(
       conversationId: string,
       groupId: string,
       userId: string,
       content: string,
       fileIds?: string[],
-    ): Promise<SentMessage>;
+    ): AsyncIterable<Delta>;
     uploadFile(groupId: string, file: Uint8Array, filename: string): Promise<{ id: string }>;
     listAis?(groupId: string): Promise<Array<{ technical_name?: string; display_name?: string }>>;
   };
@@ -92,6 +106,13 @@ async function importSdk(): Promise<Sdk | null> {
     const sdk = ((mod as { default?: unknown }).default ?? mod) as Sdk;
     if (!sdk?.EmbedClient || !sdk?.MettaraClient) {
       log.error(`${SDK_PACKAGE} loaded but does not export EmbedClient/MettaraClient`);
+      return null;
+    }
+    // A turn is taken streamed, so an SDK without it is one this cannot use.
+    // Named here rather than guessed at later: the plain call's reply would
+    // reach a worker's bubble with the status text still in it.
+    if (typeof sdk.MettaraClient.prototype?.streamMessage !== "function") {
+      log.error(`${SDK_PACKAGE} is too old: MettaraClient has no streamMessage`);
       return null;
     }
     return sdk;
@@ -183,7 +204,13 @@ function identityFor(
   if (cached) return cached;
   const embed = new sdk.EmbedClient(config.apiSecret, embedBase(config), config.platformId);
   const pending = embed
-    .getToken(userId, config.groupId, config.groupName, displayName, `${userId}@watercooler.local`)
+    .getToken(
+      userId,
+      config.groupId,
+      config.groupName,
+      displayName,
+      seatEmail(userId, config.emailDomain),
+    )
     .catch((err: unknown) => {
       // A failed provisioning must not poison the cache — the next turn should
       // be free to try again once the secret or the network is fixed.
@@ -192,6 +219,99 @@ function identityFor(
     });
   tokenCache.set(userId, pending);
   return pending;
+}
+
+// ── Whether the service can take a turn ────────────────
+
+/**
+ * The AIs the group has, by technical name, or null when Mettara could not
+ * be asked at all.
+ *
+ * Read with a plain request rather than through `sdk.listAis`, which pulls
+ * `ais` out of a response the gateway sends as `{"object":"list","data":[…]}`
+ * — so it hands back `undefined`, and an undefined list cannot be told apart
+ * from an empty group, which is the one distinction this check exists to
+ * make. Both shapes are accepted here in case the SDK's is the older one.
+ */
+async function fetchGroupAis(config: MettaraConfig): Promise<string[] | null> {
+  const url = `${apiBase(config)}/v1/ais?group_id=${encodeURIComponent(config.groupId)}`;
+  try {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${config.apiSecret}` },
+    });
+    if (!response.ok) {
+      log.warn(`could not list the group's AIs: HTTP ${response.status}`);
+      return null;
+    }
+    const body = (await response.json()) as {
+      data?: Array<{ technical_name?: string }>;
+      ais?: Array<{ technical_name?: string }>;
+    };
+    const list = body.data ?? body.ais;
+    if (!Array.isArray(list)) {
+      log.warn("could not list the group's AIs: unexpected response shape");
+      return null;
+    }
+    return list.map((ai) => ai.technical_name ?? "").filter((name) => name.length > 0);
+  } catch (err) {
+    log.warn(`could not list the group's AIs: ${(err as Error)?.message ?? err}`);
+    return null;
+  }
+}
+
+/**
+ * Only the "yes" is remembered. A group that has the AI will go on having
+ * it, so the question is asked once per process; every other answer is
+ * re-asked, because the fix for it — provisioning an assistant on Mettara's
+ * side — happens while this server is running and should not need a restart
+ * to be noticed.
+ */
+let serviceReady = false;
+
+/** Test seam: forget that the service was found ready. */
+export function resetServiceReady() {
+  serviceReady = false;
+}
+
+/**
+ * Why Mettara cannot take a turn right now, or null when it can.
+ *
+ * `mettaraPreflight` answers from the environment and cannot await; this is
+ * the half of the question that needs the network — the SDK on this side,
+ * and an assistant to talk to on the other. Without one, every run dies in
+ * `createConversation` with nothing readable to show a person.
+ *
+ * An unanswerable check is **not** a refusal. Mettara being unreachable says
+ * nothing about which AIs the group has, and the run is about to reach for
+ * the same host anyway: better it fails with the real error than be turned
+ * away by a check that could not see. Only a definite answer blocks.
+ */
+export async function mettaraServiceReady(): Promise<string | null> {
+  if (serviceReady) return null;
+
+  const config = readMettaraConfig();
+  // Missing keys are `mettaraPreflight`'s sentence to say, not this one's.
+  if (!config) return null;
+  if (!(await loadSdk())) return SDK_MISSING_MESSAGE;
+
+  const names = await fetchGroupAis(config);
+  if (!names) return null;
+  if (!names.length) {
+    return (
+      `Mettara group ${config.groupId} has no AI in it, so there is nothing for a ` +
+      "worker to talk to. Provision an assistant on Mettara, then set METTARA_AI_NAME " +
+      "to its technical name."
+    );
+  }
+  if (!names.includes(config.defaultAiName)) {
+    return (
+      `Mettara group ${config.groupId} has no AI called "${config.defaultAiName}". ` +
+      `Set METTARA_AI_NAME to one it does have: ${names.join(", ")}.`
+    );
+  }
+
+  serviceReady = true;
+  return null;
 }
 
 /**
@@ -238,12 +358,18 @@ export async function runMettaraTurn(turn: MettaraTurn): Promise<MettaraReply> {
     fileIds.push(uploaded.id);
   }
 
-  const reply = await client.sendMessage(
+  // Only the `content` frames. The others are the assistant narrating itself
+  // — "Analyzing", "is thinking..." — and a worker's bubble is not the place
+  // for them; see `streamMessage` above for why the plain call is no use.
+  let text = "";
+  for await (const delta of client.streamMessage(
     conversationId,
     token.groupId,
     token.userId,
     opening,
     fileIds.length ? fileIds : undefined,
-  );
-  return { text: reply.content ?? "", conversationId };
+  )) {
+    if (delta.type === "content") text += delta.content;
+  }
+  return { text: text.trim(), conversationId };
 }

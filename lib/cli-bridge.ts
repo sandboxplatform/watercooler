@@ -185,7 +185,16 @@ function atCapacity(): boolean {
   return runningCount >= MAX_CONCURRENT_RUNS;
 }
 
-/** Reason this provider cannot run right now, or null when it is ready. */
+/**
+ * Reason this provider cannot run right now, or null when it is ready.
+ *
+ * **Synchronous on purpose.** `runAgent` takes its place in the run count as
+ * it starts, so the ceiling only holds while nothing suspends between the
+ * check and the claim: put an await in here and a burst of dispatches all
+ * read the same free count and every one of them is let through — five runs
+ * past a ceiling of four. Anything that needs the network is `serviceBlocked`
+ * below, which is asked before this rather than inside it.
+ */
 function providerBlocked(room: string): string | null {
   const provider = activeProvider;
   const reason = provider.preflight?.() ?? null;
@@ -204,6 +213,20 @@ function providerBlocked(room: string): string | null {
   }
 
   return null;
+}
+
+/**
+ * The half of the same question that has to reach the network: whether the AI
+ * on the far end can take a turn at all. A hosted provider can be perfectly
+ * configured on this side and have nothing to talk to on the other — before
+ * this was asked, that surfaced as a run dying inside the provider with
+ * nothing readable to show a person.
+ *
+ * Asked before `providerBlocked` at every call site, never within it, so the
+ * counters stay in the same synchronous stretch as the run they guard.
+ */
+function serviceBlocked(): Promise<string | null> {
+  return activeProvider.ready?.() ?? Promise.resolve(null);
 }
 
 /**
@@ -395,9 +418,12 @@ type RunOutcome =
 /**
  * Runs one turn and says how it went. The only place a run is started.
  *
- * Every way a run can end is one settled promise: a service that answered or
- * threw, a CLI that could not be spawned, that errored, that ran over its
- * time, that exited non-zero, or that exited cleanly. Nothing here reports
+ * Every way a run can end is one settled promise: a service that answered,
+ * threw, or went quiet past its time, a CLI that could not be spawned, that
+ * errored, that ran over its time, that exited non-zero, or that exited
+ * cleanly. Both kinds are bounded, and the two ends differ in what can be
+ * done about it — a child is killed, a hosted request is only abandoned,
+ * because the SDK takes no abort signal. Nothing here reports
  * anything to a room — a directly assigned run answers one client and a
  * delegated one is broadcast to all of them, which is the whole of the
  * difference between the two and the reason this stops short of it.
@@ -424,10 +450,43 @@ function runAgent(req: RunRequest): Promise<RunOutcome> {
       }
       log.info(`Calling ${provider.displayName} for run ${runId}`);
       runningCount += 1;
+
+      /**
+       * Give the place back, once — the timeout below and the answer that
+       * may arrive after it are two ends of the same run, and counting a
+       * single run out twice is how a ceiling of four quietly becomes a
+       * ceiling of two.
+       */
+      let released = false;
+      // `timer` is declared below and only ever read from here, which runs
+      // after it exists — either from the timer itself or from the answer.
       const settle = (outcome: RunOutcome) => {
+        if (released) return;
+        released = true;
+        clearTimeout(timer);
         runningCount = Math.max(0, runningCount - 1);
         resolve(outcome);
       };
+
+      /**
+       * A hosted turn is bounded too, and it has to be: there is no process
+       * to notice dying, so a request that never answers held its place for
+       * ever, and four of those shut the room to work with nothing to show
+       * why. A turn is streamed, which is exactly the shape of call that can
+       * go quiet halfway through.
+       *
+       * The run is **abandoned**, not killed. The SDK takes no abort signal,
+       * so the request may well run on to its own end — what stops is the
+       * room waiting on it. That is the honest half of the guarantee, and it
+       * is the half the ceiling is about.
+       */
+      const timer = setTimeout(() => {
+        const seconds = Math.round(RUN_TIMEOUT_MS / 1000);
+        log.error(`run ${runId} exceeded ${seconds}s with no reply and was abandoned`);
+        settle({ ok: false, error: req.timeoutMessage(seconds) });
+      }, RUN_TIMEOUT_MS);
+      timer.unref?.();
+
       provider.run(options).then(
         (parsed) => settle({ ok: true, parsed, raw: "" }),
         (err: unknown) => settle({ ok: false, error: (err as Error)?.message ?? String(err) }),
@@ -519,7 +578,7 @@ function runAgent(req: RunRequest): Promise<RunOutcome> {
   });
 }
 
-function handleChatSend(state: ClientState, id: string, params: Record<string, unknown>) {
+async function handleChatSend(state: ClientState, id: string, params: Record<string, unknown>) {
   const provider = activeProvider;
   const sessionKey = (params.sessionKey as string) ?? "default";
   const message = (params.message as string) ?? "";
@@ -528,9 +587,10 @@ function handleChatSend(state: ClientState, id: string, params: Record<string, u
   // Immediate response with runId
   sendResponse(state, id, true, { runId, status: "accepted" });
 
-  // A missing key, a full queue or an exhausted budget should read as a plain
-  // sentence in the worker's bubble, not as a mysterious non-zero exit code.
-  const blocked = providerBlocked(state.room);
+  // A missing key, a full queue, an exhausted budget or a hosted AI that is
+  // not there should read as a plain sentence in the worker's bubble, not as
+  // a mysterious non-zero exit code.
+  const blocked = (await serviceBlocked()) ?? providerBlocked(state.room);
   if (blocked) {
     log.warn(`refusing run ${runId}: ${blocked}`);
     recordActivity(state.room, {
@@ -832,7 +892,7 @@ function handleMessage(state: ClientState, raw: string) {
       break;
 
     case "chat.send":
-      handleChatSend(state, id, params ?? {});
+      void handleChatSend(state, id, params ?? {});
       break;
 
     case "chat.abort":
@@ -969,7 +1029,7 @@ export async function dispatchToWorker(
 
   // Delegation respects the same key, capacity and budget rules; otherwise a
   // single agent could fan out past every limit by dispatching.
-  const blocked = providerBlocked(room);
+  const blocked = (await serviceBlocked()) ?? providerBlocked(room);
   if (blocked) {
     log.warn(`refusing dispatch to ${seat.label}: ${blocked}`);
     return { result: "", error: blocked };

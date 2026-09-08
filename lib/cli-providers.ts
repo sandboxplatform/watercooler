@@ -18,7 +18,7 @@ import { accessSync, constants, mkdirSync } from "fs";
 import { delimiter, isAbsolute, join } from "path";
 import { homedir } from "os";
 import { DEFAULT_AI_NAME, mettaraPreflight } from "./mettara/config";
-import { runMettaraTurn } from "./mettara/client";
+import { mettaraServiceReady, runMettaraTurn } from "./mettara/client";
 
 export type CliProviderId = "auggie" | "claude" | "claude-api" | "mettara";
 
@@ -85,6 +85,14 @@ export interface CliProvider {
    * say so in the worker's bubble, not fail as an opaque exit code.
    */
   preflight?(): string | null;
+  /**
+   * The other half of the same question, asked over the network: whether the
+   * service on the far end can actually take a turn. Split from `preflight`
+   * because that one answers from the environment and cannot await — and a
+   * hosted provider can be perfectly configured here and have nothing to
+   * talk to there.
+   */
+  ready?(): Promise<string | null>;
   /** Builds the argv for a run. Required for "cli" providers. */
   buildRun?(opts: CliRunOptions): CliRunSpec;
   /** Reads the result out of stdout. Required for "cli" providers. */
@@ -394,6 +402,10 @@ const mettaraProvider: CliProvider = {
 
   preflight() {
     return mettaraPreflight();
+  },
+
+  ready() {
+    return mettaraServiceReady();
   },
 
   async run(options) {

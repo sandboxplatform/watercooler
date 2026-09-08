@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { RoomStore } from "../server/room-store";
 import type { CliProvider, CliRunOptions, CliParsedResult } from "../cli-providers";
 
@@ -25,6 +25,8 @@ const globalForStore = globalThis as unknown as { __roomStore?: RoomStore };
 let calls: CliRunOptions[] = [];
 /** How the fake provider answers, set per test. */
 let answer: (opts: CliRunOptions) => Promise<CliParsedResult>;
+/** What the service says about its own readiness, set per test. */
+let readiness: () => Promise<string | null>;
 
 /**
  * A service provider, because that is the branch with no child process and
@@ -42,6 +44,7 @@ const fake: CliProvider = {
     calls.push(opts);
     return answer(opts);
   },
+  ready: () => readiness(),
 };
 
 let bridge: typeof import("../cli-bridge");
@@ -50,6 +53,7 @@ beforeEach(async () => {
   globalForStore.__roomStore = new RoomStore(":memory:");
   calls = [];
   answer = async () => ({ text: "done" });
+  readiness = async () => null;
   bridge = await import("../cli-bridge");
   bridge.setBridgeProvider(fake);
 });
@@ -189,5 +193,155 @@ describe("the limits delegation shares with direct work", () => {
     expect(result.result).toBe("");
     expect(result.error).toContain("spend limit");
     expect(calls).toHaveLength(0);
+  });
+});
+
+/**
+ * A hosted provider can be configured on this side and have nothing to talk
+ * to on the other — an empty Mettara group is the case that prompted this.
+ * The refusal has to arrive as a sentence, in front of the run, without
+ * costing the room a place in the count.
+ */
+describe("what the service says about itself", () => {
+  it("refuses the run with the service's own sentence, having run nothing", async () => {
+    staff("seat-0", "Alice");
+    readiness = async () => "The group has no AI in it.";
+
+    const result = await bridge.dispatchToWorker("seat-0", "a task", ROOM);
+
+    expect(result).toEqual({ result: "", error: "The group has no AI in it." });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("does not hold a place in the count when it refuses", async () => {
+    staff("seat-0", "Alice");
+    readiness = async () => "not ready";
+    for (let i = 0; i < 6; i += 1) await bridge.dispatchToWorker("seat-0", "a task", ROOM);
+
+    readiness = async () => null;
+    expect(await bridge.dispatchToWorker("seat-0", "one more", ROOM)).toEqual({ result: "done" });
+  });
+
+  /**
+   * The question reaches the network, so asking it suspends — and a check
+   * separated from the run it guards by an await is no check at all. Five
+   * dispatches arriving together must still leave four running: each has to
+   * read the count and claim its place in one uninterrupted stretch, which
+   * is why readiness is asked *before* `providerBlocked` and never inside
+   * it. Moving it back inside lets all five through, and nothing else here
+   * notices.
+   */
+  it("still holds the ceiling when the readiness question takes a moment", async () => {
+    staff("seat-0", "Alice");
+    readiness = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return null;
+    };
+    let release: (() => void) | null = null;
+    const holding = new Promise<CliParsedResult>((resolve) => {
+      release = () => resolve({ text: "at last" });
+    });
+    answer = () => holding;
+
+    const running = Array.from({ length: 4 }, () =>
+      bridge.dispatchToWorker("seat-0", "a task", ROOM),
+    );
+    const refused = await bridge.dispatchToWorker("seat-0", "one too many", ROOM);
+
+    expect(refused.error).toContain("Too many agents");
+    expect(calls).toHaveLength(4);
+
+    release!();
+    await Promise.all(running);
+  });
+});
+
+/**
+ * A hosted turn is bounded too.
+ *
+ * The CLI branch has always had a guard — it kills the child and the `close`
+ * that follows gives the place back. The service branch had none: a request
+ * that never answered held its place for ever, and four of those shut the
+ * room to work with nothing on screen to say why. A streamed turn is exactly
+ * the shape of call that can go quiet halfway through.
+ *
+ * These run against their own copy of the bridge, so a short limit here is
+ * not a short limit for the tests above that hold runs open on purpose.
+ */
+describe("a hosted run that never answers", () => {
+  let bounded: typeof import("../cli-bridge");
+
+  beforeEach(async () => {
+    process.env.AGENT_RUN_TIMEOUT_MS = "200";
+    vi.resetModules();
+    bounded = await import("../cli-bridge");
+    bounded.setBridgeProvider(fake);
+  });
+
+  afterEach(() => {
+    delete process.env.AGENT_RUN_TIMEOUT_MS;
+    vi.resetModules();
+  });
+
+  it("is abandoned at the limit, with the caller's own sentence", async () => {
+    staff("seat-0", "Alice");
+    answer = () => new Promise<CliParsedResult>(() => {});
+
+    const result = await bounded.dispatchToWorker("seat-0", "a task", ROOM);
+
+    expect(result.result).toBe("");
+    // `timeoutMessage` from the delegated path, so the seat is named.
+    expect(result.error).toBe("Alice was stopped after 0s with no reply.");
+  });
+
+  it("gives the place back, so the room still takes work", async () => {
+    staff("seat-0", "Alice");
+    answer = () => new Promise<CliParsedResult>(() => {});
+    // Five hangs in a row is more than the ceiling: if a timed-out run kept
+    // its place, the room would be shut for good by the fourth.
+    for (let i = 0; i < 5; i += 1) await bounded.dispatchToWorker("seat-0", "a task", ROOM);
+
+    answer = async () => ({ text: "still working" });
+    expect(await bounded.dispatchToWorker("seat-0", "one more", ROOM)).toEqual({
+      result: "still working",
+    });
+  });
+
+  /**
+   * The request is abandoned rather than cancelled — the SDK takes no abort
+   * signal — so the answer can still turn up long after nobody is waiting.
+   * It must not give the place back a second time.
+   *
+   * The trick is to have other runs in flight when it lands. With the room
+   * otherwise idle the count is already 0, `Math.max` clamps the second
+   * decrement, and the fault is invisible — which is exactly how the same
+   * mistake survived in the spawn path: it took the count from four to two
+   * only when three other agents were working.
+   */
+  it("does not count a late answer out a second time", async () => {
+    staff("seat-0", "Alice");
+    // Only the first run's resolver is kept: every later call overwriting it
+    // would land a filler instead, which frees a place quite legitimately and
+    // tells us nothing.
+    let landFirst: ((result: CliParsedResult) => void) | null = null;
+    answer = () =>
+      new Promise<CliParsedResult>((resolve) => {
+        if (!landFirst) landFirst = resolve;
+      });
+
+    const timedOut = await bounded.dispatchToWorker("seat-0", "a task", ROOM);
+    expect(timedOut.error).toContain("stopped after");
+
+    // Four more, all still running, so the room is legitimately full.
+    for (let i = 0; i < 4; i += 1) void bounded.dispatchToWorker("seat-0", "filling up", ROOM);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // Now the abandoned request finally answers. Counted out twice, this
+    // frees a place that no run has finished with.
+    landFirst!({ text: "sorry I am late" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const fifth = await bounded.dispatchToWorker("seat-0", "one too many", ROOM);
+    expect(fifth.error).toContain("Too many agents");
   });
 });

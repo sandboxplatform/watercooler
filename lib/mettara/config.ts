@@ -30,6 +30,34 @@ export interface MettaraConfig {
   groupId: string;
   groupName: string;
   defaultAiName: string;
+  /** Domain the seats' addresses are built on. Empty when nothing is set. */
+  emailDomain: string;
+}
+
+/**
+ * Domains Mettara will not provision a user on. It wants a real, deliverable
+ * address, and refuses the reserved and internal-only suffixes with the same
+ * opaque `400 Invalid request` it gives a bad signature — so this is worth
+ * catching here, where it can be said plainly.
+ */
+const UNDELIVERABLE = [
+  ".local",
+  ".localhost",
+  ".internal",
+  ".test",
+  ".invalid",
+  ".example",
+  "example.com",
+  "example.org",
+  "example.net",
+];
+
+/**
+ * A seat's address on Mettara. One per seat, so each worker is its own user
+ * and holds its own thread.
+ */
+export function seatEmail(userId: string, domain: string): string {
+  return `${userId}@${domain}`.toLowerCase();
 }
 
 /** Reads config from the environment. Returns null when required keys are absent. */
@@ -44,6 +72,9 @@ export function readMettaraConfig(env: EnvLike = process.env): MettaraConfig | n
     groupId: env.METTARA_GROUP_ID?.trim() || "watercooler",
     groupName: env.METTARA_GROUP_NAME?.trim() || "WaterCooler",
     defaultAiName: env.METTARA_AI_NAME?.trim() || DEFAULT_AI_NAME,
+    // No default: only the operator knows a domain they own, and the one that
+    // was hard-coded here was the reason no seat could ever be provisioned.
+    emailDomain: env.METTARA_EMAIL_DOMAIN?.trim().replace(/^@/, "").toLowerCase() ?? "",
   };
 }
 
@@ -59,6 +90,23 @@ export function mettaraPreflight(env: EnvLike = process.env): string | null {
   }
   if (!env.METTARA_PLATFORM_ID?.trim()) {
     return "No METTARA_PLATFORM_ID set on the server — Mettara agents cannot run.";
+  }
+  // Mettara provisions each seat as a user, and will not do it on an address
+  // it cannot deliver to. It refuses one with the same `400 Invalid request`
+  // it gives a bad signature, so left to the service this reads as a broken
+  // credential rather than as a setting nobody has filled in.
+  const domain = env.METTARA_EMAIL_DOMAIN?.trim().replace(/^@/, "").toLowerCase() ?? "";
+  if (!domain) {
+    return (
+      "No METTARA_EMAIL_DOMAIN set on the server. Mettara provisions each seat " +
+      "as a user and needs a real domain to address them on — set it to one you own."
+    );
+  }
+  if (!domain.includes(".") || UNDELIVERABLE.some((bad) => domain.endsWith(bad))) {
+    return (
+      `Mettara will not provision a seat on "${domain}" — it wants a real, ` +
+      "deliverable domain. Set METTARA_EMAIL_DOMAIN to one you own."
+    );
   }
   return null;
 }

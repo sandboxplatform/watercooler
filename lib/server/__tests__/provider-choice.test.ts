@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoomStore } from "../room-store";
 import {
   describeProviders,
@@ -9,14 +9,17 @@ import {
   rememberProvider,
   rememberedProvider,
 } from "../provider-choice";
-import { resetSdkCache, setSdkLoader } from "../../mettara/client";
+import { resetSdkCache, resetServiceReady, setSdkLoader } from "../../mettara/client";
 
 afterEach(() => {
   setSdkLoader();
   resetSdkCache();
+  resetServiceReady();
+  vi.unstubAllGlobals();
   registerProviderSwitch(null);
   delete process.env.METTARA_API_SECRET;
   delete process.env.METTARA_PLATFORM_ID;
+  delete process.env.METTARA_EMAIL_DOMAIN;
 });
 
 describe("what the panel offers", () => {
@@ -46,8 +49,31 @@ describe("whether Mettara can run", () => {
     expect(await providerBlocked("mettara")).toMatch(/METTARA_API_SECRET/);
     process.env.METTARA_API_SECRET = "s";
     process.env.METTARA_PLATFORM_ID = "p";
+    process.env.METTARA_EMAIL_DOMAIN = "sandbox.co";
     setSdkLoader(async () => null);
     expect(await providerBlocked("mettara")).toMatch(/SDK/i);
+  });
+
+  /**
+   * Both keys set, the SDK installed, and still nothing to talk to. The panel
+   * is the only place a person sees this, so the reason has to reach it —
+   * before, it said Mettara was ready and the failure turned up as a broken
+   * run in a worker's bubble.
+   */
+  it("wants an AI in the group, and says so in the panel", async () => {
+    process.env.METTARA_API_SECRET = "s";
+    process.env.METTARA_PLATFORM_ID = "p";
+    process.env.METTARA_EMAIL_DOMAIN = "sandbox.co";
+    setSdkLoader(async () => ({ EmbedClient: class {}, MettaraClient: class {} }) as never);
+    vi.stubGlobal("fetch", async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [] }),
+    }));
+
+    expect(await providerBlocked("mettara")).toMatch(/no AI in it/);
+    const state = await describeProviders("claude", "claude");
+    expect(state.choices[1].blocked).toMatch(/no AI in it/);
   });
 
   it("is described alongside the default, with its reason", async () => {

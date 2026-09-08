@@ -12,7 +12,6 @@
  */
 
 import { getCliProvider, isCliProviderId, type CliProviderId } from "../cli-providers";
-import { loadSdk, SDK_MISSING_MESSAGE } from "../mettara/client";
 
 export const PROVIDER_SETTING = "agent-provider";
 
@@ -39,13 +38,20 @@ export function offeredProviders(defaultId: CliProviderId): CliProviderId[] {
   return defaultId === "mettara" ? ["mettara", claude] : [defaultId, "mettara"];
 }
 
-/** Why a provider cannot run right now: its own preflight, and for Mettara its SDK. */
+/**
+ * Why a provider cannot run right now: what its environment says, then what
+ * the service on the other end says.
+ *
+ * The panel is where a person chooses a provider, so it is where the reason
+ * has to be legible — and until this asked the second question, Mettara read
+ * as ready whenever its two keys were set, whatever was waiting at the far
+ * end. The failure then only appeared as a broken run in a worker's bubble.
+ */
 export async function providerBlocked(id: CliProviderId): Promise<string | null> {
   const provider = getCliProvider(id);
   const reason = provider.preflight?.() ?? null;
   if (reason) return reason;
-  if (id === "mettara" && !(await loadSdk())) return SDK_MISSING_MESSAGE;
-  return null;
+  return (await provider.ready?.()) ?? null;
 }
 
 export async function describeProviders(

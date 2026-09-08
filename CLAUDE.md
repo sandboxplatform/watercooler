@@ -136,6 +136,27 @@ a restart comes back on it. Mettara is refused, with the reason shown in the pan
 until its keys are set and its SDK is installed. Conversations do not carry across a
 switch — a seat starts a fresh thread on whatever it switched to.
 
+**Two halves to "can it run".** `preflight` on a provider answers from the
+environment and cannot await; `ready` is the same question asked over the
+network, and only a hosted provider has one. Mettara's asks the group for its
+AIs, because the keys being right says nothing about there being anything to
+talk to: an empty group, or a `METTARA_AI_NAME` that names no AI it has, is a
+run that dies inside `createConversation` with nothing readable to show a
+person. Both are refused instead, in the panel and in the worker's bubble,
+naming the group and listing the AIs it does have. An **unanswerable** check
+is not a refusal — Mettara being unreachable says nothing about its AIs, and
+the run is about to reach the same host, so it is let through to fail with the
+real error. Only the "yes" is cached: provisioning an assistant happens while
+this server runs and must not need a restart to be noticed.
+
+`ready` is asked **before** `providerBlocked` in `lib/cli-bridge.ts`, never
+inside it. `runAgent` takes its place in the run count as it starts, so the
+ceiling only holds while the check and the claim sit in one synchronous
+stretch — an await between them lets a burst of five dispatches all read the
+same free count and every one of them through. Making `providerBlocked` async
+is how that was found; `cli-bridge.test.ts` now pins it with a readiness
+question that actually takes a moment.
+
 **Seat sandboxes.** Each seat runs in `.agent-workspaces/<room>/<seat>/`
 (gitignored, root overridable with `AGENT_WORKSPACE_ROOT`), created on demand, with
 `--permission-mode acceptEdits` — so an agent reads, writes and edits inside its own
@@ -166,6 +187,18 @@ worker's bubble, not an opaque failure.
 | Spend per room         | $50     | `ROOM_SPEND_LIMIT_USD` |
 | Humans per room        | 4       | —                      |
 
+**The duration limit binds a hosted turn too, and it can only abandon it.**
+A CLI that overstays is killed and the `close` that follows hands its place
+back; a service has no process to kill and the SDK takes no abort signal, so
+the request may run on to its own end and what stops is the room waiting on
+it. That is the half the ceiling is about: the service branch had no guard at
+all, so a request that never answered held its place for ever and four of
+them shut the room to work with nothing on screen to say why — and a streamed
+turn is exactly the shape of call that goes quiet halfway through. Because the
+run is abandoned rather than cancelled, its answer can still arrive
+afterwards, so the place is given back **once** — the same rule, and the same
+reason, as the spawn path's `released`.
+
 Spend is measured server-side from what each run reports and accumulated in the
 room's record. Hitting the ceiling is a hard stop on dispatch, not a warning — with
 a host-side key the bill belongs to whoever runs the server — and the refusal comes
@@ -180,15 +213,36 @@ The SDK is not on npm. It goes in `vendor/mettara-lib/` as `mettara-lib.cjs` —
 `.cjs` name matters — and is linked from `package.json`; run `pnpm install` once
 after adding it. The Docker image copies that folder, so a deploy carries it.
 
-Needs `METTARA_API_SECRET` and `METTARA_PLATFORM_ID`. Optional: `METTARA_BASE_URL`
-(staging or self-hosted), `METTARA_GROUP_ID` / `METTARA_GROUP_NAME` (the namespace
-the room's people are provisioned under), `METTARA_AI_NAME` (default assistant; the
-HUD's model field selects one by Mettara technical name).
+Needs `METTARA_API_SECRET`, `METTARA_PLATFORM_ID` and `METTARA_EMAIL_DOMAIN`.
+Optional: `METTARA_BASE_URL` (staging or self-hosted), `METTARA_GROUP_ID` /
+`METTARA_GROUP_NAME` (the namespace the room's people are provisioned under),
+`METTARA_AI_NAME` (default assistant; the HUD's model field selects one by Mettara
+technical name).
 
 Each seat is provisioned as its own Mettara user, so workers hold separate threads.
 The first turn opens a conversation carrying the seat's personality and the company
 briefing; later turns resume it by id, exactly as the Claude providers resume a CLI
 session.
+
+**A seat needs an address, and it has to be a real one.** Mettara provisions
+each seat as a user and will not do it on a domain it cannot deliver to —
+`METTARA_EMAIL_DOMAIN` is the one you own, and a seat is
+`<seat-slug>@<that domain>`. The address was `@watercooler.local`, hard-coded,
+which meant **no seat could ever be provisioned on any deployment**: the
+service refuses it with `400 Invalid request`, the same answer it gives a bad
+signature, so it read as a broken credential rather than as a setting. Both
+that and the reserved domains (`example.com` and friends) are refused by
+`mettaraPreflight` instead, by name.
+
+**A turn is taken streamed, and only the `content` frames are the answer.**
+The plain `sendMessage` call cannot be used: its `content` is every frame the
+assistant emitted run together — the status text included — with the answer
+repeated at the end, so asking for "PONG" comes back as
+`"Analyzingis thinking...PONGPONG"`. Streamed, the frames arrive typed
+(`content`, `activity`, `reasoning`) and the other two are the assistant
+narrating itself, which is not what belongs in a worker's bubble. An SDK
+without `streamMessage` is refused at load as too old, rather than falling
+back to the plain call and letting the narration through.
 
 **Inbound tools.** When the credentials are present, `server.ts` mounts a signed
 endpoint at `/api/mettara/tools` (`lib/mettara/webhook.ts`) so a Mettara AI can reach
@@ -1429,6 +1483,7 @@ From `CONTRIBUTING.md`, and worth holding to when adding anything:
 | `ZOHO_PULSE_STATUSES`                                                    | `New,Queue,In Progress`                 | The three standing statuses on Support's wall, in the order they hang    |
 | `ZOHO_TIMEZONE`                                                          | asked of the desk                       | Which clock "today" runs on; otherwise the org's, else its agents'       |
 | `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                             | —                                       | Required by the `mettara` provider                                       |
+| `METTARA_EMAIL_DOMAIN`                                                   | —                                       | A domain you own; Mettara addresses each seat's user on it               |
 | `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`              | —                                       | Auth.js sign-in; off when absent                                         |
 | `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT                                   |
 | `CSP_CONNECT_SRC`                                                        | —                                       | Extra `connect-src` origins                                              |
