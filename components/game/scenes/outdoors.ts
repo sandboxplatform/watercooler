@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { TILE, BOAT, type Rect } from "@/lib/world/tenants";
 import { asset } from "@/lib/assets";
+import { keepLegible } from "../systems/legible";
 import {
   PROPS,
   propBody,
@@ -229,6 +230,11 @@ export function placeResident(
     .setOrigin(0.5, 0)
     .setDepth(at.y + 1)
     .setResolution(2);
+  // A name is a label, so it keeps its size however far out the map is
+  // zoomed. The words painted on the signboards and across the buildings'
+  // name bands are not — those are sized to the picture they sit on, and
+  // blowing them up would put them over the edge of it.
+  keepLegible(scene, tag);
   return [sprite, tag];
 }
 

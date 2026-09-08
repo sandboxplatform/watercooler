@@ -557,12 +557,67 @@ a job somebody does rather than a project everybody watches. Support is the
 second working room, the one with the shared whiteboard, and the queue hangs
 beside it: `opsSupportRoom` and `SUPPORT_BOARD` in `lib/map/floor.ts`.
 
-That room is the only one lettered — `SUPPORT`, on its own wall, past the
-boards so it labels wall rather than a picture (`opsSupportSign`, drawn by
-`addSupportSign`). Nothing else on the floor is named and nothing else needs
-to be: a project room is whichever project is on the board in it. A building
-running no support queue has no such room and gets no sign, which is Castle
-Atlantic.
+That room is the only one lettered — `SUPPORT`, on its own wall
+(`opsSupportSign`, drawn by `addSupportSign`). Nothing else on the floor is
+named and nothing else needs to be: a project room is whichever project is
+on the board in it. A building running no support queue has no such room and
+gets no sign, which is Castle Atlantic.
+
+**Fourteen tiles of wall, four things on it, and the layout written down
+once** — `SUPPORT_WALL` in `lib/map/floor.ts`. The name, the whiteboard, the
+queue and the five counts, a tile of wall between each, and the pictures add
+up to twelve of the fourteen; the name gets the two on the left because
+that is the only stretch nothing else wants. It is the one sign in the world
+drawn smaller than the building's own name, because seven letters at sixteen
+pixels want nearly three tiles and the letter that does not fit ends up
+behind the whiteboard's frame.
+
+**The five counts are a second way of looking at the same queue,** so they
+come with the queue rather than being declared: `SUPPORT_PULSE` is not a
+`BoardKind`, and a building running no support desk has nothing for them to
+count. What is standing in three statuses, and what was raised and closed
+today.
+
+They are the one fixture whose picture is its numbers, which is why nothing
+delivers art for them. `systems/SupportPulse` draws the plate, the five
+bays and the figures and keeps them current on `PULSE_REFRESH_MS`; the
+registry entry carries no `art` and no `sign`, so `FixtureManager` only
+does the `Press E`. A static image under live text would be a second,
+wrong copy of it.
+
+The arithmetic is `lib/zoho/pulse.ts`, pure, and the sweeps are
+`fetchPulse` in `lib/zoho/client.ts`. Three sweeps rather than one page,
+because they are three questions:
+
+| Sweep        | Asks Zoho for                         | Stops when                          |
+| ------------ | ------------------------------------- | ----------------------------------- |
+| Standing     | `status=New,Queue,In Progress`        | The pages run out                   |
+| Opened today | Everything, `sortBy=-createdTime`     | A ticket is older than midnight     |
+| Closed today | `status=Closed`, `sortBy=-closedTime` | A ticket was closed before midnight |
+
+Four details are load-bearing. Zoho's `from` is **one-based** — its first
+record is 1 and 0 is treated as 1 — so a zero-based offset reads the
+boundary record twice on every page and counts it twice with it. The
+`sortBy` on the last two is not tidiness: they stop early on the first
+ticket past midnight, so the order is the only thing that makes them exact
+from one page. A sweep that hits `PULSE_MAX_PAGES` marks its counters
+`capped` and the figure is written `600+`, because a floor that looks like
+a total is worse than no number. And a bar is a share of its own **bank** —
+the three standing against each other, the two day counters against each
+other — since one scale across all five would measure a standing total
+against a day's flow, which is not a comparison.
+
+There is no count endpoint behind this. `/ticketsCountByFieldValues` needs
+a scope the desk's token does not carry, and `/tickets/count` insists on a
+`viewId`; both were tried against the real desk. Paging a filtered list is
+what is left, and it is exact.
+
+`ZOHO_PULSE_STATUSES` names the three standing statuses, comma separated,
+and they must match the desk's Status picklist **exactly** — Zoho's filter
+is by literal value. They map onto the three bays by position, so the first
+named is the left-hand bay whatever it is called. Sandbox ERP's desk carries
+New, Queue and In Progress among its nine, which is where the default comes
+from.
 
 `PartitionSpec` (`lib/map/spec.ts`) is how a room gets interior walls, and
 each is drawn as **the exterior wall of the same orientation** — a horizontal
@@ -846,6 +901,7 @@ components/
   panel/                terminal and session-history modals
 lib/
   events.ts store.ts reducer.ts    the state + event spine
+  camera.ts legible.ts            how far out the camera stands, and how big lettering is drawn
   fixtures.ts                      what you walk up to and press E at, read by both layers
   room-travel.ts                   moving between rooms without a page load
   cli-bridge.ts cli-providers.ts   agent execution
@@ -855,6 +911,7 @@ lib/
   arcade/ pinball/ pong/           the games (Oak Island, Flappy, Snake, Breakout, Solitaire)
   pixel/ characters/               sheet validation, PNG codec, palettes, recolouring
   voice/                           WebRTC proximity voice
+  trello/ zoho/                    the two boards on an Operations floor, read-only
   mettara/ mcp/                    Mettara client + signed webhook; MCP servers
 public/maps|tilesets|sprites|characters|audio|ui
 scripts/                build-map, seed-erp, sprite and world-art generators
@@ -1242,6 +1299,54 @@ it. Nothing else in the app knows a second task has to be held.
   timings, HUD limits) belong in `lib/constants.ts` or `components/game/config/`.
 - Explicit state transitions over hidden side effects.
 - Secrets come from the environment. `.env.local` is gitignored; never commit keys.
+- **HUD type comes from the scale, not from a number.** `--fs-3xs` through
+  `--fs-xl` in `app/globals.css`, and one media query raises the whole HUD on a
+  phone — the small end most, the larger names by a pixel, because the layouts
+  around them are tight. A pixel HUD built in whole pixels reads as crisp on a
+  monitor and as nothing at all on a handset, and the responsive rules used to
+  make it worse: the 900px breakpoint took the agent pill _down_ to 7px to win
+  back width, so the screen with the least room to read on had the smallest
+  lettering in the app. A new panel asks for a name; a hard-coded `font-size`
+  under 13px is a panel that will not follow. In-world lettering is not part of
+  this; it has a rule of its own, below.
+- **In-world lettering carries a scale against the camera's.** `legibleScale`
+  in `lib/legible.ts` is the rule, `systems/legible.ts` applies it, and
+  anything registered with `keepLegible` is redrawn at the size it was
+  written however far out the camera stands. A room's zoom is fitted to a
+  lobby — 960x912, nearly square — so a wide monitor opens _zoomed in_ and a
+  handset is pinned to `ZOOM_MIN`, where a 10px sign was landing as five
+  pixels of screen. The rule is a **floor, not a fixed size**: `1 / zoom`
+  where that magnifies and 1 elsewhere, so a monitor is untouched, a laptop
+  gains a little and a phone doubles. A true `1 / zoom` would have made every
+  sign on every desktop smaller, which is not what anybody asked for.
+
+  **What is in, and what is deliberately out.** Two kinds of text live in a
+  room and they want opposite things:
+
+  | Kind                    | Examples                                                                  | Scaled |
+  | ----------------------- | ------------------------------------------------------------------------- | ------ |
+  | Labels, floating        | `Press E`, name tags, the chips over fixtures, a resident's name outdoors | yes    |
+  | Lettering in the layout | The building's name, `SUPPORT`, the five counts, a signboard's words      | no     |
+
+  A label floats above the world with nothing under it to line up with, so
+  growing one costs nothing. Lettering in the layout is sized to the geometry
+  around it — `SUPPORT` has the two tiles the pictures leave it, the counts
+  have their bays, a signboard's words have the board — and growing one of
+  those does not make it readable, it makes it overlap. Those are decoration
+  and dashboards respectively, and the way to read a dashboard on a handset
+  is the panel behind it. The prompt that opens the panel is in.
+
+  Two things to know if you touch it. `keep` rescales **everything**, not
+  just what arrived: a scene registers in two waves either side of the
+  camera being fitted — signs during `create`, people after — and scaling
+  only the new arrivals left a room's own labels at the size they were made
+  with nothing for `update` to notice. And the scale is **polled** from the
+  scene's `update` rather than subscribed to, because the zoom moves from
+  four places (wheel, pinch, resize, a room's fit) and Phaser announces none
+  of them. `InteractionMenu` predates all this and does its own true
+  `1 / zoom`, which is right for it: a menu is clamped to the viewport, so it
+  must not grow with the world.
+
 - No `dangerouslySetInnerHTML`. A CSP is set in `next.config.ts` — new outbound
   connections need `CSP_CONNECT_SRC`, not a loosened policy.
 - Cache headers live beside it. A room change is a page load — except between
@@ -1281,6 +1386,7 @@ From `CONTRIBUTING.md`, and worth holding to when adding anything:
 | `AGENT_MAX_CONCURRENT` / `AGENT_RUN_TIMEOUT_MS` / `ROOM_SPEND_LIMIT_USD` | 4 / 180000 / 50                         | Run limits                                                               |
 | `AGENT_WORKSPACE_ROOT`                                                   | `.agent-workspaces`                     | Where seat sandboxes go                                                  |
 | `ERP_DB_PATH` / `UPLOADS_DIR`                                            | `.data/erp.sqlite` / beside the room db | Storage paths                                                            |
+| `ZOHO_PULSE_STATUSES`                                                    | `New,Queue,In Progress`                 | The three standing statuses on Support's wall, in the order they hang    |
 | `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                             | —                                       | Required by the `mettara` provider                                       |
 | `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`              | —                                       | Auth.js sign-in; off when absent                                         |
 | `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT                                   |

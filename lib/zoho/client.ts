@@ -12,6 +12,15 @@
 
 import { createLogger } from "../logger";
 import { toDeskView, type DeskView } from "./tickets";
+import {
+  CLOSED_STATUS,
+  DEFAULT_PULSE_STATUSES,
+  atOrAfter,
+  dayStart,
+  toPulse,
+  type Pulse,
+  type PulseId,
+} from "./pulse";
 
 const log = createLogger("Zoho");
 
@@ -205,4 +214,121 @@ export async function fetchDepartments(
       (d): d is { id: string; name?: string } => typeof d === "object" && d !== null && "id" in d,
     )
     .map((d) => ({ id: d.id, name: d.name?.trim() || "Department" }));
+}
+
+// ── The five numbers on the wall ────────────────────────
+
+/**
+ * How long the counts are held. Longer than the queue's half minute: the
+ * counts take three sweeps rather than one page, and a number on a wall
+ * that is a minute old is still the truth about a support desk.
+ */
+export const PULSE_CACHE_MS = 60_000;
+
+/**
+ * How many pages a sweep reads before it gives up and says the number is a
+ * floor. Six hundred tickets standing in one status is a desk with a
+ * different problem than this wall can help with; counting for ever to
+ * find that out would spend Zoho's credits on it every minute.
+ */
+export const PULSE_MAX_PAGES = 6;
+
+/** Which statuses the standing counters ask for. See DEFAULT_PULSE_STATUSES. */
+export function readPulseStatuses(env: NodeJS.ProcessEnv = process.env): string[] {
+  const named = env.ZOHO_PULSE_STATUSES?.split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  return named && named.length > 0 ? named.slice(0, 3) : [...DEFAULT_PULSE_STATUSES];
+}
+
+type Page = Record<string, unknown> & { status?: string };
+
+/**
+ * Read pages until they run out, the ceiling is reached, or `until` says a
+ * ticket is past the point of interest.
+ *
+ * `from` is one-based — Zoho's first record is 1, and 0 is treated as 1 —
+ * so a zero-based offset would read the boundary record twice on every page
+ * and count it twice with it.
+ *
+ * `until` exists because the two day counters are a prefix of a sorted
+ * list: sweeping newest-first, the first ticket older than midnight ends
+ * the sweep, and everything behind it is older still. That is what makes
+ * those two counts exact from one page in the ordinary case rather than a
+ * count of the whole desk.
+ */
+async function sweep(
+  config: ZohoConfig,
+  params: Record<string, string>,
+  until?: (ticket: Page) => boolean,
+): Promise<{ tickets: Page[]; capped: boolean }> {
+  const tickets: Page[] = [];
+  for (let page = 0; page < PULSE_MAX_PAGES; page++) {
+    const answer = await get(
+      "/tickets",
+      { ...params, limit: String(TICKET_LIMIT), from: String(1 + page * TICKET_LIMIT) },
+      config,
+    );
+    const rows = Array.isArray(answer.data) ? (answer.data as Page[]) : [];
+    for (const row of rows) {
+      if (until?.(row)) return { tickets, capped: false };
+      tickets.push(row);
+    }
+    // A short page is the end of the desk, not the end of our patience.
+    if (rows.length < TICKET_LIMIT) return { tickets, capped: false };
+  }
+  return { tickets, capped: true };
+}
+
+/**
+ * The five counts, from three sweeps.
+ *
+ * Three rather than one because they are three different questions. The
+ * standing counters want every ticket in three statuses, however old; the
+ * day counters want a prefix of the desk sorted by when tickets were
+ * raised and by when they were closed, which are different orders and
+ * neither of them the first.
+ *
+ * `sortBy` matters for more than tidiness on the last two: `until` trusts
+ * the order to stop early, so the sort is what keeps them exact.
+ */
+export async function fetchPulse(config: ZohoConfig, now: number = Date.now()): Promise<Pulse> {
+  const statuses = readPulseStatuses();
+  const from = dayStart(now);
+  const scope: Record<string, string> = config.departmentId
+    ? { departmentId: config.departmentId }
+    : {};
+
+  const standing = await sweep(config, {
+    ...scope,
+    status: statuses.join(","),
+    sortBy: "-modifiedTime",
+  });
+  const opened = await sweep(
+    config,
+    { ...scope, sortBy: "-createdTime" },
+    (ticket) => !atOrAfter(ticket.createdTime as string | undefined, from),
+  );
+  const closed = await sweep(
+    config,
+    { ...scope, status: CLOSED_STATUS, sortBy: "-closedTime" },
+    (ticket) => !atOrAfter(ticket.closedTime as string | undefined, from),
+  );
+
+  // A capped standing sweep leaves all three of its counters a floor: the
+  // pages it did not read could have held any of the three statuses.
+  const capped: PulseId[] = [
+    ...(standing.capped ? (["new", "queue", "in-progress"] as PulseId[]) : []),
+    ...(opened.capped ? (["opened-today"] as PulseId[]) : []),
+    ...(closed.capped ? (["closed-today"] as PulseId[]) : []),
+  ];
+
+  return toPulse({
+    statuses,
+    standing: standing.tickets,
+    opened: opened.tickets,
+    closed: closed.tickets,
+    capped,
+    now,
+  });
 }

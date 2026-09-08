@@ -11,7 +11,7 @@
  "version": "1.10",
  "tiledversion": "1.11.2",
  "nextlayerid": 13,
- "nextobjectid": 24,
+ "nextobjectid": 26,
  "tilesets": [
   {
    "columns": 16,
@@ -8076,6 +8076,17 @@
      "height": 96,
      "rotation": 0,
      "visible": true
+    },
+    {
+     "id": 19,
+     "name": "",
+     "type": "",
+     "x": 1200,
+     "y": 48,
+     "width": 240,
+     "height": 96,
+     "rotation": 0,
+     "visible": true
     }
    ]
   },
@@ -8090,7 +8101,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 19,
+     "id": 20,
      "name": "Whiteboard",
      "type": "",
      "x": 936,
@@ -8109,7 +8120,7 @@
      ]
     },
     {
-     "id": 20,
+     "id": 21,
      "name": "Project board",
      "type": "",
      "x": 216,
@@ -8128,10 +8139,29 @@
      ]
     },
     {
-     "id": 21,
+     "id": 22,
      "name": "Help desk",
      "type": "",
      "x": 1080,
+     "y": 120,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      }
+     ]
+    },
+    {
+     "id": 23,
+     "name": "Support pulse",
+     "type": "",
+     "x": 1320,
      "y": 120,
      "width": 0,
      "height": 0,
@@ -8159,7 +8189,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 22,
+     "id": 24,
      "name": "",
      "type": "",
      "x": 264,
@@ -8190,7 +8220,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 23,
+     "id": 25,
      "name": "elevator",
      "type": "",
      "x": 240,

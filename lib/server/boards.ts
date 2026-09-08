@@ -21,12 +21,15 @@ import {
 import type { BoardSummary, BoardView } from "../trello/board";
 import {
   DESK_CACHE_MS,
+  PULSE_CACHE_MS,
   ZohoError,
   fetchDepartments,
+  fetchPulse,
   fetchTickets,
   readZohoConfig,
 } from "../zoho/client";
 import type { DeskView } from "../zoho/tickets";
+import type { Pulse } from "../zoho/pulse";
 import { getRoomStore } from "./room-store";
 import { createLogger } from "../logger";
 
@@ -75,9 +78,18 @@ export interface DeskAnswer {
   fetchedAt?: number;
 }
 
+export interface PulseAnswer {
+  configured: boolean;
+  pulse?: Pulse;
+  error?: string;
+  status?: number;
+  fetchedAt?: number;
+}
+
 const boards = new Map<string, { at: number; board: BoardView }>();
 let boardList: { at: number; boards: BoardSummary[] } | null = null;
 let desk: { at: number; view: DeskView; departments: { id: string; name: string }[] } | null = null;
+let pulse: { at: number; view: Pulse } | null = null;
 
 /**
  * The project board. With no board named and none configured, the answer
@@ -165,9 +177,40 @@ export async function readDesk(): Promise<DeskAnswer> {
   }
 }
 
+/**
+ * The five counts on the Support room's wall.
+ *
+ * Held separately from the queue and for longer: it costs three sweeps
+ * rather than one page, and everybody in the room is looking at the same
+ * wall. Same shape of answer as the queue, so the panel and the wall both
+ * know an unconfigured desk from a broken one.
+ */
+export async function readPulse(): Promise<PulseAnswer> {
+  const config = readZohoConfig();
+  if (!config) return { configured: false };
+
+  const now = Date.now();
+  if (pulse && now - pulse.at < PULSE_CACHE_MS) {
+    return { configured: true, pulse: pulse.view, fetchedAt: pulse.at };
+  }
+
+  try {
+    const view = await fetchPulse(config, now);
+    pulse = { at: now, view };
+    return { configured: true, pulse: view, fetchedAt: now };
+  } catch (err) {
+    if (err instanceof ZohoError) {
+      return { configured: true, error: err.message, status: err.status };
+    }
+    log.error("could not count the desk:", (err as Error).message);
+    return { configured: true, error: "The desk could not be counted.", status: 500 };
+  }
+}
+
 /** Test seam: forget what is held, so the next read goes out again. */
 export function forgetBoards() {
   boards.clear();
   boardList = null;
   desk = null;
+  pulse = null;
 }

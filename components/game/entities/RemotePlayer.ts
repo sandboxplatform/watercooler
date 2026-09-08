@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { SPRITE_KEY, FRAME_HEIGHT } from "../config/animations";
 import { ensureAnims } from "../utils/sheets";
 import { ChatBubble } from "./ChatBubble";
+import { keepLegible, legible } from "../systems/legible";
 import type { PresencePlayer } from "@/lib/presence-types";
 
 /**
@@ -65,6 +66,9 @@ export class RemotePlayer {
       })
       .setOrigin(0.5, 0)
       .setDepth(20);
+    // Hangs below the feet with its top on the anchor, so it grows downward
+    // and away from the person it names whatever size it is drawn at.
+    keepLegible(scene, this.nameTag);
 
     this.bubble = new ChatBubble(scene);
     this.applyAnimation(player.facing, false);
@@ -80,7 +84,9 @@ export class RemotePlayer {
         .setOrigin(0.5, 1)
         .setDepth(21)
         .setResolution(2);
+      keepLegible(this.sprite.scene, this.voiceMark);
     } else if (!speaking && this.voiceMark) {
+      legible(this.sprite.scene).forget(this.voiceMark);
       this.voiceMark.destroy();
       this.voiceMark = null;
     }
@@ -164,6 +170,9 @@ export class RemotePlayer {
   }
 
   destroy() {
+    const keeper = legible(this.sprite.scene);
+    if (this.voiceMark) keeper.forget(this.voiceMark);
+    keeper.forget(this.nameTag);
     this.voiceMark?.destroy();
     this.bubble.destroy();
     this.sprite.destroy();

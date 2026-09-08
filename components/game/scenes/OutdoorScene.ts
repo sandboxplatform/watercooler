@@ -21,6 +21,7 @@ import { gameEvents } from "@/lib/events";
 import { asset } from "@/lib/assets";
 import type { Logger } from "@/lib/logger";
 import { cutOutdoorFrames, placeResident, preloadOutdoors } from "./outdoors";
+import { legible } from "../systems/legible";
 
 /**
  * Out of doors: the world map and the campuses.
@@ -319,6 +320,8 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
 
   update(_time: number, delta: number) {
     if (this.leaving) return;
+    // Keep the lettering the size it was written, whatever the camera is at.
+    legible(this).update();
     // Read the pad every frame, or it never reports anything out here.
     this.gamepad.poll();
     this.presence?.update(delta);

@@ -206,6 +206,15 @@ export const ZOOM_MIN = 0.5;
 export const ZOOM_MAX = 2;
 export const CAMERA_DRAG_THRESHOLD = 3;
 
+/**
+ * How often the five counts on Support's wall are read again.
+ *
+ * Matched to the server's hold on them (`PULSE_CACHE_MS`), so a room full
+ * of people watching the wall is still one sweep of the desk a minute and
+ * nobody's tick is wasted.
+ */
+export const PULSE_REFRESH_MS = 60_000;
+
 // ── Press E prompt style (shared between boss seat & worker) ──
 export const PRESS_E_STYLE: {
   fontFamily: string;

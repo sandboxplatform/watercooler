@@ -53,7 +53,8 @@ export type FixtureId =
   | "pinball"
   | "arcade"
   | "project-board"
-  | "help-desk";
+  | "help-desk"
+  | "support-pulse";
 
 /**
  * An event that carries nothing — which every fixture's pair of events is.
@@ -217,6 +218,20 @@ export const FIXTURES: readonly FixtureSpec[] = [
     promptLift: 8,
     art: { key: "help-desk", file: "/sprites/help_desk_144x96.png", lift: 24 },
     sign: { label: "HELP DESK" },
+  },
+  {
+    id: "support-pulse",
+    match: /^support pulse$/i,
+    opens: "open-support-pulse",
+    closes: "support-pulse-closed",
+    param: "pulse",
+    prompt: "Press E for the detail",
+    radius: BOSS_INTERACT_DISTANCE,
+    promptLift: 8,
+    // No art and no sign: this is the one fixture whose picture is its
+    // numbers, so `systems/SupportPulse` draws the board and keeps it
+    // current, and the board letters its own five headings. A static image
+    // here would be a second, wrong copy of it underneath.
   },
 ];
 

@@ -357,6 +357,34 @@ ticket shows its number, priority as a coloured dot, channel, due date, who
 asked and who it is with. It refreshes every half minute, and is
 **read-only**: nothing in the office replies to a ticket or changes one.
 
+Next along the same wall, five numbers are lit up on a board you do not
+have to press anything to read — the point of them is the glance you take
+walking in:
+
+| On the wall       | Counts                                             |
+| ----------------- | -------------------------------------------------- |
+| NEW · QUEUE · WIP | What is standing in each status right now          |
+| OPENED TODAY      | Raised since midnight, whatever status they are in |
+| CLOSED TODAY      | Closed since midnight, whenever they were raised   |
+
+The top three are one group and the bottom two another, and each bar is its
+number's share of its own group — so the three above compare with each
+other, the two below compare with each other, and nothing is a percentage
+of anything else. A number that has moved since the last read flashes once.
+
+Walk up and press E for the same five with the headings spelled out, what
+each one counts and which midnight "today" is measured from. That is also
+the answer on a phone: the board is a dashboard painted on a wall, drawn at
+the room's scale, and on a small screen the room is about half size. The
+labels around it — the `Press E`, the signs, people's names — hold their own
+size at any zoom, so it is the counts themselves that want the panel.
+
+Every count is exact rather than a sample of a page — the statuses are
+swept until they run out, and a count that hits the sweep's ceiling is
+written `600+` rather than quietly as `600`. If your desk names its
+statuses differently, set `ZOHO_PULSE_STATUSES` to three of its own, in
+the order they should hang.
+
 Zoho uses OAuth rather than a simple key, so it takes a few minutes to set
 up. In Zoho's API console (`api-console.zoho.com`, or `.eu`, `.in`,
 `.com.au`, `.jp` to match your account):

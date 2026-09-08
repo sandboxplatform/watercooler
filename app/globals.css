@@ -28,6 +28,49 @@
   --pixel-radius: 8px;
   --pixel-radius-sm: 6px;
   --pixel-radius-lg: 12px;
+
+  /*
+   * The HUD's type scale.
+   *
+   * A pixel HUD is built in whole pixels — 7px, 8px, 9px — and on a
+   * desktop monitor that reads as crisp and deliberate. On a phone it
+   * reads as nothing at all, and the responsive rules made it worse
+   * rather than better: the 900px breakpoint took the agent pill *down*
+   * to 7px to win back width, so the screen with the least room to read
+   * on got the smallest lettering in the app.
+   *
+   * So the sizes are named here and every panel asks for a name rather
+   * than a number, which is what makes one media query below able to
+   * raise the whole HUD at once. The small end moves most, because that
+   * is where the problem is; the larger names move by a pixel, because
+   * the layouts around them are tight and this is still an office you
+   * have to fit on screen.
+   *
+   * Two things do not come from here. In-world lettering — signs, the
+   * counts on Support's wall — is drawn by Phaser at the camera's scale,
+   * so it is the zoom that decides how big it lands; and the deliberate
+   * headline sizes (13px and up) are already legible.
+   */
+  --fs-3xs: 6px;
+  --fs-2xs: 7px;
+  --fs-xs: 8px;
+  --fs-sm: 9px;
+  --fs-md: 10px;
+  --fs-lg: 11px;
+  --fs-xl: 12px;
+}
+
+/* A phone. Same HUD, lettering you can actually read on it. */
+@media (max-width: 760px) {
+  :root {
+    --fs-3xs: 8px;
+    --fs-2xs: 9px;
+    --fs-xs: 10px;
+    --fs-sm: 11px;
+    --fs-md: 11px;
+    --fs-lg: 12px;
+    --fs-xl: 13px;
+  }
 }
 
 /*

@@ -102,7 +102,7 @@
 }
 
 .seat-card__status {
-  font-size: 7px;
+  font-size: var(--fs-2xs);
   padding: 4px 6px;
   background: rgba(255, 255, 255, 0.06);
   border-radius: var(--pixel-radius-sm);
@@ -114,7 +114,7 @@
 }
 
 .seat-card__summary {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-muted);
   margin-top: 8px;
 }
@@ -124,6 +124,6 @@
   border-radius: var(--pixel-radius);
   background: rgba(26, 21, 16, 0.5);
   padding: 10px;
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-muted);
 }

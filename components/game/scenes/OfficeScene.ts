@@ -29,7 +29,9 @@ import { UNKNOWN_IDENTITY, type AccessIdentity } from "@/lib/identity";
 import { ArrivalWalk } from "@/lib/arrival";
 import { MAX_DESKS, deskBox, deskOrigin } from "@/lib/world/desks";
 import { HELP_COUNTER, TILE } from "@/lib/map/office";
-import { SUPPORT_BOARD, opsSign, opsSupportSign } from "@/lib/map/floor";
+import { SUPPORT_BOARD, opsSign, opsSupportPulse, opsSupportSign } from "@/lib/map/floor";
+import { SupportPulse } from "../systems/SupportPulse";
+import { legible } from "../systems/legible";
 import {
   hasCampus,
   hasFloors,
@@ -346,6 +348,7 @@ export class OfficeScene extends Phaser.Scene {
     // The building's name on the wall, so a glance says whose lobby this is.
     if (address) this.addWallSign(address);
     if (address) this.addSupportSign(address);
+    const stopPulse = address ? this.addSupportPulse(address) : null;
 
     this.input.keyboard?.disableGlobalCapture();
     this.initTapToWalk();
@@ -456,6 +459,7 @@ export class OfficeScene extends Phaser.Scene {
       this.presence?.say(achievement.subjectId, `${achievement.icon} ${achievement.title}`);
     });
     this.cleanupPresence = () => {
+      stopPulse?.();
       unsubBadge();
       unsubSprite();
       unsubDoor();
@@ -653,6 +657,13 @@ export class OfficeScene extends Phaser.Scene {
    *
    * A building running no support queue has no such room and gets no sign,
    * which is Castle Atlantic.
+   *
+   * Smaller than the building's own name on the wall downstairs, and the
+   * one sign in the world that is: three pictures hang on this wall and
+   * they leave it two tiles. Seven letters at sixteen pixels want nearer
+   * three, and the letter that does not fit ends up behind the
+   * whiteboard's frame — a name lettered across a picture labels the
+   * picture.
    */
   private addSupportSign(address: Address) {
     const ops = address.floor.kind === "floor" && address.floor.level === 3;
@@ -661,12 +672,27 @@ export class OfficeScene extends Phaser.Scene {
     this.add
       .text(at.tx * TILE, at.ty * TILE + 96, "SUPPORT", {
         fontFamily: '"Press Start 2P", monospace',
-        fontSize: "16px",
+        fontSize: "12px",
         color: "#3a3a50",
       })
       .setOrigin(0.5, 1)
       .setDepth(3)
       .setResolution(2);
+  }
+
+  /**
+   * The five counts, lit up on Support's wall beside the queue they count.
+   *
+   * The same condition as the sign above, and for the same reason: they are
+   * the support desk counted, so they hang where the queue hangs and a
+   * building running none has neither the room nor the numbers. Hands back
+   * the board's own teardown, since it keeps a timer.
+   */
+  private addSupportPulse(address: Address): (() => void) | null {
+    const ops = address.floor.kind === "floor" && address.floor.level === 3;
+    if (!ops || !operationsBoards(address.tenant).includes(SUPPORT_BOARD)) return null;
+    const board = new SupportPulse(this);
+    return board.place(opsSupportPulse(operationsRoomCount(address.tenant)), TILE);
   }
 
   private addWallSign(address: Address) {
@@ -912,6 +938,10 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
+    // Before any early return: the camera can be zoomed while a panel is up
+    // or a menu is open, and lettering that stopped following would be the
+    // wrong size the moment the panel closed.
+    legible(this).update();
     this.gamepad.poll();
 
     // Remote characters keep easing toward their last reported position even

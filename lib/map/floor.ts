@@ -68,11 +68,54 @@ export const HELP_DESK = {
   poi: { name: "Help desk", tx: 7, ty: 2, facing: "up" } satisfies PoiSpec,
 };
 
+/**
+ * The five counts, next along Support's wall from the queue.
+ *
+ * Wider than the other two because it is five things rather than one, and
+ * the last thing on that wall — it runs to the room's right-hand corner.
+ * Like them, the picture is the scene's: what the map carries is the
+ * footprint that makes it solid and the point of interest to read it from.
+ *
+ * Not a `BoardKind`. A board is something a building declares it runs; this
+ * is a second way of looking at the queue, so it comes with the queue
+ * wherever the queue hangs rather than being named separately.
+ */
+export const SUPPORT_PULSE = {
+  region: {
+    label: "support pulse",
+    sx: 0,
+    sy: 0,
+    sw: 5,
+    sh: 2,
+    dx: 0,
+    dy: 1,
+    layers: [],
+  } satisfies Region,
+  poi: { name: "Support pulse", tx: 2, ty: 2, facing: "up" } satisfies PoiSpec,
+};
+
 /** Where each board hangs, and the point of interest to read it from. */
 const BOARDS: Record<BoardKind, { region: Region; poi: PoiSpec }> = {
   trello: PROJECT_BOARD,
   zoho: HELP_DESK,
 };
+
+/**
+ * Where each thing hangs along Support's wall, in tiles from its left edge,
+ * with a tile of wall between them.
+ *
+ * Fourteen tiles of wall and four things wanting some of it, so the layout
+ * is written down once here rather than worked out in three places. The
+ * room's name goes on the left, which is the only stretch nothing else
+ * wants: the counts run to the right-hand corner, and a name lettered
+ * across a picture labels the picture.
+ */
+const SUPPORT_WALL = {
+  sign: 1,
+  whiteboard: 2,
+  queue: 2 + WHITEBOARD.region.sw + 1,
+  pulse: 2 + WHITEBOARD.region.sw + 1 + HELP_DESK.region.sw + 1,
+} as const;
 
 /**
  * The board that makes a room Support.
@@ -182,16 +225,34 @@ export function opsSign(rooms: number) {
 }
 
 /**
- * Where Support letters its name: its own wall, past the boards on it.
+ * Where Support letters its name: the left end of its own wall, before the
+ * pictures start.
  *
- * The whiteboard takes the first two tiles of that wall and the queue the
- * next three, which leaves the right-hand half of it bare — so the name goes
- * there rather than over either picture, and reads from the middle of the
- * room it belongs to.
+ * It used to have the bare right-hand half of the wall, which the five
+ * counts now run across to the corner. The two tiles on the left are what
+ * is left, and they are enough: a name lettered over a picture labels the
+ * picture.
  */
 export function opsSupportSign(rooms: number) {
   const room = opsSupportRoom(rooms);
-  return { tx: room.x + 11, ty: room.wallRow } as const;
+  return { tx: room.x + SUPPORT_WALL.sign, ty: room.wallRow } as const;
+}
+
+/**
+ * Where the five counts hang, in tiles, for the scene that draws them.
+ *
+ * Read off the room rather than written down, so a longer corridor carries
+ * the board with it — and off the same layout the map is generated from, so
+ * the picture the scene draws lands on the footprint the map made solid.
+ */
+export function opsSupportPulse(rooms: number) {
+  const room = opsSupportRoom(rooms);
+  return {
+    tx: room.x + SUPPORT_WALL.pulse,
+    ty: room.wallRow + SUPPORT_PULSE.region.dy,
+    tw: SUPPORT_PULSE.region.sw,
+    th: SUPPORT_PULSE.region.sh,
+  } as const;
 }
 
 /**
@@ -317,11 +378,20 @@ function operationsSpec(
   const [first] = rooms;
   const whiteboardRoom = opsSupportRoom(roomCount);
 
-  /** Hang a board on a room's wall, `slot` boards along from its left edge. */
+  /**
+   * Hang a board on a room's wall, `at` tiles along from its left edge, with
+   * the point of interest under the middle of it — so you stand in front of
+   * a wide board to read it rather than at one end. Odd widths land on a
+   * tile; the five counts are five tiles, which is why they are.
+   */
   const hang = (board: { region: Region; poi: PoiSpec }, room: OpsRoom, at: number) => ({
     ...board,
     region: { ...board.region, dx: room.x + at, dy: room.wallRow + 1 },
-    poi: { ...board.poi, tx: room.x + at + 1, ty: room.wallRow + 2 },
+    poi: {
+      ...board.poi,
+      tx: room.x + at + Math.floor(board.region.sw / 2),
+      ty: room.wallRow + 2,
+    },
   });
 
   /**
@@ -345,11 +415,17 @@ function operationsSpec(
   // Whiteboard first along Support's wall, the queue next to it.
   const board: Region = {
     ...WHITEBOARD.region,
-    dx: whiteboardRoom.x + 2,
+    dx: whiteboardRoom.x + SUPPORT_WALL.whiteboard,
     dy: whiteboardRoom.wallRow + 1,
   };
+  // The counts come with the queue rather than being declared: they are the
+  // same desk counted, so a building with no support queue has nothing for
+  // them to count and no room to hang them in.
   const inSupport = queue
-    ? [hang(queue, whiteboardRoom, 2 + WHITEBOARD.region.sw + 1)]
+    ? [
+        hang(queue, whiteboardRoom, SUPPORT_WALL.queue),
+        hang(SUPPORT_PULSE, whiteboardRoom, SUPPORT_WALL.pulse),
+      ]
     : ([] as ReturnType<typeof hang>[]);
   // Only the whiteboard is cut from the source map. A board is a picture the
   // scene draws over the wall, which is why its region is here for its box
@@ -357,7 +433,7 @@ function operationsSpec(
   const picked = harvest(source, [board]);
   const whiteboard: PoiSpec = {
     ...WHITEBOARD.poi,
-    tx: whiteboardRoom.x + 3,
+    tx: whiteboardRoom.x + SUPPORT_WALL.whiteboard + 1,
     ty: whiteboardRoom.wallRow + 2,
   };
 

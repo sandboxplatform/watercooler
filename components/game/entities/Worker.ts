@@ -3,6 +3,7 @@ import { FRAME_HEIGHT, makeAnims, type Direction } from "../config/animations";
 import { sheetColumns } from "../utils/MapHelpers";
 import { EMOTE_SHEET_KEY, EMOTE_ANIMS } from "../config/emotes";
 import { ChatBubble } from "./ChatBubble";
+import { keepLegible, legible } from "../systems/legible";
 import type { Pathfinder, PathPoint } from "../utils/Pathfinder";
 import { buildSpriteFrames } from "../utils/MapHelpers";
 import {
@@ -150,6 +151,11 @@ export class Worker implements WorkerCtx {
       .setOrigin(0.5, 0)
       .setDepth(20)
       .setVisible(false);
+
+    // Three objects rather than one container, because `update` moves them
+    // with the walking worker anyway — so the scale is read back off the
+    // name tag there and the offsets between them go up with it.
+    keepLegible(scene, this.nameTag, this.statusDot, this.taskStatusText);
 
     this.bubble = new ChatBubble(scene);
     this.initEmoteSprite();
@@ -394,12 +400,20 @@ export class Worker implements WorkerCtx {
     if (!this.paused) updateMovement(this);
 
     const nameY = this.sprite.y + FRAME_HEIGHT / 2 + 2;
+    // Whatever `systems/legible` last wrote on the tag, so the dot beside it
+    // and the task line under it move out with it rather than being swallowed
+    // by a tag drawn twice the size on a handset. `width` is the unscaled
+    // width, which is why it is multiplied here.
+    const scale = this.nameTag.scaleX;
     this.nameTag.setPosition(this.sprite.x, nameY);
-    this.statusDot.setPosition(this.sprite.x - this.nameTag.width / 2 - 6, nameY + 4);
+    this.statusDot.setPosition(
+      this.sprite.x - (this.nameTag.width / 2 + 6) * scale,
+      nameY + 4 * scale,
+    );
 
     const hasTask = this.assignedRunId || this.taskQueue.length > 0;
     if (this.taskStatusText) {
-      this.taskStatusText.setPosition(this.sprite.x, nameY + 12);
+      this.taskStatusText.setPosition(this.sprite.x, nameY + 12 * scale);
       if (hasTask) {
         const parts: string[] = [];
         if (this.currentTaskMessage) {
@@ -447,6 +461,7 @@ export class Worker implements WorkerCtx {
       this.emoteSprite = null;
     }
     this.sprite.destroy();
+    legible(this.sprite.scene).forget(this.nameTag, this.statusDot, this.taskStatusText);
     this.nameTag.destroy();
     this.taskStatusText.destroy();
     this.statusDot.destroy();

@@ -3,6 +3,7 @@ import { gameEvents } from "@/lib/events";
 import { asset } from "@/lib/assets";
 import { PRESS_E_STYLE } from "@/lib/constants";
 import { addSign } from "../utils/signs";
+import { keepLegible } from "./legible";
 import type { POIDef } from "../utils/MapHelpers";
 import { FIXTURES, FIXTURE_ART, type FixtureId, type FixtureSpec } from "@/lib/fixtures";
 
@@ -102,6 +103,9 @@ export class FixtureManager {
         .setDepth(PROMPT_DEPTH)
         .setVisible(false);
       entry.prompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+      // Grows upward from its anchor, so it clears the thing it is about
+      // whatever size it is drawn at.
+      keepLegible(this.scene, entry.prompt);
     }
   }
 

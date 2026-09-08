@@ -56,6 +56,10 @@ export interface GameEventMap {
   "open-project-board": [];
   /** The project board was closed, so the office takes input again. */
   "project-board-closed": [];
+  /** Somebody walked up to the five counts on Support's wall and pressed E. */
+  "open-support-pulse": [];
+  /** The counts were closed, so the office takes input again. */
+  "support-pulse-closed": [];
   /** Somebody walked up to the arcade cabinet and pressed E. */
   "open-arcade": [];
   /** The arcade was closed, so the office takes input again. */

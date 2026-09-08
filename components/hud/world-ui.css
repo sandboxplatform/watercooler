@@ -16,7 +16,7 @@
 
 .welcome__title {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-xl);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--pixel-accent);
@@ -24,7 +24,7 @@
 
 .welcome__lead {
   margin: 4px 0 0;
-  font-size: 9px;
+  font-size: var(--fs-sm);
   color: var(--pixel-muted);
 }
 
@@ -34,7 +34,7 @@
 }
 
 .welcome__label {
-  font-size: 9px;
+  font-size: var(--fs-sm);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--pixel-muted);
@@ -68,11 +68,11 @@
 }
 
 .welcome-home__name {
-  font-size: 10px;
+  font-size: var(--fs-md);
 }
 
 .welcome-home__tagline {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-muted);
 }
 
@@ -91,7 +91,7 @@
   border: 2px solid var(--pixel-border);
   border-radius: var(--pixel-radius-sm);
   color: var(--pixel-text);
-  font-size: 8px;
+  font-size: var(--fs-xs);
   cursor: pointer;
 }
 
@@ -112,7 +112,7 @@
 }
 
 .welcome__hint {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-muted);
   margin-right: auto;
 }
@@ -144,7 +144,7 @@
   border: 2px solid var(--pixel-border);
   border-radius: var(--pixel-radius-sm);
   color: var(--pixel-text);
-  font-size: 10px;
+  font-size: var(--fs-md);
   text-align: left;
   cursor: pointer;
 }
@@ -160,7 +160,7 @@
 }
 
 .lift-stop__here {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-accent);
 }
 
@@ -170,7 +170,7 @@
 }
 
 .lift-stop__names {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-muted);
 }
 
@@ -193,7 +193,7 @@
   align-items: center;
   gap: 8px;
   color: var(--pixel-muted);
-  font-size: 10px;
+  font-size: var(--fs-md);
 }
 
 .welcome__account img {
@@ -204,7 +204,7 @@
 
 .welcome__error {
   color: var(--pixel-red);
-  font-size: 10px;
+  font-size: var(--fs-md);
 }
 
 .topbar-account {
@@ -227,7 +227,7 @@
   border-radius: 50%;
   background: var(--pixel-accent);
   color: var(--pixel-bg);
-  font-size: 10px;
+  font-size: var(--fs-md);
 }
 
 .welcome__hint--block {

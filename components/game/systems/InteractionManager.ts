@@ -7,6 +7,7 @@ import { gameEvents } from "@/lib/events";
 import { INTERACT_DISTANCE, PRESS_E_STYLE, PROMPT_Y_OFFSET } from "@/lib/constants";
 import type { WorkerManager } from "./WorkerManager";
 import type { CameraController } from "./CameraController";
+import { keepLegible } from "./legible";
 
 export class InteractionManager {
   private scene: Phaser.Scene;
@@ -39,6 +40,7 @@ export class InteractionManager {
       .setDepth(25)
       .setVisible(false);
     this.workerPromptText.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    keepLegible(this.scene, this.workerPromptText);
 
     this.interactionMenu = new InteractionMenu(this.scene);
     this.interactionMenu.onClose = () => {

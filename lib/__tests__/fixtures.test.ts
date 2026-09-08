@@ -32,6 +32,7 @@ const POI_NAMES = [
   "Ping pong table",
   "Project board",
   "Sofa",
+  "Support pulse",
   "Water bucket",
   "Water dispenser 1",
   "Water dispenser 2",
@@ -55,6 +56,7 @@ const EVERY_ID: Record<FixtureId, true> = {
   arcade: true,
   "project-board": true,
   "help-desk": true,
+  "support-pulse": true,
 };
 
 const claimants = (name: string) => FIXTURES.filter((f) => f.match.test(name)).map((f) => f.id);

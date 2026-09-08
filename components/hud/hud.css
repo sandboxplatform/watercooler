@@ -11,7 +11,7 @@
   border-radius: var(--pixel-radius-sm);
   background: rgba(0, 0, 0, 0.35);
   color: var(--pixel-text);
-  font-size: 10px;
+  font-size: var(--fs-md);
   white-space: nowrap;
 }
 
@@ -67,7 +67,7 @@
 }
 
 .hud-flyout__title {
-  font-size: 12px;
+  font-size: var(--fs-xl);
   font-weight: 600;
   color: var(--pixel-accent);
   text-transform: uppercase;
@@ -75,7 +75,7 @@
 }
 
 .hud-flyout__subtitle {
-  font-size: 10px;
+  font-size: var(--fs-md);
   color: var(--pixel-muted);
   width: 100%;
 }
@@ -85,7 +85,7 @@
   overflow-y: auto;
   min-height: 0;
   flex: 1 1 auto;
-  font-size: 11px;
+  font-size: var(--fs-lg);
   line-height: 1.5;
 }
 
@@ -145,7 +145,7 @@
 }
 
 .hud-panel__label {
-  font-size: 10px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--pixel-muted);
   text-transform: uppercase;
@@ -212,7 +212,7 @@
 .hud-chat__tool-name {
   color: var(--pixel-accent);
   font-family: var(--pixel-font);
-  font-size: 9px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -225,7 +225,7 @@
 
 .hud-chat__tool-output {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--fs-xl);
   color: var(--pixel-green);
   font-family: var(--pixel-font-chat);
 }
@@ -243,7 +243,7 @@
   height: 20px;
   padding: 0;
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--fs-md);
   font-family: var(--pixel-font);
   color: var(--pixel-red);
   background: rgba(239, 68, 68, 0.15);
@@ -282,13 +282,13 @@
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 4px;
-  font-size: 10px;
+  font-size: var(--fs-md);
   color: var(--pixel-muted);
 }
 
 .hud-list__title,
 .hud-workers__task {
-  font-size: 11px;
+  font-size: var(--fs-lg);
   line-height: 1.6;
   color: var(--pixel-text);
   word-break: break-word;
@@ -338,7 +338,7 @@
 .hud-empty {
   padding: 20px 12px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--fs-xl);
   color: var(--pixel-muted);
 }
 
@@ -463,7 +463,7 @@
   color: var(--pixel-text);
   cursor: pointer;
   font-family: var(--pixel-font);
-  font-size: 8px;
+  font-size: var(--fs-xs);
   white-space: nowrap;
   transition:
     border-color 0.15s,
@@ -503,7 +503,7 @@
 }
 
 .topbar-agent-pill__empty {
-  font-size: 9px;
+  font-size: var(--fs-sm);
   color: var(--pixel-muted);
   pointer-events: auto;
 }
@@ -576,7 +576,7 @@
   color: var(--pixel-text);
   cursor: pointer;
   font-family: var(--pixel-font);
-  font-size: 9px;
+  font-size: var(--fs-sm);
   image-rendering: pixelated;
   transition:
     border-color 0.15s,
@@ -615,7 +615,7 @@
 
 .hud-music-bar__label {
   color: var(--pixel-accent);
-  font-size: 10px;
+  font-size: var(--fs-md);
   flex-shrink: 0;
 }
 
@@ -665,7 +665,7 @@
 }
 
 .hud-music-bar__pct {
-  font-size: 7px;
+  font-size: var(--fs-2xs);
   color: var(--pixel-muted);
   min-width: 18px;
   text-align: right;
@@ -679,7 +679,7 @@
   color: var(--pixel-muted);
   cursor: pointer;
   font-family: var(--pixel-font);
-  font-size: 7px;
+  font-size: var(--fs-2xs);
   padding: 0 2px;
   flex-shrink: 0;
   white-space: nowrap;
@@ -707,7 +707,7 @@
   border-radius: var(--pixel-radius);
   z-index: 50;
   font-family: var(--pixel-font);
-  font-size: 8px;
+  font-size: var(--fs-xs);
 }
 
 .session-dropdown__empty {
@@ -736,7 +736,7 @@
 }
 
 .session-dropdown__time {
-  font-size: 9px;
+  font-size: var(--fs-sm);
   color: var(--pixel-muted);
   margin-top: 2px;
 }
@@ -751,7 +751,7 @@
 
   .topbar-agent-pill {
     padding: 3px 8px 3px 3px;
-    font-size: 7px;
+    font-size: var(--fs-2xs);
   }
 
   .topbar-agent-pill__avatar {
@@ -789,7 +789,7 @@
   align-items: center;
   gap: 4px 8px;
   margin-top: 6px;
-  font-size: 8px;
+  font-size: var(--fs-xs);
   line-height: 1.4;
   color: var(--pixel-muted);
 }
@@ -814,7 +814,7 @@
   background: #cfcfcf;
   color: #111;
   font-family: inherit;
-  font-size: 7px;
+  font-size: var(--fs-2xs);
   line-height: 1;
 }
 
@@ -849,7 +849,7 @@
   max-height: 90vh;
   overflow-y: auto;
   padding: 14px 16px;
-  font-size: 9px;
+  font-size: var(--fs-sm);
   line-height: 1.6;
 }
 
@@ -857,7 +857,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--fs-lg);
   margin-bottom: 10px;
 }
 
@@ -881,7 +881,7 @@
 
 .controller-check__facts--dim {
   color: var(--pixel-muted);
-  font-size: 8px;
+  font-size: var(--fs-xs);
 }
 
 .pong-foot--pad {
@@ -970,7 +970,7 @@
   display: flex;
   justify-content: space-between;
   gap: 6px;
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-muted);
   margin-bottom: 4px;
 }
@@ -979,12 +979,12 @@
   display: flex;
   justify-content: space-between;
   gap: 6px;
-  font-size: 8px;
+  font-size: var(--fs-xs);
   line-height: 1.9;
 }
 
 .pinball-hint {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   line-height: 1.8;
   color: var(--pixel-muted);
 }
@@ -1128,7 +1128,7 @@
 
 .app-sidebar__tab {
   font-family: inherit;
-  font-size: 8px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.05em;
   padding: 8px 12px;
   color: var(--pixel-muted);
@@ -1216,7 +1216,7 @@
 
 .activity__empty {
   margin: auto;
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-muted);
   text-align: center;
 }
@@ -1226,7 +1226,7 @@
   grid-template-columns: 14px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
-  font-size: 8px;
+  font-size: var(--fs-xs);
   line-height: 1.7;
   /* Said outright, because there is nothing above this to inherit from: the
      panel sets no colour of its own, so without this the browser's default
@@ -1316,7 +1316,7 @@
   align-items: baseline;
   justify-content: center;
   gap: 10px;
-  font-size: 10px;
+  font-size: var(--fs-md);
   color: var(--pixel-text);
 }
 
@@ -1339,13 +1339,13 @@
 .pong-foot__hint,
 .pong-menu__blurb,
 .pong-menu__empty {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-muted);
   line-height: 1.7;
 }
 
 .pong-foot__result {
-  font-size: 9px;
+  font-size: var(--fs-sm);
   color: var(--pixel-accent);
 }
 
@@ -1363,7 +1363,7 @@
 }
 
 .pong-menu__title {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-muted);
   letter-spacing: 0.06em;
 }
@@ -1392,7 +1392,7 @@
 }
 
 .pong-toast__text {
-  font-size: 9px;
+  font-size: var(--fs-sm);
   line-height: 1.7;
 }
 
@@ -1449,7 +1449,7 @@
   border-radius: 6px;
   background: var(--pixel-accent);
   color: var(--pixel-bg);
-  font-size: 7px;
+  font-size: var(--fs-2xs);
 }
 
 /* Tabs whose content is a plain list scroll inside the column */
@@ -1474,7 +1474,7 @@
 .board-count {
   align-self: center;
   margin-right: 4px;
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-muted);
   white-space: nowrap;
 }
@@ -1522,7 +1522,7 @@
   gap: 6px;
   padding: 7px 8px;
   border-bottom: 2px solid var(--pixel-border);
-  font-size: 9px;
+  font-size: var(--fs-sm);
   color: var(--pixel-accent);
 }
 
@@ -1538,7 +1538,7 @@
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.1);
   color: var(--pixel-muted);
-  font-size: 8px;
+  font-size: var(--fs-xs);
 }
 
 .board-column__cards {
@@ -1552,7 +1552,7 @@
 .board-column__empty {
   margin: 4px 2px;
   color: var(--pixel-muted);
-  font-size: 8px;
+  font-size: var(--fs-xs);
 }
 
 .board-card {
@@ -1576,7 +1576,7 @@
   padding: 1px 4px;
   border-radius: 3px;
   color: #12121c;
-  font-size: 7px;
+  font-size: var(--fs-2xs);
   line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1584,7 +1584,7 @@
 }
 
 .board-card__title {
-  font-size: 9px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--pixel-text);
   word-break: break-word;
@@ -1596,7 +1596,7 @@
   align-items: center;
   gap: 4px;
   margin-top: 6px;
-  font-size: 7px;
+  font-size: var(--fs-2xs);
   color: var(--pixel-muted);
 }
 
@@ -1644,14 +1644,14 @@
   border-radius: 50%;
   background: var(--pixel-accent);
   color: #12121c;
-  font-size: 6px;
+  font-size: var(--fs-3xs);
 }
 
 .board-note {
   max-width: 520px;
   margin: 0 auto;
   padding: 28px 20px;
-  font-size: 9px;
+  font-size: var(--fs-sm);
   line-height: 1.7;
   color: var(--pixel-muted);
   text-align: center;
@@ -1660,7 +1660,7 @@
 .board-note__lead {
   margin-bottom: 10px;
   color: var(--pixel-accent);
-  font-size: 11px;
+  font-size: var(--fs-lg);
 }
 
 .board-note code {
@@ -1674,7 +1674,7 @@
   border-radius: var(--pixel-radius-sm);
   background: rgba(0, 0, 0, 0.3);
   color: var(--pixel-text);
-  font-size: 8px;
+  font-size: var(--fs-xs);
   line-height: 1.8;
   text-align: left;
 }
@@ -1698,7 +1698,7 @@
   padding: 7px 12px;
   border-top: 2px solid var(--pixel-border);
   color: var(--pixel-muted);
-  font-size: 8px;
+  font-size: var(--fs-xs);
 }
 
 .board-foot__switch {
@@ -1706,7 +1706,7 @@
   background: none;
   color: var(--pixel-accent);
   font-family: inherit;
-  font-size: 8px;
+  font-size: var(--fs-xs);
   cursor: pointer;
 }
 
@@ -1720,7 +1720,7 @@
   align-items: center;
   gap: 5px;
   margin-bottom: 4px;
-  font-size: 7px;
+  font-size: var(--fs-2xs);
   color: var(--pixel-muted);
 }
 
@@ -1752,14 +1752,139 @@
   color: #f87168;
 }
 
+/* ── The five counts on Support's wall, spelled out ──
+   The wall itself is drawn in the room at the room's scale, which on a
+   phone is about half size. This is the same five numbers at a size that
+   does not depend on how far out the camera is standing. */
+.board-overlay .pulse-panel {
+  width: min(820px, 94vw);
+  height: auto;
+  max-height: 88vh;
+}
+
+.pulse-body {
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.pulse-bank + .pulse-bank {
+  margin-top: 14px;
+}
+
+.pulse-bank__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+  margin: 0 2px 7px;
+  font-weight: normal;
+}
+
+.pulse-bank__name {
+  font-size: var(--fs-md);
+  color: var(--pixel-text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pulse-bank__aside {
+  font-size: var(--fs-xs);
+  color: var(--pixel-muted);
+}
+
+/* Three across, then two — the same split the wall makes, which is the
+   split that makes the bars mean anything. One column on a phone. */
+.pulse-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.pulse-grid--standing {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pulse-grid--today {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 640px) {
+  .pulse-grid--standing,
+  .pulse-grid--today {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pulse-tile {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 2px solid var(--pixel-border);
+  border-left: 4px solid var(--pulse-colour);
+  border-radius: var(--pixel-radius-sm);
+}
+
+.pulse-tile__label {
+  font-size: var(--fs-sm);
+  color: var(--pixel-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* The number is the point of the tile, so it is the one thing here drawn
+   at a headline size rather than off the HUD's small scale. */
+.pulse-tile__figure {
+  font-family: "Press Start 2P", var(--pixel-font);
+  font-size: 26px;
+  line-height: 1.15;
+  color: var(--pulse-colour);
+}
+
+.pulse-tile__track {
+  height: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
+.pulse-tile__bar {
+  display: block;
+  height: 100%;
+  background: var(--pulse-colour);
+}
+
+.pulse-tile__note {
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  color: var(--pixel-muted);
+}
+
+.pulse-tile__capped {
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  color: #faa53d;
+}
+
+.pulse-legend {
+  margin: 12px 2px 0;
+  font-size: var(--fs-xs);
+  line-height: 1.7;
+  color: var(--pixel-muted);
+}
+
+.pulse-legend strong {
+  color: var(--pixel-text);
+}
+
 /* ── People: everyone online, by place ── */
 .people {
   padding: 10px 12px;
-  font-size: 9px;
+  font-size: var(--fs-sm);
 }
 
 .people__count {
-  font-size: 10px;
+  font-size: var(--fs-md);
   color: var(--pixel-accent);
   margin-bottom: 10px;
 }
@@ -1781,11 +1906,11 @@
   margin-bottom: 4px;
   border-bottom: 1px solid var(--pixel-border);
   color: var(--pixel-text);
-  font-size: 9px;
+  font-size: var(--fs-sm);
 }
 
 .people__here {
-  font-size: 7px;
+  font-size: var(--fs-2xs);
   color: var(--pixel-green);
   border: 1px solid var(--pixel-green);
   border-radius: var(--pixel-radius-sm);
@@ -1818,7 +1943,7 @@
 }
 
 .people__me {
-  font-size: 7px;
+  font-size: var(--fs-2xs);
   color: var(--pixel-muted);
 }
 
@@ -1835,7 +1960,7 @@
 }
 
 .badges__count {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-accent);
   letter-spacing: 0.05em;
 }
@@ -1849,7 +1974,7 @@
 
 .badges__empty,
 .badges__detail {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   line-height: 1.7;
   color: var(--pixel-muted);
 }
@@ -1859,7 +1984,7 @@
   grid-template-columns: 18px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
-  font-size: 8px;
+  font-size: var(--fs-xs);
 }
 
 /* Not yet won: shown, but plainly not theirs */
@@ -1868,12 +1993,12 @@
 }
 
 .badges__icon {
-  font-size: 12px;
+  font-size: var(--fs-xl);
   line-height: 1.4;
 }
 
 .badges__title {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   line-height: 1.7;
 }
 
@@ -1882,7 +2007,7 @@
 }
 
 .badges__when {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-muted);
   white-space: nowrap;
 }
@@ -1948,7 +2073,7 @@
   border: 1px solid var(--pixel-border);
   border-radius: var(--pixel-radius-sm);
   background: rgba(0, 0, 0, 0.35);
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-text);
 }
 
@@ -1973,7 +2098,7 @@
 }
 
 .hud-attachments__error {
-  font-size: 8px;
+  font-size: var(--fs-xs);
   color: var(--pixel-red);
 }
 
@@ -2073,18 +2198,18 @@
 
 .board-overlay.game-fullwindow .board-count,
 .board-overlay:fullscreen .board-count {
-  font-size: 10px;
+  font-size: var(--fs-md);
 }
 
 .board-overlay.game-fullwindow .board-column__head,
 .board-overlay:fullscreen .board-column__head {
   padding: 10px 11px;
-  font-size: 12px;
+  font-size: var(--fs-xl);
 }
 
 .board-overlay.game-fullwindow .board-column__count,
 .board-overlay:fullscreen .board-column__count {
-  font-size: 10px;
+  font-size: var(--fs-md);
 }
 
 .board-overlay.game-fullwindow .board-card,
@@ -2094,12 +2219,12 @@
 
 .board-overlay.game-fullwindow .board-card__title,
 .board-overlay:fullscreen .board-card__title {
-  font-size: 12px;
+  font-size: var(--fs-xl);
 }
 
 .board-overlay.game-fullwindow .board-card__label,
 .board-overlay:fullscreen .board-card__label {
-  font-size: 9px;
+  font-size: var(--fs-sm);
   padding: 2px 5px;
 }
 
@@ -2107,7 +2232,7 @@
 .board-overlay:fullscreen .board-card__meta,
 .board-overlay.game-fullwindow .desk-ticket__top,
 .board-overlay:fullscreen .desk-ticket__top {
-  font-size: 9px;
+  font-size: var(--fs-sm);
   gap: 5px;
 }
 
@@ -2115,7 +2240,7 @@
 .board-overlay:fullscreen .board-avatar {
   width: 19px;
   height: 19px;
-  font-size: 8px;
+  font-size: var(--fs-xs);
 }
 
 .board-overlay.game-fullwindow .desk-priority,
@@ -2127,13 +2252,13 @@
 .board-overlay.game-fullwindow .board-foot,
 .board-overlay:fullscreen .board-foot {
   padding: 10px 18px;
-  font-size: 10px;
+  font-size: var(--fs-md);
 }
 
 .board-overlay.game-fullwindow .board-note,
 .board-overlay:fullscreen .board-note {
   max-width: 720px;
-  font-size: 12px;
+  font-size: var(--fs-xl);
 }
 
 .board-overlay.game-fullwindow .board-note__lead,
@@ -2143,7 +2268,7 @@
 
 .board-overlay.game-fullwindow .board-note__keys,
 .board-overlay:fullscreen .board-note__keys {
-  font-size: 11px;
+  font-size: var(--fs-lg);
 }
 
 /* The arcade's head carries four buttons: give it room, and let it wrap */
@@ -2157,7 +2282,7 @@
 }
 
 .arcade-head__title {
-  font-size: 10px;
+  font-size: var(--fs-md);
 }
 
 .arcade-head__buttons {
