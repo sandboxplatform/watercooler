@@ -495,13 +495,35 @@ or a backgrounded phone is not taken out of the room for looking away.
 ### Voice chat
 
 Audio goes browser to browser over WebRTC (`lib/voice/`). The room socket carries
-only the handshake; **the server never hears anything**. Everyone in the room with a
-microphone on is connected to everyone else who has one, and each voice is attenuated
-by distance: full within three tiles, silent past nine, linear fade between
-(`lib/voice/proximity.ts`). A speaker mark appears above someone while their voice is
-coming through.
+only the handshake; **the server never hears anything**. A speaker mark appears above
+someone while their voice is coming through — where you can see them, which is only
+in the room you are both in.
 
-Voice exists where presence does — rooms. The world map and campuses have no voice.
+**One conversation for the whole server.** Switching a microphone on joins it: you
+hear everyone else who has theirs on, at full volume, wherever in the world they are
+standing. Two things follow, and both were the other way round before:
+
+| Where                                       | Was                                   | Is                                          |
+| ------------------------------------------- | ------------------------------------- | ------------------------------------------- |
+| Who to say hello to (`voice-chat.ts`)       | The room's roster (`presence-roster`) | Everyone on the server (`presence-online`)  |
+| Where a signal is delivered to (the socket) | The sender's room only                | The one person it is addressed to, anywhere |
+
+A `left` on the room socket is no longer the end of somebody's voice, either: it
+means they walked into the next room, on the same connection, and dropping them
+there would cut a conversation off at every lift ride with nothing to mend it. Who
+has actually gone is the server's own list.
+
+It used to be proximity voice, per room, each voice faded by distance — full within
+three tiles, silent past nine, linear between. Distance is the wrong measure once
+the chat spans rooms: a floor above has coordinates of its own, so the same numbers
+mean a different thing in every place. The fade went rather than being kept unused;
+`lib/voice/proximity.ts` says what it was, and those three numbers are the whole of
+it if it comes back.
+
+`lib/server/__tests__/voice-reach.test.ts` drives real sockets against a real server
+to hold the handshake to crossing rooms — and to still being a post box rather than a
+megaphone, since nothing else about the app would notice a signal going to the wrong
+person.
 
 Routing uses a public STUN server. Browsers behind strict NATs need a TURN relay:
 `NEXT_PUBLIC_TURN_URL`, `NEXT_PUBLIC_TURN_USERNAME`, `NEXT_PUBLIC_TURN_CREDENTIAL`,
@@ -1013,7 +1035,7 @@ lib/
   map/ world/                      map generation and world layout
   arcade/ pinball/ pong/           the games (Oak Island, Flappy, Snake, Breakout, Solitaire)
   pixel/ characters/               sheet validation, PNG codec, palettes, recolouring
-  voice/                           WebRTC proximity voice
+  voice/                           WebRTC voice, one conversation server-wide
   trello/ zoho/                    the two boards on an Operations floor, read-only
   mettara/ mcp/                    Mettara client + signed webhook; MCP servers
 public/maps|tilesets|sprites|characters|audio|ui

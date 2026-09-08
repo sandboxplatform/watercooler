@@ -1,27 +1,37 @@
 "use client";
 
 /**
- * Proximity voice chat between the people in a room.
+ * One voice chat for the whole server.
  *
  * Audio goes browser to browser over WebRTC; the room socket carries only
- * the handshake, and the server never hears a thing. Everyone with a
- * microphone on is connected to everyone else in the room who has one —
- * a mesh, which is fine for the four people a room holds — and each voice
- * is turned down by how far away its owner stands, from full within a few
- * tiles to nothing past earshot.
+ * the handshake, and the server never hears a thing. Switching a microphone
+ * on joins the one conversation everybody on the server is in — a mesh,
+ * which is fine while the cast is small — and everyone in it is heard in
+ * full, wherever in the world they are standing.
  *
- * One instance per browser. It listens to the room socket and the game's
- * events for as long as the HUD is mounted, and does nothing at all until
- * the microphone is switched on.
+ * It used to be one conversation per room, each voice turned down by how
+ * far away its owner stood. Distance is the wrong measure once the chat
+ * spans rooms: a floor above has coordinates of its own, so the same
+ * numbers mean something different in every place, and a person you can
+ * hear at all is a person you should hear properly. The fade is gone with
+ * it; `proximity.ts` says what it was, for whenever it comes back.
+ *
+ * Who is on the server, rather than who is in this room, is `presence-online`:
+ * the same list the People panel shows, which the server sends to everybody
+ * whenever anyone arrives, leaves or walks somewhere else.
+ *
+ * One instance per browser. It listens to the room socket for as long as
+ * the HUD is mounted, and does nothing at all until the microphone is
+ * switched on.
  */
 
 import { gameEvents } from "../events";
 import { createLogger } from "../logger";
 import { onRoomMessage, sendRoom } from "../room-socket";
-import { getPlayers } from "../presence-roster";
+import { onlinePeople, subscribeOnline } from "../presence-online";
 import { getSelfId } from "../presence-self";
-import type { PresencePlayer, VoiceSignal } from "../presence-types";
-import { distanceBetween, offers, volumeAt } from "./proximity";
+import type { OnlinePerson, VoiceSignal } from "../presence-types";
+import { offers } from "./proximity";
 import { rememberVoice, voiceWasOn } from "./remember";
 
 const log = createLogger("Voice");
@@ -33,12 +43,10 @@ export interface VoiceView {
   status: VoiceStatus;
   /** People whose voice is connected. */
   peers: number;
-  /** Of those, how many are close enough to hear. */
-  inEarshot: number;
-  /** People in this place with a microphone on, counting this browser's. */
+  /** People on the server with a microphone on, counting this browser's. */
   withMic: number;
-  /** People in this place, counting this browser's. */
-  humansHere: number;
+  /** People on the server, counting this browser's. */
+  online: number;
   /** People still being connected to. */
   connecting: number;
   /** People the connection could not be made to at all — usually a network that needs a relay. */
@@ -76,16 +84,14 @@ interface Peer {
   /** ICE that arrived before the remote description did. */
   earlyIce: RTCIceCandidateInit[];
   speaking: boolean;
-  volume: number;
 }
 
 class VoiceChat {
   private view: VoiceView = {
     status: "off",
     peers: 0,
-    inEarshot: 0,
     withMic: 0,
-    humansHere: 1,
+    online: 1,
     connecting: 0,
     failed: 0,
     speaking: false,
@@ -96,7 +102,6 @@ class VoiceChat {
   private context: AudioContext | null = null;
   private localAnalyser: AnalyserNode | null = null;
   private peers = new Map<string, Peer>();
-  private me: { x: number; y: number } | null = null;
   private unsubs: (() => void)[] = [];
   private attached = 0;
   private levelTimer: ReturnType<typeof setInterval> | null = null;
@@ -131,7 +136,12 @@ class VoiceChat {
       this.unsubs = [
         onRoomMessage((message) => {
           if (message.type === "voice") void this.handle(message.from.id, message.signal);
-          else if (message.type === "left") this.drop(message.id);
+          // A "left" is somebody leaving *this room* — most often for the
+          // room next door, on the same socket and the same connection.
+          // Ending their voice on it was right while the chat was the
+          // room's; now it would cut a conversation off at every lift ride
+          // and never mend it, since they stay greeted and so nobody says
+          // hello again. Who has actually gone is the server's list, below.
           else if (message.type === "welcome") {
             // A new room, or a reconnection: it does not know the microphone
             // is on until told, and nobody in it has been greeted yet.
@@ -140,12 +150,11 @@ class VoiceChat {
               this.greeted.clear();
             }
             this.roster();
-          } else if (message.type === "presence") this.roster();
+          }
         }),
-        gameEvents.on("player-moved", (position) => {
-          this.me = { x: position.x, y: position.y };
-          this.updateVolumes();
-        }),
+        // Who is on the server, not who is in this room: someone switching
+        // their microphone on two floors up is somebody to say hello to.
+        subscribeOnline(() => this.roster()),
       ];
       // The microphone was on when the last page was left: on again here.
       if (voiceWasOn() && this.view.status === "off") void this.enable();
@@ -209,15 +218,15 @@ class VoiceChat {
     // The room counts who is on voice; then tell everyone here, and
     // those with a microphone on will answer.
     sendRoom({ type: "mic", on: true });
-    this.greeted = new Set(this.humans().map((p) => p.id));
-    for (const player of this.humans()) this.send(player.id, { kind: "hello" });
+    this.greeted = new Set(this.everyoneElse().map((p) => p.id));
+    for (const player of this.everyoneElse()) this.send(player.id, { kind: "hello" });
     this.census();
   }
 
   async disable({ forget = true }: { forget?: boolean } = {}) {
     if (forget) rememberVoice(false);
     if (this.view.status === "off") return;
-    for (const player of this.humans()) this.send(player.id, { kind: "bye" });
+    for (const player of this.everyoneElse()) this.send(player.id, { kind: "bye" });
     for (const id of [...this.peers.keys()]) this.drop(id);
     if (this.levelTimer) clearInterval(this.levelTimer);
     this.levelTimer = null;
@@ -229,7 +238,6 @@ class VoiceChat {
     this.publish({
       status: "off",
       peers: 0,
-      inEarshot: 0,
       connecting: 0,
       failed: 0,
       speaking: false,
@@ -240,9 +248,13 @@ class VoiceChat {
 
   // ── The handshake ──────────────────────────────────────
 
-  private humans(): PresencePlayer[] {
+  /**
+   * Everybody else on the server. The list the server sends already leaves
+   * the residents out — they have no microphone and nothing to say into one.
+   */
+  private everyoneElse(): OnlinePerson[] {
     const me = getSelfId();
-    return getPlayers().filter((p) => !p.resident && p.id !== me);
+    return onlinePeople().filter((p) => p.id !== me);
   }
 
   private send(to: string, signal: VoiceSignal) {
@@ -316,7 +328,6 @@ class VoiceChat {
       analyser: null,
       earlyIce: [],
       speaking: false,
-      volume: 1,
     };
     this.peers.set(id, peer);
     for (const track of this.local?.getTracks() ?? []) pc.addTrack(track, this.local!);
@@ -340,15 +351,15 @@ class VoiceChat {
     return peer;
   }
 
-  /** Their voice arrives: play it through a gain we can turn with distance. */
+  /** Their voice arrives: play it. */
   private hear(id: string, peer: Peer, stream: MediaStream) {
-    // The element is what plays: its volume is turned with distance, and it
-    // needs no audio context, which a browser may keep suspended. The
-    // context only listens, to see when they are talking.
+    // The element is what plays, and it needs no audio context, which a
+    // browser may keep suspended. The context only listens, to see when
+    // they are talking.
     const sink = new Audio();
     sink.srcObject = stream;
     sink.autoplay = true;
-    sink.volume = Math.min(1, Math.max(0, peer.volume));
+    sink.volume = 1;
     void sink.play().catch((err: Error) => log.warn(`could not play ${id}:`, err.message));
     peer.sink = sink;
     if (this.context) {
@@ -358,7 +369,7 @@ class VoiceChat {
       peer.analyser.fftSize = 1024;
       peer.source.connect(peer.analyser);
     }
-    this.updateVolumes();
+    this.count();
     log.info(`hearing ${id}`);
   }
 
@@ -376,48 +387,35 @@ class VoiceChat {
     this.count();
   }
 
-  /** The roster changed: greet anyone new, forget anyone gone. */
+  /** The list changed: greet anyone new, forget anyone gone from the server. */
   private roster() {
     this.census();
     if (this.view.status !== "on") return;
-    const humans = this.humans();
-    const here = new Set(humans.map((p) => p.id));
-    for (const id of [...this.peers.keys()]) if (!here.has(id)) this.drop(id);
+    const others = this.everyoneElse();
+    const online = new Set(others.map((p) => p.id));
+    for (const id of [...this.peers.keys()]) if (!online.has(id)) this.drop(id);
     // Someone new: say hello, so a person who arrives after the microphone
     // went on is connected to as well.
-    for (const player of humans) {
+    for (const player of others) {
       if (this.greeted.has(player.id)) continue;
       this.greeted.add(player.id);
       this.send(player.id, { kind: "hello" });
     }
-    for (const id of [...this.greeted]) if (!here.has(id)) this.greeted.delete(id);
-    this.updateVolumes();
+    for (const id of [...this.greeted]) if (!online.has(id)) this.greeted.delete(id);
+    this.count();
   }
 
-  /** How many are here, and how many of them are on voice — this browser included. */
+  /** How many are on the server, and how many of them are on voice — this browser included. */
   private census() {
-    const humans = this.humans();
+    const others = this.everyoneElse();
     const on = this.view.status === "on";
     const patch = {
-      humansHere: humans.length + 1,
-      withMic: humans.filter((p) => p.mic).length + (on ? 1 : 0),
+      online: others.length + 1,
+      withMic: others.filter((p) => p.mic).length + (on ? 1 : 0),
     };
-    if (patch.humansHere !== this.view.humansHere || patch.withMic !== this.view.withMic) {
+    if (patch.online !== this.view.online || patch.withMic !== this.view.withMic) {
       this.publish(patch);
     }
-  }
-
-  // ── Distance ───────────────────────────────────────────
-
-  private updateVolumes() {
-    if (!this.me) return;
-    const players = getPlayers();
-    for (const [id, peer] of this.peers) {
-      const them = players.find((p) => p.id === id);
-      peer.volume = them ? volumeAt(distanceBetween(this.me, them)) : 0;
-      if (peer.sink) peer.sink.volume = Math.min(1, Math.max(0, peer.volume));
-    }
-    this.count();
   }
 
   private count() {
@@ -425,13 +423,11 @@ class VoiceChat {
     const connected = all.filter((p) => p.pc.connectionState === "connected");
     const patch = {
       peers: connected.length,
-      inEarshot: connected.filter((p) => p.volume > 0).length,
       connecting: all.filter((p) => ["new", "connecting"].includes(p.pc.connectionState)).length,
       failed: this.failedPeers,
     };
     if (
       patch.peers !== this.view.peers ||
-      patch.inEarshot !== this.view.inEarshot ||
       patch.connecting !== this.view.connecting ||
       patch.failed !== this.view.failed
     ) {
@@ -455,7 +451,7 @@ class VoiceChat {
     }
     for (const [id, peer] of this.peers) {
       if (!peer.analyser) continue;
-      const speaking = peer.volume > 0 && this.loudness(peer.analyser) > SPEAKING_RMS;
+      const speaking = this.loudness(peer.analyser) > SPEAKING_RMS;
       if (speaking !== peer.speaking) {
         peer.speaking = speaking;
         gameEvents.emit("voice-speaking", id, speaking);

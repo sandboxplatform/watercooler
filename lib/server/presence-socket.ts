@@ -181,6 +181,18 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     }
   };
 
+  /**
+   * One person's socket, wherever on the server they are.
+   *
+   * A connection is indexed by the room it is in, so reaching somebody
+   * means finding their room first. Only voice needs this: everything else
+   * is addressed to a room, and this one thing is addressed to a person.
+   */
+  const socketFor = (id: string): WebSocket | undefined => {
+    const slug = roomOf.get(id);
+    return slug ? rooms.get(slug)?.sockets.get(id) : undefined;
+  };
+
   const broadcast = (slug: string, message: ServerMessage, exceptId?: string) => {
     const room = rooms.get(slug);
     if (!room) return;
@@ -649,7 +661,13 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
         if (parsed.type === "voice") {
           // The same post box, for the voice handshake: checked, addressed
-          // to someone in this room, and passed on unread.
+          // to one person anywhere on the server, and passed on unread.
+          //
+          // Anywhere, because voice is one conversation for the whole
+          // server rather than one per room. It used to be delivered only
+          // within the sender's room, which is what made it a room's
+          // conversation: two people a floor apart would say hello and
+          // neither would hear an answer.
           const to = typeof parsed.to === "string" ? parsed.to : "";
           if (!to || to === id || !isVoiceSignal(parsed.signal)) return;
           if (parsed.signal.kind === "hello") {
@@ -660,8 +678,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             micOf.set(id, false);
             room.hub.setMic(id, false);
           }
-          if (roomOf.get(to) !== slug) return;
-          const target = room.sockets.get(to);
+          const target = socketFor(to);
           if (!target || target.readyState !== target.OPEN) return;
           const from = room.hub.snapshot().find((p) => p.id === id);
           target.send(

@@ -43,16 +43,18 @@ export default function BottomBar({ connection, sessionMetrics }: BottomBarProps
     (voice.failed
       ? ` ${voice.failed} could not be reached — those networks need a relay (TURN) to talk.`
       : "");
-  const here = `${voice.withMic} of ${voice.humansHere} here have a microphone on.`;
+  // Voice is one conversation for the whole server, so the count that
+  // matters is everybody on it rather than everybody in this room.
+  const here = `${voice.withMic} of ${voice.online} online have a microphone on.`;
   const micTitle =
     voice.status === "on"
       ? voice.peers
-        ? `Microphone on — ${here} ${voice.inEarshot} of ${voice.peers} connected are within earshot.${trouble} Click to switch off.`
+        ? `Microphone on — ${here} Talking to ${voice.peers}.${trouble} Click to switch off.`
         : `Microphone on — ${here}${voice.withMic > 1 ? "" : " The others need to switch theirs on too."}${trouble} Click to switch off.`
       : voice.status === "requesting"
         ? "Asking for the microphone…"
         : (voice.reason ??
-          `${voice.withMic > 0 ? `${here} ` : ""}Switch on voice chat: people near you in the room will hear you. On a controller, hold ${talk} to talk.`);
+          `${voice.withMic > 0 ? `${here} ` : ""}Switch on voice chat: everyone on the server with a microphone on will hear you, wherever they are. On a controller, hold ${talk} to talk.`);
 
   return (
     <div className="layout-bottombar">
@@ -88,7 +90,7 @@ export default function BottomBar({ connection, sessionMetrics }: BottomBarProps
           {voice.status === "requesting"
             ? "mic…"
             : voice.withMic > 0
-              ? `${voice.withMic}/${voice.humansHere} on mic`
+              ? `${voice.withMic}/${voice.online} on mic`
               : "voice off"}
         </span>
       </button>

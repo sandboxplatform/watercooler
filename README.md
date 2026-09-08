@@ -442,7 +442,8 @@ One server is one world. Everyone who opens the site walks into the same
 places: up to six people on the world map, six in each lobby and on each
 floor, six on a campus or the island. Wherever you are, you see the others
 there as characters, their words appear over their heads and in the chat
-window, and with voice chat on you hear whoever is near you. Walking through
+window, and with voice chat on you hear everyone else on voice, wherever
+they are. Walking through
 a door or onto the ferry moves you to that place's room, and the people in
 both places see you go and arrive. The agents are shared too: a task one
 person assigns is seen by everyone in that room.
@@ -540,16 +541,20 @@ in the image). A Claude agent finds them copied into its workspace under
 `attachments/`, with a note at the end of the task saying so; Mettara gets
 them uploaded to the group and handed over with the message.
 
-### Voice chat by proximity
+### Voice chat
 
-The microphone button in the bottom bar switches on voice chat. Audio goes
-browser to browser over WebRTC; the room socket carries only the handshake,
-and the server never hears anything. Everyone in the room with a microphone
-on is connected to everyone else who has one, and each voice is turned down
-by distance: full within three tiles, silent past nine, a straight fade
-between. A small speaker mark appears above someone while their voice is
-coming through. Voice works in rooms, where presence is; the world map and a
-campus have no room and no voice.
+The microphone button in the bottom bar switches on voice chat, and there is
+one for the whole server: everyone with a microphone on is in the same
+conversation and hears everyone else in full, whichever building, floor or
+green they happen to be standing on. Audio goes browser to browser over
+WebRTC; the room socket carries only the handshake, and the server never
+hears anything. A small speaker mark appears above someone while their voice
+is coming through — where you can see them, which is the room you are both
+in.
+
+It was proximity voice before, one conversation per room with each voice
+faded by distance. Distance stops meaning anything once the chat crosses
+rooms, since every map has coordinates of its own.
 
 Routing uses a public STUN server. Browsers behind strict NATs may need a
 TURN relay: set `NEXT_PUBLIC_TURN_URL`, `NEXT_PUBLIC_TURN_USERNAME` and

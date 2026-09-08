@@ -6,9 +6,8 @@ import { voiceChat, type VoiceView } from "../voice/voice-chat";
 const OFF: VoiceView = {
   status: "off",
   peers: 0,
-  inEarshot: 0,
   withMic: 0,
-  humansHere: 1,
+  online: 1,
   connecting: 0,
   failed: 0,
   speaking: false,

@@ -44,6 +44,7 @@ const NEVER = ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/.claude/**
  */
 const SLOW = [
   "**/lib/server/__tests__/presence-identity.test.ts",
+  "**/lib/server/__tests__/voice-reach.test.ts",
   "**/lib/pinball/__tests__/stuck.test.ts",
 ];
 
