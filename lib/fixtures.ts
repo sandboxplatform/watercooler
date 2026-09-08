@@ -31,6 +31,20 @@ import {
   CAULDRON_INTERACT_DISTANCE,
 } from "./constants";
 import { TILE, WHITEBOARD } from "./map/office";
+import { arcadeGame } from "./arcade";
+import { arcadeGameIn } from "./world/tenants";
+
+/**
+ * The title of the game in a room's cabinet, for the sign over it.
+ *
+ * Null where the room has no cabinet — a floor above a lobby, the default
+ * room, anywhere the point of interest is not on the map. The registry is
+ * the same in every room; this is the one thing on it that is not.
+ */
+function arcadeTitleIn(room: string | null): string | null {
+  const id = arcadeGameIn(room);
+  return id ? (arcadeGame(id)?.title ?? null) : null;
+}
 
 /** The fixtures a room can carry. The id is the registry's key. */
 export type FixtureId =
@@ -84,7 +98,14 @@ export interface FixtureSpec {
   art?: { key: string; file: string; lift: number };
   /** The label on the wall, so the far side of the room can read it. */
   sign?: {
-    label: string;
+    /**
+     * The words, or how to work them out from the room they are hanging
+     * in. Only the arcade cabinet needs the second: it is one machine and
+     * a different game in every building, so its sign reads BREAKOUT in
+     * one lobby and OAK ISLAND in another. Given the room's slug, or null
+     * where there is no room to ask about.
+     */
+    label: string | ((room: string | null) => string);
     /** Sideways, for a fixture whose point is not its middle. */
     nudgeX?: number;
     /** Above the point, for a fixture with no art to measure from. */
@@ -160,9 +181,13 @@ export const FIXTURES: readonly FixtureSpec[] = [
     prompt: "Press E to play",
     radius: CAULDRON_INTERACT_DISTANCE,
     promptLift: 44,
-    // Against the same wall as the pinball machine, one row above its point.
+    // In the corner against the top wall, where the pinball machine stands
+    // in the building that has that instead: one machine to a lobby.
     art: { key: "arcade-cabinet", file: "/sprites/arcade_cabinet_96x120.png", lift: 60 },
-    sign: { label: "ARCADE" },
+    // The cabinet is one game, so the sign says which — and a cabinet with
+    // no game behind it is a room nobody has furnished, which reads better
+    // as ARCADE than as a blank board.
+    sign: { label: (room) => arcadeTitleIn(room)?.toUpperCase() ?? "ARCADE" },
   },
   {
     id: "project-board",

@@ -199,18 +199,40 @@ export function isHome(slug: string | null | undefined): slug is string {
 // ── Who may ride the lift ───────────────────────────────
 
 /**
- * Buildings whose upper floors are private, and who may go up.
+ * Buildings whose upper floors are shut to the public.
  *
  * The lobby is always public — a visitor may walk in, look round and talk to
  * whoever is there. It is the floors above that are shut, because that is
  * where the desks and the agents are.
  *
- * Keyed by tenant slug, so making another building private is a line here
- * rather than a change anywhere else.
+ * A list of slugs, so making another building private is a line here rather
+ * than a change anywhere else, and everywhere unlisted is open to whoever
+ * walks up. It used to say *who* may go up in each — which could not express
+ * either of the rules below: a person barred from the public lifts too, or
+ * one who should be carried up in a building nobody has made private yet.
  */
-export const PRIVATE_LIFTS: Record<string, readonly AccessIdentity[]> = {
-  "sandbox-erp": ["coop", "rob"],
-  "castle-atlantic": ["coop", "rob"],
+export const PRIVATE_LIFTS: readonly string[] = ["sandbox-erp", "castle-atlantic"];
+
+/**
+ * How far up each person may go, where it is their own business rather than
+ * the building's.
+ *
+ * `"every"` is every lift in the world, including any building made private
+ * after this was written — which is what "all the elevators" has to mean, or
+ * it quietly stops being true the next time a building is shut. A list is
+ * exactly those buildings and nowhere else, public lifts included: Hunter
+ * works at Castle Atlantic and rides Castle Atlantic's.
+ *
+ * **An empty list is not the same as no entry.** No entry means the person is
+ * held to the building's own rule, which is how a visitor gets every lift but
+ * the private ones. An empty list means no lift anywhere, which is Campbell.
+ * Anything reading this with `if (!reach)` would hand him the lot.
+ */
+export const LIFT_REACH: Partial<Record<AccessIdentity, "every" | readonly string[]>> = {
+  coop: "every",
+  rob: "every",
+  hunter: ["castle-atlantic"],
+  campbell: [],
 };
 
 /** What the lift says to somebody it will not carry. */
@@ -218,18 +240,19 @@ export const LIFT_REFUSAL = "Thou shall not pass!";
 
 /** Whether a building's floors are anyone's but the public's. */
 export function liftIsPrivate(slug: string): boolean {
-  return slug in PRIVATE_LIFTS;
+  return PRIVATE_LIFTS.includes(slug);
 }
 
 /**
  * Whether this identity may ride a building's lift.
  *
- * Everywhere not named is open to everybody, so a new building works without
- * being listed.
+ * Their own reach answers it when they have one; otherwise the building
+ * does, so a new building works without being listed anywhere.
  */
 export function mayRideLift(slug: string, identity: AccessIdentity): boolean {
-  const allowed = PRIVATE_LIFTS[slug];
-  return !allowed || allowed.includes(identity);
+  const reach = LIFT_REACH[identity];
+  if (reach === undefined) return !liftIsPrivate(slug);
+  return reach === "every" || reach.includes(slug);
 }
 
 /**
@@ -244,11 +267,18 @@ export function mayRideLift(slug: string, identity: AccessIdentity): boolean {
  * stands them on the plaza.
  *
  * Only the root. A typed `/r/<slug>` still opens that lobby, because a lobby
- * is public and a shared link has to work. And only a visitor: somebody
- * whose own code names their building is not a stranger in it.
+ * is public and a shared link has to work. And only somebody with nowhere of
+ * their own: a person whose code names their building is not a stranger in
+ * it.
+ *
+ * `hasBuilding` rather than the identity, because that is the actual
+ * question and the two stopped agreeing. Asking whether somebody was a
+ * visitor was the same thing only while visitors were the only people
+ * without a building — Campbell has a code of his own and works nowhere yet,
+ * and the root is no more his than it is a stranger's.
  */
-export function landsOutside(pathname: string, identity: AccessIdentity): boolean {
-  return pathname === "/" && identity === "visitor";
+export function landsOutside(pathname: string, hasBuilding: boolean): boolean {
+  return pathname === "/" && !hasBuilding;
 }
 
 /** Where such a person is sent. */

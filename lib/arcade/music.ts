@@ -3,10 +3,10 @@
 /**
  * The games' music.
  *
- * "Mighty Coin Drop" plays from the moment the arcade opens and under every
- * game but one: Oak Island has its own song, "Tide Under Oak", which takes
- * over while that game is on the screen and gives way again after. The
- * pinball machine has "Silver Ball Surge". The room's own music steps aside
+ * "Mighty Coin Drop" plays from the moment an arcade cabinet opens, in
+ * every building but one: the island's cabinet is Oak Island, which has its
+ * own song, "Tide Under Oak". The pinball machine has "Silver Ball Surge".
+ * The room's own music steps aside
  * for whichever machine is open and returns when it closes. One mute
  * switch, remembered in the browser, silences the songs and only the songs
  * — the games' sound effects are separate.
@@ -75,20 +75,18 @@ function stop() {
 }
 
 export const arcadeMusic = {
-  /** The cabinet lights up: the coin song, the room's music aside. */
-  open() {
+  /**
+   * The cabinet lights up: its game's song, the room's music aside.
+   *
+   * Takes the game because a cabinet *is* one game — there is no menu to
+   * play the coin song over while somebody chooses, so the right track is
+   * known from the first note. Oak Island has its own; the rest play to
+   * the cabinet's.
+   */
+  open(id: string) {
     if (typeof Audio === "undefined") return;
     pauseBgm();
-    play("coin");
-  },
-  /** A game starts: its own song if it has one, the coin song otherwise. */
-  startGame(id: string) {
-    if (typeof Audio === "undefined") return;
     play(id === "oak-island" ? "oak" : "coin");
-  },
-  backToMenu() {
-    if (typeof Audio === "undefined") return;
-    play("coin");
   },
   close() {
     if (typeof Audio === "undefined") return;

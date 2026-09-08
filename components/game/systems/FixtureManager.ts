@@ -54,20 +54,26 @@ export class FixtureManager {
   /**
    * Read the room's points of interest: what it carries, where, with the
    * art standing on it and its sign above.
+   *
+   * `room` is the building's slug, for the one sign whose words depend on
+   * it: the arcade cabinet is the same machine in every lobby and a
+   * different game in each, so its sign is asked for rather than written
+   * down. Null where there is no building — the default room, a scene that
+   * does not know its address.
    */
-  place(pois: POIDef[]) {
+  place(pois: POIDef[], room: string | null = null) {
     this.placed = FIXTURES.map((spec) => {
       const found = pois.filter((poi) => spec.match.test(poi.name));
       // Every match, or only the first: a lobby hangs several boards and
       // they all open the one shared canvas; there is one cauldron.
       const zones = (spec.many ? found : found.slice(0, 1)).map((poi) => ({ x: poi.x, y: poi.y }));
-      for (const zone of zones) this.furnish(spec, zone);
+      for (const zone of zones) this.furnish(spec, zone, room);
       return { spec, zones, prompt: null };
     });
   }
 
   /** Stand the art on a point and hang its sign over whatever that covers. */
-  private furnish(spec: FixtureSpec, zone: { x: number; y: number }) {
+  private furnish(spec: FixtureSpec, zone: { x: number; y: number }, room: string | null) {
     // With no art of its own — the whiteboard, which the map draws — the
     // sign is measured from the point itself.
     let edge = zone.y - (spec.sign?.lift ?? 0);
@@ -77,7 +83,8 @@ export class FixtureManager {
       edge = art.getTopCenter().y;
     }
     if (!spec.sign) return;
-    addSign(this.scene, { x: zone.x + (spec.sign.nudgeX ?? 0), y: zone.y }, spec.sign.label, edge);
+    const label = typeof spec.sign.label === "function" ? spec.sign.label(room) : spec.sign.label;
+    addSign(this.scene, { x: zone.x + (spec.sign.nudgeX ?? 0), y: zone.y }, label, edge);
   }
 
   /**

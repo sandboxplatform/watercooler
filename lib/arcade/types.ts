@@ -5,7 +5,27 @@
  * functions, and the cabinet is the only thing that knows about a canvas.
  */
 
-export type ArcadeGameId = "flappy" | "snake" | "breakout" | "oak-island" | "solitaire";
+/**
+ * Every game a cabinet can be, in the order they were written.
+ *
+ * A list rather than a union spelled out, because three things have to
+ * agree about it: the type below, `isArcadeGameId`, and `GAMES` in
+ * `lib/map/office.ts`, which gives each one a cabinet to stand in. Adding
+ * a game here is what makes it something a lobby can declare.
+ */
+export const ARCADE_GAME_IDS = ["flappy", "snake", "breakout", "oak-island", "solitaire"] as const;
+
+export type ArcadeGameId = (typeof ARCADE_GAME_IDS)[number];
+
+/**
+ * Here rather than beside the games themselves, so that asking "is this an
+ * arcade game?" does not drag five games and their drawing code in with
+ * the answer. The tenant list asks it, and the tenant list is loaded by
+ * the server on every request.
+ */
+export function isArcadeGameId(value: unknown): value is ArcadeGameId {
+  return ARCADE_GAME_IDS.some((id) => id === value);
+}
 
 /** The cabinet's screen, in game pixels; the canvas scales it. */
 export const SCREEN = { width: 320, height: 480 };

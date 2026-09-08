@@ -7,6 +7,7 @@
  * partitioned map (see ./harvest.ts), so the art is unchanged.
  */
 
+import { ARCADE_GAME_IDS, type ArcadeGameId } from "../arcade/types";
 import { harvest, type Region, type SourceMap } from "./harvest";
 import type { PoiSpec, RoomSpec, WallVocabulary } from "./spec";
 
@@ -94,12 +95,32 @@ export const PLAYER_START = { tx: 5, ty: 6, facing: "down" } as const;
 export const STANDABLE: readonly number[] = [WALLS.floor, WALLS.topShadow];
 
 /**
- * The games. Each lobby gets one, in the top right corner. The art is drawn
- * by the scene from its own sprite; the region here is only its footprint,
- * which becomes the collision box, and the point of interest is the floor
- * in front of it, where you stand to play. The scene finds it by name.
+ * The games. A lobby gets **one**, in the top right corner — there is no
+ * way here to name a second, which is the whole of that rule. The art is
+ * drawn by the scene from its own sprite; the region here is only its
+ * footprint, which becomes the collision box, and the point of interest is
+ * the floor in front of it, where you stand to play. The scene finds it by
+ * name.
+ *
+ * A game is a *game*, not a machine: the ping pong table and the pinball
+ * machine are one apiece, and each of the arcade's games is a cabinet of
+ * its own standing in some other building's corner. So "Sandbox ERP has
+ * pinball" and "Mettara has Breakout" are the same kind of statement, and
+ * two buildings claiming one game is a thing the tenant list can be held
+ * to (see `lib/world/__tests__/tenants.test.ts`).
  */
-export type Game = "pong" | "pinball" | "arcade";
+export type Game = "pong" | "pinball" | ArcadeGameId;
+
+/**
+ * The cabinet: public/sprites/arcade_cabinet_96x120.png, in the same corner
+ * against the same wall as the pinball machine, since a lobby has one
+ * machine and never both. Every arcade game shares it — which game it runs
+ * is the building's business, and its sign says so.
+ */
+const CABINET = {
+  region: { label: "arcade cabinet", sx: 0, sy: 0, sw: 2, sh: 2, dx: 15, dy: 3, layers: [] },
+  poi: { name: "Arcade cabinet", tx: 16, ty: 5, facing: "up" },
+} satisfies { region: Region; poi: PoiSpec };
 
 export const GAMES: Record<Game, { region: Region; poi: PoiSpec }> = {
   pong: {
@@ -115,12 +136,12 @@ export const GAMES: Record<Game, { region: Region; poi: PoiSpec }> = {
     region: { label: "pinball machine", sx: 0, sy: 0, sw: 2, sh: 2, dx: 15, dy: 3, layers: [] },
     poi: { name: "Pinball machine", tx: 16, ty: 5, facing: "up" },
   },
-  arcade: {
-    // public/sprites/arcade_cabinet_96x120.png, beside the pinball machine
-    // and against the same wall.
-    region: { label: "arcade cabinet", sx: 0, sy: 0, sw: 2, sh: 2, dx: 12, dy: 3, layers: [] },
-    poi: { name: "Arcade cabinet", tx: 13, ty: 5, facing: "up" },
-  },
+  // Spread rather than five copies, so a game added to `ARCADE_GAME_IDS`
+  // has a cabinet without anyone remembering to write one here.
+  ...(Object.fromEntries(ARCADE_GAME_IDS.map((id) => [id, CABINET])) as Record<
+    ArcadeGameId,
+    typeof CABINET
+  >),
 };
 
 /**
@@ -191,39 +212,47 @@ export const HELP_COUNTER = {
   },
 };
 
-/** What a lobby holds beyond its walls, its board and the ways out. */
+/**
+ * What a lobby holds beyond its walls, its board and the ways out.
+ *
+ * One game, singular. There used to be an `also` for a second machine
+ * beside the first, which is how Sandbox ERP came to have both a pinball
+ * machine and the whole arcade in one corner; the arcade's games are now a
+ * building apiece and the field is gone, so a lobby cannot ask for two.
+ */
 export interface OfficeOptions {
   /** The game in the top right corner. */
   game?: Game;
-  /** Any more games, beside the first. */
-  also?: readonly Game[];
   /** A staffed help desk out on the floor. */
   helpDesk?: boolean;
 }
 
 export function buildOfficeSpec(source: SourceMap, options: OfficeOptions = {}): RoomSpec {
   const picked = harvest(source, REGIONS);
-  const games = options.game ? [options.game, ...(options.also ?? [])] : [];
+  const game = options.game ?? null;
   // Harvested apart from the decor: the decor's old collision boxes are
-  // deliberately left behind (the room is open floor), but the games' are
-  // wanted — and if the old map drew none, the whole of each is solid.
-  const corners = games.map((g) => ({ game: g, corner: harvest(source, [GAMES[g].region]) }));
-  const cornerBoxes = corners.flatMap(({ game: g, corner }) =>
-    corner.collisions.length ? corner.collisions : [regionBox(GAMES[g].region)],
-  );
+  // deliberately left behind (the room is open floor), but the game's are
+  // wanted — and if the old map drew none, the whole of it is solid.
+  const corner = game ? harvest(source, [GAMES[game].region]) : null;
+  const cornerBoxes =
+    game && corner
+      ? corner.collisions.length
+        ? corner.collisions
+        : [regionBox(GAMES[game].region)]
+      : [];
 
   return {
     width: WIDTH,
     height: HEIGHT,
     tileSize: TILE,
     walls: WALLS,
-    placements: [...picked.placements, ...corners.flatMap(({ corner }) => corner.placements)],
+    placements: [...picked.placements, ...(corner?.placements ?? [])],
     // No agent seats: an open room. The only interaction point is the game
     // in the corner, when a lobby has one; the wall collisions the generator
     // adds and the game's own boxes are the only solid things in it.
     pois: [
       WHITEBOARD.poi,
-      ...games.map((g) => GAMES[g].poi),
+      ...(game ? [GAMES[game].poi] : []),
       ...(options.helpDesk ? [HELP_COUNTER.poi] : []),
     ],
     spawns: [{ tx: PLAYER_START.tx, ty: PLAYER_START.ty, facing: PLAYER_START.facing }],

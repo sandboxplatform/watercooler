@@ -76,7 +76,14 @@ export function saveProfile(next: {
   name: string;
   /** Null for a visitor, who works nowhere and so has no desk. */
   home: string | null;
-  character: CharacterChoice;
+  /**
+   * Null leaves the look unchosen, which is what writing a persona's name
+   * and office does when no sheet has been drawn for them yet: they are
+   * themselves, and the welcome screen still asks which look to wear.
+   * `rememberCharacter` treats null as "forget", and there is nothing to
+   * forget in the only case that passes it.
+   */
+  character: CharacterChoice | null;
 }) {
   savePlayerName(next.name.trim().slice(0, 16));
   lsSet(LS_HOME, next.home);

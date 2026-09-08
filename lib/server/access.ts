@@ -28,19 +28,45 @@ const TOKEN_VERSION = "v2";
 /** Re-exported so the gate's callers need one import; see lib/identity.ts. */
 export type { AccessIdentity };
 
-/** Someone whose own code brings them straight in, already dressed. */
+/**
+ * Someone whose own code brings them straight in, already dressed.
+ *
+ * A name is the only part that is certain. A person is named the day their
+ * code is set, and their office and their face arrive whenever they arrive —
+ * so both are optional, and the welcome screen asks for whichever is still
+ * missing rather than the code inventing an answer.
+ */
 export interface Persona {
   identity: AccessIdentity;
   name: string;
-  /** Tenant slug of the office they work out of. */
-  home: string;
-  /** A WORKER_SPRITES key; their look, which no visitor may wear. */
-  characterKey: string;
+  /**
+   * Tenant slug of the office they work out of.
+   *
+   * Absent for somebody who works nowhere yet: they get no desk and no
+   * office written in, exactly as a visitor does. A home whose floors they
+   * cannot ride up to would not be a home — see `LIFT_REACH`.
+   */
+  home?: string;
+  /**
+   * A WORKER_SPRITES key: their look, which no visitor may wear.
+   *
+   * Absent until a sheet has been drawn to the 48x96 specification. The
+   * alternative to this being optional was naming a file that is not there
+   * yet — a 404 for a texture, and a broken card in their own picker.
+   */
+  characterKey?: string;
 }
 
 const PERSONAS: readonly Persona[] = [
   { identity: "coop", name: "Coop", home: "sandbox-erp", characterKey: "character_coop" },
   { identity: "rob", name: "Rob", home: "sandbox-erp", characterKey: "character_rob" },
+  // Castle Atlantic is where Hunter works, and `LIFT_REACH` carries the
+  // other half of that: his is the one lift he rides.
+  { identity: "hunter", name: "Hunter", home: "castle-atlantic", characterKey: "character_hunter" },
+  // Neither yet: Campbell is named, and works nowhere so far. That is the
+  // same fact as his empty `LIFT_REACH` rather than a second one — a desk on
+  // a floor he cannot reach is not a desk he has.
+  { identity: "campbell", name: "Campbell" },
 ];
 
 export function personaFor(identity: AccessIdentity): Persona | null {
@@ -57,7 +83,13 @@ function codeFor(identity: AccessIdentity): string | null {
   return code ? code : null;
 }
 
-const IDENTITIES: readonly AccessIdentity[] = ["coop", "rob", "visitor"];
+/**
+ * Personal codes first, the shared one last — see `identityForCode`. Every
+ * identity that can hold a code has to be here: `verifyToken` will not
+ * recognise a cookie naming one that is missing, so forgetting an entry
+ * turns that person away with a code that is set and correct.
+ */
+const IDENTITIES: readonly AccessIdentity[] = ["coop", "rob", "hunter", "campbell", "visitor"];
 
 /** How long a cookie lasts before the code must be entered again. */
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;

@@ -99,7 +99,7 @@ export class CampusScene extends OutdoorScene<CampusSceneData> {
     for (const prop of campus.props) placeProp(this, prop, walls);
     for (const sign of campus.signs ?? []) placeSign(this, sign, walls);
     const company = organisationFor(campus.slug);
-    if (campus.boat) placeBoat(this, campus.boat, walls, company?.name ?? campus.slug);
+    if (campus.boat) placeBoat(this, campus.boat, walls);
     const water = waterBodies(ground);
     for (const body of water) addSolid(walls, body);
 
@@ -130,6 +130,22 @@ export class CampusScene extends OutdoorScene<CampusSceneData> {
       // from the road it is steps up onto the yard, clear of the road out.
       walkIn: true,
       doors,
+      // The yard's buildings, and the moored ferry where there is one: the
+      // boat's way in is the campus's way out, and `entrance` is the spot
+      // you are stood on when the ferry brings you here, so it is standing
+      // room by definition.
+      entrances: [
+        ...campus.buildings,
+        ...(campus.boat
+          ? [
+              {
+                frame: { ...campus.boat, ...BOAT_SOLID },
+                door: campus.exit,
+                outside: campus.entrance,
+              },
+            ]
+          : []),
+      ],
       solids: [
         ...campus.buildings.map((b) => b.solid),
         ...campus.props.map(propBody).filter((r) => r !== null),

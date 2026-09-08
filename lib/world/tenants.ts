@@ -16,6 +16,7 @@
  * Shared by the scenes and the HUD, so nothing here touches Phaser.
  */
 
+import { isArcadeGameId, type ArcadeGameId } from "../arcade/types";
 import type { Game, OfficeOptions } from "../map/office";
 
 export type OrgStyle = "castle" | "office" | "supply" | "blocks" | "campus" | "lab" | "irish";
@@ -75,13 +76,16 @@ export interface Tenant {
   /** For a campus's building: what it is, e.g. "Warehouse". Absent for a one-lobby organisation. */
   location?: string;
   kind?: BuildingKind;
-  /** The game in the lobby's corner, if it has one. */
-  game?: Game;
   /**
-   * Any more games, beside the one in the corner. Sandbox ERP runs an
-   * arcade cabinet alongside its pinball machine.
+   * The game in the lobby's corner, if it has one.
+   *
+   * One, and one building's only: a lobby holds a single machine, and no
+   * two lobbies hold the same game. Castle Atlantic has ping pong, Sandbox
+   * ERP has pinball, and each of the arcade's games is a cabinet in some
+   * other building — so which game you are playing tells you where you
+   * are. `tenants.test.ts` is what holds the second half of that down.
    */
-  also?: readonly Game[];
+  game?: Game;
   /**
    * A staffed help desk counter out on the lobby floor.
    *
@@ -123,7 +127,6 @@ export const TENANTS: readonly Tenant[] = [
   }),
   lobby("sandbox-erp", "sandbox-erp", {
     game: "pinball",
-    also: ["arcade"],
     helpDesk: true,
     operations: ["trello", "zoho"],
     projects: 5,
@@ -143,11 +146,18 @@ export const TENANTS: readonly Tenant[] = [
     kind: "warehouse",
   }),
   lobby("homestar-field-crew", "homestar", { location: "Field Crew", kind: "garage" }),
-  lobby("mettara", "mettara"),
+  // The lab's cabinet is Breakout: a wall to clear and capsules to catch is
+  // as close as the arcade gets to an experiment.
+  lobby("mettara", "mettara", { game: "breakout" }),
   // The one house on the island: a lobby with floors, laid out like Castle
-  // Atlantic's, ping pong table and all. "office" is what makes it a
-  // building on its island the way a department is on a campus.
-  lobby("apeiron-media", "apeiron-media", { kind: "office", game: "pong" }),
+  // Atlantic's. "office" is what makes it a building on its island the way
+  // a department is on a campus.
+  //
+  // Its cabinet is Oak Island, which is the island of the legend and has
+  // its own song about the tide — the one game with somewhere it belongs.
+  // It had Castle Atlantic's ping pong table until a game became one
+  // building's, and two tables was the same mistake twice over.
+  lobby("apeiron-media", "apeiron-media", { kind: "office", game: "oak-island" }),
 ];
 
 export function tenantFor(slug: string | null | undefined): Tenant | null {
@@ -197,7 +207,32 @@ export function hasFloors(tenant: Tenant): boolean {
  * because somebody remembered both.
  */
 export function lobbyFurnishing(tenant: Tenant): OfficeOptions {
-  return { game: tenant.game, also: tenant.also, helpDesk: tenant.helpDesk };
+  return { game: tenant.game, helpDesk: tenant.helpDesk };
+}
+
+/**
+ * The game in a room's lobby, by room slug.
+ *
+ * Null for a floor above one, a campus's warehouse, the default room and
+ * anything that is not a building — the machines are a lobby's furniture.
+ * This is the HUD's way in: a panel knows the room it is mounted in and
+ * asks here what it is standing at, rather than being told by the scene.
+ */
+export function lobbyGame(slug: string | null | undefined): Game | null {
+  const tenant = tenantFor(slug);
+  return tenant?.game ?? null;
+}
+
+/**
+ * The arcade game a room's cabinet runs, if the room has a cabinet.
+ *
+ * A cabinet *is* its game — there is no menu to pick from — so this is
+ * both "does this lobby have one" and "which one". The ping pong table and
+ * the pinball machine answer null: they are their own panels.
+ */
+export function arcadeGameIn(slug: string | null | undefined): ArcadeGameId | null {
+  const game = lobbyGame(slug);
+  return game && isArcadeGameId(game) ? game : null;
 }
 
 /**
@@ -208,7 +243,7 @@ export function lobbyFurnishing(tenant: Tenant): OfficeOptions {
  * building.
  */
 export function furnishedLobby(tenant: Tenant): boolean {
-  return Boolean(tenant.game || tenant.also?.length || tenant.helpDesk);
+  return Boolean(tenant.game || tenant.helpDesk);
 }
 
 export function operationsBoards(tenant: Tenant | null | undefined): readonly BoardKind[] {

@@ -1991,55 +1991,6 @@
   touch-action: none;
 }
 
-.arcade-menu {
-  --arcade-height: min(560px, 70vh, (100vw - 260px) * 1.5);
-  --arcade-height: min(560px, 70dvh, (100vw - 260px) * 1.5);
-  height: var(--arcade-height);
-  width: calc(var(--arcade-height) / 1.5);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 12px;
-  padding: 16px;
-  border: 2px solid #2b3f4d;
-  border-radius: var(--pixel-radius-sm);
-  background: #101b24;
-}
-
-.arcade-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px;
-  border: 2px solid var(--pixel-border);
-  border-radius: var(--pixel-radius-sm);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--pixel-text);
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.arcade-card--active {
-  border-color: var(--pixel-accent);
-  background: rgba(201, 162, 39, 0.12);
-}
-
-.arcade-card__title {
-  font-size: 12px;
-  color: var(--pixel-accent);
-}
-
-.arcade-card__blurb {
-  font-size: 8px;
-  line-height: 1.6;
-}
-
-.arcade-card__best {
-  font-size: 8px;
-  color: var(--pixel-muted);
-}
-
 /* ── Full screen: the overlay is the screen, so the game fills it ─ */
 
 .pinball-overlay:fullscreen {
@@ -2050,8 +2001,7 @@
   --pinball-height: min(94vh, (100vw - 220px) * 1.75);
 }
 
-.pinball-overlay:fullscreen .arcade-screen,
-.pinball-overlay:fullscreen .arcade-menu {
+.pinball-overlay:fullscreen .arcade-screen {
   --arcade-height: min(94vh, (100vw - 220px) * 1.5);
 }
 
@@ -2075,8 +2025,7 @@
   --pinball-height: min(94vh, (100vw - 220px) * 1.75);
 }
 
-.game-fullwindow .arcade-screen,
-.game-fullwindow .arcade-menu {
+.game-fullwindow .arcade-screen {
   --arcade-height: min(94vh, (100vw - 220px) * 1.5);
 }
 

@@ -47,11 +47,13 @@ export interface Account {
 /**
  * What the access code proved. A visitor chooses their own look from the
  * shared cast and works nowhere; a persona is someone whose own code names
- * them, so the welcome screen asks them nothing.
+ * them, so the welcome screen asks them nothing — or only for the parts that
+ * are still missing: a `home` for somebody who works nowhere yet, a look for
+ * somebody whose sheet has not been drawn.
  */
 export interface AccessClaim {
   identity: AccessIdentity;
-  persona: { identity: string; name: string; home: string; characterKey: string } | null;
+  persona: { identity: string; name: string; home?: string; characterKey?: string } | null;
 }
 
 export interface Me {

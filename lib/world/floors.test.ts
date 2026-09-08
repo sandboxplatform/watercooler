@@ -9,6 +9,7 @@ import {
   mapFileFor,
   occupantsOf,
   roomForFloor,
+  LIFT_REACH,
   LIFT_REFUSAL,
   PRIVATE_LIFTS,
   liftIsPrivate,
@@ -32,6 +33,7 @@ import {
   operationsRoomCount,
 } from "./tenants";
 import { roomFromLocation } from "../rooms";
+import type { AccessIdentity } from "../identity";
 import { existsSync } from "fs";
 import { join } from "path";
 
@@ -139,32 +141,59 @@ describe("the top bar and the maps", () => {
 });
 
 describe("who may ride the lift", () => {
-  it("carries Coop and Rob up in either of their buildings", () => {
-    for (const building of ["sandbox-erp", "castle-atlantic"]) {
-      expect(mayRideLift(building, "coop"), building).toBe(true);
-      expect(mayRideLift(building, "rob"), building).toBe(true);
-    }
+  /**
+   * The whole rule as a table, because it is four different shapes of answer
+   * and each one is a decision somebody made rather than a consequence of
+   * the others: every lift, one lift, no lift, and the public's.
+   */
+  const LIFTS = ["sandbox-erp", "castle-atlantic", "homestar-sales", "chester-store"] as const;
+  const EXPECTED: Record<AccessIdentity, readonly boolean[]> = {
+    //          sandbox  castle  homestar  chester
+    coop: [true, true, true, true],
+    rob: [true, true, true, true],
+    hunter: [false, true, false, false],
+    campbell: [false, false, false, false],
+    visitor: [false, false, true, true],
+  };
+
+  // A Record over the union, so a new identity is a type error here rather
+  // than a person nobody thought about being handed the public's lifts.
+  for (const identity of Object.keys(EXPECTED) as AccessIdentity[]) {
+    const answers = EXPECTED[identity];
+    it(`carries ${identity} in ${answers.filter(Boolean).length} of the four`, () => {
+      LIFTS.forEach((building, i) => {
+        expect(mayRideLift(building, identity), `${identity} at ${building}`).toBe(answers[i]);
+      });
+    });
+  }
+
+  /** "All the elevators" has to keep meaning all of them. */
+  it("carries Coop and Rob up in a building nobody has made private yet", () => {
+    expect(mayRideLift("a-building-nobody-has-built-yet", "coop")).toBe(true);
+    expect(mayRideLift("a-building-nobody-has-built-yet", "rob")).toBe(true);
   });
 
-  it("will not carry a visitor up in either", () => {
-    expect(mayRideLift("sandbox-erp", "visitor")).toBe(false);
-    expect(mayRideLift("castle-atlantic", "visitor")).toBe(false);
+  /**
+   * The difference between an empty reach and no reach at all. Campbell's
+   * list is empty, which is no lift anywhere; a visitor has no list, so the
+   * building decides and an unlisted one carries them.
+   */
+  it("keeps an empty reach apart from no reach at all", () => {
+    expect(mayRideLift("a-building-nobody-has-built-yet", "campbell")).toBe(false);
+    expect(mayRideLift("a-building-nobody-has-built-yet", "visitor")).toBe(true);
   });
 
-  /** Only that building is private; a new one works without being listed. */
-  it("carries anybody anywhere else", () => {
-    for (const identity of ["visitor", "coop", "rob"] as const) {
-      expect(mayRideLift("homestar-sales", identity), identity).toBe(true);
-      expect(mayRideLift("chester-store", identity), identity).toBe(true);
-      expect(mayRideLift("a-building-nobody-has-built-yet", identity), identity).toBe(true);
-    }
+  /** Hunter rides where he works and nowhere else, private or not. */
+  it("holds Hunter to his own building", () => {
+    expect(LIFT_REACH.hunter).toEqual(["castle-atlantic"]);
+    expect(mayRideLift("sandbox-erp", "hunter")).toBe(false);
   });
 
   it("knows which buildings are private", () => {
     expect(liftIsPrivate("sandbox-erp")).toBe(true);
     expect(liftIsPrivate("castle-atlantic")).toBe(true);
     expect(liftIsPrivate("homestar-sales")).toBe(false);
-    expect(Object.keys(PRIVATE_LIFTS).sort()).toEqual(["castle-atlantic", "sandbox-erp"]);
+    expect([...PRIVATE_LIFTS].sort()).toEqual(["castle-atlantic", "sandbox-erp"]);
   });
 
   it("has a line to say", () => {
@@ -182,9 +211,18 @@ describe("who may be in a room", () => {
     }
   });
 
-  it("lets Coop and Rob onto them", () => {
+  it("asks the same question of a room slug, which is what the socket has", () => {
     expect(mayEnterRoom("sandbox-erp-floor-2", "coop")).toBe(true);
     expect(mayEnterRoom("sandbox-erp-floor-2", "rob")).toBe(true);
+    // Not Hunter: he works at Castle Atlantic, and his own floors are there.
+    expect(mayEnterRoom("sandbox-erp-floor-2", "hunter")).toBe(false);
+    expect(mayEnterRoom("castle-atlantic-floor-2", "hunter")).toBe(true);
+    // Campbell rides nothing, so no floor of any building is his.
+    expect(mayEnterRoom("castle-atlantic-floor-2", "campbell")).toBe(false);
+    expect(mayEnterRoom("homestar-sales-floor-1", "campbell")).toBe(false);
+    // But a lobby, the world map and a campus are still everyone's.
+    expect(mayEnterRoom("castle-atlantic", "campbell")).toBe(true);
+    expect(mayEnterRoom("world", "campbell")).toBe(true);
   });
 
   /**
@@ -273,16 +311,20 @@ describe("the Operations floor", () => {
  * building, so being dropped inside one is being dropped in the one place
  * that is not theirs — they start outside instead, on the world map.
  */
+const NO_BUILDING = false;
+const HAS_BUILDING = true;
+
 describe("landing outside", () => {
-  it("sends a visitor at the root out to the world map", () => {
-    expect(landsOutside("/", "visitor")).toBe(true);
+  it("sends somebody with nowhere of their own out to the world map", () => {
+    // A visitor, and equally somebody named by their own code who works
+    // nowhere yet: the caller asks the persona, and neither has a home.
+    expect(landsOutside("/", NO_BUILDING)).toBe(true);
     expect(OUTSIDE_PATH).toBe("/world");
   });
 
   /** Their own code names their building, so the default room is not a stranger's. */
   it("leaves somebody with a building of their own where they asked to be", () => {
-    expect(landsOutside("/", "coop")).toBe(false);
-    expect(landsOutside("/", "rob")).toBe(false);
+    expect(landsOutside("/", HAS_BUILDING)).toBe(false);
   });
 
   /**
@@ -298,7 +340,7 @@ describe("landing outside", () => {
       "/unlock",
       "/api/health",
     ]) {
-      expect(landsOutside(path, "visitor"), path).toBe(false);
+      expect(landsOutside(path, NO_BUILDING), path).toBe(false);
     }
   });
 
@@ -356,6 +398,7 @@ describe("how a lobby is furnished", () => {
     expect(furnished.map((t) => t.slug)).toEqual([
       "castle-atlantic",
       "sandbox-erp",
+      "mettara",
       "apeiron-media",
     ]);
     for (const tenant of furnished) {
@@ -366,19 +409,22 @@ describe("how a lobby is furnished", () => {
     }
   });
 
-  it("carries Sandbox ERP's arcade cabinet and help desk, which used to live in the build script", () => {
+  it("carries Sandbox ERP's pinball machine and help desk, which used to live in the build script", () => {
     const erp = TENANTS.find((t) => t.slug === "sandbox-erp")!;
-    expect(lobbyFurnishing(erp)).toEqual({
-      game: "pinball",
-      also: ["arcade"],
-      helpDesk: true,
-    });
+    expect(lobbyFurnishing(erp)).toEqual({ game: "pinball", helpDesk: true });
+  });
+
+  it("furnishes a lobby with one machine, whichever it is", () => {
+    // An arcade game is a game like the other two, so it reaches
+    // `buildOfficeSpec` the same way: nothing knows it is a cabinet.
+    const lab = TENANTS.find((t) => t.slug === "mettara")!;
+    expect(lobbyFurnishing(lab)).toEqual({ game: "breakout", helpDesk: undefined });
   });
 
   it("counts a lobby furnished by anything in it, not only by a game", () => {
     expect(furnishedLobby({ slug: "x", org: "x", name: "X" })).toBe(false);
     expect(furnishedLobby({ slug: "x", org: "x", name: "X", game: "pong" })).toBe(true);
+    expect(furnishedLobby({ slug: "x", org: "x", name: "X", game: "snake" })).toBe(true);
     expect(furnishedLobby({ slug: "x", org: "x", name: "X", helpDesk: true })).toBe(true);
-    expect(furnishedLobby({ slug: "x", org: "x", name: "X", also: ["arcade"] })).toBe(true);
   });
 });

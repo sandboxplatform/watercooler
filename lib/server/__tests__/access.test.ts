@@ -20,14 +20,24 @@ import {
 const CODE = "11111111-2222-3333-4444-555555555555";
 const COOP_CODE = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const ROB_CODE = "99999999-8888-7777-6666-555555555555";
+const HUNTER_CODE = "12121212-3434-5656-7878-909090909090";
+const CAMPBELL_CODE = "abcdabcd-1234-5678-9abc-def012345678";
 
-const VARS = ["ACCESS_CODE", "ACCESS_CODE_COOP", "ACCESS_CODE_ROB"] as const;
+const VARS = [
+  "ACCESS_CODE",
+  "ACCESS_CODE_COOP",
+  "ACCESS_CODE_ROB",
+  "ACCESS_CODE_HUNTER",
+  "ACCESS_CODE_CAMPBELL",
+] as const;
 const original = Object.fromEntries(VARS.map((v) => [v, process.env[v]]));
 
 beforeEach(() => {
   process.env.ACCESS_CODE = CODE;
   process.env.ACCESS_CODE_COOP = COOP_CODE;
   process.env.ACCESS_CODE_ROB = ROB_CODE;
+  process.env.ACCESS_CODE_HUNTER = HUNTER_CODE;
+  process.env.ACCESS_CODE_CAMPBELL = CAMPBELL_CODE;
 });
 
 afterEach(() => {
@@ -65,6 +75,8 @@ describe("whose code it is", () => {
     expect(identityForCode(CODE)).toBe("visitor");
     expect(identityForCode(COOP_CODE)).toBe("coop");
     expect(identityForCode(ROB_CODE)).toBe("rob");
+    expect(identityForCode(HUNTER_CODE)).toBe("hunter");
+    expect(identityForCode(CAMPBELL_CODE)).toBe("campbell");
   });
 
   it("refuses a wrong code, an empty one, and a prefix of a real one", () => {
@@ -108,6 +120,10 @@ describe("the cookie handed out at the door", () => {
     expect(verifyToken(mintToken("visitor")!)).toBe("visitor");
     expect(verifyToken(mintToken("coop")!)).toBe("coop");
     expect(verifyToken(mintToken("rob")!)).toBe("rob");
+    // A cookie naming an identity that is missing from IDENTITIES is refused,
+    // so this is what would catch a new person being wired everywhere but there.
+    expect(verifyToken(mintToken("hunter")!)).toBe("hunter");
+    expect(verifyToken(mintToken("campbell")!)).toBe("campbell");
   });
 
   it("mints nothing when there is no code to key it with", () => {
@@ -126,6 +142,8 @@ describe("the cookie handed out at the door", () => {
     const [expiry, , signature] = token.split(".");
     expect(verifyToken(`${expiry}.coop.${signature}`)).toBeNull();
     expect(verifyToken(`${expiry}.rob.${signature}`)).toBeNull();
+    expect(verifyToken(`${expiry}.hunter.${signature}`)).toBeNull();
+    expect(verifyToken(`${expiry}.campbell.${signature}`)).toBeNull();
   });
 
   it("refuses a token whose expiry has been pushed out by hand", () => {
@@ -181,6 +199,23 @@ describe("what a cookie entitles someone to", () => {
       expect(persona.home).toBe("sandbox-erp");
       expect(persona.characterKey).toBe(`character_${identity}`);
     }
+  });
+
+  it("seats Hunter at Castle Atlantic, wearing his own look", () => {
+    const persona = personaFor("hunter")!;
+    expect(persona.name).toBe("Hunter");
+    expect(persona.home).toBe("castle-atlantic");
+    expect(persona.characterKey).toBe("character_hunter");
+  });
+
+  it("names Campbell, who works nowhere yet and so has no desk", () => {
+    // Same fact as his empty LIFT_REACH rather than a second one: a desk on
+    // a floor he cannot ride up to is not a desk he has. The missing home is
+    // also what starts him on the world map, via sentOutside in server.ts.
+    const persona = personaFor("campbell")!;
+    expect(persona.name).toBe("Campbell");
+    expect(persona.home).toBeUndefined();
+    expect(persona.characterKey).toBeUndefined();
   });
 
   it("gives a visitor no persona, so they choose for themselves and work nowhere", () => {

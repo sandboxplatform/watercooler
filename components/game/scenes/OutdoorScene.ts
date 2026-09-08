@@ -15,6 +15,7 @@ import { ArrivalWalk, type Direction } from "@/lib/arrival";
 import { rememberedCharacter } from "@/lib/characters/choice";
 import type { Whereabouts } from "@/lib/world/residents";
 import type { Rect } from "@/lib/world/tenants";
+import { enterableAt, walkInTo, type Enterable } from "@/lib/world/entrances";
 import { showAddress } from "@/lib/world/paths";
 import { gameEvents } from "@/lib/events";
 import { asset } from "@/lib/assets";
@@ -65,6 +66,12 @@ export interface OutdoorPlace {
   walkIn: boolean;
   /** The doorways, in the order they are stepped on. */
   doors: DoorZone[];
+  /**
+   * The things a tap can be aimed at rather than walked to: the buildings,
+   * and the boat. Out here the buildings are the menu, so pointing at one
+   * anywhere on its picture means going inside it — see `lib/world/entrances`.
+   */
+  entrances: readonly Enterable[];
   /** Everything solid, for routing a tapped walk around it. */
   solids: Rect[];
   /** What this place is called, for whatever shows where somebody is. */
@@ -87,6 +94,8 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
   protected navigator = new TapNavigator();
   protected latch = new DoorLatch();
   protected zones: DoorZone[] = [];
+  /** What a tap can be aimed at, from the place's own layout. */
+  protected entrances: readonly Enterable[] = [];
   protected pathfinder: Pathfinder | null = null;
   protected leaving = false;
   /** The steps taken on coming out of a door, before the keys are the player's. */
@@ -150,6 +159,7 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     // reload comes back here.
     showAddress(place.path);
     this.zones = place.doors;
+    this.entrances = place.entrances;
     this.pathfinder = new Pathfinder(place.width, place.height, place.solids, PF_PADDING);
 
     this.player = new Player(this, place.spawn.x, place.spawn.y, place.spawn.facing);
@@ -261,11 +271,35 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
       if (this.cameraController.pinching) return;
       if (!start || !isTap(start, { x: p.x, y: p.y, at: p.upTime })) return;
       const world = p.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
-      const from = this.feet();
-      // Around the furniture if we can; straight at it if the spot is boxed in.
-      const path = this.pathfinder?.findPath(from.x, from.y, world.x, world.y);
-      this.navigator.follow(path?.length ? path : [{ x: world.x, y: world.y }]);
+      this.walkTo({ x: world.x, y: world.y });
     });
+  }
+
+  /**
+   * Walk to a tapped point — or, if a building is under it, into that
+   * building.
+   *
+   * The buildings out here are the menu, so pointing at one means going in,
+   * not standing beside it. A tap on the picture routes to the standing room
+   * at the front door and then steps into the doorway, which is what the
+   * arrow keys do too: `DoorLatch` sees the feet arrive and the door opens.
+   * There is no second way into a building that could disagree with the
+   * first.
+   */
+  private walkTo(target: { x: number; y: number }) {
+    const from = this.feet();
+    const building = enterableAt(target, this.entrances);
+    if (building) {
+      const [approach, doorway] = walkInTo(building);
+      // The doorway is inside the pathfinder's padding, so it is planned to
+      // the standing room and the last step is walked straight at the door.
+      const path = this.pathfinder?.findPath(from.x, from.y, approach.x, approach.y);
+      this.navigator.follow([...(path?.length ? path : [approach]), doorway]);
+      return;
+    }
+    // Around the furniture if we can; straight at it if the spot is boxed in.
+    const path = this.pathfinder?.findPath(from.x, from.y, target.x, target.y);
+    this.navigator.follow(path?.length ? path : [target]);
   }
 
   protected feet() {
@@ -338,10 +372,26 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     });
   }
 
-  /** Through a doorway: another scene if this place opens it, else a page. */
+  /**
+   * Through a doorway: another scene if this place opens it, else a page.
+   *
+   * They have gone inside, so there is nothing left to draw — the same as
+   * stepping into the lift. Two things had to change for that to be true:
+   *
+   * - `drive` rather than `update`, because `update` re-reads the keyboard.
+   *   Walking in on a held arrow key meant the stop was handed that key's
+   *   velocity, so the walk cycle carried on — and `leaving` then blocks
+   *   every later frame, leaving him running on the spot in the doorway for
+   *   the whole second a page load takes.
+   * - `board`, which hides the sprite and stops its animation, rather than
+   *   idling him on the doorstep as though he had thought better of it.
+   */
   private enter(zone: DoorZone) {
     this.leaving = true;
-    this.player.update({ vx: 0, vy: 0 });
+    // A route still in hand would go on steering a character who has left.
+    this.navigator.cancel();
+    this.player.drive({ vx: 0, vy: 0 });
+    this.player.board(true);
     this.log.info(`entering ${zone.name}`);
     if (this.goThrough(zone)) return;
     window.location.assign(zone.target);

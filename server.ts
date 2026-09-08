@@ -45,6 +45,7 @@ import {
   isAuthorized,
   isOpenPath,
   mintToken,
+  personaFor,
   rateLimited,
   recordFailure,
   retryAfterSeconds,
@@ -380,10 +381,11 @@ function blockedByFloor(req: IncomingMessage, res: ServerResponse): boolean {
  * The world map is where the buildings are, so it is where somebody who has
  * not picked one starts. `WORLD_SPAWN` already puts them on the plaza.
  *
- * Only the root, and only a visitor. A typed `/r/<slug>` still opens that
- * lobby, because a lobby is public and a shared link has to work; and
- * somebody whose own code names their building is left alone, since for them
- * the default room is not a stranger's office.
+ * Only the root, and only somebody with no building of their own — a
+ * visitor, or a person whose code names them before they work anywhere. A
+ * typed `/r/<slug>` still opens that lobby, because a lobby is public and a
+ * shared link has to work; and somebody whose own code names their building
+ * is left alone, since for them the default room is not a stranger's office.
  */
 function sentOutside(req: IncomingMessage, res: ServerResponse): boolean {
   if (!gateEnabled()) return false;
@@ -391,7 +393,10 @@ function sentOutside(req: IncomingMessage, res: ServerResponse): boolean {
   // navigation should have its destination changed under it.
   if (!(req.headers.accept ?? "").includes("text/html")) return false;
   const pathname = (req.url ?? "/").split("?")[0];
-  if (!landsOutside(pathname, identityOf(req.headers.cookie))) return false;
+  // The persona is what knows whether they have somewhere; a visitor has no
+  // persona at all, which is the same answer.
+  const home = personaFor(identityOf(req.headers.cookie))?.home;
+  if (!landsOutside(pathname, !!home)) return false;
 
   res.writeHead(302, { Location: OUTSIDE_PATH, "Cache-Control": "no-store" });
   res.end();

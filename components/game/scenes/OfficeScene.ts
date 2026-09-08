@@ -321,7 +321,9 @@ export class OfficeScene extends Phaser.Scene {
     // its point of interest, with its sign above whatever that covers —
     // where, how high and what the sign reads are all in config/fixtures.ts.
     this.fixtures = new FixtureManager(this);
-    this.fixtures.place(pois);
+    // The building, for the one sign that reads differently in each: the
+    // arcade cabinet's, which names the game this lobby's is.
+    this.fixtures.place(pois, address?.tenant.slug ?? null);
     if (this.counterHere) {
       // Placed from the spec rather than from its point of interest: the
       // footprint is what the collision box was cut from, so drawing it

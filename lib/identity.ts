@@ -13,7 +13,7 @@
  * when a third person gets a code.
  */
 
-export type AccessIdentity = "visitor" | "coop" | "rob";
+export type AccessIdentity = "visitor" | "coop" | "rob" | "hunter" | "campbell";
 
 /**
  * What to assume before the server has said.

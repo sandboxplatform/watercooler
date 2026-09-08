@@ -40,20 +40,24 @@ describe("the library roster", () => {
     const names = LIBRARY_CHARACTERS.map((c) => c.name);
     // Doc's sheet is here on disk but not on this list: he became a resident,
     // and a resident's look is reserved to them.
-    expect(names).toEqual(["Alice", "Bob", "Carol", "Dave", "The Boss", "Coop", "Rob"]);
+    expect(names).toEqual(["Alice", "Bob", "Carol", "Dave", "The Boss", "Coop", "Rob", "Hunter"]);
   });
 
   /**
-   * A visitor came in on a code that was passed around; Coop's and Rob's
-   * likenesses are theirs, and no visitor may put one on.
+   * A visitor came in on a code that was passed around. Every likeness built
+   * from a delivered sheet belongs to the person it is of, and no visitor may
+   * put one on — which is not a list anybody keeps: the shared cast is the
+   * premade sheets and the boss, so a new likeness is out of a visitor's
+   * picker the moment it is added to WORKER_SPRITES.
    */
   it("offers a visitor the shared cast only, never a likeness", () => {
     expect(SHARED_CAST.map((c) => c.name)).toEqual(["Alice", "Bob", "Carol", "Dave", "The Boss"]);
-    expect(SHARED_CAST.some((c) => c.name === "Coop" || c.name === "Rob")).toBe(false);
+    expect(SHARED_CAST.some((c) => ["Coop", "Rob", "Hunter"].includes(c.name))).toBe(false);
     expect(inSharedCast("character_02")).toBe(true);
     expect(inSharedCast("character_09")).toBe(true);
     expect(inSharedCast("character_coop")).toBe(false);
     expect(inSharedCast("character_rob")).toBe(false);
+    expect(inSharedCast("character_hunter")).toBe(false);
   });
 
   it("keeps the texture key a library sheet is preloaded under", () => {

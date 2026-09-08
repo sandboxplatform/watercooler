@@ -11,7 +11,7 @@
  "version": "1.10",
  "tiledversion": "1.11.2",
  "nextlayerid": 13,
- "nextobjectid": 18,
+ "nextobjectid": 16,
  "tilesets": [
   {
    "columns": 16,
@@ -2523,17 +2523,6 @@
      "id": 9,
      "name": "",
      "type": "",
-     "x": 576,
-     "y": 144,
-     "width": 96,
-     "height": 96,
-     "rotation": 0,
-     "visible": true
-    },
-    {
-     "id": 10,
-     "name": "",
-     "type": "",
      "x": 432,
      "y": 720,
      "width": 192,
@@ -2554,7 +2543,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 11,
+     "id": 10,
      "name": "Whiteboard",
      "type": "",
      "x": 504,
@@ -2573,7 +2562,7 @@
      ]
     },
     {
-     "id": 12,
+     "id": 11,
      "name": "Pinball machine",
      "type": "",
      "x": 792,
@@ -2592,26 +2581,7 @@
      ]
     },
     {
-     "id": 13,
-     "name": "Arcade cabinet",
-     "type": "",
-     "x": 648,
-     "y": 264,
-     "width": 0,
-     "height": 0,
-     "rotation": 0,
-     "visible": true,
-     "point": true,
-     "properties": [
-      {
-       "name": "facing",
-       "type": "string",
-       "value": "up"
-      }
-     ]
-    },
-    {
-     "id": 14,
+     "id": 12,
      "name": "Help desk counter",
      "type": "",
      "x": 504,
@@ -2642,7 +2612,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 15,
+     "id": 13,
      "name": "",
      "type": "",
      "x": 264,
@@ -2673,7 +2643,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 16,
+     "id": 14,
      "name": "door",
      "type": "",
      "x": 96,
@@ -2696,7 +2666,7 @@
      ]
     },
     {
-     "id": 17,
+     "id": 15,
      "name": "elevator",
      "type": "",
      "x": 96,

@@ -94,9 +94,20 @@ characters that ship with the game, and start out on the world map. Visitors wor
 nowhere, so they choose no office and have no desk.
 
 Someone who works here gets a code of their own instead — `ACCESS_CODE_COOP`,
-`ACCESS_CODE_ROB` — which they keep to themselves. It names them: they are brought
-straight in as themselves, at Sandbox ERP, wearing their own look, without being
-asked. Their likeness is theirs, and no visitor can put it on.
+`ACCESS_CODE_ROB`, `ACCESS_CODE_HUNTER`, `ACCESS_CODE_CAMPBELL` — which they keep
+to themselves. It names them: they are brought straight in as themselves, at their
+own building, wearing their own look, without being asked. Their likeness is
+theirs, and no visitor can put it on.
+
+Which floors they can reach is their own business too. Coop and Rob work at Sandbox
+ERP and ride every lift in the world; Hunter works at Castle Atlantic and rides
+Castle Atlantic's; Campbell rides none for now. A visitor rides any lift except
+those in a building whose floors are private — the lobby is always open.
+
+Somebody can be named before they have an office or a face. Their code still brings
+them in as themselves, and the welcome screen asks only for the parts that are
+missing rather than putting somebody else's on them. Campbell is at that stage: he
+works nowhere so far, so he has no desk and picks his own look.
 
 Give every code a different value. Two people sharing one, or a personal code that
 is also the shared one, hands that identity to whoever holds it — the server says
@@ -271,27 +282,39 @@ clock skew, nonce replay, then the HMAC-SHA256 signature over
 consumes a nonce, so it cannot lock out the genuine one behind it. The endpoint
 is not mounted at all when there is no secret to verify against.
 
-### The arcade cabinet
+### One game to a building
 
-Beside the pinball machine in the Sandbox ERP lobby stands an arcade cabinet
-with four games. Oak Island is the showpiece: a top-down adventure across the
-island of the legend, screen by screen, with a shovel. Dig the coconut fibre
-out of Smith's Cove to survive the flood tunnels, take the lead cross from
-under Nolan's Cross, find the lantern in Samuel Ball's ruins, read the
-90-foot stone by its light, and open the Chappell Vault at 150 feet — while
-crabs, swamp wisps, pirate skeletons and the ghosts of the shaft try to make
-you the seventh to die. Then Flappy, Snake, Breakout and Solitaire. Walk up,
-press E, pick one.
+Every lobby with something in its corner has exactly one machine, and no two
+buildings have the same game — so a game is a place you go to play it:
 
-The cabinet has its own music, "Mighty Coin Drop", from the moment it opens;
-Oak Island swaps in "Tide Under Oak" while it plays, and the pinball machine
-has "Silver Ball Surge". The room's music steps aside meanwhile. A button on
-each machine mutes the songs, one switch for all of them, remembered in the
-browser; every game's sound effects are synthesised and play regardless.
-Each keeps its own high score table for the room, and a score goes in the
-room's activity like a pinball one. Keys, a pad or a touch screen all work;
-Escape (or B) backs out of a game to the menu, and out of the menu to the
-room.
+| Walk into       | And the corner has            |
+| --------------- | ----------------------------- |
+| Castle Atlantic | a ping pong table             |
+| Sandbox ERP     | a pinball machine             |
+| Mettara         | an arcade cabinet: Breakout   |
+| Apeiron Media   | an arcade cabinet: Oak Island |
+
+Oak Island is the showpiece, and it is on the island: a top-down adventure
+across the island of the legend, screen by screen, with a shovel. Dig the
+coconut fibre out of Smith's Cove to survive the flood tunnels, take the lead
+cross from under Nolan's Cross, find the lantern in Samuel Ball's ruins, read
+the 90-foot stone by its light, and open the Chappell Vault at 150 feet —
+while crabs, swamp wisps, pirate skeletons and the ghosts of the shaft try to
+make you the seventh to die. Take the ferry from the dock at the bottom of the
+world map, and the cabinet is in the house's lobby.
+
+A cabinet is its game — there is no menu to pick from, and the sign above it
+says which game it is. Walk up, press E, and you are playing. Flappy, Snake
+and Solitaire are written and in no building yet; each is one line in
+`lib/world/tenants.ts` and a `pnpm build:map` away from a lobby of its own.
+
+A cabinet plays "Mighty Coin Drop" from the moment it opens, except the
+island's, which has "Tide Under Oak"; the pinball machine has "Silver Ball
+Surge". The room's music steps aside meanwhile. A button on each machine mutes
+the songs, one switch for all of them, remembered in the browser; every game's
+sound effects are synthesised and play regardless. Each machine keeps its own
+high score table for the room, and a score goes in the room's activity. Keys,
+a pad or a touch screen all work; Escape (or B) leaves.
 
 ### The project board on Sandbox ERP's third floor
 
@@ -400,8 +423,9 @@ The bottom of the world map is the sea. The centre avenue carries on past
 the south road as a dock, and the ferry waits at its end; walk to the end of
 the dock to board it. It sails to an island, with water all round, a dock
 under a board that says "Welcome to Ireland", sheep on the grass, and one
-whitewashed house: Apeiron Media, laid out inside like Castle Atlantic,
-ping pong table and all. Walk back onto the end of the dock to sail home.
+whitewashed house: Apeiron Media, laid out inside like Castle Atlantic, with
+an Oak Island cabinet in the corner where Castle Atlantic keeps its ping pong
+table. Walk back onto the end of the dock to sail home.
 
 ### Looking around
 
@@ -418,8 +442,17 @@ and the games are all in reach.
 
 ### Walking and sprinting
 
-Arrow keys or WASD walk; on a phone, tap the floor and your character walks
-there around the furniture. **Left Shift toggles sprinting** — it is a switch,
+Arrow keys or WASD walk; click or tap the floor and your character walks there
+around the furniture.
+
+**Out of doors, click a building and you go inside it.** Anywhere on it — the
+roof, the far wall, the sign — walks your character round to the front door and
+in through it, because out here the buildings are the menu and pointing at one
+means going there rather than standing beside it. The ferry counts as a
+building: click the boat and you sail. Click open ground and you simply walk
+there, as before.
+
+**Left Shift toggles sprinting** — it is a switch,
 not a key to hold, so crossing the world map does not mean keeping a finger
 down for twenty seconds. Press it again to go back to walking. The legs speed
 up to match, which is how you can tell which one you are in.
@@ -448,7 +481,7 @@ The game machines all use the same buttons, printed on each one:
 | Button | Does                                                                        |
 | ------ | --------------------------------------------------------------------------- |
 | A      | act: play, flap, fire the plunger, choose                                   |
-| B      | back: out of a game to the menu, out of the menu                            |
+| B      | back: out of a game to its menu, or out of the machine                      |
 | X      | full screen (the window fills; a pad press cannot ask the browser for more) |
 | Y      | music on or off                                                             |
 | View   | close the machine from anywhere                                             |

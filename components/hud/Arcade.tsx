@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeft, Music, VolumeX, X } from "lucide-react";
+import { Music, VolumeX, X } from "lucide-react";
 import FullscreenButton, { useFullscreen } from "./FullscreenButton";
 import PadLegend from "./PadLegend";
 import { useMachinePad } from "@/lib/hooks/useMachinePad";
@@ -10,7 +10,8 @@ import { currentRoom } from "@/lib/room-client";
 import { loadPlayerName } from "@/lib/persistence";
 import { usePanel } from "@/lib/hooks/usePanel";
 import { createLogger } from "@/lib/logger";
-import { ARCADE_GAMES, type AnyArcadeGame } from "@/lib/arcade";
+import { arcadeGame, type AnyArcadeGame } from "@/lib/arcade";
+import { arcadeGameIn } from "@/lib/world/tenants";
 import { NO_INPUT, SCREEN, type ArcadeGameId, type ArcadeInput } from "@/lib/arcade/types";
 import { arcadeMusic } from "@/lib/arcade/music";
 import { drainSounds } from "@/lib/arcade/sfx";
@@ -45,13 +46,20 @@ function padInput(): Pick<ArcadeInput, "up" | "down" | "left" | "right" | "actio
 }
 
 /**
- * The arcade cabinet: a menu of three games and a screen to play them on.
- * Escape backs out of a game to the menu, and out of the menu to the room.
+ * The arcade cabinet: one game, and a screen to play it on.
+ *
+ * Which game is the building's — `arcadeGameIn` reads it off the room —
+ * and there is no menu, because a game exists in exactly one lobby in the
+ * world. Walking up to Mettara's cabinet is Breakout; the island's is Oak
+ * Island. So Escape leaves, the way it does from every other panel, and
+ * the high score table is that one game's for that one room.
+ *
+ * It used to be five games behind a menu in Sandbox ERP's corner, beside
+ * the pinball machine.
  */
 export default function Arcade() {
   const [gameId, setGameId] = useState<ArcadeGameId | null>(null);
-  const [cursor, setCursor] = useState(0);
-  const [scores, setScores] = useState<Record<string, HighScore[]>>({});
+  const [scores, setScores] = useState<HighScore[]>([]);
   const [display, setDisplay] = useState({ score: 0, over: false });
   const musicMuted = useSyncExternalStore(
     arcadeMusic.subscribe,
@@ -69,42 +77,19 @@ export default function Arcade() {
   const pointerRef = useRef<number | null>(null);
   const submittedRef = useRef(false);
 
-  const loadScores = useCallback(async () => {
+  const loadScores = useCallback(async (id: ArcadeGameId) => {
     const room = encodeURIComponent(currentRoom());
-    const loaded: Record<string, HighScore[]> = {};
-    await Promise.all(
-      ARCADE_GAMES.map(async (game) => {
-        try {
-          const res = await fetch(`/api/room/arcade?room=${room}&game=${game.id}`);
-          const body = (await res.json()) as { scores?: HighScore[] };
-          loaded[game.id] = body.scores ?? [];
-        } catch (err) {
-          log.warn(`could not load ${game.title} scores:`, (err as Error).message);
-        }
-      }),
-    );
-    setScores(loaded);
+    try {
+      const res = await fetch(`/api/room/arcade?room=${room}&game=${id}`);
+      const body = (await res.json()) as { scores?: HighScore[] };
+      setScores(body.scores ?? []);
+    } catch (err) {
+      log.warn(`could not load ${id} scores:`, (err as Error).message);
+    }
   }, []);
 
-  // Escape is not the hook's: in a game it backs out to the menu first,
-  // and only from the menu does it leave the room. See the key handler.
-  const { open, close } = usePanel("arcade", {
-    onOpen: () => {
-      setCursor(0);
-      setGameId(null);
-      void loadScores();
-      arcadeMusic.open();
-    },
-    onClose: () => {
-      setGameId(null);
-      gameRef.current = null;
-      arcadeMusic.close();
-    },
-    escape: false,
-  });
-
   const start = useCallback((id: ArcadeGameId) => {
-    const game = ARCADE_GAMES.find((g) => g.id === id);
+    const game = arcadeGame(id);
     if (!game) return;
     gameRef.current = { game, state: game.create() };
     submittedRef.current = false;
@@ -112,66 +97,58 @@ export default function Arcade() {
     tapRef.current = null;
     setDisplay({ score: 0, over: false });
     setGameId(id);
-    // The island has its own song; the others play to the cabinet's.
-    arcadeMusic.startGame(id);
   }, []);
 
-  const backToMenu = useCallback(() => {
-    gameRef.current = null;
-    setGameId(null);
-    arcadeMusic.backToMenu();
-  }, []);
-
-  // The controller, by the bindings printed on the cabinet: A plays the
-  // chosen game, B backs out (of a game to the menu, of the menu to the
-  // room), X fills the screen, Y is the music, View leaves, Menu restarts.
-  // While a game is on, its own loop reads the stick and A.
-  useMachinePad(open, {
-    act: () => {
-      if (!gameRef.current) start(ARCADE_GAMES[cursor].id);
+  const { open, close } = usePanel("arcade", {
+    onOpen: () => {
+      // The room is the URL, so which game this is gets read as the panel
+      // opens rather than once at mount: riding the lift changes rooms
+      // without rebuilding the HUD, and every panel is mounted in every
+      // room regardless of what that room has in its corner.
+      const id = arcadeGameIn(currentRoom());
+      setGameId(id);
+      setScores([]);
+      if (!id) return;
+      void loadScores(id);
+      // The island's game has its own song; the rest play to the cabinet's.
+      arcadeMusic.open(id);
+      start(id);
     },
-    back: () => (gameRef.current ? backToMenu() : close()),
+    onClose: () => {
+      setGameId(null);
+      gameRef.current = null;
+      arcadeMusic.close();
+    },
+  });
+
+  // A cabinet with no game behind it: `?arcade=1` in a room that has none.
+  // Nothing is drawn for it, and an open panel the player cannot see is one
+  // they are held still under, so it lets itself go.
+  useEffect(() => {
+    if (open && !gameId) close();
+  }, [open, gameId, close]);
+
+  // The controller, by the bindings printed on the cabinet: B or View
+  // leaves, X fills the screen, Y is the music, Menu plays again. There is
+  // nothing to go back to, so B closes; while the game is on, its own loop
+  // reads the stick and A.
+  useMachinePad(open, {
     close,
     fullscreen: fullscreen.toggle,
     mute: () => arcadeMusic.setMuted(!arcadeMusic.isMuted()),
     restart: () => {
       if (gameId) start(gameId);
     },
-    up: () => {
-      if (!gameRef.current) setCursor((c) => (c + ARCADE_GAMES.length - 1) % ARCADE_GAMES.length);
-    },
-    down: () => {
-      if (!gameRef.current) setCursor((c) => (c + 1) % ARCADE_GAMES.length);
-    },
   });
 
-  // Keys: Escape backs out; in the menu arrows pick and Enter starts; in a
-  // game the arrows, WASD and Space are held state for the loop.
+  // Keys, while the game is on: the arrows, WASD and Space are held state
+  // for the loop. Escape is the hook's now — there is no menu to back out
+  // to first, so leaving the cabinet is leaving the panel.
   useEffect(() => {
     if (!open) return;
     const onDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      if (key === "escape") {
-        event.preventDefault();
-        if (gameRef.current) backToMenu();
-        else close();
-        return;
-      }
-      if (!gameRef.current) {
-        if (key === "arrowdown" || key === "arrowright" || key === "s" || key === "d") {
-          setCursor((c) => (c + 1) % ARCADE_GAMES.length);
-        } else if (key === "arrowup" || key === "arrowleft" || key === "w" || key === "a") {
-          setCursor((c) => (c + ARCADE_GAMES.length - 1) % ARCADE_GAMES.length);
-        } else if (key === "enter" || key === " ") {
-          setCursor((c) => {
-            start(ARCADE_GAMES[c].id);
-            return c;
-          });
-        } else return;
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
+      if (!gameRef.current) return;
       const held = heldRef.current;
       if (key === "arrowup" || key === "w") held.up = true;
       else if (key === "arrowdown" || key === "s") held.down = true;
@@ -200,7 +177,7 @@ export default function Arcade() {
       window.removeEventListener("keyup", onUp, true);
       heldRef.current = { up: false, down: false, left: false, right: false, action: false };
     };
-  }, [open, close, backToMenu, start]);
+  }, [open]);
 
   const submitScore = useCallback(async (id: ArcadeGameId, score: number) => {
     try {
@@ -210,7 +187,7 @@ export default function Arcade() {
         body: JSON.stringify({ game: id, player: loadPlayerName(), score }),
       });
       const body = (await res.json()) as { scores?: HighScore[] };
-      if (body.scores) setScores((prev) => ({ ...prev, [id]: body.scores! }));
+      if (body.scores) setScores(body.scores);
     } catch (err) {
       log.warn("could not record the score:", (err as Error).message);
     }
@@ -277,9 +254,9 @@ export default function Arcade() {
     };
   };
 
-  if (!open) return null;
-  const game = gameId ? ARCADE_GAMES.find((g) => g.id === gameId) : null;
-  const board = game ? (scores[game.id] ?? []) : [];
+  const game = gameId ? arcadeGame(gameId) : null;
+  // No game means no cabinet in this room; the effect above closes it.
+  if (!open || !game) return null;
 
   return (
     <div
@@ -296,20 +273,8 @@ export default function Arcade() {
     >
       <div className="pixel-panel pinball-panel arcade-panel">
         <div className="pinball-head arcade-head">
-          <span className="arcade-head__title">{game ? game.title : "Arcade"}</span>
+          <span className="arcade-head__title">{game.title}</span>
           <span className="arcade-head__buttons">
-            {game && (
-              <button
-                type="button"
-                className="pixel-icon-btn"
-                style={{ width: 26, height: 26 }}
-                onClick={backToMenu}
-                title="Back to the games (Esc)"
-                aria-label="Back to the games"
-              >
-                <ArrowLeft size={12} />
-              </button>
-            )}
             <button
               type="button"
               className="pixel-icon-btn"
@@ -340,134 +305,86 @@ export default function Arcade() {
         </div>
 
         <div className="pinball-play">
-          {game ? (
-            <canvas
-              ref={canvasRef}
-              className="arcade-screen"
-              onPointerDown={(event) => {
-                event.currentTarget.setPointerCapture(event.pointerId);
-                const point = screenPoint(event);
-                tapRef.current = point;
-                pointerRef.current = point.x;
-              }}
-              onPointerMove={(event) => {
-                if (pointerRef.current !== null) pointerRef.current = screenPoint(event).x;
-              }}
-              onPointerUp={() => {
-                pointerRef.current = null;
-              }}
-              onPointerCancel={() => {
-                pointerRef.current = null;
-              }}
-            />
-          ) : (
-            <div className="arcade-menu" role="listbox" aria-label="Games">
-              {ARCADE_GAMES.map((entry, index) => {
-                const best = scores[entry.id]?.[0];
-                return (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    role="option"
-                    aria-selected={cursor === index}
-                    className={`arcade-card${cursor === index ? " arcade-card--active" : ""}`}
-                    onMouseEnter={() => setCursor(index)}
-                    onClick={() => start(entry.id)}
-                  >
-                    <span className="arcade-card__title">{entry.title}</span>
-                    <span className="arcade-card__blurb">{entry.blurb}</span>
-                    <span className="arcade-card__best">
-                      {best
-                        ? `Best: ${best.player} · ${best.score.toLocaleString()}`
-                        : "No scores yet"}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <canvas
+            ref={canvasRef}
+            className="arcade-screen"
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              const point = screenPoint(event);
+              tapRef.current = point;
+              pointerRef.current = point.x;
+            }}
+            onPointerMove={(event) => {
+              if (pointerRef.current !== null) pointerRef.current = screenPoint(event).x;
+            }}
+            onPointerUp={() => {
+              pointerRef.current = null;
+            }}
+            onPointerCancel={() => {
+              pointerRef.current = null;
+            }}
+          />
         </div>
 
         <div className="pinball-stats">
-          {game ? (
-            <>
-              <div className="pinball-stat">
-                <div className="pinball-label">SCORE</div>
-                <div style={{ fontSize: "16px", color: "var(--pixel-accent)" }}>
-                  {display.score.toLocaleString()}
-                </div>
-              </div>
-              <div className="pinball-stat pinball-stat--scores">
-                <div className="pinball-label">HIGH SCORES</div>
-                {board.length === 0 ? (
-                  <div className="pinball-hint">Nobody has played yet.</div>
-                ) : (
-                  board.map((entry, index) => (
-                    <div
-                      key={`${entry.player}-${index}`}
-                      className="pinball-score"
-                      style={{ color: index === 0 ? "var(--pixel-accent)" : undefined }}
-                    >
-                      <span>
-                        {index + 1}. {entry.player}
-                      </span>
-                      <span>{entry.score.toLocaleString()}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-              <div className="pinball-stat pinball-stat--foot">
-                {display.over ? (
-                  <button
-                    type="button"
-                    className="pixel-button pixel-button--primary"
-                    onClick={() => start(game.id)}
-                  >
-                    Play again
-                  </button>
-                ) : game.restartLabel ? (
-                  <button
-                    type="button"
-                    className="pixel-button"
-                    onClick={() => start(game.id)}
-                    title="Give this one up and start over"
-                  >
-                    {game.restartLabel}
-                  </button>
-                ) : null}
-                <div className="pinball-hint pinball-hint--touch">{game.touch}</div>
-                <div className="pinball-hint pinball-hint--keys">{game.keys}</div>
-                <PadLegend
-                  entries={[
-                    ["act", "act"],
-                    ["back", "menu"],
-                    ["restart", game.restartLabel?.toLowerCase() ?? "again"],
-                    ["mute", "music"],
-                    ["fullscreen", "full screen"],
-                    ["close", "leave"],
-                    ["talk", "talk"],
-                  ]}
-                />
-              </div>
-            </>
-          ) : (
-            <div className="pinball-stat pinball-stat--foot">
-              <div className="pinball-hint">Five games in one cabinet. Pick one.</div>
-              <div className="pinball-hint pinball-hint--keys">
-                ↑ ↓ choose · Enter plays · Esc leaves
-              </div>
-              <PadLegend
-                entries={[
-                  ["act", "play"],
-                  ["back", "leave"],
-                  ["mute", "music"],
-                  ["fullscreen", "full screen"],
-                  ["close", "leave"],
-                  ["talk", "talk"],
-                ]}
-              />
+          <div className="pinball-stat">
+            <div className="pinball-label">SCORE</div>
+            <div style={{ fontSize: "16px", color: "var(--pixel-accent)" }}>
+              {display.score.toLocaleString()}
             </div>
-          )}
+          </div>
+          <div className="pinball-stat pinball-stat--scores">
+            <div className="pinball-label">HIGH SCORES</div>
+            {scores.length === 0 ? (
+              <div className="pinball-hint">Nobody has played yet.</div>
+            ) : (
+              scores.map((entry, index) => (
+                <div
+                  key={`${entry.player}-${index}`}
+                  className="pinball-score"
+                  style={{ color: index === 0 ? "var(--pixel-accent)" : undefined }}
+                >
+                  <span>
+                    {index + 1}. {entry.player}
+                  </span>
+                  <span>{entry.score.toLocaleString()}</span>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="pinball-stat pinball-stat--foot">
+            {display.over ? (
+              <button
+                type="button"
+                className="pixel-button pixel-button--primary"
+                onClick={() => start(game.id)}
+              >
+                Play again
+              </button>
+            ) : game.restartLabel ? (
+              <button
+                type="button"
+                className="pixel-button"
+                onClick={() => start(game.id)}
+                title="Give this one up and start over"
+              >
+                {game.restartLabel}
+              </button>
+            ) : null}
+            <div className="pinball-hint">{game.blurb}</div>
+            <div className="pinball-hint pinball-hint--touch">{game.touch}</div>
+            <div className="pinball-hint pinball-hint--keys">{game.keys}</div>
+            <PadLegend
+              entries={[
+                ["act", "act"],
+                ["restart", game.restartLabel?.toLowerCase() ?? "again"],
+                ["mute", "music"],
+                ["fullscreen", "full screen"],
+                ["close", "leave"],
+                ["talk", "talk"],
+              ]}
+            />
+          </div>
         </div>
       </div>
     </div>

@@ -15,9 +15,18 @@ import {
 } from "@/lib/world/tenants";
 import { SCENERY, WORLD_SIGNS, groundTiles, worldSolids } from "@/lib/world/scenery";
 import { asset } from "@/lib/assets";
-import { BOAT_KEY, addSolid, layGround, placeBuilding, placeProp, placeSign } from "./outdoors";
+import { addSolid, layGround, placeBuilding, placeProp, placeSign } from "./outdoors";
 
-/** Where each building's name goes: the blank sign the picture leaves, from the frame's top. */
+/**
+ * Where each building's name goes: the blank sign the picture leaves, from
+ * the frame's top.
+ *
+ * The ferry has no entry, and that is what leaves it unlettered — a boat
+ * carries no business's name over a door, because it has no door and it is
+ * nobody's premises. It used to read APEIRON MEDIA, which named the island
+ * at the far end of the crossing rather than the boat, and the "FERRY TO
+ * IRELAND" sign standing on the quay beside it already says where it goes.
+ */
 const SIGN_Y: Record<string, number> = {
   "world-castle": 175,
   "world-office": 186,
@@ -25,7 +34,6 @@ const SIGN_Y: Record<string, number> = {
   "world-blocks": 169,
   "world-campus": 173,
   "world-lab": 159,
-  [BOAT_KEY]: 136,
 };
 /** A door zone target that starts a scene rather than loading a page. */
 const CAMPUS_TARGET = "campus:";
@@ -91,6 +99,9 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
       // Only out of a door: arriving by the road, the keys are yours at once.
       walkIn: Boolean(left),
       doors,
+      // Every building on the map, the ferry among them: a tap on any of
+      // their pictures walks to that front door and goes in.
+      entrances: BUILDINGS,
       solids,
       label: "World map",
       path: WORLD_PATH,
@@ -106,13 +117,15 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
 
   /** A building's picture and name, and the doorway into it. */
   private putUp(b: Building, walls: Phaser.Physics.Arcade.StaticGroup): DoorZone {
-    // The same size as a campus building's, so the two maps read alike —
-    // except the ferry's board, which is small, and so is its lettering.
-    placeBuilding(this, b, walls, {
-      text: b.org.name.toUpperCase(),
-      y: SIGN_Y[b.art],
-      size: b.art === BOAT_KEY ? "8px" : "18px",
-    });
+    // The same size as a campus building's, so the two maps read alike. A
+    // picture with no band to letter — the ferry — gets no name at all.
+    const band = SIGN_Y[b.art];
+    placeBuilding(
+      this,
+      b,
+      walls,
+      band === undefined ? null : { text: b.org.name.toUpperCase(), y: band, size: "18px" },
+    );
     const target =
       b.entrance.kind === "lobby"
         ? floorUrl(b.entrance.tenant, LOBBY, "door")

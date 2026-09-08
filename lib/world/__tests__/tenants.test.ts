@@ -6,7 +6,10 @@ import {
   WORLD_HEIGHT,
   WORLD_SPAWN,
   WORLD_WIDTH,
+  arcadeGameIn,
   hasCampus,
+  hasFloors,
+  lobbyGame,
   spawnFor,
   tenantFor,
   tenantTitle,
@@ -64,6 +67,50 @@ describe("organisations and their lobbies", () => {
     expect(tenantTitle(tenantFor("sandbox-erp")!)).toBe("Sandbox ERP");
     expect(tenantTitle(tenantFor("chester-warehouse")!)).toBe("Chester · Warehouse");
     expect(tenantFor("local")).toBeNull();
+  });
+});
+
+describe("the games in the lobbies", () => {
+  /**
+   * One game to a lobby and one lobby to a game.
+   *
+   * The first half the types settle — `game` is a single field, and the
+   * `also` that once put the whole arcade beside Sandbox ERP's pinball
+   * machine is gone. The second half is only ever true because the list
+   * says so, and nothing about the world running would notice: two
+   * buildings declaring Breakout both draw a cabinet, both open the same
+   * panel, and the only sign of it is that the high score table you were
+   * beating is in the other building. So it is asserted here.
+   */
+  it("never puts one game in two lobbies", () => {
+    const games = TENANTS.map((t) => t.game).filter((g): g is NonNullable<typeof g> => Boolean(g));
+    expect(new Set(games).size, games.join(", ")).toBe(games.length);
+  });
+
+  it("only puts a game where there is a lobby to put it in", () => {
+    // A store, a warehouse and a garage are drawn by `lib/map/premises.ts`,
+    // which has no corner to stand a machine in and no point of interest to
+    // walk up to. A game declared on one would be furniture nobody sees.
+    for (const tenant of TENANTS) {
+      if (tenant.game) expect(hasFloors(tenant), tenant.slug).toBe(true);
+    }
+  });
+
+  it("tells the HUD which game the room it is in has", () => {
+    // How the cabinet knows what it is: the panel is mounted in every room
+    // and asks by slug, since there is no menu to pick from any more.
+    expect(lobbyGame("sandbox-erp")).toBe("pinball");
+    expect(lobbyGame("mettara")).toBe("breakout");
+    expect(arcadeGameIn("mettara")).toBe("breakout");
+    expect(arcadeGameIn("apeiron-media")).toBe("oak-island");
+    // The other two machines are their own panels, not cabinets.
+    expect(arcadeGameIn("castle-atlantic")).toBeNull();
+    expect(arcadeGameIn("sandbox-erp")).toBeNull();
+    // A floor above a lobby, a room with nothing in it, nowhere at all.
+    expect(arcadeGameIn("mettara-floor-2")).toBeNull();
+    expect(lobbyGame("chester-store")).toBeNull();
+    expect(lobbyGame("local")).toBeNull();
+    expect(lobbyGame(null)).toBeNull();
   });
 });
 

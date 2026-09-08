@@ -43,9 +43,12 @@ export const WORKER_SPRITES: WorkerSpriteConfig[] = [
   { key: "character_spud", path: "/characters/Bud_48x48.png", label: "Bud" },
   { key: "character_steve", path: "/characters/Steve_48x48.png", label: "Steve" },
   { key: "character_yash", path: "/characters/Yash_48x48.png", label: "Yash" },
-  // Looks for people, built the same way.
+  // Looks for people, built the same way. A personal code brings its holder
+  // in wearing theirs, and `SHARED_CAST` keeps every one of them out of a
+  // visitor's picker — see lib/characters/library.ts.
   { key: "character_coop", path: "/characters/Coop_48x48.png", label: "Coop" },
   { key: "character_rob", path: "/characters/Rob_48x48.png", label: "Rob" },
+  { key: "character_hunter", path: "/characters/Hunter_48x48.png", label: "Hunter" },
   // Delivered in the game's format and installed byte for byte — the first
   // sheet that needed nothing done to it at all.
   { key: "character_doc", path: "/characters/Doc_48x48.png", label: "Doc" },

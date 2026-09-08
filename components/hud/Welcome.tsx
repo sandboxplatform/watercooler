@@ -54,11 +54,21 @@ export default function Welcome() {
   // everybody else is a visitor, passing through with no office and no desk.
   const persona = me?.access?.persona ?? null;
   const visitor = (me?.access?.identity ?? "visitor") === "visitor";
+  /**
+   * Whether there is an office to ask about at all.
+   *
+   * A visitor works nowhere, and so does somebody whose own code names them
+   * before they have a building — Campbell. Neither has an office to choose
+   * or a desk to keep, so both skip that half of the screen. It used to be
+   * the same question as "is a visitor", which would have put Campbell in
+   * front of a list of offices none of which is his.
+   */
+  const worksNowhere = visitor || (!!persona && !persona.home);
   // A guest's browser profile is enough; a signed-in person's must be the
   // account's, so a profile left here by someone else does not let them in.
   const guest = !authOn || (!account && !!profile?.guest);
   const done =
-    !!profile && isComplete(profile, !visitor) && (guest || !!account?.profile || !!persona);
+    !!profile && isComplete(profile, !worksNowhere) && (guest || !!account?.profile || !!persona);
   const { characters, error } = useCharacterRoster();
 
   const [typedName, setTypedName] = useState<string | null>(null);
@@ -84,21 +94,28 @@ export default function Welcome() {
    * they are, so their name, office and look are written straight in and the
    * effect above walks them through. It settles after one pass — saving the
    * profile brings this back with `already` true.
+   *
+   * Only what the code actually says gets written: a persona with no
+   * `characterKey` has no sheet drawn yet and one with no `home` works
+   * nowhere yet, so those parts are left as they are and the screen below
+   * asks for them. The name is the part that is always known.
    */
   useEffect(() => {
     if (!persona || !profile || characters.length === 0) return;
+    const look = persona.characterKey
+      ? (characters.find((c) => textureKeyFor(c) === persona.characterKey) ?? null)
+      : null;
+    // Their sheet is named but the roster has not brought it yet: wait for
+    // it rather than write them in wearing whatever is to hand.
+    if (persona.characterKey && !look) return;
+    const character = look ? { key: textureKeyFor(look), path: look.sheetUrl } : profile.character;
+    const home = persona.home ?? profile.home;
     const already =
       profile.name === persona.name &&
-      profile.home === persona.home &&
-      profile.character?.key === persona.characterKey;
+      profile.home === home &&
+      profile.character?.key === character?.key;
     if (already) return;
-    const look = characters.find((candidate) => textureKeyFor(candidate) === persona.characterKey);
-    if (!look) return;
-    saveProfile({
-      name: persona.name,
-      home: persona.home,
-      character: { key: textureKeyFor(look), path: look.sheetUrl },
-    });
+    saveProfile({ name: persona.name, home, character });
     void registerProfile(profileSnapshot());
   }, [persona, profile, characters]);
 
@@ -111,12 +128,12 @@ export default function Welcome() {
     (profile.name === NO_NAME ? "" : profile.name);
   const name = (typedName ?? suggestedName).slice(0, NAME_LIMIT);
   const trimmed = name.trim();
-  // A visitor works nowhere, so there is no office to choose and none to remember.
-  const home = visitor ? null : (pickedHome ?? account?.profile?.home ?? profile.home);
+  // Somebody who works nowhere has no office to choose and none to remember.
+  const home = worksNowhere ? null : (pickedHome ?? account?.profile?.home ?? profile.home);
   const rememberedKey = account?.profile?.character.key ?? profile.character?.key ?? null;
   const character =
     pickedCharacter ?? characters.find((c) => textureKeyFor(c) === rememberedKey) ?? null;
-  const ready = trimmed.length > 0 && (visitor || !!home) && !!character && !walking;
+  const ready = trimmed.length > 0 && (worksNowhere || !!home) && !!character && !walking;
 
   const walkIn = async () => {
     if (!ready || !character) return;
@@ -164,7 +181,9 @@ export default function Welcome() {
               ? "Sign in to walk in. Your desk, your character and your record are kept under your email."
               : visitor
                 ? "You are visiting. Tell us who you are and what you look like — then walk out onto the world map."
-                : "Tell us who you are, where you work, and what you look like — then walk in."}
+                : worksNowhere
+                  ? "Tell us what you look like — then walk in. You work nowhere yet, so there is no office to choose."
+                  : "Tell us who you are, where you work, and what you look like — then walk in."}
           </p>
         </header>
 
@@ -233,7 +252,7 @@ export default function Welcome() {
               />
             </section>
 
-            {!visitor && (
+            {!worksNowhere && (
               <section className="welcome__step">
                 <div className="welcome__label">Your home office</div>
                 <div className="welcome__homes">
@@ -293,6 +312,8 @@ export default function Welcome() {
                   <span className="welcome__error">{refusal}</span>
                 ) : visitor ? (
                   "Kept in this browser only. You are visiting, so you have no office and no desk."
+                ) : worksNowhere ? (
+                  "You work nowhere yet, so you have no desk."
                 ) : account ? (
                   "Kept under your email. Your desk is on Floor 1 of your home building."
                 ) : (

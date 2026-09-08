@@ -30,6 +30,7 @@
     "zoho:setup": "node scripts/zoho-setup.mjs",
     "build:map": "tsx scripts/build-map.ts && tsx scripts/build-assets.ts",
     "check:sheets": "tsx scripts/check-sheets.ts",
+    "check:delivery": "tsx scripts/check-delivery.ts",
     "assets": "tsx scripts/build-assets.ts",
     "test:all": "vitest --run",
     "test:slow": "vitest --run --project slow",

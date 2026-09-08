@@ -143,6 +143,28 @@ describe("what each fixture claims off the map", () => {
     }
   });
 
+  it("names the game on the cabinet's sign, room by room", () => {
+    // The one label on the registry that is not the same in every room: a
+    // cabinet is one game, and which game is the building's. Written down
+    // once here it would read ARCADE in a lobby whose sign should say
+    // BREAKOUT, and nothing but looking at it would tell you.
+    const sign = fixture("arcade").sign!.label;
+    if (typeof sign !== "function") throw new Error("the cabinet's sign is asked, not written");
+    expect(sign("mettara")).toBe("BREAKOUT");
+    expect(sign("apeiron-media")).toBe("OAK ISLAND");
+    // A room with no cabinet: reachable only by `?arcade=1`, and better as
+    // the machine's own name than as a blank board.
+    expect(sign("sandbox-erp")).toBe("ARCADE");
+    expect(sign(null)).toBe("ARCADE");
+  });
+
+  it("writes every other sign down, since every other sign is fixed", () => {
+    for (const f of FIXTURES) {
+      if (!f.sign || f.id === "arcade") continue;
+      expect(typeof f.sign.label, f.id).toBe("string");
+    }
+  });
+
   it("hangs several boards but only one of everything else", () => {
     for (const f of FIXTURES) {
       if (f.id === "whiteboard") expect(f.many).toBe(true);

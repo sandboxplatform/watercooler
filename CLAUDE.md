@@ -25,6 +25,7 @@ pnpm format         # prettier --write .
 pnpm build:map      # regenerate public/maps/*.json from the room specs
 pnpm preview:map <file.json> <out.png> [scale]   # draw a map, without the game
 pnpm check:sheets [Name...]   # measure the figure inside every installed character sheet
+pnpm check:delivery <sheet.png>  # measure a delivered sheet before installing it
 pnpm seed:erp       # seed the fictional company's SQLite database (--force to wipe)
 ```
 
@@ -267,11 +268,41 @@ place. Shipping one server instead of two is the fix when it matters.
 inside the signature and keyed by _that identity's_ code — so it cannot be edited
 into somebody else's, and rotating one person's code turns out only them.
 
-| Code               | Identity  | What they get                                                     |
-| ------------------ | --------- | ----------------------------------------------------------------- |
-| `ACCESS_CODE`      | `visitor` | The shared cast only, no office, no desk; starts on the world map |
-| `ACCESS_CODE_COOP` | `coop`    | Brought in as Coop, at Sandbox ERP, wearing his own look          |
-| `ACCESS_CODE_ROB`  | `rob`     | The same, as Rob                                                  |
+| Code                   | Identity   | What they get                                                     |
+| ---------------------- | ---------- | ----------------------------------------------------------------- |
+| `ACCESS_CODE`          | `visitor`  | The shared cast only, no office, no desk; starts on the world map |
+| `ACCESS_CODE_COOP`     | `coop`     | Brought in as Coop, at Sandbox ERP, wearing his own look          |
+| `ACCESS_CODE_ROB`      | `rob`      | The same, as Rob                                                  |
+| `ACCESS_CODE_HUNTER`   | `hunter`   | Brought in as Hunter, at Castle Atlantic, wearing his own look    |
+| `ACCESS_CODE_CAMPBELL` | `campbell` | As Campbell, who works nowhere yet: no desk, no lift, no sheet    |
+
+**Adding a person is four places, and one of them bites.** `AccessIdentity`
+(`lib/identity.ts`), a `Persona` and the `IDENTITIES` list (both
+`lib/server/access.ts`), and `LIFT_REACH` for the floors they may ride.
+`IDENTITIES` is the one to remember: `verifyToken` will not recognise a
+cookie naming an identity that is not on it, so somebody wired everywhere
+_but_ there is turned away by a code that is set and correct — the
+`access.test.ts` round trip is what catches it. Their own sheet reserves
+itself: `SHARED_CAST` offers a visitor the premade cast only, so a new
+likeness is out of the picker the moment it is added.
+
+**A name is the only part that is certain.** `home` and `characterKey` on a
+`Persona` are both optional, because a code can name somebody the day it is
+set while their office and their face arrive whenever they arrive. The
+welcome screen asks for whichever is missing and writes in the rest, rather
+than the code inventing an answer — the alternative for a look was naming a
+file that is not there, which is a texture that 404s and a broken card in
+their own picker. Campbell is in that state on both counts: named, working
+nowhere, and asked which look to wear. Hunter was too until his sheet
+arrived.
+
+**"Works nowhere" is not the same question as "is a visitor",** and the two
+came apart with Campbell. `worksNowhere` in `Welcome.tsx` is a visitor _or_ a
+persona with no `home`: both skip the office half of the screen, because
+otherwise Campbell is shown a list of offices none of which is his. Same for
+`landsOutside`, which now takes whether they have a building rather than the
+identity — the root is the default room and the default room is an office, so
+it is no more Campbell's than a stranger's.
 
 **A visitor starts outside.** The root is the default room, and the default
 room is an office — somebody's building. A visitor has no building, so landing
@@ -289,12 +320,38 @@ picker is decoration: `/api/characters` filters the roster by identity, and the
 presence socket clamps the `spriteKey` a connection claims, so a hand-edited
 profile cannot walk in wearing someone else's face.
 
-**Private floors.** A building's upper floors can belong to the people whose own
-codes name them. `PRIVATE_LIFTS` in `lib/world/floors.ts` is the whole rule —
-today `sandbox-erp` and `castle-atlantic` are Coop's and Rob's — and a building
-not listed is open to everybody, so a new one needs no entry. The **lobby stays public**: a visitor
-may walk in, look round and talk to whoever is there. It is the desks and the
-agents above that are shut.
+**Private floors.** Two things in `lib/world/floors.ts` decide who goes up, and
+they answer different questions:
+
+- `PRIVATE_LIFTS` is a list of buildings whose floors are shut to the public —
+  today `sandbox-erp` and `castle-atlantic`. A building not listed is open to
+  whoever walks up, so a new one needs no entry.
+- `LIFT_REACH` is how far a named person may go, which is their business
+  rather than the building's.
+
+| Person   | Reach                 | Rides                                       |
+| -------- | --------------------- | ------------------------------------------- |
+| Coop     | `"every"`             | Every lift in the world                     |
+| Rob      | `"every"`             | The same                                    |
+| Hunter   | `["castle-atlantic"]` | Only where he works — not even a public one |
+| Campbell | `[]`                  | Nothing, anywhere                           |
+| visitor  | _no entry_            | Everything except a private building's      |
+
+`"every"` means every lift **including a building made private later**, which
+is what "all the elevators" has to mean or it quietly stops being true the
+next time a building is shut. And **an empty list is not the same as no
+entry**: no entry falls through to the building's own rule, which is how a
+visitor gets the public lifts; an empty list is no lift anywhere. Anything
+reading `LIFT_REACH` with `if (!reach)` hands Campbell the lot.
+
+It used to be one record keyed by building, saying who may go up in each. That
+could express neither of the rules above — a person barred from the _public_
+lifts too, or one who should be carried up in a building nobody has made
+private yet — so access moved to the person and the list kept the one job it
+was good at.
+
+The **lobby stays public** throughout: a visitor may walk in, look round and
+talk to whoever is there. It is the desks and the agents above that are shut.
 
 Enforced in three places, for the same reason a look is:
 
@@ -459,7 +516,7 @@ what makes one is naming the boards that hang on its wall:
 ```ts
 // lib/world/tenants.ts
 lobby("sandbox-erp", "sandbox-erp", {
-  game: "pinball", also: ["arcade"], helpDesk: true,   // the lobby
+  game: "pinball", helpDesk: true,                     // the lobby
   operations: ["trello", "zoho"], projects: 5,         // the floor above
 }),
 lobby("castle-atlantic", "castle-atlantic", { game: "pong", operations: ["trello"], projects: 3 }),
@@ -624,13 +681,58 @@ line there and a `pnpm build:map`:
 | `floor-ops-<boards>-<n>` | One per set of boards and number of projects | `operations` + `projects`            |
 
 The lobbies were the last thing here still hand-listed, each hand-wired in
-the build script with its own `{ game, also, helpDesk }` while `mapFileFor`
+the build script with its own `{ game, helpDesk }` while `mapFileFor`
 worked the file name out from the tenant. So the furniture lived somewhere
 nothing else could see it, and declaring a game without also editing the
 script gave a building a map that was never written — a room that 404s, with
 nothing to say why. `floors.test.ts` now walks every tenant's lobby and
 floors and insists `mapFileFor` names a file that is on disk, which also
 catches a building added without regenerating.
+
+### The games in the lobbies
+
+**One game to a lobby, and one lobby to a game.** A building's corner holds
+a single machine, and no two buildings hold the same game — so which game
+you are playing tells you where in the world you are:
+
+| Building        | Game       | Machine     |
+| --------------- | ---------- | ----------- |
+| Castle Atlantic | Ping pong  | The table   |
+| Sandbox ERP     | Pinball    | The machine |
+| Mettara         | Breakout   | A cabinet   |
+| Apeiron Media   | Oak Island | A cabinet   |
+
+That is one field: `game` on the tenant (`lib/world/tenants.ts`), and a
+`Game` is a **game rather than a machine** — `"pong" | "pinball" |
+ArcadeGameId`. The five arcade games each stand in the same cabinet, which
+`GAMES` in `lib/map/office.ts` gives them by spreading one entry over
+`ARCADE_GAME_IDS`, so a sixth game added there has a cabinet without anyone
+remembering to write one. There used to be an `also` beside `game` for a
+second machine, which is how Sandbox ERP came to have the whole arcade
+standing next to its pinball machine; **removing the field is the whole of
+the one-per-lobby rule**, and every machine now takes the same corner
+because no lobby can want two.
+
+The other half is only ever true because the list says so, so
+`tenants.test.ts` asserts it. Nothing about the world running would notice
+two buildings declaring Breakout: both draw a cabinet, both open the same
+panel, and the only sign of it is that the high score table you were beating
+is in the other building.
+
+**A cabinet is its game — there is no menu.** Walk up, press E, and you are
+in Breakout. `arcadeGameIn(room)` is how the HUD's one `Arcade` panel knows
+which, read as the panel opens rather than at mount, because riding the
+lift changes rooms without rebuilding the HUD. Escape leaves, like every
+other panel; before, it backed out of a game to the menu first, which is
+why `usePanel` was given `escape: false` there. Three of the five games —
+Flappy, Snake and Solitaire — are therefore in no building at all, and
+putting one somewhere is a `game:` on a tenant plus `pnpm build:map`.
+
+The sign over the cabinet names the game, which is the one label on the
+fixture registry that is **not** the same in every room: `sign.label` may
+be a function of the room's slug, and `FixtureManager.place(pois, room)`
+resolves it. Written down once it would read ARCADE over a cabinet whose
+sign should say BREAKOUT, and nothing but looking at it would tell you.
 
 ### Fixtures
 
@@ -671,10 +773,11 @@ claimed by two fixtures. That last one is why the help desk's match is
 anchored — the lobby's "Help desk counter" is a different thing in a
 different room.
 
-Escape closing a panel is the hook's, and off for the three that read their
-own keys: the arcade and the ping pong table back out of a game to the menu
-before they leave the room, and the whiteboard swallows every key rather
-than only that one.
+Escape closing a panel is the hook's, and off for the two that read their
+own keys: the ping pong table backs out of a game to its menu before it
+leaves the room, and the whiteboard swallows every key rather than only
+that one. The arcade was the third until a cabinet became one game — with
+no menu behind it there is nothing to back out to, so Escape leaves.
 
 The boss's terminal looks like a fixture and is not one. It is only there
 when the room has seats, it defers to a worker standing nearby, and its
@@ -769,17 +872,54 @@ that either starts another scene or loads a lobby's page.
 
 A place says four things for itself:
 
-| Hook        | Answers                                                                                            |
-| ----------- | -------------------------------------------------------------------------------------------------- |
-| `loadArt`   | The pictures it is drawn from, on top of the outdoor pack                                          |
-| `layOut`    | Lay the ground and put up the buildings; hand back size, spawn, doors, solids, label, path, camera |
-| `standing`  | Which of the residents the server reported are here, and where to stand them                       |
-| `goThrough` | A doorway it opens itself by starting a scene, rather than loading a page                          |
+| Hook        | Answers                                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------------------- |
+| `loadArt`   | The pictures it is drawn from, on top of the outdoor pack                                                     |
+| `layOut`    | Lay the ground and put up the buildings; hand back size, spawn, doors, entrances, solids, label, path, camera |
+| `standing`  | Which of the residents the server reported are here, and where to stand them                                  |
+| `goThrough` | A doorway it opens itself by starting a scene, rather than loading a page                                     |
 
 `scenes/outdoors.ts` is the drawing half — ground, water and its foam,
 props, signs, the ferry, a building with its name on the band the art
 leaves blank, a resident with their name under them — and both places call
 it. So a third outdoor place is a `layOut` and its art, not another scene.
+
+**Out of doors the buildings are the menu.** This is a UI before it is a
+world: pointing at a building has to mean "take me there", so a tap
+anywhere on the picture walks to that front door and goes in.
+`lib/world/entrances.ts` is the rule and `OutdoorPlace.entrances` is what a
+place hands over — `Building`, `CampusBuilding` and the moored ferry all
+already carry the three fields it wants (`frame`, `door`, `outside`), so
+each place passes what it laid out.
+
+A tap used to mean "walk to that pixel". A building is solid, so the
+pathfinder snapped the destination to the nearest open ground — the side
+wall. You chose Sandbox ERP and got a character standing in the flowerbed
+beside it, with nothing on screen to say what had happened.
+
+Two details it would be easy to get wrong, both of which look correct:
+
+- **The walk ends _in_ the doorway, not in front of it.** Walking into a
+  doorway is already what goes inside (`DoorLatch`), so the route does on
+  its own exactly what the arrow keys would have done and there is no
+  second way into a building to disagree with the first. A route that stops
+  a few pixels short arrives, stands there, and the door never fires —
+  which is indistinguishable from a walk that worked.
+- **Two waypoints, not one.** The pathfinder inflates every solid by half a
+  body width, and a doorway sits against the building — inside that
+  padding, so the grid calls it blocked and snaps the destination
+  elsewhere. `outside` is the part it can plan to; the last step is walked
+  straight at the door, which is safe because a doorway is open ground
+  under the wall. `__tests__/entrances.test.ts` holds every approach to
+  being clear of `worldSolids()`, and every doorway to being hit.
+
+**Going through a door means going out of sight**, the same as stepping
+into the lift. Two things were wrong there: `enter` stopped the character
+with `player.update({vx:0, vy:0})`, and `update` re-reads the keyboard — so
+walking in on a held arrow key handed the stop that key's velocity and the
+walk cycle carried on, with `leaving` then blocking every later frame. He
+ran on the spot in the doorway for the whole second a page load takes. It
+is `drive` now, and `player.board(true)` — hidden, animation stopped.
 
 It was two files that had drifted into being the same file twice: eleven
 identical fields and eight identical methods apiece, about 200 lines of
@@ -952,29 +1092,44 @@ of the texture memory. 2688x1968 is 5.3M pixels of which nine tenths are
 empty, against 0.33M for 1152x288. The wide shape survives because the pack's
 cast and everything built before this are that size.
 
-The figure sits **64px tall** in its 96px frame, rows 28-91, with the feet
-inside rows 72-91 and horizontally within x 12-36 — that rectangle is the
-collision body the game derives from every frame — centred on x 24, at one
-scale on one baseline across all 48 slots. Feet on row 91 is the one number
-nothing may vary: a character a few pixels up floats.
+The reference figure sits **64px tall** in its 96px frame, rows 28-91,
+centred on x 24, at one scale on one baseline across all 48 slots. Feet on
+row 91 is the number that matters most: the game derives a collision body
+from a fixed ratio of the frame — rows 72-91, x 12-36, never measured from
+the art — so a character drawn a few pixels up floats, and one drawn a few
+pixels down stands through his own shadow.
 
 It was 72px until the cast was redrawn, and eight pixels reads as one person
-being shorter than the people standing beside them. `pnpm check:sheets`
-measures it, because `sheetFaults` settles the _format_ — canvas, frames
-drawn, transparent background — and says nothing about the drawing inside the
-frame, which is how two short sheets passed every check and shipped. The
-generator has drifted twice now, both times by the same amount in every one
-of the 48 frames of every sheet in the batch, so **run it on a delivery
-before installing one**: the fix is four pixels of art, and finding out after
-a commit is how a cast ends up two heights.
+being shorter than the people standing beside them. Two things measure it,
+because `sheetFaults` settles the _format_ — canvas, frames drawn,
+transparent background — and says nothing about the drawing inside the frame,
+which is how two short sheets passed every check and shipped:
 
-**It reports; it does not refuse, and it should stay that way.** Which
-proportions the cast has is the artist's call, and `sheetFaults` is a
-universal check with no notion of who is a person — Bud is 42px and Michael
-is 42px, an egg and a chicken, and a height rule in there would refuse them
-both. That was going to be promoted into `sheetFaults` once every sheet
-agreed; it should not be. The exemption list belongs with the report, which
-is where it is.
+| Command                           | Reads                                      |
+| --------------------------------- | ------------------------------------------ |
+| `pnpm check:sheets [Name...]`     | The installed cast, in `public/characters` |
+| `pnpm check:delivery <sheet.png>` | One sheet before it is installed           |
+
+**Run it on the delivery, not on the cast.** The generator has drifted twice,
+both times by the same amount in every one of the 48 frames of every sheet in
+a batch. The fix is four pixels of art, and the installed cast is one step too
+late to be told.
+
+**They report; they do not refuse, and that should stay that way.** Which
+proportions the cast has is the artist's call, and the cast does not in fact
+agree: four sheets are 64px (Rob, Sara, Steve, Yoshi), three are 60px (Doc,
+Mark, Yash), Hunter is 58px and Coop is 68px with his feet on row 89. Bud and
+Michael — an egg and a chicken — are exempt outright. A height rule in
+`sheetFaults` would refuse the last two and the artist's judgement along with
+them; the exemption list belongs beside the report, which is where it is.
+
+What the report must **not** do is measure something that fires on
+everything. `check:delivery` briefly held the feet band, rows 72-91, to the
+collision body's x 12-36 — and flagged all eleven sheets in the cast,
+including the three the standard was taken from, because nothing in a bitmap
+distinguishes a boot from a coat hem or a hand at the knee. A check that is
+always red says nothing at all. It prints the span now and judges only the
+height and the baseline.
 
 **Row 1, column 18** (the first idle-down frame) is lifted straight out as
 the HUD portrait and gallery card, so make that one a clean front view.
@@ -1096,7 +1251,7 @@ From `CONTRIBUTING.md`, and worth holding to when adding anything:
 | Variable                                                                 | Default                                 | Purpose                                                                  |
 | ------------------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------ |
 | `ACCESS_CODE`                                                            | —                                       | Shared visitors' code; production refuses to boot with no code at all    |
-| `ACCESS_CODE_COOP` / `ACCESS_CODE_ROB`                                   | —                                       | One code each; brings its holder in as themselves                        |
+| `ACCESS_CODE_COOP` / `_ROB` / `_HUNTER` / `_CAMPBELL`                    | —                                       | One code each; brings its holder in as themselves                        |
 | `AGENT_PROVIDER`                                                         | `claude`                                | Which provider runs agents                                               |
 | `PORT` / `HOSTNAME`                                                      | `3000` / `localhost`                    | Server bind; also builds auth callback URLs                              |
 | `ANTHROPIC_API_KEY`                                                      | —                                       | Required by `claude-api`                                                 |

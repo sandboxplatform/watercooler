@@ -422,6 +422,10 @@ describe("paintShell", () => {
     for (const [game, name] of [
       ["pong", /pong/i],
       ["pinball", /pinball/i],
+      // An arcade game is a game like the other two: it puts a cabinet in
+      // the same corner, and only the panel it opens knows which game.
+      ["breakout", /arcade/i],
+      ["oak-island", /arcade/i],
     ] as const) {
       it(`${game}: brings the art, a point the scene knows by name, and something solid`, () => {
         const withGame = buildOfficeSpec(source, { game });

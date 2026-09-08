@@ -171,17 +171,25 @@ export function placeSign(
  * sizes, so the caller works out the words and where they go. What comes
  * back is nothing: the door zone is the caller's, since a lobby's door and
  * a campus gate lead to different kinds of place.
+ *
+ * `sign` may be null, for a thing on the map that is not a premises with a
+ * name over the door. The ferry is the one: it is a boat that goes
+ * somewhere, not the business at the other end of the crossing, and the
+ * board along its side used to read APEIRON MEDIA — a company's name on a
+ * public boat, and the third time the island says so, after the sign on the
+ * quay and the name across the top of the yard.
  */
 export function placeBuilding(
   scene: Phaser.Scene,
   building: { frame: Rect; art: string; solid: Rect },
   walls: Phaser.Physics.Arcade.StaticGroup,
-  sign: { text: string; y: number; size: string },
+  sign: { text: string; y: number; size: string } | null,
 ) {
   const { frame, art, solid } = building;
   const foot = frame.y + frame.height;
   scene.add.image(frame.x, frame.y, art).setOrigin(0, 0).setDepth(foot);
   addSolid(walls, solid);
+  if (!sign) return;
   scene.add
     .text(frame.x + frame.width / 2, frame.y + sign.y, sign.text, {
       fontFamily: '"Press Start 2P", monospace',
@@ -224,26 +232,20 @@ export function placeResident(
   return [sprite, tag];
 }
 
-/** The ferry, moored with its bow up, its name on the board along the near side. */
+/**
+ * The ferry, moored with its bow up.
+ *
+ * Unlettered, like the one on the world map: the board along its side read
+ * the company's name, which is not whose boat it is — and standing on the
+ * island it named the place you were already in rather than where it goes.
+ * The quay's own sign says which crossing this is.
+ */
 export function placeBoat(
   scene: Phaser.Scene,
   at: { x: number; y: number },
   walls: Phaser.Physics.Arcade.StaticGroup,
-  name: string,
 ) {
   const foot = at.y + BOAT.height;
   scene.add.image(at.x, at.y, BOAT_KEY).setOrigin(0, 0).setDepth(foot);
-  scene.add
-    .text(at.x + 104, at.y + 136, name.toUpperCase(), {
-      fontFamily: '"Press Start 2P", monospace',
-      fontSize: "8px",
-      color: "#1b1b2a",
-      align: "center",
-      backgroundColor: "#e0b870",
-      padding: { x: 4, y: 3 },
-    })
-    .setOrigin(0.5, 0.5)
-    .setDepth(foot + 1)
-    .setResolution(2);
   addSolid(walls, { x: at.x, y: at.y, width: BOAT.width, height: BOAT.height });
 }
