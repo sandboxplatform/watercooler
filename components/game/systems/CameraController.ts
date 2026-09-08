@@ -71,12 +71,39 @@ export class CameraController {
     this.updateCameraBounds();
     cam.startFollow(this.playerSprite, true, CAMERA_LERP, CAMERA_LERP);
 
-    this.scene.scale.on("resize", () => {
+    // The scale manager belongs to the *game*, not to this scene, so this
+    // listener has to be taken off by hand. The wheel's and the pinch's are,
+    // a few lines down; this one was the odd one out, and left on it is what
+    // freezes the game.
+    //
+    // A scene that has shut down keeps being asked to refit a camera it no
+    // longer has — `CameraManager.shutdown` sets `main` to undefined — so the
+    // handler throws. The throw is the part that matters: the scale manager
+    // checks its parent's size from `PRE_STEP`, inside the animation frame,
+    // and Phaser asks for the next frame *after* the step returns. An
+    // exception on the way through means the next frame is never asked for,
+    // so the loop stops for good: nothing draws and no key works again, while
+    // the HUD carries on as though the game were only thinking.
+    //
+    // It bites wherever a scene ends without the page ending with it — a
+    // lobby's front door onto the world map, a campus gate, and the restart a
+    // lift ride does — and then only once something changes the parent's
+    // size, which is why it comes and goes. Every one of those leaves another
+    // dead handler behind, and the first to be called is enough.
+    const onResize = () => {
+      // Gone with its scene. Shutdown order between Phaser's own camera
+      // teardown and the `shutdown` below is not ours to rely on, and a
+      // refit skipped is worth a great deal more than a loop stopped.
+      const camera = this.scene.cameras.main;
+      if (!camera) return;
       // Zoom first, then bounds: bounds are derived from the zoomed viewport,
       // so recalculating them against the old zoom leaves the room adrift.
-      this.applyFillZoom(this.scene.cameras.main);
+      this.applyFillZoom(camera);
       this.updateCameraBounds();
-    });
+    };
+    this.scene.scale.on("resize", onResize);
+    this.scene.events.once("shutdown", () => this.scene.scale.off("resize", onResize));
+
     this.initWheel(cam);
     this.initPinch(cam);
     this.initCameraDrag(cam);
