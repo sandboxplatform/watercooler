@@ -1184,6 +1184,20 @@ being clear of the buildings, the props and the sea, and reachable from every
 other; the simulation's own tests walk Michael for twelve minutes and assert he
 never crosses a solid.
 
+**A route is planned against a grid, not against the list.** Asking "is this
+cell blocked?" by testing every solid is the obvious way and it is what
+`routeAcross` did: a flood over some nine thousand cells, each reached from up
+to four sides, against a hundred and sixteen buildings, props, signs and
+stretches of sea. Four million rectangle tests, about fifty milliseconds, and
+the server does nothing else while it happens. That was affordable while one
+chicken wandered the map; it stopped being affordable when the residents'
+outdoor haunt became the map too, because seven of them can set off within a
+tick of each other and half a second of blocked event loop is a room that will
+not load and a lift that will not move. The solids are painted into a
+`Uint8Array` once instead, kept against the list they were drawn from — which
+is why `worldSolids()` hands back the same array every time rather than
+rebuilding it, and why `scenery.test.ts` says so.
+
 **The camera.** Every place opens at the zoom that fits the lobby, so people
 and signs are the same size out of doors as in, and the wheel goes further out
 on a map. Two things are not that:

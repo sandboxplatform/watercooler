@@ -33,8 +33,48 @@ export interface Point {
 /** The cell size, matching `allReachable`: about the width of a pair of feet. */
 export const ROUTE_CELL = 24;
 
-const overlaps = (a: Rect, b: Rect) =>
-  a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+/**
+ * Which cells the solids cover, drawn once and kept.
+ *
+ * Asking "is this cell blocked?" by testing every solid is the obvious way
+ * and it is what this did: a walk across the world map is a flood over some
+ * nine thousand cells, each visited from up to four sides, against a hundred
+ * and sixteen buildings, props, signs and stretches of sea. Four million
+ * rectangle tests, about fifty milliseconds, and the server does nothing
+ * else while it happens.
+ *
+ * That was affordable while one chicken wandered the map. It stopped being
+ * affordable when the residents' outdoor haunt became the map too: seven of
+ * them can set off within a tick of each other, and half a second of blocked
+ * event loop is a room that will not load and a lift that will not move.
+ *
+ * Painting the rectangles into the grid instead is the same answer for a
+ * ten-thousandth of the work — each solid touches a handful of cells, and
+ * every question afterwards is one array read. The grid is kept against the
+ * list it was drawn from, which never changes while the server runs.
+ */
+const grids = new WeakMap<readonly Rect[], Map<string, Uint8Array>>();
+
+function blockedCells(solids: readonly Rect[], cols: number, rows: number, cell: number) {
+  let shapes = grids.get(solids);
+  if (!shapes) grids.set(solids, (shapes = new Map()));
+  const shape = `${cols}x${rows}@${cell}`;
+  const kept = shapes.get(shape);
+  if (kept) return kept;
+
+  const grid = new Uint8Array(cols * rows);
+  for (const s of solids) {
+    // The same half-open overlap the per-cell test used: a solid whose edge
+    // lands exactly on a cell boundary does not block the cell beyond it.
+    const x0 = Math.max(0, Math.floor(s.x / cell));
+    const x1 = Math.min(cols - 1, Math.ceil((s.x + s.width) / cell) - 1);
+    const y0 = Math.max(0, Math.floor(s.y / cell));
+    const y1 = Math.min(rows - 1, Math.ceil((s.y + s.height) / cell) - 1);
+    for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) grid[cy * cols + cx] = 1;
+  }
+  shapes.set(shape, grid);
+  return grid;
+}
 
 /**
  * Corners of a walk from `from` to `to`, or null when there is no way through.
@@ -61,10 +101,8 @@ export function routeAcross(
   const goal = cellOf(to);
   const key = (cx: number, cy: number) => cy * cols + cx;
 
-  const blocked = (cx: number, cy: number) => {
-    const box = { x: cx * cell, y: cy * cell, width: cell, height: cell };
-    return solids.some((s) => overlaps(s, box));
-  };
+  const cells = blockedCells(solids, cols, rows, cell);
+  const blocked = (cx: number, cy: number) => cells[cy * cols + cx] === 1;
 
   if (blocked(goal.cx, goal.cy)) return null;
 

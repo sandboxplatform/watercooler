@@ -9,6 +9,7 @@ import {
   propBody,
   propBounds,
   signBody,
+  worldSolids,
   worldWater,
 } from "./scenery";
 import {
@@ -195,5 +196,18 @@ describe("the shore", () => {
             height: dock.height * TILE,
           }),
         ).toBe(false);
+  });
+});
+
+/**
+ * The route planner keeps its grid of blocked cells against this array's
+ * identity, and `clearToStand` asks for the list on every step of a walk
+ * along the row outside. Both of those are only affordable because the list
+ * is the same list every time — it was rebuilt from scratch on each call,
+ * the sea swept again for every question asked of it.
+ */
+describe("what is solid out of doors", () => {
+  it("is worked out once and handed back as it is", () => {
+    expect(worldSolids()).toBe(worldSolids());
   });
 });

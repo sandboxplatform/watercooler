@@ -392,14 +392,28 @@ export function allReachable(
   return targets.every((t) => seen.has(key(Math.floor(t.x / cell), Math.floor(t.y / cell))));
 }
 
-/** Everything solid on the world map: the buildings, the props' feet, the signs and the sea. */
+/**
+ * Everything solid on the world map: the buildings, the props' feet, the
+ * signs and the sea. Worked out once.
+ *
+ * None of it moves — the map is laid out at module load and stays put for
+ * as long as the process runs — and it was being rebuilt from scratch on
+ * every call, a hundred and sixteen rectangles including a sweep of the sea,
+ * about a millisecond and a half each time. `clearToStand` asks for it, and
+ * `placeInRow` asks `clearToStand` for every step along the row, so finding
+ * one resident somewhere to stand cost several milliseconds of rebuilding
+ * the same list. The route planner keeps its grid against this array's
+ * identity, too, so handing back the same one is what lets that be kept at
+ * all.
+ */
+let solids: Rect[] | null = null;
 export function worldSolids(): Rect[] {
-  return [
+  return (solids ??= [
     ...BUILDINGS.map((b) => b.solid),
     ...SCENERY.map(propBody).filter((r): r is Rect => r !== null),
     ...WORLD_SIGNS.map(signBody),
     ...worldWater(),
-  ];
+  ]);
 }
 
 /** The whole picture a prop is drawn from: bottom-centred on its position. */
