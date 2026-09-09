@@ -346,6 +346,32 @@ on every request, so all of this happens server-side and the token never
 reaches the browser. And a token can see every board its account can — so
 generate it from an account that is only on the boards you want readable.
 
+#### The numbers beside it
+
+At the other end of the same wall, five numbers are lit up on a board you
+do not have to press anything to read — how much work is standing in each
+stage of the board next to it:
+
+| On the wall             | Counts                         |
+| ----------------------- | ------------------------------ |
+| BACKLOG · REFINED · WIP | Cards in the first three lists |
+| REVIEW · TESTING        | Cards in the last two          |
+
+The five are one group, so each bar is that stage's share of the work in
+flight and they compare with each other; nothing is a percentage of the
+whole board. A number that has moved since the last read flashes once, and
+they refresh every minute. Walk up and press E for the same five with the
+stage names spelled out, the board they were counted off, and the lists on
+it nobody is counting — Sandbox ERP's Production and RCA / Incidents, which
+sit outside the pipeline.
+
+Which stages, and off which board, is the building's own: `flow` in
+`lib/world/tenants.ts` names the Trello lists in the order they run. A
+building that names none has nothing on that stretch of wall, which is
+Castle Atlantic. A list that has been renamed or archived reads as a dash
+rather than a zero — a stage nobody is looking at and a stage with nothing
+in it are opposite news.
+
 ### The help desk, through the corridor
 
 Sandbox ERP's third floor is a corridor with rooms off both sides, and the

@@ -19,6 +19,9 @@ import {
   readTrelloConfig,
 } from "../trello/client";
 import type { BoardSummary, BoardView } from "../trello/board";
+import { toFlow, type Flow } from "../trello/flow";
+import { tenantInRoom } from "../world/floors";
+import { projectFlow } from "../world/tenants";
 import {
   DESK_CACHE_MS,
   PULSE_CACHE_MS,
@@ -64,6 +67,21 @@ export interface BoardAnswer {
   configured: boolean;
   board?: BoardView;
   boards?: BoardSummary[];
+  error?: string;
+  status?: number;
+  fetchedAt?: number;
+}
+
+export interface FlowAnswer {
+  configured: boolean;
+  /**
+   * Whether this room counts stages at all. False for every room but the
+   * one the numbers hang in, which is not a failure — it is the answer to
+   * "is there a board on this wall", and the panel says so plainly rather
+   * than sitting on an error.
+   */
+  counts?: boolean;
+  flow?: Flow;
   error?: string;
   status?: number;
   fetchedAt?: number;
@@ -151,6 +169,43 @@ export async function readBoard(asked?: string | null): Promise<BoardAnswer> {
     log.error("could not read the board:", (err as Error).message);
     return { configured: true, error: "The board could not be read.", status: 500 };
   }
+}
+
+/**
+ * The stage counts on the wall beside the project board.
+ *
+ * No fetch and no cache of its own: it counts the board `readBoard` already
+ * holds, which is the board hanging next to it on the same wall. So the
+ * numbers and the cards cannot disagree about what is on it, and a floor of
+ * people reading both is still one request to Trello.
+ *
+ * Which board, in order: one named in the environment, then one picked on
+ * the wall, then the building's own. The building's is last because a board
+ * chosen in the office is the board on the wall, and the numbers are a
+ * second reading of *that* — the declaration is what makes the wall work
+ * before anybody has picked anything.
+ */
+export async function readFlow(room: string | null | undefined): Promise<FlowAnswer> {
+  const config = readTrelloConfig();
+  const spec = projectFlow(tenantInRoom(room));
+  if (!spec) return { configured: config !== null, counts: false };
+  if (!config) return { configured: false, counts: true };
+
+  const answer = await readBoard(config.boardId ?? officeBoard() ?? spec.board);
+  if (!answer.board) {
+    return {
+      configured: true,
+      counts: true,
+      error: answer.error ?? "No board is on the wall yet.",
+      status: answer.status,
+    };
+  }
+  return {
+    configured: true,
+    counts: true,
+    flow: toFlow(answer.board, spec.lanes),
+    fetchedAt: answer.fetchedAt,
+  };
 }
 
 /** The support queue. */

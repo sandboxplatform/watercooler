@@ -31,6 +31,7 @@ const POI_NAMES = [
   "Pinball machine",
   "Ping pong table",
   "Project board",
+  "Project flow",
   "Sofa",
   "Support pulse",
   "Water bucket",
@@ -55,6 +56,7 @@ const EVERY_ID: Record<FixtureId, true> = {
   pinball: true,
   arcade: true,
   "project-board": true,
+  "project-flow": true,
   "help-desk": true,
   "support-pulse": true,
 };

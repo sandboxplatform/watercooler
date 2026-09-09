@@ -620,6 +620,8 @@ what makes one is naming the boards that hang on its wall:
 lobby("sandbox-erp", "sandbox-erp", {
   game: "pinball", helpDesk: true,                     // the lobby
   operations: ["trello", "zoho"], projects: 5,         // the floor above
+  flow: { board: "Sandbox ERP",                        // and the numbers on its wall
+          lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"] },
 }),
 lobby("castle-atlantic", "castle-atlantic", { game: "pong", operations: ["trello"], projects: 3 }),
 ```
@@ -640,10 +642,12 @@ Atlantic's 31.
 
 How many is per building: `projects` on the tenant (`lib/world/tenants.ts`),
 counting the rooms besides Operations itself. **That number is in the map's
-file name** — `floor-ops-trello-zoho-6.json` — because the boards alone no
-longer identify a floor: two buildings with the same boards and different
+file name** — `floor-ops-trello-zoho-6-flow.json` — because the boards alone
+no longer identify a floor: two buildings with the same boards and different
 numbers of projects are different floors, and sharing a file would give one
-of them the wrong corridor.
+of them the wrong corridor. The `-flow` on the end is the same argument
+about the stage counts below: they are a point of interest on the wall, so a
+floor with them is not the floor without them.
 
 **The lift is set into the lower wall, directly beneath the door to
 Operations**, not at the end of the corridor. The ride has to land you
@@ -689,12 +693,61 @@ come with the queue rather than being declared: `SUPPORT_PULSE` is not a
 count. What is standing in three statuses, and what was raised and closed
 today.
 
-They are the one fixture whose picture is its numbers, which is why nothing
-delivers art for them. `systems/SupportPulse` draws the plate, the five
+They are one of the two fixtures whose picture is its numbers, which is why
+nothing delivers art for them. `systems/CountBoard` draws the plate, the
 bays and the figures and keeps them current on `PULSE_REFRESH_MS`; the
 registry entry carries no `art` and no `sign`, so `FixtureManager` only
 does the `Press E`. A static image under live text would be a second,
 wrong copy of it.
+
+**The other one is the project board's, and they are the same board drawn
+twice.** `systems/CountBoard` is the plate, the bays, the size the figures
+fall back through, the flash on a number that moved and the teardown that
+keeps a timer from outliving a lift ride; `SupportPulse` and `ProjectFlow`
+are the two adapters over it — what the bays are called, and where the
+numbers come from. It was written once and copied, two hundred lines
+apiece, which is the shape of duplication this codebase has been bitten by
+twice already.
+
+Two things differ between them, and only one is worth remembering:
+
+|            | Support's counts                                        | The project board's                                  |
+| ---------- | ------------------------------------------------------- | ---------------------------------------------------- |
+| Banks      | Two, with a line between: standing, and today's traffic | One, wrapped over two rows — five stages of one flow |
+| Comes with | The `zoho` board, wherever the queue hangs              | `flow` on the tenant, which is per building          |
+
+The bank is the whole of it. Three standing counts and two day counters are
+scaled separately because a standing total against a day's flow is not a
+comparison; Backlog through Testing _are_ each other's comparison, so one
+scale and no dividing line. `divider` on the spec is that decision and
+nothing else.
+
+**Which stages, and off which board, is the building's** — `flow` in
+`lib/world/tenants.ts`, naming the Trello lists in the order they run. Read
+when the numbers are fetched rather than when the map is drawn, so renaming
+a lane is not a `build:map`; the map only carries the five tiles and the
+point of interest. The board is a **fallback**: `TRELLO_BOARD_ID` wins, then
+whatever was picked on the wall, then the building's own — so the numbers
+always count the board hanging beside them, and the declaration is what
+makes the wall work before anybody has picked anything.
+
+The arithmetic is `lib/trello/flow.ts`, pure, over the board `readBoard`
+already holds — no second fetch, so a floor of people reading both is still
+one request. Two things it is careful about, both of which look like
+nothing:
+
+- **A missing lane is not an empty one.** A list that has been renamed or
+  archived reads as a dash rather than a zero, is left out of the total the
+  bars are a share of, and says so in the panel. A lane nobody is looking
+  at and a lane with nothing in it are opposite news.
+- **The board's other lists are named** in the panel — Sandbox ERP's
+  Production and RCA / Incidents — because a wall counting five of seven
+  lists should say which two it is not counting.
+
+`laneShort` is what the wall letters: a bay is eighty pixels and a letter
+eight of them, so "In Progress" is WIP, the same word the support board
+next door uses for the same thing. Anything unlisted is its own name in
+capitals, dropped a size if it does not fit.
 
 The arithmetic is `lib/zoho/pulse.ts`, pure, and the sweeps are
 `fetchPulse` in `lib/zoho/client.ts`. Three sweeps rather than one page,
@@ -879,12 +932,12 @@ will overwrite anything you change by hand.
 **Every per-building map comes off `TENANTS`**, so adding a building is a
 line there and a `pnpm build:map`:
 
-| Map                      | Written for                                  | From                                 |
-| ------------------------ | -------------------------------------------- | ------------------------------------ |
-| `lobby-<slug>.json`      | A lobby with anything in it                  | `furnishedLobby` + `lobbyFurnishing` |
-| `lobby.json`             | Every lobby with nothing in it, between them | —                                    |
-| `room-<slug>.json`       | Each store, warehouse and garage             | `kind`                               |
-| `floor-ops-<boards>-<n>` | One per set of boards and number of projects | `operations` + `projects`            |
+| Map                             | Written for                                                                  | From                                 |
+| ------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------ |
+| `lobby-<slug>.json`             | A lobby with anything in it                                                  | `furnishedLobby` + `lobbyFurnishing` |
+| `lobby.json`                    | Every lobby with nothing in it, between them                                 | —                                    |
+| `room-<slug>.json`              | Each store, warehouse and garage                                             | `kind`                               |
+| `floor-ops-<boards>-<n>[-flow]` | One per set of boards, number of projects, and whether the stage counts hang | `operations` + `projects` + `flow`   |
 
 The lobbies were the last thing here still hand-listed, each hand-wired in
 the build script with its own `{ game, helpDesk }` while `mapFileFor`
@@ -943,7 +996,8 @@ sign should say BREAKOUT, and nothing but looking at it would tell you.
 ### Fixtures
 
 The things in a room you walk up to and press E at — the boards, the games,
-the support queue. One entry each in `lib/fixtures.ts`: which points of
+the support queue, the two sets of counts. One entry each in
+`lib/fixtures.ts`: which points of
 interest on the map are it, the art that stands on them, the sign above, how
 close you have to be, what the prompt says, the `?<param>=1` that opens it
 from anywhere, and the pair of events that open and close its panel.
@@ -1072,6 +1126,7 @@ lib/
   pixel/ characters/               sheet validation, PNG codec, palettes, recolouring
   voice/                           WebRTC voice, one conversation server-wide
   trello/ zoho/                    the two boards on an Operations floor, read-only
+                                   (each with the counts drawn beside it: flow.ts, pulse.ts)
   mettara/ mcp/                    Mettara client + signed webhook; MCP servers
 public/maps|tilesets|sprites|characters|audio|ui
 scripts/                build-map, seed-erp, sprite and world-art generators

@@ -28,9 +28,11 @@ import {
   furnishedLobby,
   hasFloors,
   hasOperationsFloor,
+  hasProjectFlow,
   lobbyFurnishing,
   operationsBoards,
   operationsRoomCount,
+  projectFlow,
 } from "./tenants";
 import { roomFromLocation } from "../rooms";
 import type { AccessIdentity } from "../identity";
@@ -275,9 +277,27 @@ describe("the Operations floor", () => {
   it("draws the floor the boards and the room count make", () => {
     const erpFile = mapFileFor({ tenant: erp, floor: OPERATIONS_FLOOR });
     const castleFile = mapFileFor({ tenant: castle, floor: OPERATIONS_FLOOR });
-    expect(erpFile).toBe(`/maps/floor-ops-trello-zoho-${operationsRoomCount(erp)}.json`);
+    // Sandbox ERP counts its board's stages, which is a point of interest on
+    // the wall and so part of the floor's shape.
+    expect(erpFile).toBe(`/maps/floor-ops-trello-zoho-${operationsRoomCount(erp)}-flow.json`);
     expect(castleFile).toBe(`/maps/floor-ops-trello-${operationsRoomCount(castle)}.json`);
     expect(erpFile).not.toBe(castleFile);
+  });
+
+  /**
+   * The stage counts hang on the wall, so a floor with them is not the floor
+   * without them: sharing a file would give one building a board nobody can
+   * read, or the other a plate with nothing behind it.
+   */
+  it("draws a different floor for a building that counts its stages", () => {
+    expect(hasProjectFlow(erp)).toBe(true);
+    expect(hasProjectFlow(castle)).toBe(false);
+    expect(operationsMapFile(["trello"], 4, true)).not.toBe(operationsMapFile(["trello"], 4));
+    // Which stages is read when the numbers are fetched, not when the map is
+    // drawn — so the lanes a building names are none of the file name's
+    // business.
+    expect(projectFlow(erp)?.lanes.length).toBe(5);
+    expect(projectFlow(castle)).toBeNull();
   });
 
   /**

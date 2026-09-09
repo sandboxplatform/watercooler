@@ -26,6 +26,7 @@ import AchievementToast from "./AchievementToast";
 import Whiteboard from "./Whiteboard";
 import Pinball from "./Pinball";
 import ProjectBoard from "./ProjectBoard";
+import ProjectFlow from "./ProjectFlow";
 import HelpDesk from "./HelpDesk";
 import SupportPulse from "./SupportPulse";
 import Arcade from "./Arcade";
@@ -162,6 +163,7 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
       <Whiteboard />
       <Pinball />
       <ProjectBoard />
+      <ProjectFlow />
       <HelpDesk />
       <SupportPulse />
       <Arcade />

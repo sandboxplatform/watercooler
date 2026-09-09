@@ -8,18 +8,22 @@ import {
   OPS_HEIGHT,
   OPS_ROOM_COUNT,
   type OpsRoom,
+  opsProjectFlow,
   opsRooms,
   opsSupportRoom,
   opsSupportSign,
   opsWhiteboardRoom,
   opsWidth,
   PLAYER_START,
+  PROJECT_BOARD,
+  PROJECT_FLOW,
   SUPPORT_PULSE,
   WIDTH,
 } from "../floor";
 import { deriveCollisions, generateMap, paintShell, solidRuns, wallCollisions } from "../generate";
 import { STANDABLE } from "../office";
 import type { SourceMap } from "../harvest";
+import type { RoomSpec } from "../spec";
 import { DESK_SLOTS, deskBox, standingSpot } from "../../world/desks";
 
 const source = JSON.parse(
@@ -277,6 +281,42 @@ describe("an Operations floor", () => {
     it("runs the counts to Support's right-hand corner", () => {
       const counts = named("Support pulse").tx + Math.ceil(SUPPORT_PULSE.region.sw / 2);
       expect(counts).toBe(support.x + 14);
+    });
+  });
+
+  /**
+   * The stage counts: the same arrangement one room along, and only where
+   * the building asked for them.
+   */
+  describe("counting the project board's stages", () => {
+    const withFlow = buildFloorSpec(source, { boards: ["trello", "zoho"], rooms: 6, flow: true });
+    const without = buildFloorSpec(source, { boards: ["trello", "zoho"], rooms: 6 });
+    const [operations] = opsRooms(6);
+    const named = (spec: RoomSpec, name: string) => spec.pois.find((p) => p.name === name);
+
+    it("hangs them in Operations, beside the board they count", () => {
+      const flow = named(withFlow, "Project flow")!;
+      expect(flow.ty).toBe(operations.wallRow + 2);
+      expect(flow.tx).toBeGreaterThan(named(withFlow, "Project board")!.tx);
+      // And where the scene draws its picture is the footprint the map made
+      // solid, which is the only way the two agree.
+      const box = opsProjectFlow(6);
+      expect(box.tx).toBe(operations.x + 14 - PROJECT_FLOW.region.sw);
+      expect(flow.tx).toBe(box.tx + Math.floor(PROJECT_FLOW.region.sw / 2));
+    });
+
+    it("runs them to the room's right-hand corner, clear of the board", () => {
+      const flow = named(withFlow, "Project flow")!;
+      const board = named(withFlow, "Project board")!;
+      const flowLeft = flow.tx - Math.floor(PROJECT_FLOW.region.sw / 2);
+      const boardRight = board.tx + Math.ceil(PROJECT_BOARD.region.sw / 2);
+      expect(flow.tx + Math.ceil(PROJECT_FLOW.region.sw / 2)).toBe(operations.x + 14);
+      expect(flowLeft).toBeGreaterThanOrEqual(boardRight);
+    });
+
+    it("leaves that wall bare in a building that counts none", () => {
+      expect(named(without, "Project flow")).toBeUndefined();
+      expect(named(without, "Project board")).toBeDefined();
     });
   });
 });

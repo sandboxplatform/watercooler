@@ -53,6 +53,7 @@ export type FixtureId =
   | "pinball"
   | "arcade"
   | "project-board"
+  | "project-flow"
   | "help-desk"
   | "support-pulse";
 
@@ -208,6 +209,23 @@ export const FIXTURES: readonly FixtureSpec[] = [
     // so the picture sits half a tile above it.
     art: { key: "project-board", file: "/sprites/project_board_144x96.png", lift: 24 },
     sign: { label: "PROJECT BOARD" },
+  },
+  {
+    // The stage counts beside the project board. Anchored like the help
+    // desk's: it is one thing in one room, and a loose match is how a
+    // picture ends up drawn over another one.
+    id: "project-flow",
+    match: /^project flow$/i,
+    opens: "open-project-flow",
+    closes: "project-flow-closed",
+    param: "flow",
+    prompt: "Press E for the detail",
+    radius: BOSS_INTERACT_DISTANCE,
+    promptLift: 8,
+    // No art and no sign, for the same reason the support counts have
+    // neither: this is a fixture whose picture is its numbers, so
+    // `systems/ProjectFlow` draws the plate and letters its own headings.
+    // A static image here would be a second, wrong copy of it underneath.
   },
   {
     id: "help-desk",

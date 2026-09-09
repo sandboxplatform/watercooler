@@ -25,6 +25,7 @@ import {
   furnishedLobby,
   hasFloors,
   hasOperationsFloor,
+  hasProjectFlow,
   operationsBoards,
   operationsRoomCount,
   tenantFor,
@@ -71,6 +72,20 @@ export function floorUrl(tenant: Tenant, floor: Floor, via?: "elevator" | "door"
 /** The room a floor keeps its people in. */
 export function roomForFloor(tenant: Tenant, floor: Floor): string {
   return floor.kind === "lobby" ? tenant.slug : floorRoomSlug(tenant.slug, floor.level);
+}
+
+/**
+ * The building a room slug belongs to, floor or lobby.
+ *
+ * The other direction from `roomForFloor`, for the two sides that hold a
+ * room rather than an address: a panel knows the room it is mounted in, and
+ * a route is told one. Null for the world map, a campus, the default room
+ * and anything that is not a building's.
+ */
+export function tenantInRoom(room: string | null | undefined): Tenant | null {
+  if (!room) return null;
+  const floor = parseFloorRoomSlug(room);
+  return tenantFor(floor ? floor.slug : room);
 }
 
 export function sameFloor(a: Floor, b: Floor): boolean {
@@ -169,9 +184,14 @@ export function elevatorStops(address: Address, occupancy: Occupancy): ElevatorS
  * Here rather than in the generator so the two cannot drift: the script
  * writes the files this names, and the scene asks for them by the same
  * rule.
+ *
+ * `flow` is whether the counts hang beside the project board, and it is in
+ * the name for the same reason the room count is: it is a point of interest
+ * on the wall, so two buildings that differ only in that are different
+ * floors and sharing a file would give one of them a board nobody can read.
  */
-export function operationsMapFile(boards: readonly string[], rooms: number): string {
-  return `/maps/floor-ops-${[...boards].join("-")}-${rooms}.json`;
+export function operationsMapFile(boards: readonly string[], rooms: number, flow = false): string {
+  return `/maps/floor-ops-${[...boards].join("-")}-${rooms}${flow ? "-flow" : ""}.json`;
 }
 
 export function mapFileFor(address: Address | null): string {
@@ -180,7 +200,11 @@ export function mapFileFor(address: Address | null): string {
     if (address.floor.level !== 3) return "/maps/floor.json";
     // Named by what hangs on the wall rather than by the building, so two
     // buildings running off the same boards share one map.
-    return operationsMapFile(operationsBoards(address.tenant), operationsRoomCount(address.tenant));
+    return operationsMapFile(
+      operationsBoards(address.tenant),
+      operationsRoomCount(address.tenant),
+      hasProjectFlow(address.tenant),
+    );
   }
   if (!hasFloors(address.tenant)) return `/maps/room-${address.tenant.slug}.json`;
   // Furnished lobbies are particular to their building; the empty ones all

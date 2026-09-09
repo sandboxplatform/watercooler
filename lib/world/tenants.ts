@@ -111,6 +111,23 @@ export interface Tenant {
    * corridor and nothing else.
    */
   projects?: number;
+  /**
+   * The stages counted on the wall beside the project board, where a
+   * building keeps them.
+   *
+   * A second way of reading the board next to it — how much work is
+   * standing in each stage — so it hangs in the same room and comes off the
+   * same board. Declared rather than derived, and per building, because the
+   * lists are the board's own and no two boards agree about them: Sandbox
+   * ERP runs Backlog through Testing, and a building that names none has
+   * nothing on that stretch of wall.
+   *
+   * `board` is the Trello board to count, by name as somebody would say it
+   * out loud. It is a fallback rather than an override: a board configured
+   * in the environment or picked on the wall wins, so the numbers always
+   * count the board hanging beside them.
+   */
+  flow?: { board: string; lanes: readonly string[] };
 }
 
 const org = (slug: string) => organisationFor(slug)!;
@@ -130,6 +147,12 @@ export const TENANTS: readonly Tenant[] = [
     helpDesk: true,
     operations: ["trello", "zoho"],
     projects: 5,
+    // The stages of its development board, in the order they run. On the
+    // wall beside the board itself, in the room the board hangs in.
+    flow: {
+      board: "Sandbox ERP",
+      lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"],
+    },
   }),
   lobby("chester-warehouse", "chester", { location: "Warehouse", kind: "warehouse" }),
   lobby("chester-store", "chester", { location: "Store", kind: "store" }),
@@ -264,6 +287,26 @@ export function operationsRoomCount(tenant: Tenant | null | undefined): number {
 /** Whether a building has an Operations floor above its agents' floor. */
 export function hasOperationsFloor(tenant: Tenant | null | undefined): boolean {
   return operationsBoards(tenant).length > 0;
+}
+
+/**
+ * The stages counted beside a building's project board, if it counts any.
+ *
+ * Null where the building has no Operations floor, names no lanes, or names
+ * an empty list of them — all three are the same answer, which is that
+ * stretch of wall being bare. One accessor, so the map that hangs the plate
+ * and the server that fills it in cannot disagree about whether it is
+ * there.
+ */
+export function projectFlow(tenant: Tenant | null | undefined): Tenant["flow"] | null {
+  if (!hasOperationsFloor(tenant)) return null;
+  const flow = tenant?.flow;
+  return flow && flow.lanes.length > 0 ? flow : null;
+}
+
+/** Whether the numbers hang on a building's Operations wall. */
+export function hasProjectFlow(tenant: Tenant | null | undefined): boolean {
+  return projectFlow(tenant) !== null;
 }
 
 /** The store an organisation is entered through, if it is a store business. */

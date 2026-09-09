@@ -96,6 +96,34 @@ export const SUPPORT_PULSE = {
   poi: { name: "Support pulse", tx: 2, ty: 2, facing: "up" } satisfies PoiSpec,
 };
 
+/**
+ * The five stage counts, at the other end of the Operations room's wall
+ * from the project board they count.
+ *
+ * The same plate as Support's — five tiles by two, its picture drawn by the
+ * scene and its numbers kept current — because it is the same kind of
+ * thing: a board whose picture is its numbers. What the map carries is the
+ * footprint that makes it solid and the point of interest to read it from.
+ *
+ * Not a `BoardKind` either, and for the same reason the support counts are
+ * not: it is a second way of looking at the project board, so it comes with
+ * a building declaring the stages it runs (`flow` in `lib/world/tenants.ts`)
+ * rather than being a board of its own.
+ */
+export const PROJECT_FLOW = {
+  region: {
+    label: "project flow",
+    sx: 0,
+    sy: 0,
+    sw: 5,
+    sh: 2,
+    dx: 0,
+    dy: 1,
+    layers: [],
+  } satisfies Region,
+  poi: { name: "Project flow", tx: 2, ty: 2, facing: "up" } satisfies PoiSpec,
+};
+
 /** Where each board hangs, and the point of interest to read it from. */
 const BOARDS: Record<BoardKind, { region: Region; poi: PoiSpec }> = {
   trello: PROJECT_BOARD,
@@ -211,6 +239,20 @@ const SUPPORT_WALL = {
 } as const;
 
 /**
+ * Where each thing hangs along the Operations room's wall.
+ *
+ * The same two ends as Support's: the board on the left, where it always
+ * hung, and the counts running to the right-hand corner — so the two rooms
+ * read alike from the corridor, the work on the left and the numbers on the
+ * right. Four clear tiles between them, which is the gap that keeps the one
+ * from reading as a caption on the other.
+ */
+const OPS_WALL = {
+  board: 2,
+  flow: ROOM_COLS - PROJECT_FLOW.region.sw,
+} as const;
+
+/**
  * Where the whiteboard hangs on whichever wall it has: the middle of it.
  *
  * It is the one thing in its room, so the middle is where it belongs —
@@ -303,6 +345,25 @@ export function opsSupportPulse(rooms: number) {
 }
 
 /**
+ * Where the five stage counts hang, in tiles, for the scene that draws
+ * them.
+ *
+ * Off the first room — Operations, the one the project board hangs in —
+ * and off the same layout the map is generated from, so the picture the
+ * scene draws lands on the footprint the map made solid. The same
+ * arrangement as `opsSupportPulse`, one room along.
+ */
+export function opsProjectFlow(rooms: number) {
+  const [operations] = opsRooms(rooms);
+  return {
+    tx: operations.x + OPS_WALL.flow,
+    ty: operations.wallRow + PROJECT_FLOW.region.dy,
+    tw: PROJECT_FLOW.region.sw,
+    th: PROJECT_FLOW.region.sh,
+  } as const;
+}
+
+/**
  * Doc's post in Support, and the floor he paces at it.
  *
  * A band across the middle of the room rather than a spot against a wall:
@@ -380,6 +441,16 @@ export interface FloorOptions {
    * walk and nothing else.
    */
   rooms?: number;
+  /**
+   * Whether the five stage counts hang beside the project board.
+   *
+   * Only whether, not which: the stages a building runs are named in
+   * `lib/world/tenants.ts` and read at the moment the numbers are fetched,
+   * so renaming one is not a map to regenerate. What the map carries is a
+   * footprint and a point of interest, and those are the same five tiles
+   * whatever the stages are called.
+   */
+  flow?: boolean;
 }
 
 export function buildFloorSpec(source: SourceMap, options: FloorOptions = {}): RoomSpec {
@@ -387,7 +458,12 @@ export function buildFloorSpec(source: SourceMap, options: FloorOptions = {}): R
   // Naming boards is what makes a floor an Operations floor, and an
   // Operations floor is the one with rooms off a hallway.
   if (kinds.length)
-    return operationsSpec(source, kinds, Math.max(1, options.rooms ?? OPS_ROOM_COUNT));
+    return operationsSpec(
+      source,
+      kinds,
+      Math.max(1, options.rooms ?? OPS_ROOM_COUNT),
+      options.flow ?? false,
+    );
 
   const boards = kinds.map((kind) => BOARDS[kind]);
   const picked = harvest(source, REGIONS);
@@ -418,6 +494,7 @@ function operationsSpec(
   source: SourceMap,
   kinds: readonly BoardKind[],
   roomCount: number,
+  flow: boolean,
 ): RoomSpec {
   const rooms = opsRooms(roomCount);
   const width = opsWidth(roomCount);
@@ -457,7 +534,11 @@ function operationsSpec(
   const queue = kinds.includes(SUPPORT_BOARD) ? BOARDS[SUPPORT_BOARD] : null;
   const hung = kinds
     .filter((kind) => kind !== SUPPORT_BOARD)
-    .map((kind, i) => hang(BOARDS[kind], first, 2 + i * (BOARDS[kind].region.sw + 1)));
+    .map((kind, i) => hang(BOARDS[kind], first, OPS_WALL.board + i * (BOARDS[kind].region.sw + 1)));
+  // The stage counts, at the right-hand end of the same wall — a second way
+  // of reading the board on the left of it, so the same room and the same
+  // arrangement Support's queue and counts have.
+  if (flow) hung.push(hang(PROJECT_FLOW, first, OPS_WALL.flow));
 
   /**
    * The whiteboard goes in the empty room next door, where there is a queue

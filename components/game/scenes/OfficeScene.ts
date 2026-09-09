@@ -29,12 +29,20 @@ import { UNKNOWN_IDENTITY, type AccessIdentity } from "@/lib/identity";
 import { ArrivalWalk } from "@/lib/arrival";
 import { MAX_DESKS, deskBox, deskOrigin } from "@/lib/world/desks";
 import { HELP_COUNTER, TILE } from "@/lib/map/office";
-import { SUPPORT_BOARD, opsSign, opsSupportPulse, opsSupportSign } from "@/lib/map/floor";
+import {
+  SUPPORT_BOARD,
+  opsProjectFlow,
+  opsSign,
+  opsSupportPulse,
+  opsSupportSign,
+} from "@/lib/map/floor";
 import { SupportPulse } from "../systems/SupportPulse";
+import { ProjectFlow } from "../systems/ProjectFlow";
 import { legible } from "../systems/legible";
 import {
   hasCampus,
   hasFloors,
+  hasProjectFlow,
   operationsBoards,
   operationsRoomCount,
   tenantFor,
@@ -349,6 +357,7 @@ export class OfficeScene extends Phaser.Scene {
     if (address) this.addWallSign(address);
     if (address) this.addSupportSign(address);
     const stopPulse = address ? this.addSupportPulse(address) : null;
+    const stopFlow = address ? this.addProjectFlow(address) : null;
 
     this.input.keyboard?.disableGlobalCapture();
     this.initTapToWalk();
@@ -460,6 +469,7 @@ export class OfficeScene extends Phaser.Scene {
     });
     this.cleanupPresence = () => {
       stopPulse?.();
+      stopFlow?.();
       unsubBadge();
       unsubSprite();
       unsubDoor();
@@ -694,6 +704,21 @@ export class OfficeScene extends Phaser.Scene {
     if (!ops || !operationsBoards(address.tenant).includes(SUPPORT_BOARD)) return null;
     const board = new SupportPulse(this);
     return board.place(opsSupportPulse(operationsRoomCount(address.tenant)), TILE);
+  }
+
+  /**
+   * The five stage counts, at the other end of the project board's wall.
+   *
+   * Only where the building names the stages it runs, which is what put the
+   * footprint in the map: the same condition, so the picture and the point
+   * of interest are either both there or neither is. Hands back the board's
+   * own teardown, since it keeps a timer.
+   */
+  private addProjectFlow(address: Address): (() => void) | null {
+    const ops = address.floor.kind === "floor" && address.floor.level === 3;
+    if (!ops || !hasProjectFlow(address.tenant)) return null;
+    const board = new ProjectFlow(this);
+    return board.place(opsProjectFlow(operationsRoomCount(address.tenant)), TILE);
   }
 
   private addWallSign(address: Address) {
