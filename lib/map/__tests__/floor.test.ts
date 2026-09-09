@@ -222,6 +222,66 @@ describe("an Operations floor", () => {
   });
 
   /**
+   * And along a rank, without the corridor: neighbouring rooms share a wall
+   * and there is a doorway through it, so crossing the floor is not a walk
+   * back out to the hallway and along it. Six rooms, because with the pair
+   * above there are no neighbours to connect.
+   *
+   * The corridor's own rows are taken out of the flood, or it would pass
+   * whether or not the shared walls have a gap in them.
+   */
+  it("lets you walk from one room into the next without the corridor", () => {
+    const six = buildFloorSpec(source, { boards: ["trello", "zoho"], rooms: 6 });
+    const between = (six.partitions ?? []).filter((p) => p.orientation === "vertical");
+    expect(between).toHaveLength(4);
+    for (const wall of between) expect(wall.doorways?.length).toBeGreaterThan(0);
+
+    const width = six.width;
+    const layer = generateMap(six, []).layers.find((x) => x.name === "floor")!;
+    if (layer.type !== "tilelayer") throw new Error("no floor layer");
+    const solid = deriveCollisions(six).concat(wallCollisions(six));
+    const t = six.tileSize;
+    const rooms = opsRooms(6);
+    const [upper] = (six.partitions ?? []).filter((p) => p.orientation === "horizontal");
+    const corridor = { from: upper.at, to: rooms.find((r) => r.rank === "lower")!.y };
+    const walkable = (x: number, y: number) =>
+      y < corridor.from &&
+      STANDABLE.includes(layer.data[y * width + x]) &&
+      !solid.some(
+        (r) => x * t >= r.x && x * t < r.x + r.width && y * t >= r.y && y * t < r.y + r.height,
+      );
+
+    const [start] = rooms;
+    const seen = new Set<number>();
+    const queue = [[start.x + 3, start.y + 2] as const];
+    seen.add(queue[0][1] * width + queue[0][0]);
+    while (queue.length) {
+      const [x, y] = queue.pop()!;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= six.height) continue;
+        const key = ny * width + nx;
+        if (seen.has(key) || !walkable(nx, ny)) continue;
+        seen.add(key);
+        queue.push([nx, ny]);
+      }
+    }
+
+    for (const [i, room] of rooms.entries()) {
+      if (room.rank !== "upper") continue;
+      const x = room.x + 3;
+      const y = room.y + 2;
+      expect(seen.has(y * width + x), `room ${i} from Operations, along the rank`).toBe(true);
+    }
+  });
+
+  /**
    * A board hangs in the room it is about, and no room carries the lot.
    *
    * Six rooms rather than the pair above, because that is the shape the

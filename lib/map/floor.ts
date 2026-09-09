@@ -217,6 +217,23 @@ const LOWER_TOP = LOWER_WALL + WALL_ROWS;
 export const OPS_HEIGHT = LOWER_TOP + ROOM_ROWS + 1;
 
 /**
+ * The doorway through the wall between two rooms in the same rank: two
+ * tiles, halfway down it.
+ *
+ * A room with one door is a room you leave the way you came in, so getting
+ * from one project's room to the next door's meant walking back out to the
+ * corridor and along it. Neighbours already share a wall, so the short way
+ * is through it. Two tiles, the same as the doors off the corridor, and the
+ * middle of the wall rather than an end — where it reads as the way between
+ * two rooms rather than as a gap somebody forgot to close.
+ */
+const BETWEEN_ROOMS_ROWS = 2;
+const BETWEEN_ROOMS = {
+  rows: BETWEEN_ROOMS_ROWS,
+  at: Math.floor((ROOM_ROWS - BETWEEN_ROOMS_ROWS) / 2),
+} as const;
+
+/**
  * Where each thing hangs along Support's wall, in tiles from its left edge.
  *
  * Fourteen tiles of wall and three things wanting some of it, so the layout
@@ -593,16 +610,20 @@ function operationsSpec(
     },
   ];
 
-  // A wall between neighbouring rooms in the same rank, closing each bay.
+  // A wall between neighbouring rooms in the same rank, closing each bay —
+  // with a doorway through it, so the rooms along a rank connect to each
+  // other as well as to the corridor.
   for (const rank of ["upper", "lower"] as const) {
     const inRank = rooms.filter((r) => r.rank === rank);
     const top = rank === "upper" ? UPPER_TOP : LOWER_TOP;
     for (const room of inRank.slice(1)) {
+      const gap = top + BETWEEN_ROOMS.at;
       partitions.push({
         orientation: "vertical",
         at: room.x - 1,
         from: top,
         to: top + ROOM_ROWS,
+        doorways: [{ from: gap, to: gap + BETWEEN_ROOMS.rows }],
       });
     }
   }
