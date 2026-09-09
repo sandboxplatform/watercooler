@@ -1,22 +1,5 @@
 import { defineConfig } from "vitest/config";
 import path from "path";
-import os from "os";
-
-/**
- * The room database the suite is allowed to write to.
- *
- * `presence-identity` drives real sockets against a real server, and a real
- * server opens the room store — which, left to itself, is the one in
- * `.data/` that the developer has been playing in. So the suite ran against
- * somebody's actual rooms, achievements and board scribbles, and wrote to
- * them. Nothing had gone wrong with it, but nothing was stopping it either,
- * and a store that now refuses a database newer than the build would turn
- * that into a suite that fails for reasons nothing in the suite explains.
- *
- * One file per run, outside the repository, so a run starts on a clean
- * database and climbs the migrations to reach it.
- */
-const TEST_DB = path.join(os.tmpdir(), `watercooler-test-${process.pid}.sqlite`);
 
 // Git worktrees created by tooling live under .claude/ inside the project.
 // Collecting their tests runs a second copy of the suite whose "@/" imports
@@ -56,9 +39,18 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    // Read at module load by lib/server/room-store.ts, so it has to be here
-    // rather than set inside a test.
-    env: { ROOM_DB_PATH: TEST_DB },
+    /**
+     * Where the suite is allowed to keep a room database.
+     *
+     * A real server opens the room store, and left to itself that is the one
+     * in `.data/` the developer has been playing in — so the suite ran
+     * against somebody's actual rooms, achievements and board scribbles, and
+     * wrote to them. `vitest.setup.ts` points `ROOM_DB_PATH` at the OS temp
+     * directory instead, one file per *test file*: it used to be one per run
+     * and the files that start real servers raced each other for it. The
+     * setup file says the rest.
+     */
+    setupFiles: ["./vitest.setup.ts"],
     exclude: NEVER,
     /**
      * Threads rather than the default forks: same 1,065 tests, about a fifth

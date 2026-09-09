@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import WebSocket from "ws";
 import type { PresencePlayer } from "../../presence-types";
 
@@ -19,14 +17,9 @@ import type { PresencePlayer } from "../../presence-types";
  * a word, and the roster is the only place the answer shows up.
  */
 
-// Both of these are read when the module under test is first loaded, which
-// is why the import below is awaited rather than written at the top.
-//
-// A room database of this file's own, because a real server opens one and
-// two servers in one run share the suite's: this file and
-// `presence-identity` are in different projects, so they run at the same
-// time and SQLite answers the second one "database is locked".
-process.env.ROOM_DB_PATH = join(tmpdir(), `watercooler-lift-${process.pid}.sqlite`);
+// Codes have to exist before the access module reads the environment, which
+// is why the imports below are awaited rather than written at the top. The
+// room database this server opens is `vitest.setup.ts`'s, one per test file.
 process.env.ACCESS_CODE = "test-visitors-share-this-one";
 
 const { attachPresenceSocket } = await import("../presence-socket");

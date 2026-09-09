@@ -1032,10 +1032,19 @@ the ladder sits at version 0 with the tables and — depending on its age —
 some of the columns. From version 2 on, the version is the answer and a
 migration can assume the one before it ran.
 
-The suite has a room database of its own, in the OS temp directory, set by
-`ROOM_DB_PATH` in `vitest.config.ts`: `presence-identity` drives a real
-server, a real server opens the room store, and left alone that is the one
-in `.data/` with somebody's actual rooms and board scribbles in it.
+**Every test file gets a room database of its own**, in the OS temp
+directory, from `ROOM_DB_PATH` in `vitest.setup.ts`. Three files drive real
+servers — `presence-identity`, `voice-reach`, `lift-visibility` — a real
+server opens the room store, and left alone that is the one in `.data/` with
+somebody's actual rooms and board scribbles in it.
+
+It was one database per run, in `vitest.config.ts`'s `env`, and those three
+raced each other for it: SQLite answers the second writer "database is
+locked", which arrived as an uncaught exception and failed about one run in
+three **with every test passing**. So it has to be a setup file rather than
+`env` — `env` is one value for the whole run — and a setup file rather than a
+hook, since the store reads the path when it is first imported and a setup
+file is the last moment before a test file's own imports are evaluated.
 
 ## Layout
 
