@@ -46,7 +46,7 @@ export class Legible {
   /** The scale currently written on them, so a still camera costs nothing. */
   private applied = 0;
 
-  constructor(private scene: Phaser.Scene) {}
+  constructor(private scene: Phaser.Scene | null) {}
 
   /** Keep these readable. Returns nothing: the objects are the caller's. */
   keep(...objects: Scalable[]) {
@@ -99,16 +99,34 @@ export class Legible {
   }
 
   private scale(): number {
-    return legibleScale(this.scene.cameras.main?.zoom ?? 1);
+    return legibleScale(this.scene?.cameras.main?.zoom ?? 1);
   }
 }
 
-/** This scene's registry, made on first use. */
-export function legible(scene: Phaser.Scene): Legible {
-  const found = registries.get(scene);
+/**
+ * This scene's registry, made on first use.
+ *
+ * The scene may be gone, which is why it is allowed to be null rather than
+ * merely typed as though it never is. A destroy path asks for the registry
+ * to `forget` what it is taking down — and it asks the way everything in
+ * this layer does, off the object it is destroying: `legible(sprite.scene)`.
+ * Phaser clears an object's `scene` when it destroys it, and a scene's
+ * shutdown destroys its display list *before* the shutdown handlers that do
+ * our own cleanup run, so by then that is null.
+ *
+ * A loose registry is the right answer to it: nothing is left to keep
+ * legible, and there is nothing to key one to. Writing the null into the map
+ * is what used to happen, and `WeakMap.set` throws on it — which took the
+ * lift down with it. The throw landed inside `Systems.shutdown`, half-way
+ * through swapping a floor's map, so riding a lift with anybody else in the
+ * room left you on the new floor's URL looking at the old floor's room,
+ * invisible, with nothing on screen to say why.
+ */
+export function legible(scene: Phaser.Scene | null | undefined): Legible {
+  const found = scene ? registries.get(scene) : undefined;
   if (found) return found;
-  const made = new Legible(scene);
-  registries.set(scene, made);
+  const made = new Legible(scene ?? null);
+  if (scene) registries.set(scene, made);
   return made;
 }
 
