@@ -676,6 +676,16 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           return;
         }
 
+        if (parsed.type === "boarded") {
+          // Into the lift, or back out of it. Part of presence so everyone
+          // else stops drawing them, and deliberately not remembered by
+          // connection the way the microphone is: a ride to another floor
+          // is a fresh join, and `place` clears it for a re-join to this
+          // one, so nobody can arrive somewhere invisible.
+          room.hub.setHidden(id, parsed.inside === true);
+          return;
+        }
+
         if (parsed.type === "mic") {
           // Who is on voice is part of presence, so the room can count it
           // and a late arrival sees it without a handshake.

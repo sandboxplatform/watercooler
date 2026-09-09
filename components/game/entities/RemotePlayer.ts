@@ -43,6 +43,8 @@ export class RemotePlayer {
   private voiceMark: Phaser.GameObjects.Text | null = null;
   /** Outdoors, where trees and people sort by their feet. */
   private sortByY: boolean;
+  /** In the lift, or through a door: nothing of them is drawn. */
+  private hidden = false;
 
   constructor(scene: Phaser.Scene, player: PresencePlayer, options: { sortByY?: boolean } = {}) {
     this.id = player.id;
@@ -73,6 +75,38 @@ export class RemotePlayer {
     this.bubble = new ChatBubble(scene);
     this.applyAnimation(player.facing, false);
     this.settle();
+    // Somebody already in the lift when we walked in.
+    this.board(player.hidden === true);
+  }
+
+  /**
+   * Out of sight, or back into it — the lift, or a door.
+   *
+   * The name tag goes with the sprite, and it is the half that matters: a
+   * character standing in the lift doorway is odd, but their name floating
+   * on the landing is what actually gives away somebody who is not there.
+   *
+   * They keep their place in the roster and their position goes on
+   * arriving, so stepping back out is a frame rather than a new sprite —
+   * and the animation is stopped rather than left running, for the same
+   * reason `Player.board` stops it: they walked in, so the cycle would
+   * otherwise be resumed mid-stride.
+   */
+  board(inside: boolean) {
+    if (inside === this.hidden) return;
+    this.hidden = inside;
+    this.sprite.setVisible(!inside);
+    this.nameTag.setVisible(!inside);
+    this.voiceMark?.setVisible(!inside);
+    if (inside) {
+      this.sprite.anims.stop();
+      this.bubble.hide();
+      return;
+    }
+    // `applyAnimation` short-circuits on the key it last played, which is
+    // the one that was stopped, so it has to be told to play again.
+    this.currentAnim = "";
+    this.applyAnimation(this.facing, this.moving);
   }
 
   /** Show what this person just said, above their head. */
@@ -84,6 +118,7 @@ export class RemotePlayer {
         .setOrigin(0.5, 1)
         .setDepth(21)
         .setResolution(2);
+      this.voiceMark.setVisible(!this.hidden);
       keepLegible(this.sprite.scene, this.voiceMark);
     } else if (!speaking && this.voiceMark) {
       legible(this.sprite.scene).forget(this.voiceMark);
@@ -93,6 +128,8 @@ export class RemotePlayer {
   }
 
   say(text: string, ttl = 6000) {
+    // Nothing of them is on screen, so there is no head to put it over.
+    if (this.hidden) return;
     this.bubble.show(text, this.sprite.x, this.sprite.y - FRAME_HEIGHT * 0.6, ttl);
   }
 
@@ -109,6 +146,8 @@ export class RemotePlayer {
     this.wear(player.spriteKey);
 
     this.applyAnimation(player.facing, player.moving);
+    // Last, because `wear` and `applyAnimation` both start the cycle up.
+    this.board(player.hidden === true);
   }
 
   update(deltaMs: number) {

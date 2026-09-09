@@ -11,6 +11,7 @@ import { ensureAnims } from "../utils/sheets";
 import { sheetColumns } from "../utils/MapHelpers";
 import { ChatBubble } from "./ChatBubble";
 import { facingFor } from "@/lib/facing";
+import { gameEvents } from "@/lib/events";
 import { dialogOpen, typingInAField } from "@/lib/gamepad/dialogs";
 import { togglesSprint } from "@/lib/sprint";
 import { loadSprinting, saveSprinting } from "@/lib/persistence";
@@ -138,11 +139,21 @@ export class Player {
    * The animation is stopped as well as hidden. A hidden sprite goes on
    * running its cycle, which costs nothing to look at but leaves the walk
    * mid-stride when he steps back out.
+   *
+   * It says so on the bus as well as hiding the sprite, because "there is
+   * nothing to draw" is true of everyone's screen and not only this one:
+   * without it, the person who opened the lift stands in the doorway of
+   * every other browser in the room for as long as they take to choose a
+   * floor. The announcement belongs here rather than at the three call
+   * sites — an entity that touches the bus is unusual in this layer, but a
+   * call site that forgets to is invisible to the person who made it and
+   * plain to everybody else.
    */
   board(inside: boolean) {
     this.sprite.setVisible(!inside);
     if (inside) this.sprite.anims.stop();
     else this.sprite.anims.play(this.animKey("idle"));
+    gameEvents.emit("player-boarded", inside);
   }
 
   /** Show what this player just said, above their own head. */

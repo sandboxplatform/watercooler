@@ -494,6 +494,30 @@ drives real sockets against a real server to hold the rule down.
 The client closes on `pagehide` too, guarded on `persisted` so a hidden tab
 or a backgrounded phone is not taken out of the room for looking away.
 
+**Out of sight is part of presence.** The lift car is a hole in the wall with
+the character drawn in front of it, so stepping in hides them — and that is
+true of everyone's screen, not just their own. `Player.board` hid the local
+sprite and said nothing, so everybody else watched them idle in the doorway,
+name tag and all, for as long as they took to choose a floor. It is a
+`hidden` flag on the roster now, set by a `boarded` message and drawn by
+`RemotePlayer.board`.
+
+Three things about it, and two of them were the mistake:
+
+| Where          | Rule                                                                    |
+| -------------- | ----------------------------------------------------------------------- |
+| `Player.board` | Emits `player-boarded`, so no call site can hide somebody quietly       |
+| `hub.place`    | Clears it: a scene saying where somebody stands is a scene drawing them |
+| `hub.count`    | Unchanged. Out of sight is not out of the room, and the place is held   |
+
+It cannot ride on `player-moved`: a scene stops reporting position while a
+dialog is up, and the lift's buttons are a dialog. And unlike the microphone,
+which stays on through a door, it is **not** remembered per connection — a
+ride is a fresh join, and arriving invisible is the worse bug of the two.
+Both halves are held down by `lib/server/__tests__/lift-visibility.test.ts`,
+over real sockets, because a message type the socket does not recognise is
+dropped without a word.
+
 ### Voice chat
 
 Audio goes browser to browser over WebRTC (`lib/voice/`). The room socket carries

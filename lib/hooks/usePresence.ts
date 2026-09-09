@@ -143,6 +143,15 @@ export function usePresence() {
       sendRoom({ type: "move", ...next });
     });
 
+    // Into the lift, or out through a door: they have gone out of sight,
+    // so tell the room to stop drawing them. Sent every time rather than
+    // only on a change, since it is two messages a ride and the server
+    // clears the flag on a join — a browser that thought it had already
+    // said so would leave somebody drawn in a doorway.
+    const unsubBoarded = gameEvents.on("player-boarded", (inside) => {
+      if (joinedRef.current) sendRoom({ type: "boarded", inside });
+    });
+
     // A new look goes out with a fresh join, so everyone sees it at once
     // rather than on the next walk through a door.
     // The event carries the key: the choice is remembered a moment later.
@@ -152,6 +161,7 @@ export function usePresence() {
 
     return () => {
       unsubOpen();
+      unsubBoarded();
       unsubLook();
       unsubPlace();
       unsubMessage();

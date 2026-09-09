@@ -86,6 +86,14 @@ export interface PresencePlayer {
   resident?: boolean;
   /** Their microphone is on for voice chat. */
   mic?: boolean;
+  /**
+   * They have stepped out of sight — into the lift, or through a door.
+   *
+   * Still in the room and still counted, but there is nothing to draw: the
+   * car is a hole in the wall and they are inside it. Their own browser
+   * already hides them (`Player.board`); this is how everyone else's does.
+   */
+  hidden?: boolean;
 }
 
 // ── Client → server ────────────────────────────────────
@@ -178,6 +186,22 @@ export interface MicMessage {
   on: boolean;
 }
 
+/**
+ * This character stepped into the lift, or back out of it.
+ *
+ * A message of its own rather than a field on `move`, because somebody in
+ * the lift is standing still and the scene stops reporting position while a
+ * dialog is up — there is no frame left to carry it on.
+ *
+ * Unlike `mic` it is deliberately *not* remembered across a room change:
+ * riding to a floor is a fresh join, and arriving invisible is a worse bug
+ * than the one this fixes.
+ */
+export interface BoardedMessage {
+  type: "boarded";
+  inside: boolean;
+}
+
 /** A handshake step on its way to one other player in the room. */
 export interface VoiceRelayMessage {
   type: "voice";
@@ -193,7 +217,8 @@ export type ClientMessage =
   | BoardMessage
   | PongRelayMessage
   | VoiceRelayMessage
-  | MicMessage;
+  | MicMessage
+  | BoardedMessage;
 
 // ── Server → client ────────────────────────────────────
 
@@ -345,7 +370,8 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     type === "board" ||
     type === "pong" ||
     type === "voice" ||
-    type === "mic"
+    type === "mic" ||
+    type === "boarded"
   );
 }
 

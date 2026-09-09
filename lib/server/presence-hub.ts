@@ -22,6 +22,7 @@ interface TrackedPlayer extends PresencePlayer {
   lastSeen: number;
   lastMoveAt: number;
   mic?: boolean;
+  hidden?: boolean;
 }
 
 export interface JoinRequest {
@@ -123,6 +124,9 @@ export class PresenceHub {
     // A new look or name comes with a fresh join too.
     if (at.name) player.name = sanitiseName(at.name);
     if (at.spriteKey) player.spriteKey = at.spriteKey;
+    // A scene saying where somebody stands is a scene drawing them, so
+    // whatever they had stepped into they are out of it.
+    player.hidden = false;
     player.moving = false;
     player.lastSeen = now;
     player.lastMoveAt = now;
@@ -133,6 +137,17 @@ export class PresenceHub {
   setMic(id: string, on: boolean): void {
     const player = this.players.get(id);
     if (player) player.mic = on;
+  }
+
+  /**
+   * They stepped into the lift, or back out of it.
+   *
+   * They stay in the room and keep their place in the count — they have gone
+   * out of sight, not out of the building. Only the drawing of them stops.
+   */
+  setHidden(id: string, hidden: boolean): void {
+    const player = this.players.get(id);
+    if (player) player.hidden = hidden;
   }
 
   leave(id: string): PresencePlayer | null {
@@ -241,5 +256,6 @@ function strip(player: TrackedPlayer): PresencePlayer {
     moving: player.moving,
     ...(player.resident ? { resident: true } : {}),
     ...(player.mic ? { mic: true } : {}),
+    ...(player.hidden ? { hidden: true } : {}),
   };
 }

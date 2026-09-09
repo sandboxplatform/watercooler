@@ -63,6 +63,30 @@ describe("capacity", () => {
     hub.setMic("nobody", true);
   });
 
+  it("says in the roster who has stepped out of sight", () => {
+    join("p0");
+    join("p1");
+    hub.setHidden("p0", true);
+    const roster = hub.snapshot();
+    expect(roster.find((p) => p.id === "p0")?.hidden).toBe(true);
+    expect(roster.find((p) => p.id === "p1")?.hidden).toBeUndefined();
+    // Out of sight is not out of the room: they keep their place.
+    expect(hub.count).toBe(2);
+    hub.setHidden("p0", false);
+    expect(hub.snapshot().find((p) => p.id === "p0")?.hidden).toBeUndefined();
+    hub.setHidden("nobody", true);
+  });
+
+  it("draws them again when a scene says where they stand", () => {
+    // A ride to another floor is a fresh join, but changing a look — or a
+    // scene restarting — re-joins the room we are already in, which lands
+    // as a place. Somebody must not arrive there invisible.
+    join("p0");
+    hub.setHidden("p0", true);
+    hub.place("p0", { x: 10, y: 10, facing: "down" });
+    expect(hub.snapshot()[0].hidden).toBeUndefined();
+  });
+
   it("takes a new look and name along with the place", () => {
     join("p0");
     hub.place("p0", { x: 5, y: 5, facing: "down", spriteKey: "character_coop", name: "  Coop " });

@@ -20,6 +20,16 @@ export interface GameEventMap {
   /** Where this browser's own character is, for the room socket to send on. */
   "player-moved": [position: { x: number; y: number; facing: string; moving: boolean }];
   /**
+   * This browser's own character stepped out of sight, or back into it —
+   * into the lift, or through a door.
+   *
+   * Emitted by `Player.board`, which is the one place that hides the local
+   * sprite, so the room socket can tell everyone else to stop drawing them.
+   * It cannot ride on `player-moved`: a scene stops reporting position
+   * while a dialog is up, and the lift's buttons are a dialog.
+   */
+  "player-boarded": [inside: boolean];
+  /**
    * A scene has put the character somewhere: a lobby, a floor, the world
    * map, a campus. The address bar already says which; this carries where
    * the character stands, so the room socket can join that place there.
