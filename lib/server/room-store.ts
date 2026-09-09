@@ -12,7 +12,7 @@
  * client's model while it is still moving.
  */
 
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { createLogger } from "../logger";
@@ -302,6 +302,25 @@ function asString(value: unknown): string | null {
 export class RoomStore {
   private db: DatabaseSync;
 
+  /**
+   * Compiled statements, kept by their SQL.
+   *
+   * `prepare` parses and plans the statement every time it is called, and
+   * every method here called it afresh — including `ensureRoom`, which runs
+   * ahead of nearly every other one, and `appendMessage`, which runs on every
+   * line anybody says. The SQL is a fixed set of literals (the handful built
+   * from a table name among them, since the tables are a closed list), so it
+   * compiles once and is reused for the life of the process, which is what a
+   * prepared statement is for.
+   */
+  private statements = new Map<string, StatementSync>();
+
+  private stmt(sql: string): StatementSync {
+    let compiled = this.statements.get(sql);
+    if (!compiled) this.statements.set(sql, (compiled = this.db.prepare(sql)));
+    return compiled;
+  }
+
   constructor(path: string) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
@@ -327,10 +346,14 @@ export class RoomStore {
    * rather than a nicety.
    */
   close() {
+    // The compiled statements hold the file too, so they go first.
+    this.statements.clear();
     this.db.close();
   }
 
   private get version(): number {
+    // Straight to the driver: this is read twice per open, before the cache
+    // is worth anything, and migration should not depend on it at all.
     const row = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
     return row.user_version;
   }
@@ -384,38 +407,34 @@ export class RoomStore {
    * building's floor for everyone else to see.
    */
   upsertPerson(person: { id: string; name: string; home: string }) {
-    this.db
-      .prepare(
-        `INSERT INTO people (id, name, home, updated_at) VALUES (?, ?, ?, ?)
+    this.stmt(
+      `INSERT INTO people (id, name, home, updated_at) VALUES (?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET name = excluded.name, home = excluded.home, updated_at = excluded.updated_at`,
-      )
-      .run(person.id, person.name.slice(0, 16), person.home, new Date().toISOString());
+    ).run(person.id, person.name.slice(0, 16), person.home, new Date().toISOString());
   }
 
   /** Everyone who calls a building home, earliest first — desks are handed out in this order. */
   listPeople(home: string): { id: string; name: string }[] {
-    return this.db
-      .prepare("SELECT id, name FROM people WHERE home = ? ORDER BY rowid ASC")
-      .all(home) as unknown as { id: string; name: string }[];
+    return this.stmt("SELECT id, name FROM people WHERE home = ? ORDER BY rowid ASC").all(
+      home,
+    ) as unknown as { id: string; name: string }[];
   }
 
   // ── Settings ──────────────────────────────────────────
 
   /** A server-wide setting chosen from the HUD, kept across restarts. */
   getSetting(key: string): string | null {
-    const row = this.db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
+    const row = this.stmt("SELECT value FROM settings WHERE key = ?").get(key) as
       | { value: string }
       | undefined;
     return row?.value ?? null;
   }
 
   setSetting(key: string, value: string) {
-    this.db
-      .prepare(
-        `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+    this.stmt(
+      `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-      )
-      .run(key, value, new Date().toISOString());
+    ).run(key, value, new Date().toISOString());
   }
 
   // ── Accounts ──────────────────────────────────────────
@@ -428,17 +447,15 @@ export class RoomStore {
   visitAccount(person: SignedIn): Account {
     const email = normaliseEmail(person.email);
     const now = new Date().toISOString();
-    this.db
-      .prepare(
-        `INSERT INTO accounts (email, display_name, image, visits, created_at, updated_at, last_seen_at)
+    this.stmt(
+      `INSERT INTO accounts (email, display_name, image, visits, created_at, updated_at, last_seen_at)
          VALUES (?, ?, ?, 1, ?, ?, ?)
          ON CONFLICT(email) DO UPDATE SET
            display_name = excluded.display_name,
            image = excluded.image,
            visits = visits + 1,
            last_seen_at = excluded.last_seen_at`,
-      )
-      .run(email, person.name, person.image, now, now, now);
+    ).run(email, person.name, person.image, now, now, now);
     return this.getAccount(email)!;
   }
 
@@ -446,9 +463,8 @@ export class RoomStore {
   saveAccountProfile(person: SignedIn, profile: AccountProfile): Account {
     const email = normaliseEmail(person.email);
     const now = new Date().toISOString();
-    this.db
-      .prepare(
-        `INSERT INTO accounts (email, display_name, image, name, home, character_key, character_path, created_at, updated_at, last_seen_at)
+    this.stmt(
+      `INSERT INTO accounts (email, display_name, image, name, home, character_key, character_path, created_at, updated_at, last_seen_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(email) DO UPDATE SET
            name = excluded.name,
@@ -456,19 +472,18 @@ export class RoomStore {
            character_key = excluded.character_key,
            character_path = excluded.character_path,
            updated_at = excluded.updated_at`,
-      )
-      .run(
-        email,
-        person.name,
-        person.image,
-        profile.name,
-        profile.home,
-        profile.character.key,
-        profile.character.path,
-        now,
-        now,
-        now,
-      );
+    ).run(
+      email,
+      person.name,
+      person.image,
+      profile.name,
+      profile.home,
+      profile.character.key,
+      profile.character.path,
+      now,
+      now,
+      now,
+    );
     this.upsertPerson({ id: personIdForEmail(email), name: profile.name, home: profile.home });
     return this.getAccount(email)!;
   }
@@ -478,19 +493,19 @@ export class RoomStore {
     const account = this.getAccount(normaliseEmail(email));
     if (!account) return null;
     const stats = { ...account.stats, [stat]: (account.stats[stat] ?? 0) + by };
-    this.db
-      .prepare("UPDATE accounts SET stats = ?, updated_at = ? WHERE email = ?")
-      .run(JSON.stringify(stats), new Date().toISOString(), account.email);
+    this.stmt("UPDATE accounts SET stats = ?, updated_at = ? WHERE email = ?").run(
+      JSON.stringify(stats),
+      new Date().toISOString(),
+      account.email,
+    );
     return { ...account, stats };
   }
 
   getAccount(email: string): Account | null {
-    const row = this.db
-      .prepare(
-        `SELECT email, display_name, image, name, home, character_key, character_path, visits, stats
+    const row = this.stmt(
+      `SELECT email, display_name, image, name, home, character_key, character_path, visits, stats
          FROM accounts WHERE email = ?`,
-      )
-      .get(normaliseEmail(email)) as AccountRow | undefined;
+    ).get(normaliseEmail(email)) as AccountRow | undefined;
     if (!row) return null;
     const complete = row.name && row.home && row.character_key && row.character_path;
     let stats: Record<string, number> = {};
@@ -525,16 +540,14 @@ export class RoomStore {
    */
   addStroke(room: string, strokeId: string, data: unknown) {
     this.ensureRoom(room);
-    const row = this.db
-      .prepare("SELECT MAX(position) AS edge FROM board_strokes WHERE room = ?")
-      .get(room) as { edge: number | null };
+    const row = this.stmt("SELECT MAX(position) AS edge FROM board_strokes WHERE room = ?").get(
+      room,
+    ) as { edge: number | null };
 
-    this.db
-      .prepare(
-        `INSERT INTO board_strokes (room, stroke_id, position, data) VALUES (?, ?, ?, ?)
+    this.stmt(
+      `INSERT INTO board_strokes (room, stroke_id, position, data) VALUES (?, ?, ?, ?)
          ON CONFLICT (room, stroke_id) DO UPDATE SET data = excluded.data`,
-      )
-      .run(room, strokeId, (row?.edge ?? 0) + 1, JSON.stringify(data));
+    ).run(room, strokeId, (row?.edge ?? 0) + 1, JSON.stringify(data));
 
     this.trimStrokes(room);
   }
@@ -542,26 +555,24 @@ export class RoomStore {
   listStrokes(room: string): unknown[] {
     this.ensureRoom(room);
     return parseRows(
-      this.db
-        .prepare("SELECT data FROM board_strokes WHERE room = ? ORDER BY position")
-        .all(room) as DataRow[],
+      this.stmt("SELECT data FROM board_strokes WHERE room = ? ORDER BY position").all(
+        room,
+      ) as DataRow[],
     );
   }
 
   clearBoard(room: string) {
     this.ensureRoom(room);
-    this.db.prepare("DELETE FROM board_strokes WHERE room = ?").run(room);
+    this.stmt("DELETE FROM board_strokes WHERE room = ?").run(room);
   }
 
   private trimStrokes(room: string) {
-    this.db
-      .prepare(
-        `DELETE FROM board_strokes WHERE room = ? AND stroke_id IN (
+    this.stmt(
+      `DELETE FROM board_strokes WHERE room = ? AND stroke_id IN (
            SELECT stroke_id FROM board_strokes WHERE room = ?
            ORDER BY position DESC LIMIT -1 OFFSET ?
          )`,
-      )
-      .run(room, room, BOARD_STROKE_LIMIT);
+    ).run(room, room, BOARD_STROKE_LIMIT);
   }
 
   // ── Activity log ──────────────────────────────────────
@@ -575,33 +586,29 @@ export class RoomStore {
     entry: { kind: string; actor: string; text: string; detail?: string; at?: string },
   ): ActivityEntry {
     this.ensureRoom(room);
-    const row = this.db
-      .prepare("SELECT MAX(position) AS edge FROM activity WHERE room = ?")
-      .get(room) as { edge: number | null };
+    const row = this.stmt("SELECT MAX(position) AS edge FROM activity WHERE room = ?").get(
+      room,
+    ) as { edge: number | null };
     const position = (row?.edge ?? 0) + 1;
     const at = entry.at ?? new Date().toISOString();
 
-    this.db
-      .prepare(
-        "INSERT INTO activity (room, position, at, kind, actor, text, detail) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      )
-      .run(
-        room,
-        position,
-        at,
-        entry.kind,
-        entry.actor.slice(0, 40),
-        entry.text.slice(0, 400),
-        entry.detail?.slice(0, 200) ?? null,
-      );
+    this.stmt(
+      "INSERT INTO activity (room, position, at, kind, actor, text, detail) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).run(
+      room,
+      position,
+      at,
+      entry.kind,
+      entry.actor.slice(0, 40),
+      entry.text.slice(0, 400),
+      entry.detail?.slice(0, 200) ?? null,
+    );
 
-    this.db
-      .prepare(
-        `DELETE FROM activity WHERE room = ? AND position IN (
+    this.stmt(
+      `DELETE FROM activity WHERE room = ? AND position IN (
            SELECT position FROM activity WHERE room = ? ORDER BY position DESC LIMIT -1 OFFSET ?
          )`,
-      )
-      .run(room, room, ACTIVITY_LIMIT);
+    ).run(room, room, ACTIVITY_LIMIT);
 
     return {
       id: position,
@@ -616,12 +623,10 @@ export class RoomStore {
   /** The log, oldest first, which is how it reads. */
   listActivity(room: string, limit = ACTIVITY_LIMIT): ActivityEntry[] {
     this.ensureRoom(room);
-    const rows = this.db
-      .prepare(
-        `SELECT position, at, kind, actor, text, detail FROM activity
+    const rows = this.stmt(
+      `SELECT position, at, kind, actor, text, detail FROM activity
          WHERE room = ? ORDER BY position DESC LIMIT ?`,
-      )
-      .all(room, limit) as Array<{
+    ).all(room, limit) as Array<{
       position: number;
       at: string;
       kind: string;
@@ -653,9 +658,9 @@ export class RoomStore {
    */
   recordPinballScore(room: string, player: string, score: number): PinballScore[] {
     this.ensureRoom(room);
-    this.db
-      .prepare("INSERT INTO pinball_scores (room, player, score, scored_at) VALUES (?, ?, ?, ?)")
-      .run(room, player.slice(0, 16), Math.max(0, Math.round(score)), new Date().toISOString());
+    this.stmt(
+      "INSERT INTO pinball_scores (room, player, score, scored_at) VALUES (?, ?, ?, ?)",
+    ).run(room, player.slice(0, 16), Math.max(0, Math.round(score)), new Date().toISOString());
 
     return this.topPinballScores(room);
   }
@@ -663,12 +668,10 @@ export class RoomStore {
   /** The high score table: the best games in this room, best first. */
   topPinballScores(room: string, limit = PINBALL_HIGH_SCORES): PinballScore[] {
     this.ensureRoom(room);
-    return this.db
-      .prepare(
-        `SELECT player, score, scored_at FROM pinball_scores
+    return this.stmt(
+      `SELECT player, score, scored_at FROM pinball_scores
          WHERE room = ? ORDER BY score DESC, scored_at ASC LIMIT ?`,
-      )
-      .all(room, limit) as unknown as PinballScore[];
+    ).all(room, limit) as unknown as PinballScore[];
   }
 
   // ── The arcade cabinet ────────────────────────────────
@@ -676,28 +679,24 @@ export class RoomStore {
   /** Like the cauldron's board, one per game in the cabinet. */
   recordArcadeScore(room: string, game: string, player: string, score: number): PinballScore[] {
     this.ensureRoom(room);
-    this.db
-      .prepare(
-        "INSERT INTO arcade_scores (room, game, player, score, scored_at) VALUES (?, ?, ?, ?, ?)",
-      )
-      .run(
-        room,
-        game,
-        player.slice(0, 16),
-        Math.max(0, Math.round(score)),
-        new Date().toISOString(),
-      );
+    this.stmt(
+      "INSERT INTO arcade_scores (room, game, player, score, scored_at) VALUES (?, ?, ?, ?, ?)",
+    ).run(
+      room,
+      game,
+      player.slice(0, 16),
+      Math.max(0, Math.round(score)),
+      new Date().toISOString(),
+    );
     return this.topArcadeScores(room, game);
   }
 
   topArcadeScores(room: string, game: string, limit = PINBALL_HIGH_SCORES): PinballScore[] {
     this.ensureRoom(room);
-    return this.db
-      .prepare(
-        `SELECT player, score, scored_at FROM arcade_scores
+    return this.stmt(
+      `SELECT player, score, scored_at FROM arcade_scores
          WHERE room = ? AND game = ? ORDER BY score DESC, scored_at ASC LIMIT ?`,
-      )
-      .all(room, game, limit) as unknown as PinballScore[];
+    ).all(room, game, limit) as unknown as PinballScore[];
   }
 
   // ── Achievements ──────────────────────────────────────
@@ -714,25 +713,21 @@ export class RoomStore {
     subjectName: string,
   ): boolean {
     this.ensureRoom(room);
-    const result = this.db
-      .prepare(
-        `INSERT OR IGNORE INTO achievements
+    const result = this.stmt(
+      `INSERT OR IGNORE INTO achievements
            (room, subject_type, subject_id, code, subject_name, earned_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(room, subjectType, subjectId, code, subjectName, new Date().toISOString());
+    ).run(room, subjectType, subjectId, code, subjectName, new Date().toISOString());
     return result.changes > 0;
   }
 
   listAchievements(room: string) {
     this.ensureRoom(room);
-    return this.db
-      .prepare(
-        `SELECT subject_type AS subjectType, subject_id AS subjectId, code,
+    return this.stmt(
+      `SELECT subject_type AS subjectType, subject_id AS subjectId, code,
                 subject_name AS subjectName, earned_at AS earnedAt
          FROM achievements WHERE room = ? ORDER BY earned_at`,
-      )
-      .all(room) as Array<{
+    ).all(room) as Array<{
       subjectType: string;
       subjectId: string;
       code: string;
@@ -744,24 +739,22 @@ export class RoomStore {
   /** How many tasks a seat has finished, for "first time" style rules. */
   countCompletedTasksForSeat(room: string, seatId: string): number {
     this.ensureRoom(room);
-    const row = this.db
-      .prepare("SELECT COUNT(*) AS n FROM tasks WHERE room = ? AND seat_id = ? AND status = ?")
-      .get(room, seatId, "completed") as { n: number } | undefined;
+    const row = this.stmt(
+      "SELECT COUNT(*) AS n FROM tasks WHERE room = ? AND seat_id = ? AND status = ?",
+    ).get(room, seatId, "completed") as { n: number } | undefined;
     return row?.n ?? 0;
   }
 
   /** Seats a given person has given work to, and how many seats are staffed. */
   assignmentBreadth(room: string, requesterName: string): { assigned: number; staffed: number } {
     this.ensureRoom(room);
-    const assigned = this.db
-      .prepare(
-        `SELECT COUNT(DISTINCT seat_id) AS n FROM tasks
+    const assigned = this.stmt(
+      `SELECT COUNT(DISTINCT seat_id) AS n FROM tasks
          WHERE room = ? AND requested_by_name = ? AND seat_id IS NOT NULL`,
-      )
-      .get(room, requesterName) as { n: number } | undefined;
+    ).get(room, requesterName) as { n: number } | undefined;
 
     const seats = parseRows(
-      this.db.prepare("SELECT data FROM seats WHERE room = ?").all(room) as DataRow[],
+      this.stmt("SELECT data FROM seats WHERE room = ?").all(room) as DataRow[],
     ) as Array<{ assigned?: boolean }>;
 
     return {
@@ -777,7 +770,7 @@ export class RoomStore {
   addSpend(room: string, usd: number) {
     if (!Number.isFinite(usd) || usd <= 0) return;
     this.ensureRoom(room);
-    this.db.prepare("UPDATE rooms SET spend_usd = spend_usd + ? WHERE slug = ?").run(usd, room);
+    this.stmt("UPDATE rooms SET spend_usd = spend_usd + ? WHERE slug = ?").run(usd, room);
   }
 
   /** True once this room has spent its allowance. */
@@ -787,53 +780,83 @@ export class RoomStore {
 
   getSpend(room: string): number {
     this.ensureRoom(room);
-    const row = this.db.prepare("SELECT spend_usd FROM rooms WHERE slug = ?").get(room) as
+    const row = this.stmt("SELECT spend_usd FROM rooms WHERE slug = ?").get(room) as
       | { spend_usd: number }
       | undefined;
     return row?.spend_usd ?? 0;
   }
 
   ensureRoom(room: string) {
-    this.db
-      .prepare("INSERT OR IGNORE INTO rooms (slug, created_at) VALUES (?, ?)")
-      .run(room, new Date().toISOString());
+    this.stmt("INSERT OR IGNORE INTO rooms (slug, created_at) VALUES (?, ?)").run(
+      room,
+      new Date().toISOString(),
+    );
   }
 
   getSnapshot(room: string): RoomSnapshot {
     this.ensureRoom(room);
 
-    const roomRow = this.db
-      .prepare("SELECT active_session_key FROM rooms WHERE slug = ?")
-      .get(room) as { active_session_key: string | null } | undefined;
+    const roomRow = this.stmt("SELECT active_session_key FROM rooms WHERE slug = ?").get(room) as
+      | { active_session_key: string | null }
+      | undefined;
 
     return {
       tasks: parseRows(
-        this.db
-          .prepare("SELECT data FROM tasks WHERE room = ? ORDER BY position")
-          .all(room) as DataRow[],
+        this.stmt("SELECT data FROM tasks WHERE room = ? ORDER BY position").all(room) as DataRow[],
       ),
       messages: parseRows(
-        this.db
-          .prepare("SELECT data FROM messages WHERE room = ? ORDER BY position")
-          .all(room) as DataRow[],
+        this.stmt("SELECT data FROM messages WHERE room = ? ORDER BY position").all(
+          room,
+        ) as DataRow[],
       ),
       sessions: parseRows(
-        this.db
-          .prepare("SELECT data FROM sessions WHERE room = ? ORDER BY position")
-          .all(room) as DataRow[],
+        this.stmt("SELECT data FROM sessions WHERE room = ? ORDER BY position").all(
+          room,
+        ) as DataRow[],
       ),
       seats: parseRows(
-        this.db
-          .prepare("SELECT data FROM seats WHERE room = ? ORDER BY seat_id")
-          .all(room) as DataRow[],
+        this.stmt("SELECT data FROM seats WHERE room = ? ORDER BY seat_id").all(room) as DataRow[],
       ),
       activeSessionKey: roomRow?.active_session_key ?? null,
     };
   }
 
+  /**
+   * The room's active session, on its own.
+   *
+   * The one field of a snapshot that anything asks for by itself, and
+   * `getSnapshot` is an expensive way to get it: every task, message,
+   * session and seat in the room, read off disk and JSON-parsed, to return
+   * one string.
+   */
+  activeSessionKey(room: string): string | null {
+    this.ensureRoom(room);
+    const row = this.stmt("SELECT active_session_key FROM rooms WHERE slug = ?").get(room) as
+      | { active_session_key: string | null }
+      | undefined;
+    return row?.active_session_key ?? null;
+  }
+
+  /**
+   * Whether anybody has ever spoken in this room, for the "first thing said"
+   * badge.
+   *
+   * `author_type` is the message's `role`, written by `appendMessage`, so
+   * this is a one-row existence check against an indexed column rather than
+   * parsing the room's whole history to look at a single field of it. It is
+   * asked on every line anybody says.
+   */
+  hasSpoken(room: string): boolean {
+    this.ensureRoom(room);
+    const row = this.stmt(
+      "SELECT 1 AS found FROM messages WHERE room = ? AND author_type = 'player' LIMIT 1",
+    ).get(room) as { found: number } | undefined;
+    return row !== undefined;
+  }
+
   setActiveSessionKey(room: string, key: string | null) {
     this.ensureRoom(room);
-    this.db.prepare("UPDATE rooms SET active_session_key = ? WHERE slug = ?").run(key, room);
+    this.stmt("UPDATE rooms SET active_session_key = ? WHERE slug = ?").run(key, room);
   }
 
   /**
@@ -845,8 +868,8 @@ export class RoomStore {
     this.ensureRoom(room);
     const capped = tasks.slice(0, LIMITS.tasks);
     this.transaction(() => {
-      this.db.prepare("DELETE FROM tasks WHERE room = ?").run(room);
-      const insert = this.db.prepare(
+      this.stmt("DELETE FROM tasks WHERE room = ?").run(room);
+      const insert = this.stmt(
         `INSERT INTO tasks (room, task_id, seat_id, session_key, status, requested_by, created_at, position, data)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
@@ -872,8 +895,8 @@ export class RoomStore {
     this.ensureRoom(room);
     const capped = messages.slice(-LIMITS.messages);
     this.transaction(() => {
-      this.db.prepare("DELETE FROM messages WHERE room = ?").run(room);
-      const insert = this.db.prepare(
+      this.stmt("DELETE FROM messages WHERE room = ?").run(room);
+      const insert = this.stmt(
         `INSERT INTO messages (room, message_id, session_key, author_type, author, created_at, position, data)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       );
@@ -899,8 +922,8 @@ export class RoomStore {
     this.ensureRoom(room);
     const capped = sessions.slice(0, LIMITS.sessions);
     this.transaction(() => {
-      this.db.prepare("DELETE FROM sessions WHERE room = ?").run(room);
-      const insert = this.db.prepare(
+      this.stmt("DELETE FROM sessions WHERE room = ?").run(room);
+      const insert = this.stmt(
         "INSERT INTO sessions (room, session_key, updated_at, position, data) VALUES (?, ?, ?, ?, ?)",
       );
       capped.forEach((session, index) => {
@@ -914,8 +937,8 @@ export class RoomStore {
   replaceSeats(room: string, seats: Record<string, unknown>[]) {
     this.ensureRoom(room);
     this.transaction(() => {
-      this.db.prepare("DELETE FROM seats WHERE room = ?").run(room);
-      const insert = this.db.prepare(
+      this.stmt("DELETE FROM seats WHERE room = ?").run(room);
+      const insert = this.stmt(
         "INSERT INTO seats (room, seat_id, updated_at, data) VALUES (?, ?, ?, ?)",
       );
       const now = new Date().toISOString();
@@ -937,16 +960,16 @@ export class RoomStore {
     const id = asString(task.taskId) ?? asString(task.runId);
     if (!id) return;
 
-    const existing = this.db
-      .prepare("SELECT position FROM tasks WHERE room = ? AND task_id = ?")
-      .get(room, id) as { position: number } | undefined;
+    const existing = this.stmt("SELECT position FROM tasks WHERE room = ? AND task_id = ?").get(
+      room,
+      id,
+    ) as { position: number } | undefined;
 
     // New tasks go to the head, matching the newest-first list the client keeps
     const position = existing?.position ?? this.nextHeadPosition(room, "tasks");
 
-    this.db
-      .prepare(
-        `INSERT INTO tasks (room, task_id, seat_id, session_key, status, requested_by, created_at, position, data)
+    this.stmt(
+      `INSERT INTO tasks (room, task_id, seat_id, session_key, status, requested_by, created_at, position, data)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (room, task_id) DO UPDATE SET
            seat_id = excluded.seat_id,
@@ -954,25 +977,26 @@ export class RoomStore {
            status = excluded.status,
            requested_by = COALESCE(excluded.requested_by, tasks.requested_by),
            data = excluded.data`,
-      )
-      .run(
-        room,
-        id,
-        asString(task.seatId),
-        asString(task.sessionKey),
-        asString(task.status),
-        asString(task.requestedBy),
-        asString(task.createdAt) ?? new Date().toISOString(),
-        position,
-        JSON.stringify(task),
-      );
+    ).run(
+      room,
+      id,
+      asString(task.seatId),
+      asString(task.sessionKey),
+      asString(task.status),
+      asString(task.requestedBy),
+      asString(task.createdAt) ?? new Date().toISOString(),
+      position,
+      JSON.stringify(task),
+    );
 
     // Kept in a column so "gave work to every seat" is a query rather than a scan
     const requesterName = asString(task.requestedByName);
     if (requesterName) {
-      this.db
-        .prepare("UPDATE tasks SET requested_by_name = ? WHERE room = ? AND task_id = ?")
-        .run(requesterName, room, id);
+      this.stmt("UPDATE tasks SET requested_by_name = ? WHERE room = ? AND task_id = ?").run(
+        requesterName,
+        room,
+        id,
+      );
     }
 
     this.trim(room, "tasks", LIMITS.tasks, "DESC");
@@ -983,32 +1007,30 @@ export class RoomStore {
     const id = asString(message.id);
     if (!id) return;
 
-    const existing = this.db
-      .prepare("SELECT position FROM messages WHERE room = ? AND message_id = ?")
-      .get(room, id) as { position: number } | undefined;
+    const existing = this.stmt(
+      "SELECT position FROM messages WHERE room = ? AND message_id = ?",
+    ).get(room, id) as { position: number } | undefined;
 
     const position = existing?.position ?? this.nextTailPosition(room, "messages");
 
-    this.db
-      .prepare(
-        `INSERT INTO messages (room, message_id, session_key, author_type, author, created_at, position, data)
+    this.stmt(
+      `INSERT INTO messages (room, message_id, session_key, author_type, author, created_at, position, data)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (room, message_id) DO UPDATE SET
            session_key = excluded.session_key,
            author_type = excluded.author_type,
            author = excluded.author,
            data = excluded.data`,
-      )
-      .run(
-        room,
-        id,
-        asString(message.sessionKey),
-        asString(message.role) ?? "system",
-        asString(message.actorName) ?? asString(message.author),
-        asString(message.timestamp) ?? new Date().toISOString(),
-        position,
-        JSON.stringify(message),
-      );
+    ).run(
+      room,
+      id,
+      asString(message.sessionKey),
+      asString(message.role) ?? "system",
+      asString(message.actorName) ?? asString(message.author),
+      asString(message.timestamp) ?? new Date().toISOString(),
+      position,
+      JSON.stringify(message),
+    );
 
     this.trim(room, "messages", LIMITS.messages, "ASC");
   }
@@ -1018,12 +1040,10 @@ export class RoomStore {
     const id = asString(seat.seatId);
     if (!id) return;
 
-    this.db
-      .prepare(
-        `INSERT INTO seats (room, seat_id, updated_at, data) VALUES (?, ?, ?, ?)
+    this.stmt(
+      `INSERT INTO seats (room, seat_id, updated_at, data) VALUES (?, ?, ?, ?)
          ON CONFLICT (room, seat_id) DO UPDATE SET updated_at = excluded.updated_at, data = excluded.data`,
-      )
-      .run(room, id, new Date().toISOString(), JSON.stringify(seat));
+    ).run(room, id, new Date().toISOString(), JSON.stringify(seat));
   }
 
   upsertSession(room: string, session: Record<string, unknown>) {
@@ -1031,39 +1051,37 @@ export class RoomStore {
     const key = asString(session.sessionKey) ?? asString(session.key);
     if (!key) return;
 
-    const existing = this.db
-      .prepare("SELECT position FROM sessions WHERE room = ? AND session_key = ?")
-      .get(room, key) as { position: number } | undefined;
+    const existing = this.stmt(
+      "SELECT position FROM sessions WHERE room = ? AND session_key = ?",
+    ).get(room, key) as { position: number } | undefined;
 
-    this.db
-      .prepare(
-        `INSERT INTO sessions (room, session_key, updated_at, position, data) VALUES (?, ?, ?, ?, ?)
+    this.stmt(
+      `INSERT INTO sessions (room, session_key, updated_at, position, data) VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (room, session_key) DO UPDATE SET updated_at = excluded.updated_at, data = excluded.data`,
-      )
-      .run(
-        room,
-        key,
-        new Date().toISOString(),
-        existing?.position ?? this.nextHeadPosition(room, "sessions"),
-        JSON.stringify(session),
-      );
+    ).run(
+      room,
+      key,
+      new Date().toISOString(),
+      existing?.position ?? this.nextHeadPosition(room, "sessions"),
+      JSON.stringify(session),
+    );
 
     this.trim(room, "sessions", LIMITS.sessions, "DESC");
   }
 
   /** Newest-first collections grow downward from the current minimum. */
   private nextHeadPosition(room: string, table: "tasks" | "sessions"): number {
-    const row = this.db
-      .prepare(`SELECT MIN(position) AS edge FROM ${table} WHERE room = ?`)
-      .get(room) as { edge: number | null };
+    const row = this.stmt(`SELECT MIN(position) AS edge FROM ${table} WHERE room = ?`).get(
+      room,
+    ) as { edge: number | null };
     return (row?.edge ?? 0) - 1;
   }
 
   /** Oldest-first collections grow upward from the current maximum. */
   private nextTailPosition(room: string, table: "messages"): number {
-    const row = this.db
-      .prepare(`SELECT MAX(position) AS edge FROM ${table} WHERE room = ?`)
-      .get(room) as { edge: number | null };
+    const row = this.stmt(`SELECT MAX(position) AS edge FROM ${table} WHERE room = ?`).get(
+      room,
+    ) as { edge: number | null };
     return (row?.edge ?? 0) + 1;
   }
 
@@ -1079,15 +1097,13 @@ export class RoomStore {
   ) {
     const idColumn =
       table === "tasks" ? "task_id" : table === "messages" ? "message_id" : "session_key";
-    this.db
-      .prepare(
-        `DELETE FROM ${table} WHERE room = ? AND ${idColumn} IN (
+    this.stmt(
+      `DELETE FROM ${table} WHERE room = ? AND ${idColumn} IN (
            SELECT ${idColumn} FROM ${table} WHERE room = ?
            ORDER BY position ${keep === "ASC" ? "DESC" : "ASC"}
            LIMIT -1 OFFSET ?
          )`,
-      )
-      .run(room, room, limit);
+    ).run(room, room, limit);
   }
 
   private transaction(fn: () => void) {

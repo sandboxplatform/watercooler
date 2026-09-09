@@ -97,6 +97,11 @@ if (dev && !gateEnabled()) {
   log.warn("ACCESS_CODE is not set: the world is open to anyone who can reach this port.");
 }
 
+/** The path a request names, without its query. Asked for all over this file. */
+function pathOf(req: IncomingMessage): string {
+  return (req.url ?? "/").split("?")[0];
+}
+
 const UNCONFIGURED_MESSAGE =
   "This world has no access code, so nothing is being served.\n\n" +
   "Set ACCESS_CODE in the server's environment to a long random value and redeploy.\n";
@@ -107,7 +112,7 @@ const UNCONFIGURED_MESSAGE =
  * probe would only reproduce the 502 this exists to avoid.
  */
 function answerUnconfigured(req: IncomingMessage, res: ServerResponse) {
-  if ((req.url ?? "").split("?")[0] === "/api/health") {
+  if (pathOf(req) === "/api/health") {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(JSON.stringify({ ok: true, serving: false, reason: "ACCESS_CODE is not set" }));
     return;
@@ -127,57 +132,131 @@ for (const problem of misconfiguredCodes()) {
 const app = next({ dev, port, hostname: process.env.HOSTNAME ?? "localhost" });
 const handle = app.getRequestHandler();
 
+const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
+/**
+ * The door the agents' own tools come in by: loopback only, and a shared
+ * secret. Answers the request and returns false when it is not welcome.
+ *
+ * One check for both endpoints. It was written out twice, identically, which
+ * is the shape of thing that gets tightened in one place and not the other —
+ * and this is the check that stands in for the cookie gate, since `server.ts`
+ * answers these before the gate is consulted.
+ */
+function fromAgentTools(
+  req: IncomingMessage,
+  res: ServerResponse,
+  method: "GET" | "POST",
+): boolean {
+  const refuse = (status: number, error: string) => {
+    res.writeHead(status, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error }));
+    return false;
+  };
+  if (req.method !== method) return refuse(405, "Method not allowed");
+  if (!LOOPBACK.has(req.socket.remoteAddress ?? "")) return refuse(403, "Forbidden");
+  const secret = req.headers["x-dispatch-secret"] as string | undefined;
+  if (!secret || !validateDispatchSecret(secret)) return refuse(401, "Invalid dispatch secret");
+  return true;
+}
+
+/**
+ * Read a request body, refusing one too big to be honest.
+ *
+ * An unbounded read is a free denial of service — a body is buffered in this
+ * process's heap, and nothing but the sender decides how much of it there is.
+ * Dispatch had no ceiling at all while the two handlers either side of it did,
+ * which is the shape of thing that happens when the same reader is written
+ * out per endpoint. Resolves null when the request was refused or broke, and
+ * has already answered in that case.
+ */
+function readBody(
+  req: IncomingMessage,
+  res: ServerResponse,
+  limit: number,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    let body = "";
+    let done = false;
+    const stop = (answer: string | null) => {
+      if (done) return;
+      done = true;
+      resolve(answer);
+    };
+    req.on("data", (chunk: Buffer) => {
+      if (done) return;
+      body += chunk.toString();
+      if (body.length <= limit) return;
+      res.writeHead(413, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Body too large" }));
+      req.destroy();
+      stop(null);
+    });
+    req.on("end", () => stop(body));
+    // A socket that broke mid-body: nothing to answer, and nobody to answer to.
+    req.on("error", () => stop(null));
+  });
+}
+
+/**
+ * Last resort for a handler that threw.
+ *
+ * These are launched and not awaited, so without this a throw reaches the
+ * process as an unhandled rejection — which takes the whole world down to
+ * report one bad request. Once a response has started there is nothing left
+ * to say, so it is only closed.
+ */
+function failRequest(res: ServerResponse, what: string, err: unknown) {
+  log.error(`${what} failed:`, (err as Error)?.message ?? err);
+  if (res.headersSent) {
+    res.end();
+    return;
+  }
+  res.writeHead(500, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "Something went wrong." }));
+}
+
+/** Nothing a person types at the door is large. */
+const UNLOCK_BODY_LIMIT = 4 * 1024;
+/** A task can be a paragraph or two, and comes from our own tools. */
+const DISPATCH_BODY_LIMIT = 256 * 1024;
+
 // ── Internal dispatch endpoint for MCP tool → auggie bridge ──
 
-function handleDispatch(req: IncomingMessage, res: ServerResponse) {
-  if (req.method !== "POST") {
-    res.writeHead(405, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Method not allowed" }));
+async function handleDispatch(req: IncomingMessage, res: ServerResponse) {
+  if (!fromAgentTools(req, res, "POST")) return;
+
+  const body = await readBody(req, res, DISPATCH_BODY_LIMIT);
+  if (body === null) return;
+
+  let seatId: unknown;
+  let task: unknown;
+  let room: unknown;
+  try {
+    ({ seatId, task, room } = JSON.parse(body));
+  } catch {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Invalid JSON body" }));
+    return;
+  }
+  if (typeof seatId !== "string" || typeof task !== "string" || !seatId || !task) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "seatId and task are required" }));
     return;
   }
 
-  // Only accept requests from localhost
-  const remoteIp = req.socket.remoteAddress;
-  if (remoteIp !== "127.0.0.1" && remoteIp !== "::1" && remoteIp !== "::ffff:127.0.0.1") {
-    res.writeHead(403, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Forbidden" }));
-    return;
+  try {
+    const result = await dispatchToWorker(
+      seatId,
+      task,
+      typeof room === "string" ? room : undefined,
+    );
+    res.writeHead(result.error ? 500 : 200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: (err as Error).message }));
   }
-
-  const secret = req.headers["x-dispatch-secret"] as string | undefined;
-  if (!secret || !validateDispatchSecret(secret)) {
-    res.writeHead(401, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Invalid dispatch secret" }));
-    return;
-  }
-
-  let body = "";
-  req.on("data", (chunk: Buffer) => {
-    body += chunk.toString();
-  });
-  req.on("end", () => {
-    try {
-      const { seatId, task, room } = JSON.parse(body);
-      if (!seatId || !task) {
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "seatId and task are required" }));
-        return;
-      }
-
-      dispatchToWorker(seatId, task, typeof room === "string" ? room : undefined)
-        .then((result) => {
-          res.writeHead(result.error ? 500 : 200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify(result));
-        })
-        .catch((err: Error) => {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: err.message }));
-        });
-    } catch {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Invalid JSON body" }));
-    }
-  });
 }
 
 // ── The access gate ──
@@ -189,7 +268,7 @@ function handleDispatch(req: IncomingMessage, res: ServerResponse) {
  * in one module instance: a route handler is bundled into Next's own module
  * graph, which would give it a second, separate copy of them.
  */
-function handleUnlock(req: IncomingMessage, res: ServerResponse) {
+async function handleUnlock(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== "POST") {
     res.writeHead(405, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Method not allowed" }));
@@ -207,51 +286,41 @@ function handleUnlock(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
-  let body = "";
-  let tooBig = false;
-  req.on("data", (chunk: Buffer) => {
-    body += chunk.toString();
-    // Nothing legitimate is large, and an unbounded body is a free denial of service.
-    if (body.length > 4096) {
-      tooBig = true;
-      req.destroy();
-    }
+  const body = await readBody(req, res, UNLOCK_BODY_LIMIT);
+  if (body === null) return;
+
+  let submitted = "";
+  try {
+    submitted = String((JSON.parse(body) as { code?: unknown }).code ?? "");
+  } catch {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Invalid JSON body" }));
+    return;
+  }
+
+  const identity = identityForCode(submitted);
+  if (!identity) {
+    recordFailure(ip);
+    log.warn(`unlock: rejected code from ${ip}`);
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "That code was not accepted." }));
+    return;
+  }
+
+  const token = mintToken(identity);
+  if (!token) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "No access code is configured." }));
+    return;
+  }
+
+  clearFailures(ip);
+  log.info(`unlock: let ${ip} in as ${identity}`);
+  res.writeHead(200, {
+    "Content-Type": "application/json",
+    "Set-Cookie": accessCookieHeader(token, !dev),
   });
-  req.on("end", () => {
-    if (tooBig) return;
-    let submitted = "";
-    try {
-      submitted = String((JSON.parse(body) as { code?: unknown }).code ?? "");
-    } catch {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Invalid JSON body" }));
-      return;
-    }
-
-    const identity = identityForCode(submitted);
-    if (!identity) {
-      recordFailure(ip);
-      log.warn(`unlock: rejected code from ${ip}`);
-      res.writeHead(401, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "That code was not accepted." }));
-      return;
-    }
-
-    const token = mintToken(identity);
-    if (!token) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "No access code is configured." }));
-      return;
-    }
-
-    clearFailures(ip);
-    log.info(`unlock: let ${ip} in as ${identity}`);
-    res.writeHead(200, {
-      "Content-Type": "application/json",
-      "Set-Cookie": accessCookieHeader(token, !dev),
-    });
-    res.end(JSON.stringify({ ok: true }));
-  });
+  res.end(JSON.stringify({ ok: true }));
 }
 
 /**
@@ -319,7 +388,7 @@ function blockedByGate(req: IncomingMessage, res: ServerResponse): boolean {
   // Before the open-path check, so a bookmark to /unlock?code=… works too.
   if (handleCodeInLink(req, res)) return true;
 
-  const pathname = (req.url ?? "/").split("?")[0];
+  const pathname = pathOf(req);
   if (isOpenPath(pathname) || isAuthorized(req)) return false;
 
   const wantsHtml = (req.headers.accept ?? "").includes("text/html");
@@ -349,7 +418,7 @@ function blockedByGate(req: IncomingMessage, res: ServerResponse): boolean {
  */
 function blockedByFloor(req: IncomingMessage, res: ServerResponse): boolean {
   if (!gateEnabled()) return false;
-  const pathname = (req.url ?? "/").split("?")[0];
+  const pathname = pathOf(req);
   const path = parseRoomPath(pathname);
   if (!path || path.floor === null) return false;
 
@@ -392,7 +461,7 @@ function sentOutside(req: IncomingMessage, res: ServerResponse): boolean {
   // A prefetch or a fetch is left alone, as everywhere else here: only a
   // navigation should have its destination changed under it.
   if (!(req.headers.accept ?? "").includes("text/html")) return false;
-  const pathname = (req.url ?? "/").split("?")[0];
+  const pathname = pathOf(req);
   // The persona is what knows whether they have somewhere; a visitor has no
   // persona at all, which is the same answer.
   const home = personaFor(identityOf(req.headers.cookie))?.home;
@@ -413,25 +482,7 @@ function sentOutside(req: IncomingMessage, res: ServerResponse): boolean {
  * Read-only. There is no counterpart that writes.
  */
 function handleBoards(req: IncomingMessage, res: ServerResponse) {
-  if (req.method !== "GET") {
-    res.writeHead(405, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Method not allowed" }));
-    return;
-  }
-
-  const remoteIp = req.socket.remoteAddress;
-  if (remoteIp !== "127.0.0.1" && remoteIp !== "::1" && remoteIp !== "::ffff:127.0.0.1") {
-    res.writeHead(403, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Forbidden" }));
-    return;
-  }
-
-  const secret = req.headers["x-dispatch-secret"] as string | undefined;
-  if (!secret || !validateDispatchSecret(secret)) {
-    res.writeHead(401, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Invalid dispatch secret" }));
-    return;
-  }
+  if (!fromAgentTools(req, res, "GET")) return;
 
   const params = new URL(req.url ?? "", "http://127.0.0.1").searchParams;
   const what = params.get("what");
@@ -516,20 +567,20 @@ if (unconfigured) {
         // Intercept internal API routes before Next.js. These authenticate
         // themselves — a localhost-plus-secret check and an HMAC signature —
         // and are not browser traffic, so the cookie gate does not apply.
-        if (req.url === "/api/internal/dispatch") {
-          handleDispatch(req, res);
+        if (pathOf(req) === "/api/internal/dispatch") {
+          void handleDispatch(req, res).catch((err) => failRequest(res, "dispatch", err));
           return;
         }
-        if (mettaraTools && (req.url ?? "").split("?")[0] === TOOLS_PATH) {
-          void mettaraTools(req, res);
+        if (mettaraTools && pathOf(req) === TOOLS_PATH) {
+          void mettaraTools(req, res).catch((err) => failRequest(res, "mettara tools", err));
           return;
         }
-        if ((req.url ?? "").split("?")[0] === "/api/internal/boards") {
+        if (pathOf(req) === "/api/internal/boards") {
           handleBoards(req, res);
           return;
         }
-        if ((req.url ?? "").split("?")[0] === "/api/unlock") {
-          handleUnlock(req, res);
+        if (pathOf(req) === "/api/unlock") {
+          void handleUnlock(req, res).catch((err) => failRequest(res, "unlock", err));
           return;
         }
         // Everything below this line needs the cookie: pages, API routes, uploads.

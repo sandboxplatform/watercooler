@@ -53,6 +53,25 @@ export const SPRINT_SPEED_PX_S = 364;
  */
 export const SPEED_TOLERANCE = 2.5;
 
+/**
+ * The longest stretch a single move may be paid for out of.
+ *
+ * The clamp budgets from the last move, and standing still sends nothing —
+ * so the budget went on growing while somebody stood there. A pong keeps the
+ * idle sweep off them indefinitely, so a modified client could stand for a
+ * minute, bank about 54,000px, and cross any map in the world in one message.
+ * The comment on the clamp promised that could not happen; this is what makes
+ * it true.
+ *
+ * Five times the client's own send interval, so an honest walker never feels
+ * it: they send every `MOVE_SEND_MS` while moving, and a slow frame or a
+ * little jitter has four intervals of headroom. The one thing it refuses is
+ * the case it exists for — a long silence followed by one enormous step,
+ * which no honest client produces. A genuinely large move is a `place`, not a
+ * `move`: through a door, off a ferry, out of a lift.
+ */
+export const MOVE_BUDGET_WINDOW_MS = MOVE_SEND_MS * 5;
+
 export type Facing = "up" | "down" | "left" | "right";
 
 export interface PresencePlayer {

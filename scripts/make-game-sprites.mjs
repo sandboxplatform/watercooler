@@ -92,7 +92,6 @@ function table() {
 const cabinet = [86, 89, 114, 255];
 const cabinetLit = [139, 139, 171, 255];
 const cabinetDark = [58, 58, 80, 255];
-const glass = [204, 230, 236, 255];
 const field = [47, 125, 120, 255];
 const fieldLit = [66, 150, 144, 255];
 const lane = [31, 94, 90, 255];

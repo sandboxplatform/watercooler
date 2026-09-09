@@ -10,6 +10,7 @@
 
 import {
   IDLE_TIMEOUT_MS,
+  MOVE_BUDGET_WINDOW_MS,
   MAX_HUMAN_PLAYERS,
   SPRINT_SPEED_PX_S,
   SPEED_TOLERANCE,
@@ -146,9 +147,27 @@ export class PresenceHub {
   }
 
   /**
-   * Apply a movement update. Positions are clamped to what walking could cover
-   * since the player's last update, so a modified client cannot teleport across
-   * the office or into a locked room.
+   * One player, by connection.
+   *
+   * `snapshot().find(...)` is the same answer and builds the whole room to
+   * get it — a fresh object for every person present, thrown away but for
+   * one. That is on the path of every remark, every board stroke and every
+   * voice frame, which is exactly where a room with people in it does the
+   * most work.
+   */
+  get(id: string): PresencePlayer | null {
+    const player = this.players.get(id);
+    return player ? strip(player) : null;
+  }
+
+  /**
+   * Apply a movement update. Positions are clamped to what sprinting could
+   * cover since the player's last move — over a bounded window, so a modified
+   * client cannot save up a teleport by standing still — which is what stops
+   * one crossing the office in a single message.
+   *
+   * Being in a room at all is a separate question, and a separate answer:
+   * `mayEnterRoom` on the join, not this.
    */
   move(
     id: string,
@@ -159,7 +178,10 @@ export class PresenceHub {
     if (!Number.isFinite(update.x) || !Number.isFinite(update.y)) return strip(player);
 
     const at = this.now();
-    const elapsedMs = Math.max(at - player.lastMoveAt, 0);
+    // Capped, or standing still banks distance: the budget is measured from
+    // the last move, and a player who sends nothing for a minute could spend
+    // all sixty seconds of it on one step. See MOVE_BUDGET_WINDOW_MS.
+    const elapsedMs = Math.min(Math.max(at - player.lastMoveAt, 0), MOVE_BUDGET_WINDOW_MS);
     const budget = (SPRINT_SPEED_PX_S / 1000) * elapsedMs * SPEED_TOLERANCE;
 
     const dx = update.x - player.x;

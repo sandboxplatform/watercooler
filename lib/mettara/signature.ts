@@ -2,9 +2,11 @@
  * Inbound webhook verification for Mettara Connect tool calls.
  *
  * When a Mettara AI invokes a tool we have registered, it POSTs to this server
- * signed with the platform API secret. Verification is three independent
- * checks — body digest, clock skew, nonce replay — and only then the HMAC, so
- * a tampered request fails on the specific thing that is wrong.
+ * signed with the platform API secret. Verification is four checks in a
+ * deliberate order — body digest, clock skew, the HMAC, and replay last — so a
+ * tampered request fails on the specific thing that is wrong, and a forged one
+ * is turned away before it can spend the nonce the genuine request behind it
+ * still needs.
  *
  * Docs: https://connect-a12e4c.gitlab.io/inbound-webhooks/
  */

@@ -15,9 +15,9 @@ import { toDeskView, type DeskView } from "./tickets";
 import {
   CLOSED_STATUS,
   DEFAULT_PULSE_STATUSES,
-  atOrAfter,
   commonZone,
   dayStartIn,
+  readableBefore,
   toPulse,
   type Pulse,
   type PulseId,
@@ -384,15 +384,16 @@ export async function fetchPulse(config: ZohoConfig, now: number = Date.now()): 
     status: statuses.join(","),
     sortBy: "-modifiedTime",
   });
-  const opened = await sweep(
-    config,
-    { ...scope, sortBy: "-createdTime" },
-    (ticket) => !atOrAfter(ticket.createdTime as string | undefined, from),
+  // `readableBefore` rather than `!atOrAfter`: a sweep stops on the claim
+  // that everything past here is older, and a ticket whose stamp is missing
+  // or unreadable is no grounds for it. See the note on that function.
+  const opened = await sweep(config, { ...scope, sortBy: "-createdTime" }, (ticket) =>
+    readableBefore(ticket.createdTime as string | undefined, from),
   );
   const closed = await sweep(
     config,
     { ...scope, status: CLOSED_STATUS, sortBy: "-closedTime" },
-    (ticket) => !atOrAfter(ticket.closedTime as string | undefined, from),
+    (ticket) => readableBefore(ticket.closedTime as string | undefined, from),
   );
 
   // A capped standing sweep leaves all three of its counters a floor: the

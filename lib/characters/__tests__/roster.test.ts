@@ -6,6 +6,7 @@ import {
   LIBRARY_CHARACTERS,
   LIBRARY_PREFIX,
   SHARED_CAST,
+  generatedSheetPath,
   inSharedCast,
   librarySheetPath,
   textureKeyFor,
@@ -69,6 +70,23 @@ describe("the library roster", () => {
 
   it("namespaces uploaded characters so they cannot collide with the library", () => {
     expect(textureKeyFor({ id: "kai-abc", key: "x", source: "sheet" })).toBe("generated:kai-abc");
+  });
+
+  /**
+   * A scene meeting somebody in an uploaded look has only the key presence
+   * carries, and `WORKER_SPRITES` never holds an upload — so without the way
+   * back, the sheet was never fetched and `RemotePlayer` fell back to the
+   * default. The wearer looked like themselves and like nobody else's idea
+   * of themselves.
+   */
+  it("finds the way back from an uploaded key to its sheet", () => {
+    const key = textureKeyFor({ id: "kai-abc", key: "x", source: "sheet" });
+    expect(generatedSheetPath(key)).toBe("/api/characters/kai-abc");
+  });
+
+  it("says nothing about a key that is not an upload", () => {
+    expect(generatedSheetPath("character_02")).toBeNull();
+    expect(generatedSheetPath("generated:")).toBeNull();
   });
 
   it("resolves a library id to its shipped file and nothing else", () => {

@@ -146,6 +146,23 @@ function broadcastEvent(event: string, payload: Record<string, unknown>) {
 }
 
 /**
+ * The same, to one room's watchers only.
+ *
+ * Badges and budget both wanted this and both wrote their own loop, building
+ * the event frame and stepping the sequence number by hand — which is what
+ * `sendEvent` is for, and two copies of it is one drift away from two
+ * differently-shaped frames for the same kind of event.
+ */
+function broadcastToRoom(room: string, event: string, payload: Record<string, unknown>) {
+  for (const client of clients) {
+    // Only the people looking at this room care what happens in it.
+    if (client.room !== room) continue;
+    if (client.ws.readyState !== WebSocket.OPEN) continue;
+    sendEvent(client, event, payload);
+  }
+}
+
+/**
  * Resume ids for dispatched seats. Server-owned: the seat's conversation
  * belongs to the room and must survive any one browser disconnecting.
  */
@@ -237,25 +254,16 @@ function announceAchievements(room: string, run: CompletedRun) {
   for (const item of onRunCompleted(run)) {
     const definition = achievementFor(item.code);
     if (!definition) continue;
-    for (const client of clients) {
-      if (client.room !== room) continue;
-      if (client.ws.readyState !== WebSocket.OPEN) continue;
-      sendFrame(client, {
-        type: "event",
-        event: "achievement",
-        payload: {
-          code: item.code,
-          subjectType: item.subjectType,
-          subjectId: item.subjectId,
-          subjectName: item.subjectName,
-          title: definition.title,
-          description: definition.description,
-          icon: definition.icon,
-          at: item.earnedAt,
-        },
-        seq: client.seq++,
-      });
-    }
+    broadcastToRoom(room, "achievement", {
+      code: item.code,
+      subjectType: item.subjectType,
+      subjectId: item.subjectId,
+      subjectName: item.subjectName,
+      title: definition.title,
+      description: definition.description,
+      icon: definition.icon,
+      at: item.earnedAt,
+    });
   }
 }
 
@@ -264,21 +272,11 @@ function broadcastBudget(room: string) {
   try {
     const store = getRoomStore();
     const spentUsd = store.getSpend(room);
-    for (const client of clients) {
-      // Only the people looking at this room care what it has spent
-      if (client.room !== room) continue;
-      if (client.ws.readyState !== WebSocket.OPEN) continue;
-      sendFrame(client, {
-        type: "event",
-        event: "budget",
-        payload: {
-          spentUsd,
-          limitUsd: ROOM_SPEND_LIMIT_USD,
-          halted: spentUsd >= ROOM_SPEND_LIMIT_USD,
-        },
-        seq: client.seq++,
-      });
-    }
+    broadcastToRoom(room, "budget", {
+      spentUsd,
+      limitUsd: ROOM_SPEND_LIMIT_USD,
+      halted: spentUsd >= ROOM_SPEND_LIMIT_USD,
+    });
   } catch {
     // Reporting spend must never take a run down with it
   }
@@ -619,83 +617,105 @@ async function handleChatSend(state: ClientState, id: string, params: Record<str
 
   const startedAt = Date.now();
   const seatLabel = params.seatLabel as string | undefined;
-  const workspaceDir = provider.usesWorkspaces
-    ? ensureSeatWorkspace(seatLabel ?? sessionKey, state.room)
-    : undefined;
-  // Files that came with the task: into the seat's workspace, with a note
-  // in the message saying so, for a CLI; handed over as files to a service.
-  const files = attachmentRefs(params.attachments)
-    .map((ref) => resolveUpload(state.room, ref.id))
-    .filter((f): f is StoredUpload => f !== null);
-  let attached: { name: string; path: string }[] = files;
-  let taskMessage = message;
-  if (workspaceDir && files.length) {
-    const folder = join(workspaceDir, "attachments");
-    mkdirSync(folder, { recursive: true });
-    attached = files.map((f) => {
-      const path = join(folder, f.name);
-      copyFileSync(f.path, path);
-      return { name: f.name, path };
-    });
-    taskMessage += attachmentNote(attached.map((f) => `attachments/${f.name}`));
-  }
-  const runOptions = {
-    message: taskMessage,
-    personality: buildPersonality(state.room, params),
-    // A session belongs to the provider that opened it: the map is keyed by both.
-    sessionId: state.sessionMap.get(`${provider.id}:${sessionKey}`),
-    // Attach the MCP server for worker dispatch if we have a roster
-    mcpConfigPath: writeMcpConfig(state.room),
-    model: (params.model as string | undefined) ?? process.env.WATERCOOLER_MODEL,
-    workspaceDir,
-    seatLabel,
-    sessionKey,
-    attachments: attached.length ? attached : undefined,
-  };
 
   // Both kinds of run end the same way, so the reporting — spend, activity,
   // achievements, session mapping, the final bubble — lives in one place.
+  // Declared up here because everything below has to be able to reach it: the
+  // client has been told the run was accepted and shown a `start`, so from
+  // this point on there is no way out that does not report an ending.
   const finish = (parsed: CliParsedResult | null, failure: string | null) =>
     finishRun({ provider, state, params, runId, sessionKey, message, startedAt, parsed, failure });
 
-  void runAgent({
-    provider,
-    runId,
-    options: runOptions,
-    env: {
-      WATERCOOLER_PORT: process.env.PORT ?? "3000",
-      WATERCOOLER_WORKERS: JSON.stringify(getWorkerRoster(state.room)),
-      WATERCOOLER_DISPATCH_SECRET: dispatchSecret,
-      // Delegated work must land in the room that asked for it: the roster,
-      // the sandbox and the spend ceiling are all per room.
-      WATERCOOLER_ROOM: state.room,
-      // Stamped onto anything the agent writes, so a person can see who did it
-      WATERCOOLER_SEAT: seatLabel ?? "an agent",
-      ERP_DB_PATH: erpDatabasePath(),
-    },
-    // Kept so an abort from the HUD can find and kill it.
-    onSpawn: (child) => {
-      state.runningProcesses.set(runId, child);
-      const forget = () => state.runningProcesses.delete(runId);
-      child.once("close", forget);
-      child.once("error", forget);
-    },
-    timeoutMessage: (seconds) => `The agent was stopped after ${seconds}s with no reply.`,
-  }).then((outcome) => {
-    if (!outcome.ok) {
-      finish(null, outcome.error);
-      return;
+  /**
+   * Getting a run to the point of starting can fail, and it must not fail
+   * silently.
+   *
+   * A workspace that cannot be made, an attachment whose upload has been
+   * cleaned off the volume, a read-only or full disk — `mkdirSync` and
+   * `copyFileSync` throw at any of them. This was launched with `void` and no
+   * catch, so the rejection went nowhere: no `error` phase, no `chat` error,
+   * nothing. The seat stayed "running" for ever and, because the HUD's queue
+   * only advances on a task ending, every later task for that session queued
+   * behind a run that was never going to finish. Only a reload cleared it.
+   */
+  try {
+    const workspaceDir = provider.usesWorkspaces
+      ? ensureSeatWorkspace(seatLabel ?? sessionKey, state.room)
+      : undefined;
+    // Files that came with the task: into the seat's workspace, with a note
+    // in the message saying so, for a CLI; handed over as files to a service.
+    const files = attachmentRefs(params.attachments)
+      .map((ref) => resolveUpload(state.room, ref.id))
+      .filter((f): f is StoredUpload => f !== null);
+    let attached: { name: string; path: string }[] = files;
+    let taskMessage = message;
+    if (workspaceDir && files.length) {
+      const folder = join(workspaceDir, "attachments");
+      mkdirSync(folder, { recursive: true });
+      attached = files.map((f) => {
+        const path = join(folder, f.name);
+        copyFileSync(f.path, path);
+        return { name: f.name, path };
+      });
+      taskMessage += attachmentNote(attached.map((f) => `attachments/${f.name}`));
     }
-    if (!outcome.parsed) {
-      log.error(
-        `${provider.binName} produced unparseable output for run ${runId}:`,
-        outcome.raw.slice(0, 500),
-      );
-      finish(null, `Failed to parse ${provider.displayName} output`);
-      return;
-    }
-    finish(outcome.parsed, null);
-  });
+    const runOptions = {
+      message: taskMessage,
+      personality: buildPersonality(state.room, params),
+      // A session belongs to the provider that opened it: the map is keyed by both.
+      sessionId: state.sessionMap.get(`${provider.id}:${sessionKey}`),
+      // Attach the MCP server for worker dispatch if we have a roster
+      mcpConfigPath: writeMcpConfig(state.room),
+      model: (params.model as string | undefined) ?? process.env.WATERCOOLER_MODEL,
+      workspaceDir,
+      seatLabel,
+      sessionKey,
+      attachments: attached.length ? attached : undefined,
+    };
+
+    await runAgent({
+      provider,
+      runId,
+      options: runOptions,
+      env: {
+        WATERCOOLER_PORT: process.env.PORT ?? "3000",
+        WATERCOOLER_WORKERS: JSON.stringify(getWorkerRoster(state.room)),
+        WATERCOOLER_DISPATCH_SECRET: dispatchSecret,
+        // Delegated work must land in the room that asked for it: the roster,
+        // the sandbox and the spend ceiling are all per room.
+        WATERCOOLER_ROOM: state.room,
+        // Stamped onto anything the agent writes, so a person can see who did it
+        WATERCOOLER_SEAT: seatLabel ?? "an agent",
+        ERP_DB_PATH: erpDatabasePath(),
+      },
+      // Kept so an abort from the HUD can find and kill it.
+      onSpawn: (child) => {
+        state.runningProcesses.set(runId, child);
+        const forget = () => state.runningProcesses.delete(runId);
+        child.once("close", forget);
+        child.once("error", forget);
+      },
+      timeoutMessage: (seconds) => `The agent was stopped after ${seconds}s with no reply.`,
+    }).then((outcome) => {
+      if (!outcome.ok) {
+        finish(null, outcome.error);
+        return;
+      }
+      if (!outcome.parsed) {
+        log.error(
+          `${provider.binName} produced unparseable output for run ${runId}:`,
+          outcome.raw.slice(0, 500),
+        );
+        finish(null, `Failed to parse ${provider.displayName} output`);
+        return;
+      }
+      finish(outcome.parsed, null);
+    });
+  } catch (err) {
+    const reason = (err as Error)?.message ?? String(err);
+    log.error(`run ${runId} could not be started:`, reason);
+    finish(null, `The task could not be started: ${reason}`);
+  }
 }
 
 /**
@@ -892,7 +912,11 @@ function handleMessage(state: ClientState, raw: string) {
       break;
 
     case "chat.send":
-      void handleChatSend(state, id, params ?? {});
+      // It reports its own failures; this is only so nothing it misses can
+      // reach the process as an unhandled rejection and take the world down.
+      void handleChatSend(state, id, params ?? {}).catch((err: unknown) =>
+        log.error("chat.send failed outright:", (err as Error)?.message ?? err),
+      );
       break;
 
     case "chat.abort":

@@ -110,6 +110,16 @@ class VoiceChat {
   /** Whom this browser has said hello to since the microphone came on. */
   private greeted = new Set<string>();
   private levels = new Float32Array(1024);
+  /**
+   * Which switching-on this is, so one that was called off can tell.
+   *
+   * Asking for the microphone is the one slow step here, and the browser's
+   * permission prompt can sit there for as long as the person looks at it.
+   * Every way of switching off bumps this, and `enable` compares it across
+   * the await: an answer that arrives for a switching-on nobody wants any
+   * more is thrown away rather than acted on.
+   */
+  private turn = 0;
 
   // ── For the HUD ────────────────────────────────────────
 
@@ -187,8 +197,10 @@ class VoiceChat {
       return;
     }
     this.publish({ status: "requesting", reason: null });
+    const turn = ++this.turn;
+    let stream: MediaStream;
     try {
-      this.local = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
     } catch (err) {
@@ -200,9 +212,29 @@ class VoiceChat {
             ? "No microphone was found."
             : `The microphone could not be opened: ${(err as Error)?.message ?? err}`;
       log.warn(reason);
-      this.publish({ status: "denied", reason });
+      // Only if this is still the switching-on in progress: a refusal that
+      // arrives after the person already gave up must not overwrite "off"
+      // with a red error they did not ask to see.
+      if (turn === this.turn) this.publish({ status: "denied", reason });
       return;
     }
+
+    /**
+     * Switched off while the permission prompt was up.
+     *
+     * `disable` could do nothing about a stream that did not exist yet — it
+     * stopped no tracks, because `this.local` was still null — and this side
+     * went on to publish "on", greet every peer and start sending audio. The
+     * HUD said off, the person believed off, and the microphone was live.
+     * So the stream is stopped here instead, by whoever actually has it.
+     */
+    if (turn !== this.turn) {
+      log.info("microphone was switched off while it was being asked for");
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    this.local = stream;
+
     // A click got us here, so the context may start; if it was made
     // earlier and suspended, wake it.
     this.context ??= new AudioContext();
@@ -225,6 +257,9 @@ class VoiceChat {
 
   async disable({ forget = true }: { forget?: boolean } = {}) {
     if (forget) rememberVoice(false);
+    // Before the early return, so switching off always calls off whatever
+    // switching-on is in flight — even when the view already reads "off".
+    this.turn += 1;
     if (this.view.status === "off") return;
     for (const player of this.everyoneElse()) this.send(player.id, { kind: "bye" });
     for (const id of [...this.peers.keys()]) this.drop(id);

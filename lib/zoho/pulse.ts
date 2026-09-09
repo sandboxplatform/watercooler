@@ -265,6 +265,28 @@ export function atOrAfter(stamp: string | null | undefined, from: number): boole
 }
 
 /**
+ * Whether an instant Zoho reported is readable *and* falls before `from`.
+ *
+ * **Not the opposite of `atOrAfter`**, and the gap between them is the point:
+ * a missing or unreadable stamp is neither. This is the question a sweep that
+ * stops early has to ask, because stopping means "everything past here is
+ * older" — a claim a ticket with no stamp at all gives no grounds for.
+ *
+ * The closed-today sweep stopped on `!atOrAfter(closedTime)`, which is true
+ * of a missing `closedTime` as well as an old one. Zoho promises nothing
+ * about where a Closed ticket with no `closedTime` lands under
+ * `sortBy=-closedTime` — a workflow or an import can leave the field unset —
+ * and one of those at the head of page one ended the sweep before it had
+ * counted anything. The wall then read "CLOSED TODAY 0", which is exactly
+ * what a quiet desk looks like.
+ */
+export function readableBefore(stamp: string | null | undefined, from: number): boolean {
+  if (!stamp) return false;
+  const at = Date.parse(stamp);
+  return Number.isFinite(at) && at < from;
+}
+
+/**
  * How many of a swept page fall in each of the named statuses.
  *
  * Matched case-insensitively on the name, so a desk whose picklist reads

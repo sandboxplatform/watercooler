@@ -4,7 +4,9 @@
  * A Mettara AI can reach back into the office: read the roster and hand a task
  * to a named worker. Requests arrive signed with the platform secret, so this
  * is the one door into the room that is open to the outside world — every
- * request is verified before a handler sees it.
+ * request is verified before a handler sees it: body digest, clock skew, the
+ * HMAC, and the nonce **last**, so a forged request never consumes a nonce and
+ * cannot lock out the genuine one behind it (see ./signature.ts).
  *
  * Mounted on the raw HTTP server rather than as a Next route handler because
  * dispatching needs the live bridge, and route handlers load in their own

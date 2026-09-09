@@ -92,7 +92,29 @@ export function librarySheetPath(id: string): string | null {
   return entry ? entry.sheetUrl : null;
 }
 
+/** What an uploaded character's texture key is namespaced with. */
+const GENERATED_PREFIX = "generated:";
+
 /** Texture key for a character: library keys as-is, uploads namespaced. */
 export function textureKeyFor(character: Pick<RosterCharacter, "id" | "key" | "source">): string {
-  return character.source === "library" ? character.key : `generated:${character.id}`;
+  return character.source === "library" ? character.key : `${GENERATED_PREFIX}${character.id}`;
+}
+
+/**
+ * The sheet behind an uploaded character's texture key, or null for a key
+ * that is not one.
+ *
+ * The other direction of `textureKeyFor`, and here beside it so the two
+ * cannot drift. A scene that meets somebody wearing an uploaded look has
+ * only the key the presence socket carries — no roster entry, no path — and
+ * without this it had nowhere to look: `WORKER_SPRITES` holds the sheets
+ * that ship with the game and never an upload, so the fetch was skipped and
+ * `RemotePlayer.wear` quietly substituted the default sheet. The person
+ * looked like themselves on their own screen and like the generic character
+ * on everybody else's, with nothing anywhere to say why.
+ */
+export function generatedSheetPath(key: string): string | null {
+  if (!key.startsWith(GENERATED_PREFIX)) return null;
+  const id = key.slice(GENERATED_PREFIX.length);
+  return id ? `/api/characters/${id}` : null;
 }

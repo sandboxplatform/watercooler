@@ -121,7 +121,6 @@ function layout(
     { x: roadX, y: yardTop, width: 4, height: rows - yardTop },
   ];
   for (const b of buildings) {
-    const tx = b.frame.x / TILE;
     const ty = b.frame.y / TILE;
     const size = b.frame.width / TILE;
     if (b.side === "bottom") {

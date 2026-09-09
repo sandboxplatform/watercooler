@@ -124,17 +124,6 @@ interface State {
   heldSince: number;
 }
 
-/**
- * The world map's solids, worked out once.
- *
- * They never change — the buildings, the props' feet, the signs and the sea
- * are all laid out at module load — and a route is planned every time
- * somebody outside picks somewhere new to be, so this is not worth
- * recomputing.
- */
-let worldObstacles: Rect[] | null = null;
-const obstacles = () => (worldObstacles ??= worldSolids());
-
 function firstHaunt(resident: Resident, kind?: PlaceKind): Haunt {
   const haunts = hauntsOf(resident);
   return haunts.find((h) => h.kind === kind) ?? haunts[0];
@@ -444,9 +433,13 @@ export class ResidentSimulation {
       state.target = to;
       return;
     }
+    // `worldSolids` keeps its own list and hands back the same array every
+    // time — which is also what lets the route planner keep its grid against
+    // that array's identity. A second cache over it here bought nothing and
+    // was one more thing claiming to know when the map changes.
     const route = routeAcross(
       { width: WORLD_WIDTH, height: WORLD_HEIGHT },
-      obstacles(),
+      worldSolids(),
       { x: state.x, y: state.y },
       to,
     );

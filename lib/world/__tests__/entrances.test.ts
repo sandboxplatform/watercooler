@@ -11,10 +11,10 @@ import { worldSolids } from "../scenery";
  * that worked.
  */
 
-const inside = (rect: { x: number; y: number; width: number; height: number }, p: typeof origin) =>
-  p.x >= rect.x && p.x < rect.x + rect.width && p.y >= rect.y && p.y < rect.y + rect.height;
+type Point = { x: number; y: number };
 
-const origin = { x: 0, y: 0 };
+const inside = (rect: { x: number; y: number; width: number; height: number }, p: Point) =>
+  p.x >= rect.x && p.x < rect.x + rect.width && p.y >= rect.y && p.y < rect.y + rect.height;
 
 const overlaps = (
   a: { x: number; y: number; width: number; height: number },

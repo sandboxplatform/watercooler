@@ -254,9 +254,11 @@ back into the room:
 | `dispatch_task` | `seatId`, `task`, `room?` | Hands a task to a worker |
 
 Every request is verified before a handler sees it, in this order: body digest, ±5
-minute clock skew, nonce replay, then the HMAC-SHA256 signature over
-`METHOD\npath\ntimestamp\nnonce\nbase64(SHA256(body))`. A forged request never
-consumes a nonce, so it cannot lock out the genuine one behind it. The endpoint is
+minute clock skew, the HMAC-SHA256 signature over
+`METHOD\npath\ntimestamp\nnonce\nbase64(SHA256(body))`, and **nonce replay last**.
+That last part is the order, not an afterthought: a forged request is turned away
+before the replay check, so it never consumes a nonce and cannot lock out the
+genuine one behind it. The endpoint is
 **not mounted at all** when there is no secret to verify against — don't add a
 fallback that mounts it unauthenticated.
 

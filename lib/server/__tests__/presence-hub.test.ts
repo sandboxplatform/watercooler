@@ -3,6 +3,7 @@ import { PresenceHub, sanitiseName } from "../presence-hub";
 import {
   IDLE_TIMEOUT_MS,
   MAX_HUMAN_PLAYERS,
+  MOVE_BUDGET_WINDOW_MS,
   SPEED_TOLERANCE,
   SPRINT_SPEED_PX_S,
 } from "../../presence-types";
@@ -119,6 +120,32 @@ describe("movement", () => {
     expect(moved.x).toBeCloseTo(100 + ran, 5);
   });
 
+  /**
+   * Standing still must not bank distance.
+   *
+   * The budget was measured from the last *move*, and a player who stands
+   * there sends none — while a pong keeps the idle sweep off them for as long
+   * as they like. So a minute of standing bought about 54,000px, and one
+   * message crossed any map in the world. The clamp's own comment promised
+   * that could not happen.
+   */
+  it("does not let standing still pay for a teleport", () => {
+    join("p1");
+    // A minute of standing about, kept alive by the heartbeat rather than by
+    // moving, which is what a modified client would do.
+    for (let i = 0; i < 12; i++) {
+      clock += 5_000;
+      hub.touch("p1");
+    }
+    const moved = hub.move("p1", { x: 50_000, y: 100, facing: "right", moving: true })!;
+
+    const travelled = moved.x - 100;
+    const ceiling = (SPRINT_SPEED_PX_S / 1000) * MOVE_BUDGET_WINDOW_MS * SPEED_TOLERANCE;
+    expect(travelled).toBeLessThanOrEqual(ceiling);
+    // Comfortably inside a lobby, which is 960px across.
+    expect(travelled).toBeLessThan(500);
+  });
+
   it("keeps the intended direction when clamping", () => {
     join("p1");
     clock += 100;
@@ -138,11 +165,16 @@ describe("movement", () => {
     expect(hub.move("ghost", { x: 1, y: 1, facing: "up", moving: false })).toBeNull();
   });
 
-  it("allows a longer distance after a longer gap", () => {
+  it("allows a longer distance after a longer gap, up to the window", () => {
     join("p1");
-    clock += 1000; // a full second of walking
+    clock += 1000; // a full second, of which the budget pays for the window
     const moved = hub.move("p1", { x: 300, y: 100, facing: "right", moving: true })!;
     expect(moved.x).toBe(300);
+    // 200px is inside what the capped window buys, which is what makes this
+    // pass — not the whole second. Lower the window and this should fail.
+    expect(300 - 100).toBeLessThan(
+      (SPRINT_SPEED_PX_S / 1000) * MOVE_BUDGET_WINDOW_MS * SPEED_TOLERANCE,
+    );
   });
 });
 

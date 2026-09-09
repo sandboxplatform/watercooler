@@ -9,6 +9,7 @@ import {
   dayStartIn,
   pulseBars,
   pulseFigure,
+  readableBefore,
   toPulse,
   zoneOffset,
 } from "../pulse";
@@ -196,6 +197,49 @@ describe("atOrAfter", () => {
     expect(atOrAfter(undefined, from)).toBe(false);
     expect(atOrAfter("", from)).toBe(false);
     expect(atOrAfter("whenever", from)).toBe(false);
+  });
+});
+
+/**
+ * The question a sweep that stops early has to ask, and why it is not simply
+ * `!atOrAfter`.
+ *
+ * The closed-today sweep reads pages newest-first and stops at the first
+ * ticket older than midnight, on the reasoning that everything behind it is
+ * older still. `!atOrAfter` says true for a *missing* stamp as well as an old
+ * one — and a Closed ticket with no `closedTime` (a workflow, an import) can
+ * land anywhere under `sortBy=-closedTime`. One at the head of page one ended
+ * the sweep having counted nothing, and the Support wall read "CLOSED TODAY
+ * 0", which is precisely what a quiet desk looks like.
+ */
+describe("readableBefore", () => {
+  const from = at("2026-09-08T00:00:00Z");
+
+  it("stops on a stamp that really is older", () => {
+    expect(readableBefore("2026-09-07T23:59:59Z", from)).toBe(true);
+  });
+
+  it("does not stop on the boundary or anything after it", () => {
+    expect(readableBefore("2026-09-08T00:00:00Z", from)).toBe(false);
+    expect(readableBefore("2026-09-08T09:00:00Z", from)).toBe(false);
+  });
+
+  it("does not stop on a stamp it cannot read", () => {
+    expect(readableBefore(null, from)).toBe(false);
+    expect(readableBefore(undefined, from)).toBe(false);
+    expect(readableBefore("", from)).toBe(false);
+    expect(readableBefore("whenever", from)).toBe(false);
+  });
+
+  /**
+   * The two are deliberately not complements: an unreadable stamp is neither
+   * inside the day nor grounds for saying the rest of the desk is outside it.
+   */
+  it("leaves an unreadable stamp out of both answers", () => {
+    for (const stamp of [null, undefined, "", "whenever"]) {
+      expect(atOrAfter(stamp, from)).toBe(false);
+      expect(readableBefore(stamp, from)).toBe(false);
+    }
   });
 });
 

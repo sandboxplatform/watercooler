@@ -5,7 +5,7 @@
 
 import { FONT, SCREEN } from "../types";
 import { COLS, ITEM_NAMES, MAP_TOP, ROWS, TILE, type Item, type Tile } from "./world";
-import { DAN_TILE, ENEMIES, MAX_HP, has, roomOf, tileAt, type Enemy, type OakState } from "./game";
+import { DAN_TILE, MAX_HP, has, roomOf, tileAt, type Enemy, type OakState } from "./game";
 
 const ITEMS: Item[] = ["shovel", "fibre", "cross", "lantern", "cipher"];
 const ITEM_GLYPH: Record<Item, string> = {

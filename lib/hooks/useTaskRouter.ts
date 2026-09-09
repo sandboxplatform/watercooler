@@ -33,15 +33,56 @@ export function useTaskRouter(refs: TaskRouterRefs) {
   // committed the task, so they are kept here until it goes out.
   const attachmentsRef = useRef<Map<string, TaskAttachment[]>>(new Map());
 
+  /**
+   * Give up on a task, out loud.
+   *
+   * The queue only ever moves on `task-completed`, `task-failed` or
+   * `task-aborted`, so a task that stops without emitting one of them does
+   * not just lose itself — it holds the line behind it for the rest of the
+   * page's life.
+   */
+  const failTask = useCallback(
+    (taskId: string, sessionKey: string, reason: string) => {
+      log.error(`task ${taskId} failed: ${reason}`);
+      refs.dispatch.current({ type: "UPDATE_TASK", taskId, patch: { status: "failed" } });
+      refs.dispatch.current({ type: "SET_SEAT_STATUS", runId: taskId, status: "failed" });
+      refs.dispatch.current({
+        type: "APPEND_CHAT",
+        message: {
+          id: chatId(),
+          runId: taskId,
+          role: "system",
+          content: reason,
+          timestamp: new Date().toISOString(),
+          sessionKey,
+        },
+      });
+      gameEvents.emit("task-failed", taskId);
+    },
+    [refs],
+  );
+
   const sendTaskToGateway = useCallback(
     (taskId: string, message: string, seatId?: string) => {
       const client = refs.clientRef.current;
-      if (!client || client.status !== "connected") return;
       const task = findTask(refs.tasks.current, taskId);
 
       const seat = seatId ? refs.seats.current.find((s) => s.seatId === seatId) : undefined;
       const sessionKey = task?.sessionKey ?? refs.activeSessionKey.current ?? MAIN_SESSION_KEY;
       const actorName = task?.actorName ?? resolveSeatLabelForTask(refs.seats.current, seatId);
+
+      /**
+       * The gateway went away between queueing this and reaching it.
+       *
+       * This used to `return` and say nothing. A task drained off the queue
+       * into a disconnected client was neither sent nor failed nor put back,
+       * so it sat at "queued" for ever and every later task for the session
+       * lined up behind a run that could never end.
+       */
+      if (!client || client.status !== "connected") {
+        failTask(taskId, sessionKey, "Assign failed: not connected to the agent gateway.");
+        return;
+      }
 
       refs.dispatch.current({ type: "UPDATE_TASK", taskId, patch: { status: "submitted" } });
       if (seatId) {
@@ -84,25 +125,9 @@ export function useTaskRouter(refs: TaskRouterRefs) {
           refs.dispatch.current({ type: "BIND_SEAT_RUN", taskId, runId: finalRunId });
           gameEvents.emit("task-bound", taskId, finalRunId);
         })
-        .catch((err: Error) => {
-          log.error("assign failed:", err);
-          refs.dispatch.current({ type: "UPDATE_TASK", taskId, patch: { status: "failed" } });
-          refs.dispatch.current({ type: "SET_SEAT_STATUS", runId: taskId, status: "failed" });
-          gameEvents.emit("task-failed", taskId);
-          refs.dispatch.current({
-            type: "APPEND_CHAT",
-            message: {
-              id: chatId(),
-              runId: taskId,
-              role: "system",
-              content: `Assign failed: ${err.message}`,
-              timestamp: new Date().toISOString(),
-              sessionKey,
-            },
-          });
-        });
+        .catch((err: Error) => failTask(taskId, sessionKey, `Assign failed: ${err.message}`));
     },
-    [refs],
+    [refs, failTask],
   );
 
   const drainSessionQueue = useCallback(

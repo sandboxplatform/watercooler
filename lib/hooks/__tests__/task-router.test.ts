@@ -240,6 +240,40 @@ describe("one task at a time per session", () => {
     },
   );
 
+  /**
+   * The gateway going away must not jam the line for good.
+   *
+   * Draining used to hand the next task to a disconnected client and take a
+   * silent `return`: not sent, not failed, not put back. It sat at "queued"
+   * for ever, and since the line only moves when a task *ends*, every later
+   * task for that session queued behind one that never could. A reload was
+   * the only way out.
+   */
+  it("fails a task it cannot send rather than jamming the line behind it", async () => {
+    refs.tasks.current = [task("task-1", { status: "running", runId: "run-1" }), task("task-2")];
+    await settle(() => gameEvents.emit("task-ready", "task-2", "the next job"));
+
+    // The gateway drops, and only then does the running task end.
+    status = "disconnected";
+    await settle(() => gameEvents.emit("task-completed", "task-1"));
+
+    expect(requests).toEqual([]);
+    expect(of("UPDATE_TASK")).toContainEqual(
+      expect.objectContaining({ taskId: "task-2", patch: { status: "failed" } }),
+    );
+    // And it said so, rather than the task simply vanishing.
+    expect(first("APPEND_CHAT")).toMatchObject({
+      message: { role: "system", content: expect.stringContaining("not connected") },
+    });
+
+    // The line moved: a task queued afterwards still goes out once the
+    // gateway is back.
+    status = "connected";
+    refs.tasks.current = [task("task-1", { status: "completed" }), task("task-3")];
+    await settle(() => gameEvents.emit("task-ready", "task-3", "third"));
+    expect(requests.map((r) => r.params.message)).toEqual(["third"]);
+  });
+
   it("lets the line through one at a time", async () => {
     refs.tasks.current = [
       task("task-1", { status: "running", runId: "run-1" }),
