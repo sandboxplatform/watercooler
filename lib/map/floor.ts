@@ -217,17 +217,22 @@ const LOWER_TOP = LOWER_WALL + WALL_ROWS;
 export const OPS_HEIGHT = LOWER_TOP + ROOM_ROWS + 1;
 
 /**
- * The doorway through the wall between two rooms in the same rank: two
- * tiles, halfway down it.
+ * The doorway through the wall between two rooms in the same rank: three
+ * tiles, dead centre of it.
  *
  * A room with one door is a room you leave the way you came in, so getting
  * from one project's room to the next door's meant walking back out to the
  * corridor and along it. Neighbours already share a wall, so the short way
- * is through it. Two tiles, the same as the doors off the corridor, and the
- * middle of the wall rather than an end — where it reads as the way between
- * two rooms rather than as a gap somebody forgot to close.
+ * is through it.
+ *
+ * Wider than the two-tile doors off the corridor, and deliberately: those
+ * are doorways in a wall you look at the face of, and this is a wall seen
+ * from above, where the same two tiles read as a slot rather than a way
+ * through. Three of the seven rows leaves two tiles of wall above and two
+ * below — the only width that is symmetrical, so the opening sits where a
+ * person walking the middle of the room already is.
  */
-const BETWEEN_ROOMS_ROWS = 2;
+const BETWEEN_ROOMS_ROWS = 3;
 const BETWEEN_ROOMS = {
   rows: BETWEEN_ROOMS_ROWS,
   at: Math.floor((ROOM_ROWS - BETWEEN_ROOMS_ROWS) / 2),
