@@ -310,9 +310,58 @@ export function opsElevator(rooms: number) {
   } as const;
 }
 
+/** A clear stretch of wall, as [from, to) columns. */
+export interface WallRun {
+  from: number;
+  to: number;
+}
+
 /**
- * Where this floor writes its name: the corridor's upper wall, on the
- * Operations room's half of it.
+ * The clear stretches of the corridor's upper wall, split by the doorways
+ * cut through it.
+ *
+ * The one wall on this floor with anything written on it, and the only one
+ * the corridor sees a whole face of: the lower rank's is the wall the lift
+ * is set into and the lower rooms hang their boards on. A doorway is a hole
+ * in it, so a stretch is what is left between two of them — which is what
+ * "on the wall" has to mean before anything can be centred on it.
+ */
+export function opsWallRuns(rooms: number): WallRun[] {
+  const runs: WallRun[] = [];
+  let from = 0;
+  for (const room of opsRooms(rooms).filter((room) => room.rank === "upper")) {
+    runs.push({ from, to: room.door.from });
+    from = room.door.to;
+  }
+  runs.push({ from, to: opsWidth(rooms) });
+  return runs.filter((run) => run.to > run.from);
+}
+
+/**
+ * The stretch of that wall a room fronts: the run it shares most of its
+ * width with.
+ *
+ * A room's own doorway divides its frontage in two, and the larger half is
+ * the side of it there is room to write on — which for every room on this
+ * floor is the side away from the door, since a doorway sits four tiles in
+ * from one edge and eight from the other. Asked as an overlap rather than
+ * written down as "the run after the door", because the lower rank's doors
+ * are offset the other way and one rule that reads the geometry beats two
+ * that assume it.
+ */
+export function opsWallRun(rooms: number, room: OpsRoom): WallRun {
+  const runs = opsWallRuns(rooms);
+  const shared = (run: WallRun) =>
+    Math.max(0, Math.min(run.to, room.x + ROOM_COLS) - Math.max(run.from, room.x));
+  return runs.reduce((best, run) => (shared(run) > shared(best) ? run : best), runs[0]);
+}
+
+/** The middle of a run, which is where anything lettered on it goes. */
+const middleOf = (run: WallRun) => (run.from + run.to) / 2;
+
+/**
+ * Where this floor writes its name: the middle of the stretch of the
+ * corridor's upper wall that Operations fronts.
  *
  * Every other room hangs its sign on the wall across the top of the map,
  * because in every other room you can see that wall. Up there on this one
@@ -322,14 +371,49 @@ export function opsElevator(rooms: number) {
  *
  * Right of the doorway rather than over it: a sign across a gap labels the
  * gap. The Operations room is the one the floor is named after and the one
- * the lift lands you facing, so its half of the wall is the half to use.
+ * the lift lands you facing, so its side of the wall is the side to use.
+ *
+ * It used to be centred between the doorway and the room's own right-hand
+ * edge, which is not the wall anybody sees: the wall does not stop where
+ * the room does — it carries on past the divider between the bays to the
+ * next doorway along. So the name sat a couple of tiles left of the middle
+ * of the stretch it was written on, with no edge in the room to line up
+ * with and nothing to explain why.
  */
 export function opsSign(rooms: number) {
   const [operations] = opsRooms(rooms);
-  return {
-    tx: (operations.door.to + operations.x + ROOM_COLS) / 2,
-    ty: UPPER_WALL,
-  } as const;
+  return { tx: middleOf(opsWallRun(rooms, operations)), ty: UPPER_WALL } as const;
+}
+
+/**
+ * Where the desk's week is lettered: the corridor wall outside Support,
+ * two figures side by side.
+ *
+ * The counts on Support's own wall are the desk today — what is standing on
+ * it and what moved since midnight — and they are a plate five tiles wide
+ * with no room for a third bank. The week is the other question, and the
+ * corridor wall is where it goes: the same face the floor writes its name
+ * on, outside the room the numbers belong to, so walking out of the lift
+ * tells you where you are and how the week has gone in two glances.
+ *
+ * Quarter and three-quarters of the run rather than a gap between them,
+ * because each figure is centred under its own heading and the pair has to
+ * read as two things rather than one long one.
+ *
+ * Null on the two floors with nowhere to put them, and the room keeps its
+ * five counts on both: where Support is in the lower rank — a floor of two
+ * rooms, whose lower wall is the one the lift is set into and the one the
+ * room's own boards hang on — and where its stretch is the one the floor
+ * has written its name on, which is a floor of one room, where Operations
+ * and Support are the same room.
+ */
+export function opsWeekCounts(rooms: number) {
+  const support = opsSupportRoom(rooms);
+  if (support.rank !== "upper") return null;
+  const run = opsWallRun(rooms, support);
+  if (middleOf(run) === opsSign(rooms).tx) return null;
+  const width = run.to - run.from;
+  return { tx: [run.from + width / 4, run.from + (width * 3) / 4] as const, ty: UPPER_WALL };
 }
 
 /**

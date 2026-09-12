@@ -656,6 +656,36 @@ named after — so you step out facing its door. That is why the two doorways
 in a bay are offset: the lower rank's door has to stay clear of the wall the
 lift occupies, and a test asserts it does.
 
+**The floor's name is centred on the stretch of wall it is written on.**
+The corridor's upper wall is the one face anybody on this floor sees a
+whole run of, and every doorway is a hole in it — so "the wall" is a
+stretch between two doorways (`opsWallRuns`), not a room's frontage. The
+name used to be centred between Operations' doorway and Operations' own
+right-hand edge, which is an edge nothing in the corridor can see: the wall
+carries on past the divider between the bays to the next doorway along. It
+sat a couple of tiles to the left of the middle of what it was written on,
+with nothing in the room to line up with and nothing to explain why.
+
+**The desk's week is lettered on the wall outside Support** — two figures,
+`opsWeekCounts`, on the stretch that room fronts. Support's own wall is
+full (the queue, the five counts, the room's name) and the plate is five
+tiles with two rows on it, so a third bank would take every figure down a
+size to make room for one nobody asked the wall for. Outside is where there
+is room, and it is not a consolation: the numbers hang on the face the
+floor writes its own name on, so stepping out of the lift says where you
+are and how the week has gone in two glances.
+
+Painted rather than plated, which is the whole difference from the plate
+inside — no bays, no bars, the wall's own two colours, and no flash on a
+number that moved. Paint does not change while you watch it. `DeskWeek` in
+`systems/SupportPulse.ts` is the drawing; it keeps a timer, so it hands back
+a teardown like the boards do.
+
+Two floors get nothing, and the desk keeps its five counts on both: one of
+one room, where Operations and Support are the same room and the name
+already has that wall, and one of two, where Support is in the lower rank —
+whose wall is the lift's and its own boards'.
+
 **The project board hangs in Operations; the support queue hangs in
 Support.** A board is a picture of the work it stands for, so the room it
 hangs in is what the room is for — and the queue is the one board that names
@@ -691,7 +721,8 @@ the sign and its bobbing arrow a whole tile off centre in a lobby.
 come with the queue rather than being declared: `SUPPORT_PULSE` is not a
 `BoardKind`, and a building running no support desk has nothing for them to
 count. What is standing in three statuses, and what was raised and closed
-today.
+today. The week's two come with the queue for the same reason and hang
+outside the room, above.
 
 They are one of the two fixtures whose picture is its numbers, which is why
 nothing delivers art for them. `systems/CountBoard` draws the plate, the
@@ -753,23 +784,32 @@ The arithmetic is `lib/zoho/pulse.ts`, pure, and the sweeps are
 `fetchPulse` in `lib/zoho/client.ts`. Three sweeps rather than one page,
 because they are three questions:
 
-| Sweep        | Asks Zoho for                         | Stops when                          |
-| ------------ | ------------------------------------- | ----------------------------------- |
-| Standing     | `status=New,Queue,In Progress`        | The pages run out                   |
-| Opened today | Everything, `sortBy=-createdTime`     | A ticket is older than midnight     |
-| Closed today | `status=Closed`, `sortBy=-closedTime` | A ticket was closed before midnight |
+| Sweep    | Asks Zoho for                         | Stops when                        |
+| -------- | ------------------------------------- | --------------------------------- |
+| Standing | `status=New,Queue,In Progress`        | The pages run out                 |
+| Opened   | Everything, `sortBy=-createdTime`     | A ticket is older than Monday     |
+| Closed   | `status=Closed`, `sortBy=-closedTime` | A ticket was closed before Monday |
 
-Four details are load-bearing. Zoho's `from` is **one-based** — its first
+**Still three sweeps for seven counts.** The week is the longer reach of the
+two boundaries, so the traffic sweeps stop there and the day's counts are a
+prefix of what they already read — a second pair of sweeps to midnight would
+ask Zoho again for tickets it has just handed over.
+
+Five details are load-bearing. Zoho's `from` is **one-based** — its first
 record is 1 and 0 is treated as 1 — so a zero-based offset reads the
 boundary record twice on every page and counts it twice with it. The
 `sortBy` on the last two is not tidiness: they stop early on the first
-ticket past midnight, so the order is the only thing that makes them exact
-from one page. A sweep that hits `PULSE_MAX_PAGES` marks its counters
+ticket past the boundary, so the order is the only thing that makes them
+exact from one page. A sweep that hits `PULSE_MAX_PAGES` marks its counters
 `capped` and the figure is written `600+`, because a floor that looks like
-a total is worse than no number. And a bar is a share of its own **bank** —
-the three standing against each other, the two day counters against each
-other — since one scale across all five would measure a standing total
-against a day's flow, which is not a comparison.
+a total is worse than no number — but **capped is asked per boundary now**,
+since one sweep answers two questions: running out of pages somewhere inside
+the week says nothing about today if the sweep got as far back as midnight,
+which on a busy desk is the ordinary case (`sweptPast`). And a bar is a
+share of its own **bank** — the three standing against each other, the two
+day counters against each other, the two week counters against each other —
+since one scale across the lot would measure a standing total against a
+day's flow, which is not a comparison.
 
 There is no count endpoint behind this. `/ticketsCountByFieldValues` needs
 a scope the desk's token does not carry, and `/tickets/count` insists on a
@@ -782,6 +822,15 @@ is by literal value. They map onto the three bays by position, so the first
 named is the left-hand bay whatever it is called. Sandbox ERP's desk carries
 New, Queue and In Progress among its nine, which is where the default comes
 from.
+
+**"This week" is Monday to now, on the desk's clock.** Monday because a
+support desk's week is a working week: a Sunday ticket belongs with the
+weekend it arrived in rather than opening the week that is about to be
+worked. `weekStartIn` is the boundary, and it steps back **whole days on
+the desk's own calendar** rather than subtracting days of milliseconds from
+its midnight — a week with a clock change in it is 167 hours or 169, so the
+arithmetic that looks right lands an hour inside Sunday or an hour inside
+Monday twice a year, which moves two figures on the wall.
 
 **"Today" is the desk's day, not the server's.** A support desk's day
 belongs to the people working it, and the same build runs on a laptop in
@@ -809,10 +858,13 @@ Three things in there are easy to get wrong and all of them look fine:
 
 - **`hourCycle: "h23"`, not `hour12: false`.** Some ICU builds write
   midnight as `"24"` under the latter, which puts the boundary a day out.
-- **Two passes over the offset.** The offset in force _now_ is not the one
-  in force at midnight on the two days a year the clocks move, so the
-  answer is re-derived from itself and the version that actually reads as
-  midnight there is the one kept. That is a check rather than a hope, and
+- **Two passes over the offset**, which both boundaries go through. The
+  offset in force _now_ is not the one in force at that midnight on the two
+  days a year the clocks move, so the answer is re-derived from itself and
+  the version that actually reads as midnight there is the one kept. The
+  week's first guess is up to six days from now, so it is the more often
+  wrong of the two and the refining pass is doing real work there rather
+  than covering a corner. That is a check rather than a hope, and
   where neither reads as midnight — a zone whose clocks change _at_
   midnight — the first pass stands: an hour out on one day, rather than a
   day out.
@@ -1594,7 +1646,7 @@ it. Nothing else in the app knows a second task has to be held.
   | Kind                    | Examples                                                                  | Scaled |
   | ----------------------- | ------------------------------------------------------------------------- | ------ |
   | Labels, floating        | `Press E`, name tags, the chips over fixtures, a resident's name outdoors | yes    |
-  | Lettering in the layout | The building's name, `SUPPORT`, the five counts, a signboard's words      | no     |
+  | Lettering in the layout | The building's name, `SUPPORT`, the counts on a wall, a signboard's words | no     |
 
   A label floats above the world with nothing under it to line up with, so
   growing one costs nothing. Lettering in the layout is sized to the geometry

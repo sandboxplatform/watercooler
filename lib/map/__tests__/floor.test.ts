@@ -10,8 +10,12 @@ import {
   type OpsRoom,
   opsProjectFlow,
   opsRooms,
+  opsSign,
   opsSupportRoom,
   opsSupportSign,
+  opsWallRun,
+  opsWallRuns,
+  opsWeekCounts,
   opsWhiteboardRoom,
   opsWidth,
   PLAYER_START,
@@ -341,6 +345,114 @@ describe("an Operations floor", () => {
     it("runs the counts to Support's right-hand corner", () => {
       const counts = named("Support pulse").tx + Math.ceil(SUPPORT_PULSE.region.sw / 2);
       expect(counts).toBe(support.x + 14);
+    });
+  });
+
+  /**
+   * What is lettered on the corridor's upper wall, and where.
+   *
+   * Nothing here is in the map — a name and two numbers are paint on a wall
+   * the map already made solid, so the scene draws them off these. Which
+   * makes the geometry the only thing there is to check: a figure two tiles
+   * off centre, or one written across a doorway, looks like a rendering
+   * fault and is arithmetic.
+   */
+  describe("the lettering on the corridor wall", () => {
+    /** Sandbox ERP's floor: five projects, three bays, forty-six tiles. */
+    const rooms = 5;
+    const doors = opsRooms(rooms)
+      .filter((room) => room.rank === "upper")
+      .map((room) => room.door);
+    const clear = (tx: number) =>
+      doors.every((door) => tx <= door.from || tx >= door.to) && tx > 0 && tx < opsWidth(rooms);
+
+    it("splits the wall at every doorway through it", () => {
+      const runs = opsWallRuns(rooms);
+      expect(runs).toEqual([
+        { from: 0, to: 5 },
+        { from: 7, to: 20 },
+        { from: 22, to: 35 },
+        { from: 37, to: 46 },
+      ]);
+      // Every run is wall, and between them is the way into a room.
+      for (const run of runs) expect(run.to).toBeGreaterThan(run.from);
+      for (const door of doors) {
+        expect(runs.some((run) => run.from < door.to && run.to > door.from)).toBe(false);
+      }
+    });
+
+    /**
+     * The wall does not stop where the room does. It carries on past the
+     * divider between the bays to the next doorway along, and the middle of
+     * that stretch is the middle of what anybody standing in the corridor
+     * is looking at — which is what "centred" has to mean out there.
+     */
+    it("centres the floor's name on the stretch of wall it is written on", () => {
+      const [operations] = opsRooms(rooms);
+      const run = opsWallRun(rooms, operations);
+      expect(opsSign(rooms).tx).toBe((run.from + run.to) / 2);
+      expect(clear(opsSign(rooms).tx)).toBe(true);
+      // The larger half of Operations' frontage: the side away from its door.
+      expect(run.from).toBe(operations.door.to);
+    });
+
+    /**
+     * The week hangs outside the room it counts, which is the whole reason
+     * it is out here rather than on the plate inside: a stretch of wall
+     * belongs to the room behind it, so the numbers say whose they are by
+     * where they are.
+     */
+    it("letters the week on the stretch of wall Support fronts", () => {
+      const week = opsWeekCounts(rooms)!;
+      const run = opsWallRun(rooms, opsSupportRoom(rooms));
+      expect(week.ty).toBe(opsSign(rooms).ty);
+      expect(week.tx).toEqual([25.25, 31.75]);
+      for (const tx of week.tx) {
+        expect(tx).toBeGreaterThan(run.from);
+        expect(tx).toBeLessThan(run.to);
+        expect(clear(tx)).toBe(true);
+      }
+      // Evenly spaced on their own stretch: each figure is centred under
+      // its own heading, so the pair reads as two things and not one.
+      expect(week.tx[0] - run.from).toBe(run.to - week.tx[1]);
+    });
+
+    /** And never on the stretch the floor has written its name on. */
+    it("keeps the week clear of the floor's name", () => {
+      for (let count = 1; count <= 12; count++) {
+        const week = opsWeekCounts(count);
+        if (!week) continue;
+        const name = opsSign(count);
+        for (const tx of week.tx) expect(Math.abs(tx - name.tx)).toBeGreaterThan(6);
+      }
+    });
+
+    /**
+     * Two floors have nowhere to put them, and the desk keeps its five
+     * counts on both: one room, where Operations and Support are the same
+     * room and the name already has that wall; and two, where Support is in
+     * the lower rank, whose wall is the lift's and its own boards'.
+     */
+    it("letters nothing where there is no clear wall for it", () => {
+      expect(opsWeekCounts(1)).toBeNull();
+      expect(opsSupportRoom(2).rank).toBe("lower");
+      expect(opsWeekCounts(2)).toBeNull();
+      for (let count = 3; count <= 12; count++) {
+        expect(opsWeekCounts(count), `${count} rooms`).not.toBeNull();
+      }
+    });
+
+    /**
+     * The narrowest stretch the week is ever lettered on, which is what the
+     * headings are sized against (see `pulse.test.ts`). The last run of a
+     * floor with an odd number of rooms is the short one: nine tiles.
+     */
+    it("never letters the week on less than nine tiles", () => {
+      for (let count = 3; count <= 12; count++) {
+        if (!opsWeekCounts(count)) continue;
+        const run = opsWallRun(count, opsSupportRoom(count));
+        expect(run.to - run.from, `${count} rooms`).toBeGreaterThanOrEqual(9);
+      }
     });
   });
 

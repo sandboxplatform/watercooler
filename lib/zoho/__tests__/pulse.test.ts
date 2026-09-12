@@ -10,12 +10,15 @@ import {
   pulseBars,
   pulseFigure,
   readableBefore,
+  sweptPast,
   toPulse,
+  weekStart,
+  weekStartIn,
   zoneOffset,
 } from "../pulse";
 
 /**
- * The arithmetic behind five numbers on a wall.
+ * The arithmetic behind the numbers on a wall.
  *
  * Worth pinning down because a wrong count looks exactly like a right one:
  * there is nothing on the board to say a status was missed or that a ticket
@@ -308,10 +311,130 @@ describe("countSince", () => {
   });
 });
 
+describe("weekStart", () => {
+  /**
+   * Monday, because a support desk's week is a working week — a Sunday
+   * ticket belongs with the weekend it arrived in rather than opening the
+   * week that is about to be worked.
+   */
+  it("steps back to Monday morning", () => {
+    const monday = weekStart(at("2026-09-09T15:00:00Z"));
+    expect(new Date(monday).getDay()).toBe(1);
+    expect(new Date(monday).getHours()).toBe(0);
+    expect(new Date(monday).getMinutes()).toBe(0);
+  });
+
+  /** A Monday is its own week's start, not last week's. */
+  it("leaves a Monday where it is", () => {
+    const at9 = new Date(2026, 8, 7, 9, 30);
+    const start = new Date(weekStart(at9.getTime()));
+    expect(start.getDate()).toBe(7);
+    expect(start.getHours()).toBe(0);
+  });
+
+  /** Sunday is the end of a week here, six days from its Monday. */
+  it("puts Sunday at the end of its own week", () => {
+    const sunday = new Date(2026, 8, 13, 23, 0);
+    const start = new Date(weekStart(sunday.getTime()));
+    expect(start.getDate()).toBe(7);
+  });
+});
+
+describe("weekStartIn", () => {
+  const zone = "America/Halifax";
+  // Assembled from the parts rather than taken as a formatted string: how
+  // a locale punctuates between a weekday and a time is up to the ICU the
+  // runtime was built with, and it is not what any of this is about.
+  const reads = (at: number) => {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(at));
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((p) => p.type === type)?.value ?? "";
+    return `${part("weekday")} ${part("hour")}:${part("minute")}`;
+  };
+
+  it("is midnight on Monday where the desk is", () => {
+    expect(reads(weekStartIn(at("2026-09-10T12:00:00Z"), zone))).toBe("Mon 00:00");
+  });
+
+  /**
+   * A Halifax Monday starts at 04:00 UTC, so an instant between midnight
+   * UTC and then is still Sunday on the desk's clock — and belongs to the
+   * week before. Reading the boundary off the server's clock would open the
+   * new week eight hours early, every week.
+   */
+  it("uses the desk's calendar day, not the server's", () => {
+    const sundayThere = at("2026-09-14T02:00:00Z");
+    expect(reads(weekStartIn(sundayThere, zone))).toBe("Mon 00:00");
+    expect(weekStartIn(sundayThere, zone)).toBeLessThan(sundayThere - 6 * 86_400_000);
+  });
+
+  /**
+   * The week the clocks go back is 169 hours long. Stepping back whole days
+   * on a calendar lands on midnight anyway; subtracting days of
+   * milliseconds from Sunday's midnight would land an hour inside Monday.
+   */
+  it("still lands on midnight across a clock change", () => {
+    // Nova Scotia puts its clocks back on the first Sunday in November.
+    expect(reads(weekStartIn(at("2026-11-05T12:00:00Z"), zone))).toBe("Mon 00:00");
+    expect(reads(weekStartIn(at("2026-03-12T12:00:00Z"), zone))).toBe("Mon 00:00");
+  });
+
+  /** Today is always inside this week, whatever the clocks did. */
+  it("never lands after the day it contains", () => {
+    for (let day = 0; day < 14; day++) {
+      const now = at("2026-11-01T09:00:00Z") + day * 86_400_000;
+      expect(weekStartIn(now, zone)).toBeLessThanOrEqual(dayStartIn(now, zone));
+      expect(now - weekStartIn(now, zone)).toBeLessThan(8 * 86_400_000);
+    }
+  });
+
+  /** No zone, or one this runtime never heard of: the server's own Monday. */
+  it("falls back to the server's week", () => {
+    const now = at("2026-09-10T12:00:00Z");
+    expect(weekStartIn(now, null)).toBe(weekStart(now));
+    expect(weekStartIn(now, "Mars/Olympus")).toBe(weekStart(now));
+  });
+});
+
+describe("sweptPast", () => {
+  const boundary = at("2026-09-08T00:00:00Z");
+  const older = { createdTime: "2026-09-07T23:00:00Z" };
+  const newer = { createdTime: "2026-09-08T01:00:00Z" };
+
+  it("is true once the sweep has read something older", () => {
+    expect(sweptPast([newer, older], "createdTime", boundary)).toBe(true);
+  });
+
+  /**
+   * The whole point: a sweep that ran out of pages inside the week may
+   * still have read every ticket raised today, and marking today's count a
+   * floor on the week's account would be a floor where there is a total.
+   */
+  it("is false while everything read is newer", () => {
+    expect(sweptPast([newer, newer], "createdTime", boundary)).toBe(false);
+    expect(sweptPast([], "createdTime", boundary)).toBe(false);
+  });
+
+  /** A missing stamp is no evidence of having read far enough. */
+  it("does not count an unreadable stamp as reaching back", () => {
+    expect(sweptPast([{}, { createdTime: "whenever" }], "createdTime", boundary)).toBe(false);
+  });
+});
+
 describe("toPulse", () => {
+  // A Tuesday, so "yesterday" is still inside the week and the two
+  // boundaries are a day apart rather than the same instant.
   const from = dayStartIn(at("2026-09-08T12:00:00Z"), "America/Halifax");
+  const week = weekStartIn(at("2026-09-08T12:00:00Z"), "America/Halifax");
   const today = new Date(from + 3_600_000).toISOString();
   const yesterday = new Date(from - 3_600_000).toISOString();
+  const lastWeek = new Date(week - 3_600_000).toISOString();
 
   const pulse = (over: Partial<Parameters<typeof toPulse>[0]> = {}) =>
     toPulse({
@@ -321,12 +444,13 @@ describe("toPulse", () => {
       closed: [],
       capped: [],
       since: from,
+      weekSince: week,
       timeZone: "America/Halifax",
       zone: "agents",
       ...over,
     });
 
-  it("fills the five counters", () => {
+  it("fills the seven counters", () => {
     const view = pulse({
       standing: [{ status: "New" }, { status: "New" }, { status: "Queue" }],
       opened: [{ createdTime: today }, { createdTime: yesterday }],
@@ -338,7 +462,26 @@ describe("toPulse", () => {
       "in-progress": 0,
       "opened-today": 1,
       "closed-today": 2,
+      "opened-week": 2,
+      "closed-week": 3,
     });
+  });
+
+  /**
+   * The week's two are the day's two over a longer reach of the same swept
+   * page — the whole point of sweeping to Monday rather than to midnight
+   * twice. So today is always a subset of the week, and a ticket older than
+   * Monday is in neither.
+   */
+  it("counts the week off the same sweep, and stops at Monday", () => {
+    const view = pulse({
+      opened: [{ createdTime: today }, { createdTime: yesterday }, { createdTime: lastWeek }],
+      closed: [{ closedTime: yesterday }, { closedTime: lastWeek }],
+    });
+    expect(view.counts["opened-today"]).toBe(1);
+    expect(view.counts["opened-week"]).toBe(2);
+    expect(view.counts["closed-today"]).toBe(0);
+    expect(view.counts["closed-week"]).toBe(1);
   });
 
   /**
@@ -370,6 +513,17 @@ describe("toPulse", () => {
     expect(pulse().zone).toBe("agents");
   });
 
+  /**
+   * Its own field rather than left to the reader: "this week" is only
+   * checkable if the panel can say which Monday, on whose clock.
+   */
+  it("says which Monday the week is measured from", () => {
+    expect(pulse().weekSince).toBe(new Date(week).toISOString());
+    expect(new Date(pulse().weekSince).getTime()).toBeLessThanOrEqual(
+      new Date(pulse().since).getTime(),
+    );
+  });
+
   it("carries the capped counters through", () => {
     expect(pulse({ capped: ["new", "queue", "in-progress"] }).capped).toEqual([
       "new",
@@ -386,6 +540,8 @@ describe("pulseBars", () => {
     "in-progress": 0,
     "opened-today": 2,
     "closed-today": 6,
+    "opened-week": 9,
+    "closed-week": 11,
   } as const;
 
   /**
@@ -401,11 +557,13 @@ describe("pulseBars", () => {
     expect(bars["in-progress"]).toBe(0);
     expect(bars["opened-today"]).toBeCloseTo(2 / 8);
     expect(bars["closed-today"]).toBeCloseTo(6 / 8);
+    expect(bars["opened-week"]).toBeCloseTo(9 / 20);
+    expect(bars["closed-week"]).toBeCloseTo(11 / 20);
   });
 
   it("fills each bank, and only its own", () => {
     const bars = pulseBars(counts);
-    for (const bank of ["standing", "today"] as const) {
+    for (const bank of ["standing", "today", "week"] as const) {
       const total = PULSE_METRICS.filter((m) => m.bank === bank).reduce(
         (sum, m) => sum + bars[m.id],
         0,
@@ -421,6 +579,8 @@ describe("pulseBars", () => {
       "in-progress": 0,
       "opened-today": 0,
       "closed-today": 0,
+      "opened-week": 0,
+      "closed-week": 0,
     });
     for (const metric of PULSE_METRICS) expect(bars[metric.id]).toBe(0);
   });
@@ -437,11 +597,12 @@ describe("pulseFigure", () => {
   });
 });
 
-describe("the five metrics", () => {
-  it("are five, each in one of the two banks", () => {
-    expect(PULSE_METRICS).toHaveLength(5);
+describe("the metrics", () => {
+  it("are seven, each in one of the three banks", () => {
+    expect(PULSE_METRICS).toHaveLength(7);
     expect(PULSE_METRICS.filter((m) => m.bank === "standing")).toHaveLength(3);
     expect(PULSE_METRICS.filter((m) => m.bank === "today")).toHaveLength(2);
+    expect(PULSE_METRICS.filter((m) => m.bank === "week")).toHaveLength(2);
   });
 
   it("gives each its own id", () => {
@@ -450,15 +611,32 @@ describe("the five metrics", () => {
   });
 
   /**
-   * The headings are drawn on five tiles of wall — two hundred and forty
-   * pixels, less padding, split three across the top and two across the
-   * bottom, in a font that advances by its own size. Twelve characters is
-   * what the narrower of the two banks affords.
+   * The plate's headings are drawn on five tiles of wall — two hundred and
+   * forty pixels, less padding, split three across the top and two across
+   * the bottom, in a font that advances by its own size. Twelve characters
+   * is what the narrower of the two banks affords.
+   *
+   * The week's two are not on the plate, so they are not held to a bay:
+   * they are lettered on the corridor wall outside, where what they have to
+   * fit is a quarter of a stretch of wall. That is the test below.
    */
-  it("keeps every wall heading short enough to fit its bay", () => {
-    const room = { standing: (240 - 12) / 3, today: (240 - 12) / 2 };
+  it("keeps every heading on the plate short enough to fit its bay", () => {
+    const room: Record<string, number> = { standing: (240 - 12) / 3, today: (240 - 12) / 2 };
     for (const metric of PULSE_METRICS) {
-      expect(metric.short.length * 8, metric.short).toBeLessThanOrEqual(room[metric.bank]);
+      const bay = room[metric.bank];
+      if (bay === undefined) continue;
+      expect(metric.short.length * 8, metric.short).toBeLessThanOrEqual(bay);
+    }
+  });
+
+  /**
+   * The narrowest stretch of corridor wall the week is ever lettered on is
+   * nine tiles (see `opsWallRuns`), so each of the two has four and a half
+   * of them — two hundred and sixteen pixels — at twelve to a letter.
+   */
+  it("keeps the week's headings short enough for the wall outside", () => {
+    for (const metric of PULSE_METRICS.filter((m) => m.bank === "week")) {
+      expect(metric.short.length * 12, metric.short).toBeLessThanOrEqual((9 / 2) * 48);
     }
   });
 });

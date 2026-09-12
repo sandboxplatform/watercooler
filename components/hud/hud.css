@@ -1793,8 +1793,8 @@
   color: var(--pixel-muted);
 }
 
-/* Three across, then two — the same split the wall makes, which is the
-   split that makes the bars mean anything. One column on a phone. */
+/* Three across, then two, then two — the same split the room makes, which
+   is the split that makes the bars mean anything. One column on a phone. */
 .pulse-grid {
   display: grid;
   gap: 10px;
@@ -1804,7 +1804,8 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.pulse-grid--today {
+.pulse-grid--today,
+.pulse-grid--week {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -1820,6 +1821,7 @@
 @media (max-width: 640px) {
   .pulse-grid--standing,
   .pulse-grid--today,
+  .pulse-grid--week,
   .pulse-grid--flow {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -35,8 +35,9 @@ import {
   opsSign,
   opsSupportPulse,
   opsSupportSign,
+  opsWeekCounts,
 } from "@/lib/map/floor";
-import { SupportPulse } from "../systems/SupportPulse";
+import { DeskWeek, SupportPulse } from "../systems/SupportPulse";
 import { ProjectFlow } from "../systems/ProjectFlow";
 import { legible } from "../systems/legible";
 import {
@@ -357,6 +358,7 @@ export class OfficeScene extends Phaser.Scene {
     if (address) this.addWallSign(address);
     if (address) this.addSupportSign(address);
     const stopPulse = address ? this.addSupportPulse(address) : null;
+    const stopWeek = address ? this.addDeskWeek(address) : null;
     const stopFlow = address ? this.addProjectFlow(address) : null;
 
     this.input.keyboard?.disableGlobalCapture();
@@ -469,6 +471,7 @@ export class OfficeScene extends Phaser.Scene {
     });
     this.cleanupPresence = () => {
       stopPulse?.();
+      stopWeek?.();
       stopFlow?.();
       unsubBadge();
       unsubSprite();
@@ -714,6 +717,23 @@ export class OfficeScene extends Phaser.Scene {
    * of interest are either both there or neither is. Hands back the board's
    * own teardown, since it keeps a timer.
    */
+  /**
+   * The week, lettered on the corridor wall outside Support.
+   *
+   * The same condition as the plate inside — it is the same desk — and one
+   * more: `opsWeekCounts` answers null on a floor with no clear stretch of
+   * that wall to letter, which the plate does not care about because it
+   * hangs on the room's own. Hands back its teardown, since it keeps a
+   * timer.
+   */
+  private addDeskWeek(address: Address): (() => void) | null {
+    const ops = address.floor.kind === "floor" && address.floor.level === 3;
+    if (!ops || !operationsBoards(address.tenant).includes(SUPPORT_BOARD)) return null;
+    const at = opsWeekCounts(operationsRoomCount(address.tenant));
+    if (!at) return null;
+    return new DeskWeek(this).place(at, TILE);
+  }
+
   private addProjectFlow(address: Address): (() => void) | null {
     const ops = address.floor.kind === "floor" && address.floor.level === 3;
     if (!ops || !hasProjectFlow(address.tenant)) return null;

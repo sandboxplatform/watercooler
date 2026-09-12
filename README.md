@@ -398,16 +398,26 @@ number's share of its own group — so the three above compare with each
 other, the two below compare with each other, and nothing is a percentage
 of anything else. A number that has moved since the last read flashes once.
 
-Walk up and press E for the same five with the headings spelled out, what
-each one counts and which midnight "today" is measured from. That is also
-the answer on a phone: the board is a dashboard painted on a wall, drawn at
-the room's scale, and on a small screen the room is about half size. The
-labels around it — the `Press E`, the signs, people's names — hold their own
-size at any zoom, so it is the counts themselves that want the panel.
+**The week is on the corridor wall outside**, lettered beside the floor's
+own name rather than on a board: OPENED WEEK and CLOSED WEEK, counted from
+midnight on Monday on the same clock. Stepping out of the lift gives you
+where you are and how the week has gone in two glances. There was no room
+for them on the plate inside — it is five tiles of wall with two rows on it
+— and out here they read as part of the building, which is why they are
+painted on rather than lit up, and why neither of them flashes.
+
+Walk up and press E for all seven with the headings spelled out, what each
+one counts and which midnight "today" and "this week" are measured from.
+That is also the answer on a phone: the board is a dashboard painted on a
+wall, drawn at the room's scale, and on a small screen the room is about
+half size. The labels around it — the `Press E`, the signs, people's names —
+hold their own size at any zoom, so it is the counts themselves that want
+the panel.
 
 Every count is exact rather than a sample of a page — the statuses are
 swept until they run out, and a count that hits the sweep's ceiling is
-written `600+` rather than quietly as `600`. If your desk names its
+written `600+` rather than quietly as `600`. The week and the day come off
+one sweep each, so reading both costs no more than reading one. If your desk names its
 statuses differently, set `ZOHO_PULSE_STATUSES` to three of its own, in
 the order they should hang.
 

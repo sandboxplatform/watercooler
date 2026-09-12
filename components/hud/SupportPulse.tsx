@@ -17,13 +17,18 @@ interface Answer {
 }
 
 /**
- * The two groups, and what each says for itself.
+ * The three groups, and what each says for itself.
  *
- * The wall splits the five the same way, one bank above the other, because
- * the split is what makes the bars mean anything: three numbers that are
- * standing there right now, and two that are a day's traffic. Naming the
- * groups here saves the paragraph that used to have to explain which three
- * were which.
+ * The room splits them the same way, because the split is what makes the
+ * bars mean anything: three numbers standing on the desk right now, two
+ * that are a day's traffic, and two that are the week's. Naming the groups
+ * here saves the paragraph that used to have to explain which three were
+ * which.
+ *
+ * The first two are the plate on Support's wall and the third is lettered
+ * on the corridor wall outside it — which is a fact about where there was
+ * room, not about the numbers. In here they are one desk read three ways,
+ * so they are one panel.
  */
 const BANKS = [
   {
@@ -35,6 +40,11 @@ const BANKS = [
     bank: "today" as const,
     name: "Today",
     aside: (pulse: Pulse) => `since ${sinceLabel(pulse.since, pulse.timeZone)}`,
+  },
+  {
+    bank: "week" as const,
+    name: "This week",
+    aside: (pulse: Pulse) => `since ${sinceLabel(pulse.weekSince, pulse.timeZone)}`,
   },
 ];
 
@@ -87,14 +97,18 @@ function sinceLabel(iso: string, timeZone: string | null): string {
 }
 
 /**
- * The five counts on Support's wall, in words and at a readable size.
+ * The desk's counts, in words and at a readable size.
  *
- * The board itself is the thing you walk in and glance at, and it is drawn
+ * The wall itself is the thing you walk in and glance at, and it is drawn
  * in the room at the room's scale — which on a phone is about half size.
- * This is the same five numbers with the headings spelled out, what each
- * one counts, and which midnight "today" is measured from: the answer to
- * "what does WIP mean" and the answer to "I cannot read that", in one
- * place.
+ * This is the same numbers with the headings spelled out, what each one
+ * counts, and which midnight "today" and "this week" are measured from: the
+ * answer to "what does WIP mean" and the answer to "I cannot read that", in
+ * one place.
+ *
+ * All seven, wherever they hang. The five on Support's plate and the two
+ * lettered on the corridor wall outside are one desk, and a reader who
+ * walked up to either wants the same explanation.
  *
  * A window onto the desk and only that. Nothing here answers a ticket.
  */
@@ -231,9 +245,9 @@ export default function SupportPulse() {
                 </section>
               ))}
               <p className="pulse-legend">
-                Each bar is that number&rsquo;s share of its own group, so the three above compare
-                with each other and the two below compare with each other. Nothing here is a
-                percentage of anything else.
+                Each bar is that number&rsquo;s share of its own group, so the numbers within a
+                group compare with each other and nothing here is a percentage of anything else. A
+                week starts on Monday, on the same clock as the day.
                 {zoneNote(pulse) && <> {zoneNote(pulse)}</>}
               </p>
             </>

@@ -1,10 +1,14 @@
 /**
- * The five numbers on the Support room's wall.
+ * The numbers the Support desk is counted by.
  *
  * A support desk is read two ways. The queue itself — who asked what, and
  * how late it is — is the board beside this one (`tickets.ts`). This is the
- * other way: five counts that say how much work is standing and how much
- * moved today, big enough to read from the doorway.
+ * other way: counts that say how much work is standing, how much moved
+ * today and how much moved this week, big enough to read from the doorway.
+ *
+ * Five of them are the plate on Support's wall; the week's two are lettered
+ * on the corridor wall outside it, where the floor writes its own name. Same
+ * sweeps, same boundary arithmetic — a second reading of the same desk.
  *
  * Everything here is pure. No fetching, no credentials, no clock of its
  * own, so the arithmetic can be checked without a network or a Zoho
@@ -14,8 +18,15 @@
  * Read-only, like everything else downstream of Zoho.
  */
 
-/** The five, in the order they hang. */
-export type PulseId = "new" | "queue" | "in-progress" | "opened-today" | "closed-today";
+/** The counts, in the order they hang. */
+export type PulseId =
+  | "new"
+  | "queue"
+  | "in-progress"
+  | "opened-today"
+  | "closed-today"
+  | "opened-week"
+  | "closed-week";
 
 export interface PulseMetric {
   id: PulseId;
@@ -28,13 +39,13 @@ export interface PulseMetric {
   /** The colour it lights up in, on the wall and in the panel alike. */
   colour: string;
   /**
-   * Which bank it belongs to. The two are scaled separately, because a bar
-   * is only meaningful against the numbers standing next to it: "how much
-   * of the open work is here", and "how much of today's traffic was this".
-   * One scale across all five would measure a standing total against a
-   * day's flow, which is not a comparison.
+   * Which bank it belongs to. Each is scaled on its own, because a bar is
+   * only meaningful against the numbers standing next to it: "how much of
+   * the open work is here", "how much of today's traffic was this", "how
+   * much of the week's". One scale across the lot would measure a standing
+   * total against a day's flow, which is not a comparison.
    */
-  bank: "standing" | "today";
+  bank: "standing" | "today" | "week";
 }
 
 /**
@@ -92,6 +103,22 @@ export const PULSE_METRICS: readonly PulseMetric[] = [
     colour: "#6bd968",
     bank: "today",
   },
+  {
+    id: "opened-week",
+    short: "OPENED WEEK",
+    label: "Opened this week",
+    note: "Raised since Monday, whatever status they are in now",
+    colour: "#7dd3fc",
+    bank: "week",
+  },
+  {
+    id: "closed-week",
+    short: "CLOSED WEEK",
+    label: "Closed this week",
+    note: "Closed since Monday, whenever they were raised",
+    colour: "#6bd968",
+    bank: "week",
+  },
 ];
 
 /** Which of the three standing counters each named status feeds, by position. */
@@ -122,6 +149,15 @@ export interface Pulse {
   statuses: string[];
   /** Midnight the two day counters are measured from, as an ISO instant. */
   since: string;
+  /**
+   * Midnight on the Monday the two week counters are measured from, as an
+   * ISO instant.
+   *
+   * Its own field rather than derived from `since`: the reader would have to
+   * know which day the week starts on to work it out, and that is exactly
+   * the thing the panel has to be able to say out loud.
+   */
+  weekSince: string;
   /** The desk's timezone, or null where it fell back to the server's clock. */
   timeZone: string | null;
   /** How that was decided. */
@@ -139,6 +175,30 @@ export interface Pulse {
 export function dayStart(now: number): number {
   const at = new Date(now);
   at.setHours(0, 0, 0, 0);
+  return at.getTime();
+}
+
+/**
+ * How many days back Monday is from a weekday, Sunday being 0.
+ *
+ * Monday because a support desk's week is a working week: a Sunday ticket
+ * belongs with the weekend it arrived in rather than opening the week that
+ * is about to be worked. Written down once, since the server's clock and
+ * the desk's both need it and they count days differently.
+ */
+const SINCE_MONDAY = (weekday: number) => (weekday + 6) % 7;
+
+/**
+ * Midnight on Monday this week, where the server stands.
+ *
+ * The last resort, for the same reason `dayStart` is — and stepped back by
+ * whole days on a local date rather than by 24-hour blocks, so the week
+ * containing a clock change is still seven midnights long.
+ */
+export function weekStart(now: number): number {
+  const at = new Date(now);
+  at.setHours(0, 0, 0, 0);
+  at.setDate(at.getDate() - SINCE_MONDAY(at.getDay()));
   return at.getTime();
 }
 
@@ -198,15 +258,38 @@ function isMidnightIn(at: number, timeZone: string): boolean {
 }
 
 /**
- * Midnight this morning where the desk is.
+ * The instant a named date begins in `timeZone`, guessing from `near`.
  *
- * Two passes, because the offset now is not the offset at midnight on the
- * two days a year the clocks change: the first pass uses the offset in
- * force at `now`, and the second re-derives it from the answer that gave.
- * Whichever of the two actually reads as midnight there is the one taken,
- * which is a check rather than a hope — and if neither does (a zone whose
- * clocks change *at* midnight, so that midnight did not happen today), the
- * first pass stands, an hour out on one day rather than a day out.
+ * Two passes, because the offset at `near` is not the offset at that
+ * midnight on the two days a year the clocks change: the first pass uses
+ * the offset in force at `near`, and the second re-derives it from the
+ * answer that gave. Whichever of the two actually reads as midnight there
+ * is the one taken, which is a check rather than a hope — and if neither
+ * does (a zone whose clocks change *at* midnight, so that midnight did not
+ * happen that day), the first pass stands, an hour out rather than a day.
+ *
+ * Both boundaries go through here. The week's is up to six days from
+ * `near`, so its first guess is the more often wrong of the two and the
+ * refining pass is doing real work rather than covering a corner.
+ */
+function startOfDayIn(
+  date: { year: number; month: number; day: number },
+  near: number,
+  timeZone: string,
+): number | null {
+  const offset = zoneOffset(near, timeZone);
+  if (offset === null) return null;
+
+  const midnightThere = Date.UTC(date.year, date.month - 1, date.day);
+  const first = midnightThere - offset;
+  const refined = zoneOffset(first, timeZone);
+  if (refined === null || refined === offset) return first;
+  const second = midnightThere - refined;
+  return isMidnightIn(second, timeZone) ? second : first;
+}
+
+/**
+ * Midnight this morning where the desk is.
  *
  * No zone, or one the runtime does not know, falls back to the server's own
  * midnight; `Pulse.zone` is what says which happened.
@@ -214,15 +297,34 @@ function isMidnightIn(at: number, timeZone: string): boolean {
 export function dayStartIn(now: number, timeZone: string | null): number {
   if (!timeZone) return dayStart(now);
   const wall = wallClock(now, timeZone);
-  const offset = zoneOffset(now, timeZone);
-  if (!wall || offset === null) return dayStart(now);
+  const start = wall && startOfDayIn(wall, now, timeZone);
+  return start ?? dayStart(now);
+}
 
-  const midnightThere = Date.UTC(wall.year, wall.month - 1, wall.day);
-  const first = midnightThere - offset;
-  const refined = zoneOffset(first, timeZone);
-  if (refined === null || refined === offset) return first;
-  const second = midnightThere - refined;
-  return isMidnightIn(second, timeZone) ? second : first;
+/**
+ * Midnight on Monday this week where the desk is.
+ *
+ * The day is stepped back on the desk's own calendar rather than by
+ * subtracting days of milliseconds from its midnight: a week with a clock
+ * change in it is 167 hours or 169, so the arithmetic that looks right —
+ * `dayStartIn(now) - days * 86_400_000` — lands an hour inside Sunday or an
+ * hour inside Monday twice a year, which moves two counts on the wall.
+ * Whole days on a calendar have no such thing to get wrong, and `Date`'s
+ * UTC side is the calendar with no daylight saving of its own.
+ */
+export function weekStartIn(now: number, timeZone: string | null): number {
+  if (!timeZone) return weekStart(now);
+  const wall = wallClock(now, timeZone);
+  if (!wall) return weekStart(now);
+
+  const date = new Date(Date.UTC(wall.year, wall.month - 1, wall.day));
+  date.setUTCDate(date.getUTCDate() - SINCE_MONDAY(date.getUTCDay()));
+  const start = startOfDayIn(
+    { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() },
+    now,
+    timeZone,
+  );
+  return start ?? weekStart(now);
 }
 
 /**
@@ -321,7 +423,30 @@ export function countSince(
 }
 
 /**
- * The five counts, from three swept pages.
+ * Whether a swept page reached back past `boundary` — whether it saw
+ * anything older than it.
+ *
+ * What this answers is "is the count after that boundary a total, or only a
+ * floor". A sweep that ran out of pages is short of the desk, but it is
+ * only short of a *count* whose boundary it never reached: one sweep now
+ * serves both the day and the week, and a week that ran to the page ceiling
+ * has very often still read every ticket raised today. Marking today's
+ * count "5+" on those grounds would be a floor where there is a total.
+ *
+ * `readableBefore` rather than `!atOrAfter`, for the reason given there: a
+ * missing stamp is no evidence of anything, least of all of having read far
+ * enough.
+ */
+export function sweptPast(
+  tickets: readonly Record<string, unknown>[],
+  field: "createdTime" | "closedTime",
+  boundary: number,
+): boolean {
+  return tickets.some((ticket) => readableBefore(ticket[field] as string | undefined, boundary));
+}
+
+/**
+ * The counts, from three swept pages.
  *
  * The status names map onto the three standing counters by position, which
  * is what `ZOHO_PULSE_STATUSES` overrides: the first name asked for is the
@@ -336,15 +461,23 @@ export function toPulse(input: {
   /**
    * Midnight the day counters measure from, as an instant. Handed in rather
    * than worked out here, because the sweeps that gathered `opened` and
-   * `closed` stopped at this same boundary — deriving it twice is two
+   * `closed` are bounded by the same arithmetic — deriving it twice is two
    * chances for the counts and the line under them to disagree.
    */
   since: number;
+  /**
+   * Monday the week counters measure from, likewise — and the boundary the
+   * two sweeps actually stopped at, since the week is the longer reach of
+   * the two. The day's counters are then a prefix of what the week's read,
+   * which is why this costs no extra request.
+   */
+  weekSince: number;
   /** The desk's timezone that boundary came from, and how it was decided. */
   timeZone: string | null;
   zone: ZoneSource;
 }): Pulse {
   const from = input.since;
+  const week = input.weekSince;
   const byStatus = countStatuses(input.standing, input.statuses);
   const counts = {
     new: 0,
@@ -352,6 +485,8 @@ export function toPulse(input: {
     "in-progress": 0,
     "opened-today": countSince(input.opened, "createdTime", from),
     "closed-today": countSince(input.closed, "closedTime", from),
+    "opened-week": countSince(input.opened, "createdTime", week),
+    "closed-week": countSince(input.closed, "closedTime", week),
   } as PulseCounts;
   for (const [i, id] of STANDING.entries()) {
     const name = input.statuses[i];
@@ -362,6 +497,7 @@ export function toPulse(input: {
     capped: [...input.capped],
     statuses: [...input.statuses],
     since: new Date(from).toISOString(),
+    weekSince: new Date(week).toISOString(),
     timeZone: input.timeZone,
     zone: input.zone,
   };
@@ -371,16 +507,19 @@ export function toPulse(input: {
  * How full each bar stands, 0 to 1, within its own bank.
  *
  * Share of the bank rather than of some invented ceiling: the three
- * standing bars show where the open work is sitting, and the two day bars
- * show which way today went. An empty bank leaves every bar at zero rather
- * than dividing by nothing, which is the right picture of a quiet desk.
+ * standing bars show where the open work is sitting, the two day bars show
+ * which way today went, and the two week bars the same over the week. An
+ * empty bank leaves every bar at zero rather than dividing by nothing,
+ * which is the right picture of a quiet desk.
  */
 export function pulseBars(counts: PulseCounts): Record<PulseId, number> {
-  const totals = { standing: 0, today: 0 };
-  for (const metric of PULSE_METRICS) totals[metric.bank] += Math.max(0, counts[metric.id]);
+  const totals = new Map<PulseMetric["bank"], number>();
+  for (const metric of PULSE_METRICS) {
+    totals.set(metric.bank, (totals.get(metric.bank) ?? 0) + Math.max(0, counts[metric.id]));
+  }
   const bars = {} as Record<PulseId, number>;
   for (const metric of PULSE_METRICS) {
-    const total = totals[metric.bank];
+    const total = totals.get(metric.bank) ?? 0;
     bars[metric.id] = total > 0 ? Math.max(0, counts[metric.id]) / total : 0;
   }
   return bars;
