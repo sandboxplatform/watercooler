@@ -11,7 +11,7 @@
  "version": "1.10",
  "tiledversion": "1.11.2",
  "nextlayerid": 13,
- "nextobjectid": 20,
+ "nextobjectid": 22,
  "tilesets": [
   {
    "columns": 16,
@@ -5523,6 +5523,17 @@
      "height": 96,
      "rotation": 0,
      "visible": true
+    },
+    {
+     "id": 16,
+     "name": "",
+     "type": "",
+     "x": 960,
+     "y": 240,
+     "width": 240,
+     "height": 144,
+     "rotation": 0,
+     "visible": true
     }
    ]
   },
@@ -5537,7 +5548,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 16,
+     "id": 17,
      "name": "Whiteboard",
      "type": "",
      "x": 1128,
@@ -5556,7 +5567,26 @@
      ]
     },
     {
-     "id": 17,
+     "id": 18,
+     "name": "Boardroom table",
+     "type": "",
+     "x": 1080,
+     "y": 408,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      }
+     ]
+    },
+    {
+     "id": 19,
      "name": "Project board",
      "type": "",
      "x": 216,
@@ -5587,7 +5617,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 18,
+     "id": 20,
      "name": "",
      "type": "",
      "x": 264,
@@ -5618,7 +5648,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 19,
+     "id": 21,
      "name": "elevator",
      "type": "",
      "x": 240,

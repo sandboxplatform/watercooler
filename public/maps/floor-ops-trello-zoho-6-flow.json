@@ -11,7 +11,7 @@
  "version": "1.10",
  "tiledversion": "1.11.2",
  "nextlayerid": 13,
- "nextobjectid": 32,
+ "nextobjectid": 34,
  "tilesets": [
   {
    "columns": 16,
@@ -8142,6 +8142,17 @@
      "height": 96,
      "rotation": 0,
      "visible": true
+    },
+    {
+     "id": 25,
+     "name": "",
+     "type": "",
+     "x": 1680,
+     "y": 240,
+     "width": 240,
+     "height": 144,
+     "rotation": 0,
+     "visible": true
     }
    ]
   },
@@ -8156,7 +8167,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 25,
+     "id": 26,
      "name": "Whiteboard",
      "type": "",
      "x": 1848,
@@ -8175,7 +8186,26 @@
      ]
     },
     {
-     "id": 26,
+     "id": 27,
+     "name": "Boardroom table",
+     "type": "",
+     "x": 1800,
+     "y": 408,
+     "width": 0,
+     "height": 0,
+     "rotation": 0,
+     "visible": true,
+     "point": true,
+     "properties": [
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      }
+     ]
+    },
+    {
+     "id": 28,
      "name": "Project board",
      "type": "",
      "x": 216,
@@ -8194,7 +8224,7 @@
      ]
     },
     {
-     "id": 27,
+     "id": 29,
      "name": "Project flow",
      "type": "",
      "x": 600,
@@ -8213,7 +8243,7 @@
      ]
     },
     {
-     "id": 28,
+     "id": 30,
      "name": "Help desk",
      "type": "",
      "x": 936,
@@ -8232,7 +8262,7 @@
      ]
     },
     {
-     "id": 29,
+     "id": 31,
      "name": "Support pulse",
      "type": "",
      "x": 1320,
@@ -8263,7 +8293,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 30,
+     "id": 32,
      "name": "",
      "type": "",
      "x": 264,
@@ -8294,7 +8324,7 @@
    "draworder": "topdown",
    "objects": [
     {
-     "id": 31,
+     "id": 33,
      "name": "elevator",
      "type": "",
      "x": 240,

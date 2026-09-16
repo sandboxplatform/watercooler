@@ -124,6 +124,34 @@ export const PROJECT_FLOW = {
   poi: { name: "Project flow", tx: 2, ty: 2, facing: "up" } satisfies PoiSpec,
 };
 
+/**
+ * The boardroom table: five tiles of it, three rows deep with the chairs.
+ *
+ * The one thing on this floor that is furniture rather than something on a
+ * wall, so what the map carries is the footprint that makes it solid and a
+ * point of interest on the tile **below** it — you walk up to the near side
+ * of a table, and the picture the scene stands on that point is three rows
+ * of table above it (`lib/fixtures.ts`).
+ *
+ * Not a `BoardKind` and not declared per building: every Operations floor
+ * has one, in the same room, so it is not another thing for the map's file
+ * name to distinguish. A floor with rooms to hold meetings in and nowhere
+ * to hold one is the odder answer.
+ */
+export const BOARDROOM_TABLE = {
+  region: {
+    label: "boardroom table",
+    sx: 0,
+    sy: 0,
+    sw: 5,
+    sh: 3,
+    dx: 0,
+    dy: 0,
+    layers: [],
+  } satisfies Region,
+  poi: { name: "Boardroom table", tx: 2, ty: 3, facing: "up" } satisfies PoiSpec,
+};
+
 /** Where each board hangs, and the point of interest to read it from. */
 const BOARDS: Record<BoardKind, { region: Region; poi: PoiSpec }> = {
   trello: PROJECT_BOARD,
@@ -180,6 +208,25 @@ export function opsWhiteboardRoom(rooms: number): OpsRoom {
   const alongside = list.find((r) => r.rank === support.rank && r.x > support.x);
   const across = list.find((r) => r.x === support.x && r.rank !== support.rank);
   return alongside ?? across ?? support;
+}
+
+/**
+ * The room the boardroom table stands in: the far one at the top.
+ *
+ * The end of the upper rank, which is as far from the lift as this floor
+ * goes — a room you pass everything else to reach, which is what a
+ * boardroom is. It shares the room with the whiteboard, and that is the
+ * point rather than a collision: a table to sit round and a board to draw
+ * on is a meeting room.
+ *
+ * On a short floor the far upper room is Operations itself, and the table
+ * stands in the middle of it. That is the same answer `opsWhiteboardRoom`
+ * gives on a floor with nowhere else to hang a board, and for the same
+ * reason: a floor of one room is one room.
+ */
+export function opsBoardroom(rooms: number): OpsRoom {
+  const upper = opsRooms(rooms).filter((room) => room.rank === "upper");
+  return upper[upper.length - 1];
 }
 
 /**
@@ -487,6 +534,30 @@ export function opsSupportPost(rooms: number) {
   } as const;
 }
 
+/**
+ * Where the boardroom table stands, in tiles: the middle of its room.
+ *
+ * Centred both ways: two clear rows above and two below, and four clear
+ * columns to the left of it — five tiles of table cannot sit dead centre
+ * in a room fourteen wide, and half a tile of overhang on the right is
+ * closer to centred than a table shoved against a wall. The lower of the
+ * two rows below is where the point of interest sits, which is where you
+ * stand to use it.
+ *
+ * Read off the room, like the boards, so a longer corridor carries the
+ * table with it rather than leaving it behind at a hard-coded column.
+ */
+export function opsBoardroomTable(rooms: number) {
+  const room = opsBoardroom(rooms);
+  const { sw, sh } = BOARDROOM_TABLE.region;
+  return {
+    tx: room.x + Math.floor((ROOM_COLS - sw) / 2),
+    ty: room.y + Math.floor((ROOM_ROWS - sh) / 2),
+    tw: sw,
+    th: sh,
+  } as const;
+}
+
 /** Out of the lift and into the corridor, facing the door it is under. */
 export function opsPlayerStart(rooms: number) {
   const door = opsRooms(rooms)[0].door;
@@ -677,6 +748,20 @@ function operationsSpec(
     ty: whiteboardRoom.wallRow + 2,
   };
 
+  /**
+   * The table in the far room at the top, and the point you use it from.
+   *
+   * Every Operations floor gets one — see `opsBoardroom`. Its point is the
+   * tile below the table rather than under the middle of it, because this
+   * is furniture: you stand at a table's near side, not inside it.
+   */
+  const table = opsBoardroomTable(roomCount);
+  const boardroom: PoiSpec = {
+    ...BOARDROOM_TABLE.poi,
+    tx: table.tx + Math.floor(table.tw / 2),
+    ty: table.ty + table.th,
+  };
+
   // One wall above the corridor and one below it, each with the doorways of
   // the rooms on that side cut out of it.
   const doorsOn = (rank: "upper" | "lower") =>
@@ -730,9 +815,20 @@ function operationsSpec(
     tileSize: TILE,
     walls: WALLS,
     placements: picked.placements,
-    pois: [whiteboard, ...hung.map((b) => b.poi), ...inSupport.map((b) => b.poi)],
+    pois: [whiteboard, boardroom, ...hung.map((b) => b.poi), ...inSupport.map((b) => b.poi)],
     spawns: [{ ...opsPlayerStart(roomCount) }],
-    collisions: [...hung, ...inSupport].map(box),
+    collisions: [
+      ...[...hung, ...inSupport].map(box),
+      // The table is solid, so the room is walked round it rather than
+      // through it. The whole picture, chairs included: a chair is no more
+      // walkable than the table it is pushed under.
+      {
+        x: table.tx * TILE,
+        y: table.ty * TILE,
+        width: table.tw * TILE,
+        height: table.th * TILE,
+      },
+    ],
     partitions,
     transitions: [
       { name: "elevator", target: "elevator", ...opsElevator(roomCount), facing: "down" },

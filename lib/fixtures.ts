@@ -29,6 +29,7 @@ import {
   BOSS_INTERACT_DISTANCE,
   BUCKET_INTERACT_DISTANCE,
   CAULDRON_INTERACT_DISTANCE,
+  TABLE_INTERACT_DISTANCE,
 } from "./constants";
 import { TILE } from "./map/office";
 import { arcadeGame } from "./arcade";
@@ -55,7 +56,8 @@ export type FixtureId =
   | "project-board"
   | "project-flow"
   | "help-desk"
-  | "support-pulse";
+  | "support-pulse"
+  | "boardroom";
 
 /**
  * An event that carries nothing — which every fixture's pair of events is.
@@ -241,6 +243,30 @@ export const FIXTURES: readonly FixtureSpec[] = [
     promptLift: 8,
     art: { key: "help-desk", file: "/sprites/help_desk_144x96.png", lift: 24 },
     sign: { label: "HELP DESK" },
+  },
+  {
+    /**
+     * The boardroom table, in the far room at the top of an Operations
+     * floor. The one fixture that is furniture rather than something on a
+     * wall: you walk round it, and pressing E at it starts or ends a
+     * meeting the rest of the building can see is happening.
+     */
+    id: "boardroom",
+    match: /^boardroom table$/i,
+    opens: "open-boardroom",
+    closes: "boardroom-closed",
+    param: "meeting",
+    prompt: "Press E for the meeting",
+    // Five tiles of table, so the reach covers its near side rather than
+    // one spot in the middle of it.
+    radius: TABLE_INTERACT_DISTANCE,
+    promptLift: 8,
+    // Its point of interest is the tile below the table, which is where you
+    // stand: the picture is three rows of table and chairs above that.
+    art: { key: "boardroom-table", file: "/sprites/boardroom_table_240x144.png", lift: 96 },
+    // Hung over the table rather than on a wall — there is no wall behind
+    // it — so the lift is measured from the art, as the games' are.
+    sign: { label: "BOARDROOM" },
   },
   {
     id: "support-pulse",

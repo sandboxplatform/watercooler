@@ -74,6 +74,10 @@ export interface GameEventMap {
   "open-support-pulse": [];
   /** The counts were closed, so the office takes input again. */
   "support-pulse-closed": [];
+  /** Somebody walked up to the boardroom table and pressed E. */
+  "open-boardroom": [];
+  /** The boardroom was closed, so the office takes input again. */
+  "boardroom-closed": [];
   /** Somebody walked up to the arcade cabinet and pressed E. */
   "open-arcade": [];
   /** The arcade was closed, so the office takes input again. */

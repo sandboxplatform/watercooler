@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Gamepad2, Mic, MicOff, Sparkles, User } from "lucide-react";
+import { Gamepad2, Mic, MicOff, Sparkles, User, Users } from "lucide-react";
 import { gameEvents } from "@/lib/events";
 import { useVoice } from "@/lib/hooks/useVoice";
+import { meetingFor, useMeetings } from "@/lib/meeting";
 import { voiceChat } from "@/lib/voice/voice-chat";
 import { STATUS_LABELS, formatModelLabel } from "@/lib/constants";
 import type { ConnectionStatus, SessionMetrics } from "@/types/game";
@@ -35,6 +36,20 @@ export default function BottomBar({ connection, sessionMetrics }: BottomBarProps
       setPad(id ? { id, layout } : null);
     });
   }, []);
+
+  /**
+   * A meeting somebody has called at a boardroom table.
+   *
+   * Everyone who could walk into that room is shown it, wherever in the
+   * world they are standing — which is the whole point: the people it is
+   * news to are the ones who are not in the room. The server has already
+   * left out the floors this person cannot ride to, so anything that
+   * arrives here is theirs to know.
+   *
+   * A notice rather than a way in. Walking to the lift and going up is how
+   * you join it, which is how everything else in this world works.
+   */
+  const meetings = useMeetings();
 
   const voice = useVoice();
   const micOn = voice.status === "on";
@@ -94,6 +109,21 @@ export default function BottomBar({ connection, sessionMetrics }: BottomBarProps
               : "voice off"}
         </span>
       </button>
+      {meetings.length > 0 && (
+        <div
+          className="hud-pill hud-pill--metric hud-pill--meeting"
+          title={meetings
+            .map((m) => `${m.where} — called by ${m.host}, ${meetingFor(m.since)}`)
+            .join("\n")}
+        >
+          <Users size={10} />
+          <span>
+            {meetings.length === 1
+              ? `meeting · ${meetings[0].where.split(" · ").slice(-1)[0]}`
+              : `${meetings.length} meetings`}
+          </span>
+        </div>
+      )}
       {humans && (
         <div
           className="hud-pill hud-pill--metric"

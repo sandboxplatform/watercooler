@@ -29,6 +29,7 @@ import ProjectBoard from "./ProjectBoard";
 import ProjectFlow from "./ProjectFlow";
 import HelpDesk from "./HelpDesk";
 import SupportPulse from "./SupportPulse";
+import Boardroom from "./Boardroom";
 import Arcade from "./Arcade";
 import PingPong from "./PingPong";
 import TouchControls from "./TouchControls";
@@ -176,6 +177,7 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
       <ProjectFlow />
       <HelpDesk />
       <SupportPulse />
+      <Boardroom />
       <Arcade />
       <PingPong />
       <TouchControls />

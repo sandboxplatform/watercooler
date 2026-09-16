@@ -2307,3 +2307,54 @@
   width: 26px;
   height: 26px;
 }
+
+/* ── The boardroom table ──
+   Two lines and a button: a meeting is a fact about a room rather than
+   anything to lay out, so the panel is the narrowest of the board panels
+   and says what is true in words. */
+.board-overlay .meeting-panel {
+  width: min(520px, 94vw);
+  height: auto;
+  max-height: 88vh;
+}
+
+.meeting-body {
+  padding: 16px;
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  color: var(--pixel-muted);
+  text-align: center;
+}
+
+.meeting-state {
+  margin-bottom: 6px;
+  color: var(--pixel-text);
+  font-size: var(--fs-md);
+}
+
+.meeting-state .pixel-dot {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.meeting-who {
+  margin-bottom: 14px;
+}
+
+.meeting-button {
+  min-width: 200px;
+}
+
+.meeting-note {
+  margin-top: 12px;
+  font-size: var(--fs-xs);
+}
+
+.meeting-note--elsewhere {
+  color: var(--pixel-accent);
+}
+
+/* The notice in the bottom bar, for everyone who is not in the room. */
+.hud-pill--meeting {
+  color: var(--pixel-accent);
+}

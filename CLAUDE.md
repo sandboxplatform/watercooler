@@ -741,6 +741,74 @@ interest is the board's right-hand tile, so the sign over it carries a nudge
 of **half a tile** — half the board's _width_ is what that was, which hung
 the sign and its bobbing arrow a whole tile off centre in a lobby.
 
+**The far room at the top is the boardroom**, and the table in it is the
+one fixture on this floor that is furniture rather than a picture on a
+wall. `opsBoardroom` is the room — the end of the upper rank, as far from
+the lift as the floor goes — and `opsBoardroomTable` is where in it, read
+off the room so a longer corridor carries the table with it. It shares the
+room with the whiteboard, which is the point rather than a collision: a
+table to sit round and a board to draw on is a meeting room.
+
+Every Operations floor has one, which is what keeps it out of the map's
+file name: a floor with rooms to hold meetings in and nowhere to hold one
+is the odder answer. On a short floor the far upper room is Operations
+itself, exactly as the whiteboard's is.
+
+Two details, and the second is the one to know. Its point of interest is
+the tile **below** the table rather than under the middle of it — a board
+is a picture you stand in front of, a table is furniture, and standing
+inside one is not a thing anybody does. And the reach is
+`TABLE_INTERACT_DISTANCE`, not the tile and a half every other fixture
+uses: five tiles of table is something you walk up to anywhere along its
+near side, so a reach that only covers the middle leaves the two ends of
+it as furniture you cannot use.
+
+**A meeting is a fact about a room, and the people it is news to are
+somewhere else.** Press E at the table and the panel starts one or ends the
+one that is running; everybody who could walk into that room is shown a
+pill in the bottom bar saying so, wherever in the world they are standing.
+
+| Where                          | What it does                                                            |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| `components/hud/Boardroom.tsx` | The panel at the table: what is on, who is in the room, start or end it |
+| `lib/meeting.ts`               | The browser's side — the list, and the two words it sends               |
+| `presence-socket`              | Who is holding one, who is told, and when it ends                       |
+| `BottomBar`                    | The pill, for everybody who is not in the room                          |
+
+Five things about it are decisions rather than mechanics:
+
+- **The notice crosses rooms, and stops where the floor's door does.** It
+  is filtered per connection by `mayEnterRoom` — the same rule that
+  refuses the join — so a meeting on a floor somebody cannot ride to is not
+  news they are entitled to. Server-side, for the reason every other
+  private-floor check is: what the browser is told is the only part that
+  holds. Hunter is the case that proves it, since he rides one building's
+  lift and it is not this one.
+- **The whole list every time**, like `online` rather than like a start
+  and an end. A browser that missed one message is otherwise left with a
+  notice that will never come down.
+- **The browser never names the room.** `{ type: "meeting", on }` and
+  nothing else: the room is the one that connection walked into, and where
+  somebody is standing is the server's to know. The socket also refuses a
+  meeting in a room with no table in it (`hasBoardroom`), because
+  `?meeting=1` opens the panel anywhere and a panel is decoration.
+- **Anybody at the table may end it, and an empty room ends it by
+  itself.** Whoever called it may close the tab, time out or ride away and
+  the meeting carries on without them — which is what a meeting does — but
+  when the last person leaves, the notice would otherwise hang over the
+  building for as long as the server runs, and the floor is private, so
+  there may be nobody left who can reach the table to take it down.
+- **In memory, not in the room store.** A meeting is something happening
+  rather than something kept, and a server that restarts has ended every
+  meeting it was hosting.
+
+It is a notice rather than a way in: walking to the lift and going up is
+how you join, which is how everything else in this world works. And it is
+not the voice chat — that is already one conversation for the whole server,
+and switching a microphone on is how you join that. This says a meeting is
+happening here, which is the part somebody three floors down has no way of
+knowing.
+
 **The five counts are a second way of looking at the same queue,** so they
 come with the queue rather than being declared: `SUPPORT_PULSE` is not a
 `BoardKind`, and a building running no support desk has nothing for them to

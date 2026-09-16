@@ -18,7 +18,7 @@ import { getRoomStore } from "./room-store";
 import { identityOf, isAuthorized, personaFor, type AccessIdentity } from "./access";
 import { mayWear } from "../characters/library";
 import { normaliseRoomSlug } from "../rooms";
-import { mayEnterRoom } from "../world/floors";
+import { describeRoom, hasBoardroom, mayEnterRoom } from "../world/floors";
 import { achievementFor, type EarnedAchievement } from "../achievements";
 import type { ActivityEntry } from "../activity";
 import { isPongPayload } from "../pong/protocol";
@@ -34,6 +34,7 @@ import {
   type Facing,
   type OnlineMessage,
   type PresencePlayer,
+  type MeetingNotice,
   type SayScope,
   type ServerMessage,
   type WorldChange,
@@ -167,6 +168,20 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
    * and the person is left standing in the room they just walked out of.
    */
   const owesPong = new Set<string>();
+  /**
+   * The meeting under way in each room, by room slug.
+   *
+   * In memory rather than in the room store, because a meeting is something
+   * happening rather than something kept: a server that restarts has ended
+   * every meeting it was hosting, and a notice that outlived the room it
+   * was called in would hang over the building until somebody walked up to
+   * the table to take it down.
+   *
+   * Who called it is kept as a name rather than as a connection: a meeting
+   * outlives the person who called it — they may leave the room while it
+   * carries on without them, exactly as a meeting does.
+   */
+  const meetings = new Map<string, { host: string; since: string }>();
 
   setRoomBroadcast((slug, message) => broadcast(slug, message));
 
@@ -234,6 +249,72 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   };
   const broadcastOnline = () => broadcastAll({ type: "online", people: onlineList() });
 
+  /**
+   * The meetings a given identity is allowed to know about.
+   *
+   * The same rule that decides whether they could walk in: a meeting on a
+   * floor they cannot ride to is not news they are entitled to. Asked here
+   * rather than in the HUD for the reason every other private-floor check
+   * is asked here — what the browser is told is the only thing that holds.
+   */
+  const noticesFor = (identity: AccessIdentity): MeetingNotice[] => {
+    const notices: MeetingNotice[] = [];
+    for (const [room, meeting] of meetings) {
+      if (!mayEnterRoom(room, identity)) continue;
+      notices.push({ room, where: describeRoom(room), host: meeting.host, since: meeting.since });
+    }
+    return notices;
+  };
+
+  /** Tell one connection what is being held that it may know about. */
+  const tellMeetings = (id: string, socket: WebSocket) => {
+    send(socket, {
+      type: "meetings",
+      meetings: noticesFor(identityByConnection.get(id) ?? "visitor"),
+    });
+  };
+
+  /**
+   * Tell everyone, wherever they are.
+   *
+   * A meeting is announced across the server rather than into its own room:
+   * the people it is news to are the ones who are not in the room yet. Each
+   * connection gets its own filtered list, which is why this is a loop
+   * rather than a `broadcastAll`.
+   */
+  const tellEveryoneMeetings = () => {
+    for (const room of rooms.values()) {
+      for (const [id, socket] of room.sockets) tellMeetings(id, socket);
+    }
+  };
+
+  /**
+   * A meeting in an empty room is over.
+   *
+   * The other way one ends, and the one nobody has to remember: whoever
+   * called it may close the tab, time out or ride away, and the meeting
+   * carries on for the people still at the table — which is what a meeting
+   * does. When the last of them goes the notice would otherwise hang over
+   * the building for as long as the server runs, and the table is on a
+   * private floor, so there may be nobody left who can reach it to take it
+   * down.
+   *
+   * Humans only, which is what `hub.count` counts: Doc standing about in
+   * Support is not somebody still in the meeting.
+   */
+  const endMeetingIfEmpty = (slug: string, hub: PresenceHub) => {
+    const meeting = meetings.get(slug);
+    if (!meeting || hub.count > 0) return false;
+    meetings.delete(slug);
+    log.info(`the meeting in "${slug}" ended: the room is empty`);
+    recordActivity(slug, {
+      kind: "human",
+      actor: meeting.host,
+      text: "'s meeting ended when the room emptied",
+    });
+    return true;
+  };
+
   /** Tell the room about badges just earned, so it is a shared moment. */
   const announce = (slug: string, earned: EarnedAchievement[]) => {
     for (const item of earned) {
@@ -292,6 +373,8 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     // An empty room costs nothing to forget; its contents live in the store
     if (room.sockets.size === 0 && room.hub.count === 0) rooms.delete(slug);
     if (player) broadcastOnline();
+    // Whoever has just gone may have been the last of the meeting.
+    if (endMeetingIfEmpty(slug, room.hub)) tellEveryoneMeetings();
   };
 
   /**
@@ -560,6 +643,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
                 capacity: room.hub.capacity,
               });
               send(ws, { type: "online", people: onlineList() });
+              tellMeetings(id, ws);
               return;
             }
           }
@@ -596,6 +680,9 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           });
           broadcast(slug, { type: "joined", player: result.player }, id);
           broadcastOnline();
+          // What is being held, of what they may know about: a meeting is
+          // most useful to somebody who is not in the room yet.
+          tellMeetings(id, ws);
           recordActivity(slug, {
             kind: "human",
             actor: result.player.name,
@@ -690,6 +777,42 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           // is a fresh join, and `place` clears it for a re-join to this
           // one, so nobody can arrive somewhere invisible.
           room.hub.setHidden(id, parsed.inside === true);
+          return;
+        }
+
+        if (parsed.type === "meeting") {
+          // A meeting is held at a table, so it can only be called in a
+          // room that has one — every Operations floor, and nowhere else.
+          // The panel only opens at the table, but `?meeting=1` opens it
+          // anywhere and a panel is decoration either way.
+          if (!hasBoardroom(slug)) return;
+          // The room it is held in is whatever room this connection is
+          // standing in, and anybody there may end it — see `MeetingMessage`.
+          const player = room.hub.get(id);
+          const running = meetings.get(slug);
+          if (parsed.on) {
+            // Already under way: the second person to press E at the table
+            // is joining a meeting rather than calling another one.
+            if (running) return;
+            const since = new Date().toISOString();
+            meetings.set(slug, { host: player?.name ?? "Someone", since });
+            log.info(`${player?.name ?? "someone"} called a meeting in "${slug}"`);
+            recordActivity(slug, {
+              kind: "human",
+              actor: player?.name ?? "someone",
+              text: "called a meeting",
+            });
+          } else {
+            if (!running) return;
+            meetings.delete(slug);
+            log.info(`the meeting in "${slug}" ended`);
+            recordActivity(slug, {
+              kind: "human",
+              actor: player?.name ?? "someone",
+              text: "ended the meeting",
+            });
+          }
+          tellEveryoneMeetings();
           return;
         }
 

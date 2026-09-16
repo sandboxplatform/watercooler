@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 import {
+  BOARDROOM_TABLE,
   buildFloorSpec,
   HEIGHT,
   HELP_DESK,
   OPS_HEIGHT,
   OPS_ROOM_COUNT,
   type OpsRoom,
+  opsBoardroom,
+  opsBoardroomTable,
   opsProjectFlow,
   opsRooms,
   opsSign,
@@ -490,6 +493,86 @@ describe("an Operations floor", () => {
       expect(named(without, "Project flow")).toBeUndefined();
       expect(named(without, "Project board")).toBeDefined();
     });
+  });
+});
+
+/**
+ * The boardroom table: the one thing on this floor that is furniture rather
+ * than a picture on a wall, so the things worth pinning are different —
+ * where it stands, that you can get at it, and that it is solid.
+ */
+describe("the boardroom table", () => {
+  const long = buildFloorSpec(source, { boards: ["trello", "zoho"], rooms: 6 });
+  const table = opsBoardroomTable(6);
+  const room = opsBoardroom(6);
+
+  it("stands in the far room at the top, which is as far from the lift as the floor goes", () => {
+    const upper = opsRooms(6).filter((r) => r.rank === "upper");
+    expect(room).toEqual(upper[upper.length - 1]);
+    // And that is the room the whiteboard hangs in: a table to sit round
+    // and a board to draw on is what makes it a meeting room.
+    expect(room).toEqual(opsWhiteboardRoom(6));
+  });
+
+  it("is centred in it, with clear floor on every side", () => {
+    expect(table.tx).toBeGreaterThan(room.x);
+    expect(table.tx + table.tw).toBeLessThan(room.x + 14);
+    expect(table.ty).toBeGreaterThan(room.y);
+    expect(table.ty + table.th).toBeLessThan(room.y + 7);
+    // Dead centre down the room; across it, as near as five tiles can sit
+    // in fourteen — a tile of the odd one over, not a table against a wall.
+    expect(table.ty - room.y).toBe(room.y + 7 - (table.ty + table.th));
+    const left = table.tx - room.x;
+    const right = room.x + 14 - (table.tx + table.tw);
+    expect(Math.abs(left - right)).toBeLessThanOrEqual(1);
+  });
+
+  /**
+   * Below the table rather than under the middle of it. A board is a
+   * picture you stand in front of; a table is furniture, and standing
+   * inside it is not a thing anybody does.
+   */
+  it("is used from the tile below it", () => {
+    const poi = long.pois.find((p) => p.name === BOARDROOM_TABLE.poi.name)!;
+    expect(poi).toBeDefined();
+    expect(poi.ty).toBe(table.ty + table.th);
+    expect(poi.tx).toBe(table.tx + Math.floor(table.tw / 2));
+    // And that tile is inside the room, not in the wall below it.
+    expect(poi.ty).toBeLessThan(room.y + 7);
+  });
+
+  it("is solid, so the room is walked round it", () => {
+    const t = long.tileSize;
+    const box = (long.collisions ?? []).find((r) => r.x === table.tx * t && r.y === table.ty * t);
+    expect(box).toEqual({
+      x: table.tx * t,
+      y: table.ty * t,
+      width: table.tw * t,
+      height: table.th * t,
+    });
+  });
+
+  /**
+   * Every Operations floor has one, however short. A floor with rooms to
+   * hold meetings in and nowhere to hold one is the odder answer, and it
+   * is what keeps this off the map's file name.
+   */
+  it("is on every Operations floor, whatever its shape", () => {
+    for (const rooms of [1, 2, 3, 4, 6, 10]) {
+      const spec = buildFloorSpec(source, { boards: ["trello"], rooms });
+      const poi = spec.pois.find((p) => p.name === BOARDROOM_TABLE.poi.name);
+      expect(poi, `${rooms} rooms`).toBeDefined();
+      const here = opsBoardroomTable(rooms);
+      const its = opsBoardroom(rooms);
+      expect(here.tx, `${rooms} rooms`).toBeGreaterThanOrEqual(its.x);
+      expect(here.tx + here.tw, `${rooms} rooms`).toBeLessThanOrEqual(its.x + 14);
+    }
+  });
+
+  /** A floor without one is a floor that is not an Operations floor at all. */
+  it("is nowhere on a plain floor, which has no rooms to hold one in", () => {
+    const plain = buildFloorSpec(source);
+    expect(plain.pois.find((p) => p.name === BOARDROOM_TABLE.poi.name)).toBeUndefined();
   });
 });
 

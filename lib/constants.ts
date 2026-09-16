@@ -34,6 +34,17 @@ export const CAULDRON_INTERACT_DISTANCE = 62;
 /** The bucket sits on a bench, so you reach it from the front or the side. */
 export const BUCKET_INTERACT_DISTANCE = 54;
 
+/**
+ * The boardroom table, which is five tiles of it.
+ *
+ * Every other fixture is a thing you stand in front of, so a tile and a
+ * half is plenty. A table is something you walk up to anywhere along its
+ * near side, and its point of interest is one tile below the middle — so
+ * the reach has to cover half the table as well as the standing room, or
+ * the two ends of it are furniture you cannot use.
+ */
+export const TABLE_INTERACT_DISTANCE = 120;
+
 // ── Pathfinder ───────────────────────────────────────────
 export const PF_CELL_SIZE = 16;
 export const PF_PADDING = 8;

@@ -88,6 +88,44 @@ export function tenantInRoom(room: string | null | undefined): Tenant | null {
   return tenantFor(floor ? floor.slug : room);
 }
 
+/**
+ * A room slug in words: the building and the floor — "Sandbox ERP ·
+ * Floor 3 · Operations".
+ *
+ * For the places that hold a room and have to say where it is to somebody
+ * standing somewhere else: a meeting called at the boardroom table is
+ * announced to the rest of the building, and "sandbox-erp-floor-3" is a
+ * slug rather than a place.
+ *
+ * Anything that is not a building's room — the world map, a campus, the
+ * default room — comes back as its own slug rather than as an invented
+ * name. Nothing outside a building announces itself today, and a wrong
+ * name would be worse than a plain one.
+ */
+export function describeRoom(room: string): string {
+  const tenant = tenantInRoom(room);
+  if (!tenant) return room;
+  const floor = parseFloorRoomSlug(room);
+  const level = floor?.level;
+  const where: Floor = level === 1 || level === 2 || level === 3 ? { kind: "floor", level } : LOBBY;
+  return `${tenant.name} · ${floorTitle(where)}`;
+}
+
+/**
+ * Whether this room has the boardroom table in it, which is the one place
+ * a meeting can be called from.
+ *
+ * Every Operations floor has one (`opsBoardroom` in `lib/map/floor.ts`),
+ * and nowhere else does. Asked of a room slug so the presence socket can
+ * hold a `meeting` message to it without caring how the browser got there
+ * — the panel only opens at the table, but a panel is decoration, exactly
+ * as the character picker's was.
+ */
+export function hasBoardroom(room: string): boolean {
+  const floor = parseFloorRoomSlug(room);
+  return floor?.level === 3 && hasOperationsFloor(tenantFor(floor.slug));
+}
+
 export function sameFloor(a: Floor, b: Floor): boolean {
   if (a.kind !== b.kind) return false;
   return a.kind === "lobby" || b.kind === "lobby" || a.level === b.level;

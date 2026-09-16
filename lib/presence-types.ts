@@ -209,6 +209,19 @@ export interface VoiceRelayMessage {
   signal: VoiceSignal;
 }
 
+/**
+ * Start or end the meeting in the room this connection is in.
+ *
+ * The room's, not the sender's: a meeting is a thing happening in a place,
+ * so anybody standing at the table may end one — the person who called it
+ * may well have walked out, and a meeting nobody can end is a notice that
+ * hangs over the building for ever.
+ */
+export interface MeetingMessage {
+  type: "meeting";
+  on: boolean;
+}
+
 export type ClientMessage =
   | JoinMessage
   | MoveMessage
@@ -218,7 +231,8 @@ export type ClientMessage =
   | PongRelayMessage
   | VoiceRelayMessage
   | MicMessage
-  | BoardedMessage;
+  | BoardedMessage
+  | MeetingMessage;
 
 // ── Server → client ────────────────────────────────────
 
@@ -343,6 +357,36 @@ export interface BoardBroadcast {
   by?: string;
 }
 
+/** A meeting somebody has called, and where it is being held. */
+export interface MeetingNotice {
+  /** The room it is in, which is a floor of a building. */
+  room: string;
+  /** That floor in words — "Sandbox ERP · Floor 3 · Operations". */
+  where: string;
+  /** Who called it. */
+  host: string;
+  /** When, as an ISO stamp, so the HUD can say how long it has been going. */
+  since: string;
+}
+
+/**
+ * Every meeting this connection is allowed to know about.
+ *
+ * The whole list rather than a start or an end, for the reason `online` is
+ * a whole list: it is sent on every change and to everyone arriving, so a
+ * browser that missed one message is not left with a notice that will never
+ * be taken down.
+ *
+ * Filtered per connection by the room's own rule (`mayEnterRoom`) — a
+ * meeting on a floor you cannot ride to is not news you are entitled to,
+ * and the filtering is the server's rather than the HUD's for the reason
+ * every other private-floor check is.
+ */
+export interface MeetingsMessage {
+  type: "meetings";
+  meetings: MeetingNotice[];
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | RejectedMessage
@@ -357,7 +401,8 @@ export type ServerMessage =
   | PongBroadcast
   | BoardBroadcast
   | VoiceBroadcast
-  | OnlineMessage;
+  | OnlineMessage
+  | MeetingsMessage;
 
 export function isClientMessage(value: unknown): value is ClientMessage {
   if (typeof value !== "object" || value === null) return false;
@@ -371,7 +416,8 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     type === "pong" ||
     type === "voice" ||
     type === "mic" ||
-    type === "boarded"
+    type === "boarded" ||
+    type === "meeting"
   );
 }
 

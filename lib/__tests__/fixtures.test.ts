@@ -22,6 +22,7 @@ import type { FixtureId } from "../fixtures";
  */
 const POI_NAMES = [
   "Arcade cabinet",
+  "Boardroom table",
   "Bookshelf 2",
   "Bookshelf 3",
   "Bookshelf 4",
@@ -59,6 +60,7 @@ const EVERY_ID: Record<FixtureId, true> = {
   "project-flow": true,
   "help-desk": true,
   "support-pulse": true,
+  boardroom: true,
 };
 
 const claimants = (name: string) => FIXTURES.filter((f) => f.match.test(name)).map((f) => f.id);
