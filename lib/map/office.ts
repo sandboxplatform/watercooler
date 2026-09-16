@@ -52,6 +52,14 @@ export const WALLS: WallVocabulary = {
 };
 
 /**
+ * How deep a wall stands, cap through base — so one number says how many
+ * rows a wall takes out of a map and how tall the band is that lettering is
+ * painted on. Read off the vocabulary rather than written down, because the
+ * face row is the thing that gets dropped for a shorter wall.
+ */
+export const WALL_ROWS = 2 + WALLS.topFace.length;
+
+/**
  * The one thing on the walls: a whiteboard, lifted from the old office. It
  * is the shared board — every room shows the same drawing — and its point
  * of interest sits on the board's lower tile so standing just below is

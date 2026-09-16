@@ -11,7 +11,7 @@
 
 import { harvest, type Region, type SourceMap } from "./harvest";
 import type { PartitionSpec, PoiSpec, RoomSpec } from "./spec";
-import { TILE, WALLS, WHITEBOARD } from "./office";
+import { TILE, WALL_ROWS, WALLS, WHITEBOARD } from "./office";
 import type { BoardKind } from "../world/tenants";
 
 export const WIDTH = 20;
@@ -251,9 +251,6 @@ const ROOM_COLS = 14;
 const ROOM_ROWS = 7;
 const CORRIDOR_ROWS = 4;
 
-/** How deep a wall stack is, cap through base. Its shadow row is floor below. */
-const WALL_ROWS = 3;
-
 /** The first walkable row of each band, worked out once so nothing drifts. */
 const UPPER_TOP = WALL_ROWS;
 const UPPER_WALL = UPPER_TOP + ROOM_ROWS;
@@ -445,7 +442,10 @@ export function opsSign(rooms: number) {
  *
  * Quarter and three-quarters of the run rather than a gap between them,
  * because each figure is centred under its own heading and the pair has to
- * read as two things rather than one long one.
+ * read as two things rather than one long one. `net` is the middle of the
+ * run, which is where the difference between them is lettered: it belongs
+ * between the two figures it is taken from, and the middle is the one spot
+ * on the stretch that reads as belonging to both rather than to either.
  *
  * Null on the two floors with nowhere to put them, and the room keeps its
  * five counts on both: where Support is in the lower rank — a floor of two
@@ -460,7 +460,11 @@ export function opsWeekCounts(rooms: number) {
   const run = opsWallRun(rooms, support);
   if (middleOf(run) === opsSign(rooms).tx) return null;
   const width = run.to - run.from;
-  return { tx: [run.from + width / 4, run.from + (width * 3) / 4] as const, ty: UPPER_WALL };
+  return {
+    tx: [run.from + width / 4, run.from + (width * 3) / 4] as const,
+    net: middleOf(run),
+    ty: UPPER_WALL,
+  };
 }
 
 /**

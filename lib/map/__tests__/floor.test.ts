@@ -420,6 +420,22 @@ describe("an Operations floor", () => {
       expect(week.tx[0] - run.from).toBe(run.to - week.tx[1]);
     });
 
+    /**
+     * And the net between them, which is the difference of the two — so it
+     * goes where it belongs to both of them rather than to either: the
+     * middle of the stretch, equidistant from each.
+     */
+    it("letters the net at the middle of the two it is taken from", () => {
+      const week = opsWeekCounts(rooms)!;
+      expect(week.net).toBe(28.5);
+      expect(clear(week.net)).toBe(true);
+      for (let count = 3; count <= 12; count++) {
+        const at = opsWeekCounts(count);
+        if (!at) continue;
+        expect(at.net - at.tx[0], `${count} rooms`).toBe(at.tx[1] - at.net);
+      }
+    });
+
     /** And never on the stretch the floor has written its name on. */
     it("keeps the week clear of the floor's name", () => {
       for (let count = 1; count <= 12; count++) {

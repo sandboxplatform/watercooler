@@ -532,3 +532,41 @@ export function pulseBars(counts: PulseCounts): Record<PulseId, number> {
 export function pulseFigure(value: number, capped: boolean): string {
   return capped ? `${value}+` : String(value);
 }
+
+/**
+ * What the wall letters over the net, which is not a `PulseMetric` — there
+ * is no sweep behind it and no bay for it on the plate. It is here rather
+ * than beside the lettering that draws it so the wall's headings can be
+ * measured against each other in one place (see `pulse.test.ts`).
+ */
+export const NET_HEADING = "NET";
+
+/**
+ * The week's net, as the wall letters it between the two counts it is the
+ * difference of: what the desk took on this week less what it saw off.
+ *
+ * Signed, because the sign is the whole of what it says — a desk that
+ * raised twelve and closed eleven is one ticket deeper in than it started,
+ * and "+1" is that sentence in two characters. Zero is written plainly as
+ * `0`: level is an answer, and `+0` reads as a rounding.
+ *
+ * **Null where either sweep was capped**, which is why this is not simple
+ * subtraction at the call site. A capped count is a floor rather than a
+ * total (see `pulseFigure`), so a net taken off one is not even a bound in
+ * a known direction: capping the opened sweep hides tickets that would
+ * push it up, capping the closed sweep hides tickets that would pull it
+ * down, and the wall would letter a confident `-3` for a week that ran the
+ * other way. A dash says the one true thing available.
+ */
+export function weekNet(
+  counts: PulseCounts,
+  capped: readonly PulseId[] = [],
+): { net: number; figure: string; lean: "rise" | "level" | "fall" } | null {
+  if (capped.includes("opened-week") || capped.includes("closed-week")) return null;
+  const net = counts["opened-week"] - counts["closed-week"];
+  return {
+    net,
+    figure: net > 0 ? `+${net}` : String(net),
+    lean: net > 0 ? "rise" : net < 0 ? "fall" : "level",
+  };
+}

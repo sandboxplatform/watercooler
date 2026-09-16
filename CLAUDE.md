@@ -690,8 +690,9 @@ carries on past the divider between the bays to the next doorway along. It
 sat a couple of tiles to the left of the middle of what it was written on,
 with nothing in the room to line up with and nothing to explain why.
 
-**The desk's week is lettered on the wall outside Support** — two figures,
-`opsWeekCounts`, on the stretch that room fronts. Support's own wall is
+**The desk's week is lettered on the wall outside Support** — two counts
+and the net between them, `opsWeekCounts`, on the stretch that room
+fronts. Support's own wall is
 full (the queue, the five counts, the room's name) and the plate is five
 tiles with two rows on it, so a third bank would take every figure down a
 size to make room for one nobody asked the wall for. Outside is where there
@@ -704,6 +705,45 @@ inside — no bays, no bars, the wall's own two colours, and no flash on a
 number that moved. Paint does not change while you watch it. `DeskWeek` in
 `systems/SupportPulse.ts` is the drawing; it keeps a timer, so it hands back
 a teardown like the boards do.
+
+**The middle figure is the two of them subtracted**, and it is the one
+thing on the wall with a colour: red where the week put the desk deeper in
+than it started, green where it saw off more than it took on, and the
+wall's own ink where it came out level. `weekNet` in `lib/zoho/pulse.ts` is
+the arithmetic and the lean; `NET` in `SupportPulse.ts` is the two colours,
+both at the weight of the ink beside them rather than the HUD's warning
+colours — this is paint on a wall next to the floor's own name, and a
+`#ef4444` up there reads as a light somebody switched on.
+
+It is **not a `PulseMetric`**: nothing counts it, so there is no sweep
+behind it, no bay for it on the plate and nothing for the panel to show. It
+also **answers a dash where either week sweep was capped**, which is the
+reason the subtraction is a function rather than two numbers taken away at
+the call site. A capped count is a floor rather than a total, so a net off
+one is not even a bound in a known direction — capping the opened sweep
+hides tickets that would push it up and capping the closed sweep hides
+tickets that would pull it down, and the wall would letter a confident
+`-3` for a week that ran the other way.
+
+**Lettering painted on a wall is centred on the wall.** `letterOnWall` in
+`components/game/utils/wall-lettering.ts` is the one rule, and every
+painted thing goes through it: the building's name and the line under it,
+`SUPPORT`, and the week's three headings and figures. Each used to hang off
+a fixed pair of offsets — a bottom edge at 92 and a top edge at 100 — which
+put the block a good twenty pixels low in a band of a hundred and
+forty-four, and on the corridor wall, where the paint is the only thing on
+a long clear stretch, that read as lettering sliding off the bottom of the
+wall. The block is **measured** rather than worked out, because the second
+line of a building's name wraps on the longest of them — "Building Supply
+Warehouse" is two lines where every other name is one, and a block centred
+on an assumed height is centred for one of the two. `WALL_ROWS` in
+`lib/map/office.ts` is how deep the band is, read off the wall vocabulary
+so the floor's row arithmetic and the lettering cannot disagree about it.
+
+This is not `utils/signs.ts`, which is the opposite kind of text: a sign
+floats above the world on a chip with an arrow over it and grows as the
+camera stands back. Paint is sized to the wall and left alone — see the
+in-world lettering rule under Conventions.
 
 Two floors get nothing, and the desk keeps its five counts on both: one of
 one room, where Operations and Support are the same room and the name

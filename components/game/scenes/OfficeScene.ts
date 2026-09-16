@@ -51,6 +51,7 @@ import {
 import { GARAGE_BAYS } from "@/lib/map/premises";
 import { fetchPeople } from "@/lib/people-client";
 import { ensureSheet } from "../utils/sheets";
+import { letterOnWall } from "../utils/wall-lettering";
 import { createLogger } from "@/lib/logger";
 import {
   BOSS_INTERACT_DISTANCE,
@@ -703,15 +704,15 @@ export class OfficeScene extends Phaser.Scene {
     const ops = address.floor.kind === "floor" && address.floor.level === 3;
     if (!ops || !operationsBoards(address.tenant).includes(SUPPORT_BOARD)) return;
     const at = opsSupportSign(operationsRoomCount(address.tenant));
-    this.add
-      .text(at.tx * TILE, at.ty * TILE + 96, "SUPPORT", {
+    const name = this.add
+      .text(at.tx * TILE, 0, "SUPPORT", {
         fontFamily: '"Press Start 2P", monospace',
         fontSize: "16px",
         color: "#3a3a50",
       })
-      .setOrigin(0.5, 1)
       .setDepth(3)
       .setResolution(2);
+    letterOnWall(at.ty * TILE, [name]);
   }
 
   /**
@@ -768,28 +769,27 @@ export class OfficeScene extends Phaser.Scene {
     const lobby = hasFloors(address.tenant);
     // An Operations floor is a corridor, and the wall across the top of the
     // map is behind the rooms — so it writes its name on the wall the
-    // corridor actually looks at. Both lines hang off the wall's top row,
-    // at the same offsets they use against the top of every other map.
+    // corridor actually looks at. Either way both lines are centred on the
+    // band of that wall, as every other piece of paint in the world is.
     const ops =
       address.floor.kind === "floor" && address.floor.level === 3
         ? opsSign(operationsRoomCount(address.tenant))
         : null;
     const x = ops ? ops.tx * TILE : lobby ? 15 * 48 : 17 * 48;
     const wallTop = ops ? ops.ty * TILE : 0;
-    this.add
-      .text(x, wallTop + 92, address.tenant.name.toUpperCase(), {
+    const name = this.add
+      .text(x, 0, address.tenant.name.toUpperCase(), {
         fontFamily: '"Press Start 2P", monospace',
         fontSize: "16px",
         color: "#3a3a50",
       })
-      .setOrigin(0.5, 1)
       .setDepth(3)
       .setResolution(2);
     // Wrapped to the wall it has, so "Building Supply Warehouse" takes two lines.
-    this.add
+    const where = this.add
       .text(
         x,
-        wallTop + 100,
+        0,
         [address.tenant.location, describeFloor(address)].filter(Boolean).join(" · ").toUpperCase(),
         {
           fontFamily: '"Press Start 2P", monospace',
@@ -799,9 +799,9 @@ export class OfficeScene extends Phaser.Scene {
           wordWrap: { width: lobby ? 340 : 200 },
         },
       )
-      .setOrigin(0.5, 0)
       .setDepth(3)
       .setResolution(2);
+    letterOnWall(wallTop, [name, where]);
   }
 
   /**

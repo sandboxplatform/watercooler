@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  NET_HEADING,
   PULSE_METRICS,
   atOrAfter,
   countSince,
@@ -12,6 +13,7 @@ import {
   readableBefore,
   sweptPast,
   toPulse,
+  weekNet,
   weekStart,
   weekStartIn,
   zoneOffset,
@@ -597,6 +599,51 @@ describe("pulseFigure", () => {
   });
 });
 
+describe("weekNet", () => {
+  const counts = (openedWeek: number, closedWeek: number) => ({
+    new: 0,
+    queue: 0,
+    "in-progress": 0,
+    "opened-today": 0,
+    "closed-today": 0,
+    "opened-week": openedWeek,
+    "closed-week": closedWeek,
+  });
+
+  /**
+   * The sign is the whole of what the figure says, and the lean is what
+   * paints it: a desk deeper in than it started is the week going the wrong
+   * way, whatever the two numbers behind it were.
+   */
+  it("signs a week the desk lost ground on", () => {
+    expect(weekNet(counts(12, 11))).toEqual({ net: 1, figure: "+1", lean: "rise" });
+    expect(weekNet(counts(40, 12))).toMatchObject({ figure: "+28", lean: "rise" });
+  });
+
+  it("signs a week the desk gained on", () => {
+    expect(weekNet(counts(11, 12))).toEqual({ net: -1, figure: "-1", lean: "fall" });
+  });
+
+  /** Level is an answer, so it is written plainly — `+0` reads as a rounding. */
+  it("writes a level week as neither", () => {
+    expect(weekNet(counts(11, 11))).toEqual({ net: 0, figure: "0", lean: "level" });
+  });
+
+  /**
+   * The reason this is a function and not a subtraction at the call site. A
+   * capped count is a floor rather than a total, and a net taken off one is
+   * not even a bound in a known direction — capping the opened sweep hides
+   * tickets that would push it up, capping the closed sweep hides tickets
+   * that would pull it down. Either way the wall would letter a confident
+   * number for a week that may have run the other way.
+   */
+  it("answers nothing when either sweep was capped", () => {
+    expect(weekNet(counts(600, 11), ["opened-week"])).toBeNull();
+    expect(weekNet(counts(12, 600), ["closed-week"])).toBeNull();
+    expect(weekNet(counts(12, 11), ["opened-today"])).not.toBeNull();
+  });
+});
+
 describe("the metrics", () => {
   it("are seven, each in one of the three banks", () => {
     expect(PULSE_METRICS).toHaveLength(7);
@@ -631,12 +678,20 @@ describe("the metrics", () => {
 
   /**
    * The narrowest stretch of corridor wall the week is ever lettered on is
-   * nine tiles (see `opsWallRuns`), so each of the two has four and a half
-   * of them — two hundred and sixteen pixels — at twelve to a letter.
+   * nine tiles (see `opsWallRuns`), and three things hang on it: the two
+   * counts at the quarter and the three-quarters of it, and the net between
+   * them at the middle. So what any two neighbouring headings have between
+   * them is a quarter of the stretch, and each pays half its own width in.
+   *
+   * Which is why the net's heading is measured here rather than beside the
+   * lettering that draws it: the constraint is on the pair, and a test that
+   * knew only one of them would pass a heading that overlapped.
    */
-  it("keeps the week's headings short enough for the wall outside", () => {
+  it("keeps the week's headings clear of the net between them", () => {
+    const between = (9 / 4) * 48;
+    const half = (text: string) => (text.length * 12) / 2;
     for (const metric of PULSE_METRICS.filter((m) => m.bank === "week")) {
-      expect(metric.short.length * 12, metric.short).toBeLessThanOrEqual((9 / 2) * 48);
+      expect(half(metric.short) + half(NET_HEADING), metric.short).toBeLessThanOrEqual(between);
     }
   });
 });

@@ -1,8 +1,16 @@
 import * as Phaser from "phaser";
-import { PULSE_METRICS, pulseBars, pulseFigure, type Pulse } from "@/lib/zoho/pulse";
+import {
+  NET_HEADING,
+  PULSE_METRICS,
+  pulseBars,
+  pulseFigure,
+  weekNet,
+  type Pulse,
+} from "@/lib/zoho/pulse";
 import { PULSE_REFRESH_MS } from "@/lib/constants";
 import { createLogger } from "@/lib/logger";
 import { CountBoard, type CountBay, type CountReading } from "./CountBoard";
+import { letterOnWall } from "../utils/wall-lettering";
 
 const log = createLogger("SupportPulse");
 
@@ -114,11 +122,40 @@ export class SupportPulse {
  *
  * The counts are `opened-week` and `closed-week` off the same read the
  * plate uses, on the same beat, which the server holds them for — see
- * `PULSE_REFRESH_MS`.
+ * `PULSE_REFRESH_MS`. Between them goes the third figure, which is the
+ * two of them subtracted: see `NET`.
  */
 
-/** The two, in the order they are lettered. Left to right, as written. */
+/** The two counted ones, in the order they are lettered: raised, then closed. */
 const WEEK = PULSE_METRICS.filter((metric) => metric.bank === "week");
+
+/**
+ * The figure between them: the week's net, and the two ways it can lean.
+ *
+ * Not a `PulseMetric`, because nothing counts it — it is the other two
+ * subtracted (`weekNet`), so there is no sweep behind it and nothing for
+ * the panel or the plate inside to show. It lives out here with the
+ * lettering that draws it.
+ *
+ * The colour is the whole point of having it on the wall rather than
+ * leaving it to be worked out: a desk that raised twelve and closed eleven
+ * is one deeper in than it started, and the wall should say so from across
+ * the corridor without anybody doing the arithmetic. So up is red and down
+ * is green — a support desk's good week is the one where the queue got
+ * shorter — and level stays the wall's own ink, because level is neither.
+ *
+ * Both are the weight of that ink rather than the HUD's warning colours:
+ * this is paint on a wall beside the floor's own name, and a `#ef4444` next
+ * to it reads as a light somebody switched on.
+ */
+const NET = {
+  id: "net",
+  short: NET_HEADING,
+  /** More came in than went out. */
+  rise: "#8f3138",
+  /** The desk saw off more than it took on. */
+  fall: "#2f6b40",
+} as const;
 
 /** What the wall says before anything has been counted, or when it cannot be. */
 const NO_FIGURE = "—";
@@ -131,15 +168,6 @@ const LABEL = "#565972";
 /** With the room's props, over the wall it is painted on — as a board is. */
 const DEPTH = 4;
 
-/**
- * Off the wall's top row, at the offsets the floor's own name uses against
- * it — so the headings sit on the line the building's name sits on and the
- * figures on the line under it, and the three read as one row of lettering
- * rather than as two things that happen to share a wall.
- */
-const HEADING_Y = 92;
-const FIGURE_Y = 100;
-
 export class DeskWeek {
   private container: Phaser.GameObjects.Container | null = null;
   private figures = new Map<string, Phaser.GameObjects.Text>();
@@ -148,35 +176,42 @@ export class DeskWeek {
   constructor(private scene: Phaser.Scene) {}
 
   /**
-   * Letter it at `at` — the two columns and the wall row `opsWeekCounts`
-   * gives, which are tiles rather than a footprint because nothing here is
-   * solid: it is paint on a wall that already is.
+   * Letter it at `at` — the columns and the wall row `opsWeekCounts` gives,
+   * which are tiles rather than a footprint because nothing here is solid:
+   * it is paint on a wall that already is.
+   *
+   * Three columns off two of them: the net hangs at the middle of the
+   * stretch, between the two figures it is the difference of.
+   *
+   * Each heading and figure is centred on the wall as a pair, by the same
+   * rule the floor's own name on this wall goes by (`letterOnWall`) — which
+   * is what keeps the three of them reading as one row of lettering rather
+   * than as three things that happen to share a wall.
    *
    * Returns a teardown, because the scene restarts on every lift ride and
    * an interval that outlives it goes on fetching for a room nobody is in.
    */
-  place(at: { tx: readonly number[]; ty: number }, tile: number): () => void {
-    const container = this.scene.add.container(0, at.ty * tile).setDepth(DEPTH);
+  place(at: { tx: readonly number[]; net: number; ty: number }, tile: number): () => void {
+    const container = this.scene.add.container(0, 0).setDepth(DEPTH);
     this.container = container;
 
-    for (const [i, metric] of WEEK.entries()) {
-      const x = (at.tx[i] ?? at.tx[at.tx.length - 1]) * tile;
-      container.add(
-        this.scene.add
-          .text(x, HEADING_Y, metric.short, {
-            fontFamily: FONT,
-            fontSize: "12px",
-            color: LABEL,
-          })
-          .setOrigin(0.5, 1)
-          .setResolution(2),
-      );
-      const figure = this.scene.add
-        .text(x, FIGURE_Y, NO_FIGURE, { fontFamily: FONT, fontSize: "22px", color: INK })
-        .setOrigin(0.5, 0)
+    const columns = [
+      { id: WEEK[0].id, short: WEEK[0].short, tx: at.tx[0] },
+      { id: NET.id, short: NET.short, tx: at.net },
+      { id: WEEK[1].id, short: WEEK[1].short, tx: at.tx[1] },
+    ];
+
+    for (const column of columns) {
+      const x = column.tx * tile;
+      const heading = this.scene.add
+        .text(x, 0, column.short, { fontFamily: FONT, fontSize: "12px", color: LABEL })
         .setResolution(2);
-      container.add(figure);
-      this.figures.set(metric.id, figure);
+      const figure = this.scene.add
+        .text(x, 0, NO_FIGURE, { fontFamily: FONT, fontSize: "22px", color: INK })
+        .setResolution(2);
+      letterOnWall(at.ty * tile, [heading, figure]);
+      container.add([heading, figure]);
+      this.figures.set(column.id, figure);
     }
 
     void this.read();
@@ -197,6 +232,23 @@ export class DeskWeek {
             : NO_FIGURE,
         );
     }
+    this.leanNet(pulse);
+  }
+
+  /**
+   * The middle figure, and its colour.
+   *
+   * A dash where either sweep was capped, which is `weekNet`'s call rather
+   * than this one's — and it takes the ink with it, because a coloured dash
+   * would be the wall claiming a direction it has just said it cannot
+   * work out.
+   */
+  private leanNet(pulse: Pulse | null) {
+    const figure = this.figures.get(NET.id);
+    if (!figure) return;
+    const net = pulse && weekNet(pulse.counts, pulse.capped);
+    figure.setText(net ? net.figure : NO_FIGURE);
+    figure.setColor(net?.lean === "rise" ? NET.rise : net?.lean === "fall" ? NET.fall : INK);
   }
 
   private destroy() {
