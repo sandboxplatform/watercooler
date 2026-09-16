@@ -297,6 +297,26 @@ export class OfficeScene extends Phaser.Scene {
     // the desk. The doorway's latch is not stepped while the walk holds the
     // keys, so standing in it does not fire it.
     this.arrival.reset();
+    // And the walk that brought them here is over.
+    //
+    // A route is a list of points in the room it was planned in, and this
+    // scene object outlives the room: riding the lift restarts the scene
+    // rather than building a new one, so `navigator` — a field, made once
+    // when the scene was constructed — is still following the tap that
+    // ended at the lift downstairs. Those coordinates are somewhere else
+    // entirely up here. Tapping the lift on Floor 1 of Sandbox ERP and
+    // riding to Operations walked the character out of the car and away up
+    // the corridor to the west wall, which is where the lobby's lift is.
+    //
+    // It survives because the walk was never finished: the last step into
+    // the car opens the lift's dialog, and `update` stands the character
+    // still under a dialog rather than stepping the route — so it is still
+    // live when the floor above comes up. The arrival walk above is reset
+    // here for the same reason, and this was the half that was forgotten.
+    this.navigator.cancel();
+    this.walkMarker?.destroy();
+    this.walkMarker = null;
+
     const via = new URLSearchParams(window.location.search).get("via");
     const zones = parseTransitions(map);
     const arrivedBy = via ? zones.find((zone) => zone.name === via) : undefined;

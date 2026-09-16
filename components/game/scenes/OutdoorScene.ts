@@ -154,6 +154,11 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
 
     this.player = new Player(this, place.spawn.x, place.spawn.y, place.spawn.facing);
     this.arrival.reset();
+    // The walk they were on before is over: this scene object is reused
+    // between visits, so a route abandoned on the way indoors would be
+    // picked up again on the way back out. The office has the same rule
+    // for a stronger reason — see `OfficeScene.create`.
+    this.navigator.cancel();
     if (place.walkIn) this.arrival.begin(place.spawn.facing, ARRIVAL_STEPS);
     this.player.sprite.setCollideWorldBounds(true);
     this.physics.world.setBounds(0, 0, place.width, place.height);
