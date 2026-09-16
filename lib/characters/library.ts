@@ -81,9 +81,35 @@ export const SHARED_CAST: RosterCharacter[] = LIBRARY_CHARACTERS.filter(
   (character) => isPremade(character) || character.key === BOSS_SPRITE_KEY,
 );
 
-/** Whether this look is one a visitor may choose. */
-export function inSharedCast(key: string): boolean {
-  return SHARED_CAST.some((character) => character.key === key);
+/** As much of a persona as the question "what may they wear" needs. */
+export interface LookClaim {
+  characterKey?: string;
+}
+
+/**
+ * The looks a given person may wear — their own, or the shared cast.
+ *
+ * A code that says who you are is no use if it also lets you walk in as
+ * somebody else, so somebody whose own code names their sheet wears that and
+ * nothing else: there is nothing left to choose between, and the picker is
+ * not offered to them at all. Everybody who has no sheet of their own
+ * chooses from the shared cast — a visitor, and equally a persona whose
+ * likeness has not been drawn yet, since Coop's face is no more Campbell's
+ * to put on than a stranger's.
+ *
+ * Not the list an agent may be given: a seat wears anything uploaded to the
+ * room, which is the roster rather than this.
+ */
+export function looksFor(persona: LookClaim | null | undefined): RosterCharacter[] {
+  const own = persona?.characterKey
+    ? LIBRARY_CHARACTERS.find((character) => character.key === persona.characterKey)
+    : null;
+  return own ? [own] : SHARED_CAST;
+}
+
+/** Whether this person may wear this look — the socket's question, and the picker's. */
+export function mayWear(persona: LookClaim | null | undefined, key: string): boolean {
+  return looksFor(persona).some((character) => character.key === key);
 }
 
 /** The public file behind a library id, or null for anything else. */

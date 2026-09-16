@@ -7,8 +7,9 @@ import {
   LIBRARY_PREFIX,
   SHARED_CAST,
   generatedSheetPath,
-  inSharedCast,
   librarySheetPath,
+  looksFor,
+  mayWear,
   textureKeyFor,
 } from "../library";
 import { RESIDENTS } from "../../world/residents";
@@ -54,11 +55,55 @@ describe("the library roster", () => {
   it("offers a visitor the shared cast only, never a likeness", () => {
     expect(SHARED_CAST.map((c) => c.name)).toEqual(["Alice", "Bob", "Carol", "Dave", "The Boss"]);
     expect(SHARED_CAST.some((c) => ["Coop", "Rob", "Hunter"].includes(c.name))).toBe(false);
-    expect(inSharedCast("character_02")).toBe(true);
-    expect(inSharedCast("character_09")).toBe(true);
-    expect(inSharedCast("character_coop")).toBe(false);
-    expect(inSharedCast("character_rob")).toBe(false);
-    expect(inSharedCast("character_hunter")).toBe(false);
+    expect(looksFor(null)).toEqual(SHARED_CAST);
+    expect(mayWear(null, "character_02")).toBe(true);
+    expect(mayWear(null, "character_09")).toBe(true);
+    expect(mayWear(null, "character_coop")).toBe(false);
+    expect(mayWear(null, "character_rob")).toBe(false);
+    expect(mayWear(null, "character_hunter")).toBe(false);
+  });
+
+  /**
+   * The other half of the same rule. A visitor may not put Coop's face on,
+   * and neither may Coop put on Rob's: his own code names his sheet, so that
+   * sheet is the whole of what he may wear and the picker has nothing to
+   * offer him. Held here rather than in the HUD, because hiding the button
+   * is decoration — this is what the roster route and the presence socket
+   * both ask.
+   */
+  it("locks somebody whose own code names their sheet to that sheet", () => {
+    const coop = looksFor({ characterKey: "character_coop" });
+    expect(coop.map((c) => c.name)).toEqual(["Coop"]);
+    expect(mayWear({ characterKey: "character_coop" }, "character_coop")).toBe(true);
+    expect(mayWear({ characterKey: "character_coop" }, "character_rob")).toBe(false);
+    // Not even the cast a visitor gets the run of.
+    expect(mayWear({ characterKey: "character_coop" }, "character_02")).toBe(false);
+  });
+
+  /**
+   * Campbell: named by his own code, with no sheet drawn for him yet. He
+   * chooses, because there is nothing of his own to wear — but he chooses
+   * from the same cast a visitor does, since Coop's likeness is no more his
+   * than a stranger's.
+   */
+  it("gives somebody with no sheet of their own the shared cast", () => {
+    expect(looksFor({})).toEqual(SHARED_CAST);
+    expect(mayWear({}, "character_02")).toBe(true);
+    expect(mayWear({}, "character_coop")).toBe(false);
+  });
+
+  /**
+   * A look named on a persona has to be a look that exists: naming one that
+   * is not in the library would leave them with the shared cast and no sign
+   * of why, which is the unlocked picker this rule exists to close.
+   */
+  it("keeps every persona's named sheet in the library", () => {
+    for (const key of ["character_coop", "character_rob", "character_hunter"]) {
+      expect(
+        looksFor({ characterKey: key }).map((c) => c.key),
+        key,
+      ).toEqual([key]);
+    }
   });
 
   it("keeps the texture key a library sheet is preloaded under", () => {

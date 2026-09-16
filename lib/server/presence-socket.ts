@@ -15,8 +15,8 @@ import type { Duplex } from "stream";
 import { WebSocket, WebSocketServer } from "ws";
 import { PresenceHub } from "./presence-hub";
 import { getRoomStore } from "./room-store";
-import { identityOf, isAuthorized, type AccessIdentity } from "./access";
-import { inSharedCast } from "../characters/library";
+import { identityOf, isAuthorized, personaFor, type AccessIdentity } from "./access";
+import { mayWear } from "../characters/library";
 import { normaliseRoomSlug } from "../rooms";
 import { mayEnterRoom } from "../world/floors";
 import { achievementFor, type EarnedAchievement } from "../achievements";
@@ -62,17 +62,24 @@ function coerceNumber(value: unknown, fallback = 0): number {
 /**
  * The look this connection is allowed to wear.
  *
- * The picker already offers a visitor the shared cast only, but the browser
+ * The picker already offers each person only what is theirs, but the browser
  * says what it likes over this socket — a hand-edited profile could otherwise
  * walk into the room wearing Coop's face. So the claim is checked rather than
- * trusted, and anything a visitor may not wear falls back to what they had.
- * Anyone on their own code is left alone: their roster is not restricted.
+ * trusted, against `looksFor`: the shared cast for a visitor, and for
+ * somebody whose own code names their sheet, that sheet alone.
+ *
+ * Who is refused falls back differently, because the two have different
+ * right answers. A visitor keeps what they had — any of the cast will do,
+ * and the one they were wearing is the least surprising. A persona is put
+ * back into their own sheet rather than into whatever the connection last
+ * claimed, which may be the impersonation itself.
  */
 function permittedLook(identity: AccessIdentity, wanted: string, fallback: string): string {
-  if (identity !== "visitor") return wanted;
-  if (inSharedCast(wanted)) return wanted;
-  log.warn(`a visitor asked for the look "${wanted}"; kept "${fallback}"`);
-  return fallback;
+  const persona = personaFor(identity);
+  if (mayWear(persona, wanted)) return wanted;
+  const kept = persona?.characterKey ?? fallback;
+  log.warn(`${identity} asked for the look "${wanted}"; kept "${kept}"`);
+  return kept;
 }
 
 /** Same-origin check, matching the agent bridge. */

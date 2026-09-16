@@ -20,7 +20,7 @@ import Welcome from "./Welcome";
 import GamepadDriver from "./GamepadDriver";
 import { profileSnapshot, subscribeToProfile } from "@/lib/profile";
 import { registerProfile } from "@/lib/people-client";
-import { pushProfileToAccount } from "@/lib/account-client";
+import { pushProfileToAccount, useMe } from "@/lib/account-client";
 import ElevatorModal from "./ElevatorModal";
 import AchievementToast from "./AchievementToast";
 import Whiteboard from "./Whiteboard";
@@ -42,6 +42,12 @@ interface GameHudProps {
 export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) {
   const { state } = useStudio();
   const bgm = useBgm();
+  // Somebody whose own code names their sheet wears that and nothing else,
+  // so there is no character to choose and no button to choose it with.
+  // Assumed locked until the answer comes: a picker that is briefly there
+  // and then gone is worse than one that arrives a moment late.
+  const me = useMe();
+  const ownLookOnly = !me || !!me.access?.persona?.characterKey;
   const [openPanel, setOpenPanel] = useState<HudPanelId | null>(null);
   const [seatManagerOpen, setSeatManagerOpen] = useState(false);
   const [studioOpen, setStudioOpen] = useState(false);
@@ -114,37 +120,41 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
 
   // Top-right toolbar items (everything except chat)
   const toolItems: HudDockItem[] = useMemo(
-    () => [
-      {
-        id: "music",
-        label: "Music",
-        icon: asset("/ui/icons/icon-music.png"),
-        iconActive: asset("/ui/icons/icon-music-active.png"),
-      },
-      {
-        id: "connection",
-        label: "Connection",
-        icon: asset("/ui/icons/icon-connection.png"),
-        iconActive: asset("/ui/icons/icon-connection-active.png"),
-      },
-      // Who you are in the world: opens the character studio.
-      {
-        id: "workers",
-        label: "Character",
-        icon: asset("/ui/icons/icon-workers.png"),
-        iconActive: asset("/ui/icons/icon-workers-active.png"),
-      },
-    ],
-    [],
+    () =>
+      [
+        {
+          id: "music" as const,
+          label: "Music",
+          icon: asset("/ui/icons/icon-music.png"),
+          iconActive: asset("/ui/icons/icon-music-active.png"),
+        },
+        {
+          id: "connection" as const,
+          label: "Connection",
+          icon: asset("/ui/icons/icon-connection.png"),
+          iconActive: asset("/ui/icons/icon-connection-active.png"),
+        },
+        // Who you are in the world: opens the character studio.
+        {
+          id: "workers" as const,
+          label: "Character",
+          icon: asset("/ui/icons/icon-workers.png"),
+          iconActive: asset("/ui/icons/icon-workers-active.png"),
+        },
+      ].filter((item) => item.id !== "workers" || !ownLookOnly),
+    [ownLookOnly],
   );
 
-  const togglePanel = useCallback((id: HudPanelId) => {
-    if (id === "workers") {
-      setStudioOpen((prev) => !prev);
-      return;
-    }
-    setOpenPanel((current) => (current === id ? null : id));
-  }, []);
+  const togglePanel = useCallback(
+    (id: HudPanelId) => {
+      if (id === "workers") {
+        if (!ownLookOnly) setStudioOpen((prev) => !prev);
+        return;
+      }
+      setOpenPanel((current) => (current === id ? null : id));
+    },
+    [ownLookOnly],
+  );
 
   const musicIconOverrides = useMemo(
     () =>

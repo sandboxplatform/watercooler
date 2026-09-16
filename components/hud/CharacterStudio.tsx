@@ -22,7 +22,10 @@ const PORTRAIT_SCALE = 2.4;
  * put back on at the next visit.
  */
 export default function CharacterStudio({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { characters, error, refresh } = useCharacterRoster();
+  // What this person may put on, which is not the roster a seat is dressed
+  // from: somebody whose own code names their sheet has only that one, and
+  // the HUD does not offer them this picker at all.
+  const { wearable: characters, error, refresh } = useCharacterRoster();
   // Storage is the source of truth for what is worn: the scene writes it on a
   // successful load and clears it on a failed one, and this follows either.
   const wearing = useSyncExternalStore(subscribeToChoice, rememberedKey, () => null);

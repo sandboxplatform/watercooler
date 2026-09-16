@@ -69,7 +69,10 @@ export default function Welcome() {
   const guest = !authOn || (!account && !!profile?.guest);
   const done =
     !!profile && isComplete(profile, !worksNowhere) && (guest || !!account?.profile || !!persona);
-  const { characters, error } = useCharacterRoster();
+  // The looks this person may wear: the shared cast, or — for somebody whose
+  // own code names their sheet — that sheet on its own, which is what the
+  // effect below writes straight in without asking.
+  const { wearable: characters, error } = useCharacterRoster();
 
   const [typedName, setTypedName] = useState<string | null>(null);
   const [pickedHome, setPickedHome] = useState<string | null>(null);

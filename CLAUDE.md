@@ -369,12 +369,36 @@ navigation — a typed `/r/<slug>` still opens that lobby, because a lobby is
 public and a shared link has to work. `WORLD_SPAWN` already stands them on the
 plaza.
 
-A visitor is offered the **shared cast** — the premade four and The Boss
-(`SHARED_CAST` in `lib/characters/library.ts`). Coop's and Rob's likenesses are
-theirs alone. That is enforced in three places, because hiding a choice in the
-picker is decoration: `/api/characters` filters the roster by identity, and the
-presence socket clamps the `spriteKey` a connection claims, so a hand-edited
-profile cannot walk in wearing someone else's face.
+**A look belongs to whoever it is of.** `looksFor` in
+`lib/characters/library.ts` is the one rule: somebody whose own code names
+their sheet wears that sheet and nothing else, and everybody with no sheet of
+their own — a visitor, and equally Campbell, whose likeness has not been drawn
+yet — chooses from the **shared cast**, the premade four and The Boss. Coop's
+and Rob's likenesses are no more Campbell's to put on than a stranger's.
+
+So the picker is a **visitor's screen**: there is nothing for it to offer
+somebody with one look, and the HUD's Character button is not drawn for them
+(`ownLookOnly` in `GameHud.tsx`, assumed true until `/api/me` answers — a
+picker that appears and then vanishes is worse than one that arrives late).
+
+Enforced in three places, because hiding a button is decoration:
+
+| Where             | What it does                                                                  |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `GameHud`         | No button, so nobody is shown a choice they do not have                       |
+| `/api/characters` | Answers `wearable` beside `characters` — what the person may wear, not a seat |
+| `permittedLook`   | Clamps the `spriteKey` a connection claims, against the cookie                |
+
+The socket is the one that actually holds: the browser says what it likes
+over it, so a hand-edited profile would otherwise walk in wearing somebody
+else's face. A persona is put back into **their own sheet** rather than into
+whatever the connection last claimed, which may be the impersonation itself.
+A persona used to be exempt from the clamp outright — the check asked "is
+this a visitor?" rather than "may they wear this?" — so every personal code
+was a way into everybody else's face, and Campbell's into the lot.
+
+The list an agent may be dressed from is a different question and stays the
+roster: a seat wears whatever has been uploaded to the room.
 
 **Private floors.** Two things in `lib/world/floors.ts` decide who goes up, and
 they answer different questions:
