@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Gamepad2, Mic, MicOff, Sparkles, User, Users } from "lucide-react";
+import { Gamepad2, Mic, MicOff, Sparkles, Users } from "lucide-react";
 import { gameEvents } from "@/lib/events";
+import { useOnline } from "@/lib/presence-online";
 import { useVoice } from "@/lib/hooks/useVoice";
 import { meetingFor, useMeetings } from "@/lib/meeting";
 import { voiceChat } from "@/lib/voice/voice-chat";
@@ -15,17 +16,21 @@ import { subscribeTalkButton, talkButton } from "@/lib/gamepad/bindings";
 interface BottomBarProps {
   connection: ConnectionStatus;
   sessionMetrics: SessionMetrics;
+  /** Show the People panel — the list this pill is counting. */
+  onShowPeople: () => void;
 }
 
-export default function BottomBar({ connection, sessionMetrics }: BottomBarProps) {
-  // Humans in the room; the pill counts people, not the agent seats
-  const [humans, setHumans] = useState<{ count: number; capacity: number } | null>(null);
-
-  useEffect(() => {
-    return gameEvents.on("presence-count", (count, capacity) => {
-      setHumans({ count, capacity });
-    });
-  }, []);
+export default function BottomBar({ connection, sessionMetrics, onShowPeople }: BottomBarProps) {
+  /**
+   * Everybody logged into the world, not everybody in this room.
+   *
+   * The room's own figure used to hang here as its own pill — `2/6 here` —
+   * which answered a question nobody was asking: a room's ceiling is the
+   * server's business, and what is worth knowing at a glance is whether
+   * there is anyone else about at all. This is the server's list, which
+   * already leaves the residents out, so it is a count of people.
+   */
+  const online = useOnline();
 
   const [pad, setPad] = useState<{ id: string; layout: string } | null>(null);
   const [checkOpen, setCheckOpen] = useState(false);
@@ -73,14 +78,30 @@ export default function BottomBar({ connection, sessionMetrics }: BottomBarProps
 
   return (
     <div className="layout-bottombar">
-      <div className="hud-pill hud-pill--connection">
+      {/* The count is a door: it opens the list it is counting. */}
+      <button
+        type="button"
+        className="hud-pill hud-pill--connection hud-pill--button"
+        onClick={onShowPeople}
+        title={
+          online.length > 0
+            ? `${
+                online.length === 1 ? "1 person is" : `${online.length} people are`
+              } in the world. Click to see who, and where.`
+            : "Click to see who is in the world, and where."
+        }
+        aria-label="Who is in the world"
+      >
         <span
           className={`pixel-dot pixel-dot--${
             connection === "connected" ? "green" : connection === "connecting" ? "yellow" : "red"
           }`}
         />
-        <span>{STATUS_LABELS[connection]}</span>
-      </div>
+        <span>
+          {STATUS_LABELS[connection]}
+          {connection === "connected" && online.length > 0 ? ` (${online.length})` : ""}
+        </span>
+      </button>
       {/* Only once a run has reported one: an empty pill says nothing. */}
       {sessionMetrics.model ? (
         <div className="hud-pill hud-pill--model">
@@ -121,17 +142,6 @@ export default function BottomBar({ connection, sessionMetrics }: BottomBarProps
             {meetings.length === 1
               ? `meeting · ${meetings[0].where.split(" · ").slice(-1)[0]}`
               : `${meetings.length} meetings`}
-          </span>
-        </div>
-      )}
-      {humans && (
-        <div
-          className="hud-pill hud-pill--metric"
-          title={`${humans.count} of ${humans.capacity} humans in this room`}
-        >
-          <User size={10} />
-          <span>
-            {humans.count}/{humans.capacity} here
           </span>
         </div>
       )}

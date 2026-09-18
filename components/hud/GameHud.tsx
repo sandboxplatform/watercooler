@@ -38,9 +38,11 @@ import { asset } from "@/lib/assets";
 interface GameHudProps {
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  /** Open the column on People — what the Online pill counts. */
+  onShowPeople: () => void;
 }
 
-export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) {
+export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: GameHudProps) {
   const { state } = useStudio();
   const bgm = useBgm();
   // Somebody whose own code names their sheet wears that and nothing else,
@@ -203,7 +205,11 @@ export default function GameHud({ sidebarOpen, onToggleSidebar }: GameHudProps) 
 
       {/* Bottom area: status pills (left) + chat dock (right) */}
       <div className="layout-bottom">
-        <BottomBar connection={state.connection} sessionMetrics={state.sessionMetrics} />
+        <BottomBar
+          connection={state.connection}
+          sessionMetrics={state.sessionMetrics}
+          onShowPeople={onShowPeople}
+        />
 
         {/* Spacer pushes chat to right */}
         <div style={{ flex: "1 1 auto" }} />

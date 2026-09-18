@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { PanelRightClose } from "lucide-react";
 import { useStudio } from "@/lib/store";
 import { isVisibleChatMessage } from "@/lib/constants";
@@ -27,14 +27,27 @@ export type SidebarTab = "chat" | "activity" | "tasks" | "badges" | "people";
 
 interface SidebarProps {
   open: boolean;
+  /**
+   * Which tab is showing. Held by the page rather than here, so the HUD can
+   * open the column on a tab of its own choosing — the Online pill counts
+   * the people this panel lists, and pressing it lands on them.
+   */
+  tab: SidebarTab;
+  onTabChange: (tab: SidebarTab) => void;
   width: number;
   onWidthChange: (width: number) => void;
   onClose: () => void;
 }
 
-export default function Sidebar({ open, width, onWidthChange, onClose }: SidebarProps) {
+export default function Sidebar({
+  open,
+  tab,
+  onTabChange,
+  width,
+  onWidthChange,
+  onClose,
+}: SidebarProps) {
   const { state } = useStudio();
-  const [tab, setTab] = useState<SidebarTab>("chat");
   const online = useOnline();
   const draggingRef = useRef(false);
 
@@ -132,21 +145,21 @@ export default function Sidebar({ open, width, onWidthChange, onClose }: Sidebar
           <button
             type="button"
             className={`app-sidebar__tab${tab === "chat" ? " is-active" : ""}`}
-            onClick={() => setTab("chat")}
+            onClick={() => onTabChange("chat")}
           >
             Chat
           </button>
           <button
             type="button"
             className={`app-sidebar__tab${tab === "activity" ? " is-active" : ""}`}
-            onClick={() => setTab("activity")}
+            onClick={() => onTabChange("activity")}
           >
             Activity
           </button>
           <button
             type="button"
             className={`app-sidebar__tab${tab === "tasks" ? " is-active" : ""}`}
-            onClick={() => setTab("tasks")}
+            onClick={() => onTabChange("tasks")}
           >
             Tasks
             {busyCount > 0 && <span className="app-sidebar__count">{busyCount}</span>}
@@ -154,14 +167,14 @@ export default function Sidebar({ open, width, onWidthChange, onClose }: Sidebar
           <button
             type="button"
             className={`app-sidebar__tab${tab === "badges" ? " is-active" : ""}`}
-            onClick={() => setTab("badges")}
+            onClick={() => onTabChange("badges")}
           >
             Badges
           </button>
           <button
             type="button"
             className={`app-sidebar__tab${tab === "people" ? " is-active" : ""}`}
-            onClick={() => setTab("people")}
+            onClick={() => onTabChange("people")}
             title="Everyone online, and where they are"
           >
             People

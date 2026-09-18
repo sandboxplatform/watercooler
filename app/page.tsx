@@ -8,7 +8,7 @@ import { GameErrorBoundary } from "@/components/game/GameErrorBoundary";
 import TerminalModal from "@/components/panel/TerminalModal";
 import WorkerSessionHistoryModal from "@/components/panel/WorkerSessionHistoryModal";
 import GameHud from "@/components/hud/GameHud";
-import Sidebar from "@/components/hud/Sidebar";
+import Sidebar, { type SidebarTab } from "@/components/hud/Sidebar";
 import { loadSidebarWidth } from "@/lib/persistence";
 import { useBackToClose } from "@/lib/hooks/useBackToClose";
 import { SIDEBAR_DEFAULT_WIDTH } from "@/lib/constants";
@@ -40,10 +40,21 @@ export default function Page() {
    * conversation nobody had asked for yet.
    */
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  /**
+   * Which tab the column is showing. Here rather than inside it, because
+   * the HUD opens it on a tab of its own choosing: the Online pill in the
+   * bottom bar is a count of the people the People tab lists, so pressing
+   * it has to land there rather than on whatever was last read.
+   */
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("chat");
   const wideEnough = useSyncExternalStore(subscribeToNothing, readWideEnough, () => true);
 
   const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+  const showPeople = useCallback(() => {
+    setSidebarTab("people");
+    setSidebarOpen(true);
+  }, []);
 
   // Only while it is a drawer over the office. Where it is a column beside
   // the office it covers nothing, and back should still mean back.
@@ -61,12 +72,18 @@ export default function Page() {
 
             {/* HUD overlay — floating UI over the office only */}
             <div className="app-hud">
-              <GameHud sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} />
+              <GameHud
+                sidebarOpen={sidebarOpen}
+                onToggleSidebar={toggleSidebar}
+                onShowPeople={showPeople}
+              />
             </div>
           </div>
 
           <Sidebar
             open={sidebarOpen}
+            tab={sidebarTab}
+            onTabChange={setSidebarTab}
             width={width ?? storedWidth}
             onWidthChange={setWidth}
             onClose={closeSidebar}
