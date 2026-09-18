@@ -8,12 +8,6 @@ const log = createLogger("GameEventBus");
 export interface GameEventMap {
   "seats-discovered": [seats: SeatDef[]];
   "seat-configs-updated": [seats: SeatState[]];
-  "task-assigned": [taskId: string, message: string, seatId?: string, sessionKey?: string];
-  "task-routed": [taskId: string, seatId: string, actorName: string];
-  "task-ready": [taskId: string, message: string, seatId?: string];
-  "task-bound": [taskId: string, runId: string];
-  "task-staged": [taskId: string, stage: "queued" | "returning", seatId?: string];
-  "task-bubble": [runId: string, text: string, ttl: number];
   /** Gamepad shoulder buttons cycle HUD panels; Back closes the open one. */
   "hud-cycle-panel": [direction: -1 | 1];
   "hud-close-panel": [];
@@ -62,8 +56,6 @@ export interface GameEventMap {
    * whose state this browser knows best is the one that needed telling.
    */
   "voice-self": [inChat: boolean, speaking: boolean];
-  /** What the room has spent on agents, and the ceiling it stops at. */
-  "budget-updated": [spentUsd: number, limitUsd: number, halted: boolean];
   /** A controller appeared or went away, with its layout for prompts. */
   "gamepad-state": [id: string | null, layout: string];
   /**
@@ -157,16 +149,6 @@ export interface GameEventMap {
   "player-said": [playerId: string, text: string];
   /** This browser's own remark, to show over our own character. */
   "self-said": [text: string];
-  "task-aborted": [runId: string];
-  "task-completed": [runId: string];
-  "task-failed": [runId: string];
-  "subagent-assigned": [runId: string, parentRunId: string, label: string, seatId?: string];
-  "open-terminal": [seatId?: string];
-  "open-terminal-queue": [seatId: string];
-  "stop-task": [runId: string, seatId: string];
-  "terminal-closed": [];
-  "new-session-for-seat": [seatId: string];
-  "open-session-history": [seatId: string];
 }
 
 type Listener<T extends unknown[]> = (...args: T) => void;

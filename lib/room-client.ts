@@ -5,11 +5,11 @@
  *
  * The server owns the world; this module fetches it and writes changes back.
  * Writes are coalesced and debounced, because the store persists whole
- * collections on every reducer change and we do not want a request per
- * keystroke of an agent's streaming reply.
+ * collections on every reducer change and a burst of remarks should not be a
+ * request apiece.
  */
 
-import type { TaskItem, ChatMessage, SessionRecord } from "@/types/game";
+import type { ChatMessage } from "@/types/game";
 import type { PersistedSeatConfig } from "./persistence";
 import { createLogger } from "./logger";
 
@@ -32,42 +32,26 @@ function endpointForRoom(): string {
 /** Long enough to batch a burst of reducer updates, short enough to survive a refresh. */
 export const WRITE_DEBOUNCE_MS = 400;
 
-export interface RoomBudget {
-  spentUsd: number;
-  limitUsd: number;
-  halted: boolean;
-}
-
 export interface RoomSnapshot {
-  tasks: TaskItem[];
   messages: ChatMessage[];
-  sessions: SessionRecord[];
   seats: PersistedSeatConfig[];
-  activeSessionKey: string | null;
-  budget?: RoomBudget;
 }
 
 export interface RoomPatch {
-  tasks?: TaskItem[];
   messages?: ChatMessage[];
-  sessions?: SessionRecord[];
   seats?: PersistedSeatConfig[];
-  activeSessionKey?: string | null;
 }
 
 const EMPTY: RoomSnapshot = {
-  tasks: [],
   messages: [],
-  sessions: [],
   seats: [],
-  activeSessionKey: null,
 };
 
 /**
  * Read the world. A failure yields an empty room rather than throwing: the app
  * should still open if the server is unreachable, just with nothing in it.
  */
-export async function fetchRoomSnapshot(mainSessionKey: string): Promise<RoomSnapshot> {
+export async function fetchRoomSnapshot(): Promise<RoomSnapshot> {
   try {
     const response = await fetch(endpointForRoom(), { cache: "no-store" });
     if (!response.ok) {
@@ -75,25 +59,9 @@ export async function fetchRoomSnapshot(mainSessionKey: string): Promise<RoomSna
       return EMPTY;
     }
     const raw = (await response.json()) as Partial<RoomSnapshot>;
-
-    // Rows written before sessions existed carry no key. Anchor them to the
-    // room's active session so they stay visible, falling back to main only
-    // when the room has no active session at all.
-    const fallbackSessionKey = raw.activeSessionKey ?? mainSessionKey;
-
     return {
-      tasks: (raw.tasks ?? []).map((task) => ({
-        ...task,
-        sessionKey: task.sessionKey ?? fallbackSessionKey,
-      })),
-      messages: (raw.messages ?? []).map((message) => ({
-        ...message,
-        sessionKey: message.sessionKey ?? fallbackSessionKey,
-      })),
-      sessions: raw.sessions ?? [],
+      messages: raw.messages ?? [],
       seats: raw.seats ?? [],
-      activeSessionKey: raw.activeSessionKey ?? null,
-      budget: raw.budget,
     };
   } catch (err) {
     log.warn("snapshot failed:", (err as Error).message);

@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { DEFAULT_ROOM, ROOM_SPEND_LIMIT_USD, getRoomStore } from "@/lib/server/room-store";
+import { DEFAULT_ROOM, getRoomStore } from "@/lib/server/room-store";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("RoomAPI");
@@ -22,18 +22,7 @@ function roomFrom(request: Request): string {
 
 export async function GET(request: Request) {
   try {
-    const store = getRoomStore();
-    const room = roomFrom(request);
-    const snapshot = store.getSnapshot(room);
-    const spentUsd = store.getSpend(room);
-    return NextResponse.json({
-      ...snapshot,
-      budget: {
-        spentUsd,
-        limitUsd: ROOM_SPEND_LIMIT_USD,
-        halted: spentUsd >= ROOM_SPEND_LIMIT_USD,
-      },
-    });
+    return NextResponse.json(getRoomStore().getSnapshot(roomFrom(request)));
   } catch (err) {
     log.error("snapshot failed:", (err as Error).message);
     return NextResponse.json({ error: "Failed to read room state" }, { status: 500 });
@@ -41,11 +30,8 @@ export async function GET(request: Request) {
 }
 
 interface StatePatch {
-  tasks?: Record<string, unknown>[];
   messages?: Record<string, unknown>[];
-  sessions?: Record<string, unknown>[];
   seats?: Record<string, unknown>[];
-  activeSessionKey?: string | null;
 }
 
 export async function PUT(request: Request) {
@@ -60,13 +46,8 @@ export async function PUT(request: Request) {
 
   try {
     const store = getRoomStore();
-    if (Array.isArray(patch.tasks)) store.replaceTasks(room, patch.tasks);
     if (Array.isArray(patch.messages)) store.replaceMessages(room, patch.messages);
-    if (Array.isArray(patch.sessions)) store.replaceSessions(room, patch.sessions);
     if (Array.isArray(patch.seats)) store.replaceSeats(room, patch.seats);
-    if (patch.activeSessionKey !== undefined) {
-      store.setActiveSessionKey(room, patch.activeSessionKey);
-    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     log.error("write failed:", (err as Error).message);

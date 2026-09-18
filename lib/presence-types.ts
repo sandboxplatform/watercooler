@@ -143,10 +143,8 @@ export interface MoveMessage {
  * person's work.
  */
 export type WorldChange =
-  | { entity: "task"; task: Record<string, unknown> }
   | { entity: "message"; message: Record<string, unknown> }
-  | { entity: "seat"; seat: Record<string, unknown> }
-  | { entity: "session"; session: Record<string, unknown> };
+  | { entity: "seat"; seat: Record<string, unknown> };
 
 export interface WorldMessage {
   type: "world";
@@ -317,15 +315,6 @@ export interface PlayerLeftMessage {
   name: string;
 }
 
-/** What this room has spent on agents, and the ceiling it stops at. */
-export interface BudgetMessage {
-  type: "budget";
-  spentUsd: number;
-  limitUsd: number;
-  /** True once the ceiling is reached and dispatch has stopped. */
-  halted: boolean;
-}
-
 /** Somebody — or some agent — just earned a badge. */
 export interface AchievementMessage {
   type: "achievement";
@@ -337,12 +326,6 @@ export interface AchievementMessage {
   description: string;
   icon: string;
   at: string;
-}
-
-/** A line for the room's log, as it happens. */
-export interface ActivityBroadcast {
-  type: "activity";
-  entry: import("./activity").ActivityEntry;
 }
 
 /** The same, arriving at the other end, stamped with who sent it. */
@@ -421,10 +404,8 @@ export type ServerMessage =
   | PlayerJoinedMessage
   | PlayerLeftMessage
   | WorldBroadcast
-  | BudgetMessage
   | SaidMessage
   | AchievementMessage
-  | ActivityBroadcast
   | PongBroadcast
   | BoardBroadcast
   | VoiceBroadcast
@@ -467,7 +448,7 @@ export function isVoiceSignal(value: unknown): value is VoiceSignal {
   return false;
 }
 
-const WORLD_ENTITIES = ["task", "message", "seat", "session"] as const;
+const WORLD_ENTITIES = ["message", "seat"] as const;
 
 export function isWorldChange(value: unknown): value is WorldChange {
   if (typeof value !== "object" || value === null) return false;

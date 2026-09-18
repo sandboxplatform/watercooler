@@ -4,15 +4,7 @@ import type { ChatBubble } from "../ChatBubble";
 import type { Pathfinder, PathPoint } from "../../utils/Pathfinder";
 import type { POIDef } from "../../utils/MapHelpers";
 
-export type WorkerStatus = "idle" | "working" | "done" | "failed";
-
 export type POI = POIDef;
-
-export type QueuedTask = {
-  runId: string;
-  message: string;
-  onReady?: () => void;
-};
 
 /**
  * Shared mutable context exposed to movement, task, and idle sub-modules.
@@ -49,20 +41,12 @@ export interface WorkerCtx {
   activityTimer: Phaser.Time.TimerEvent | null;
   interactionLocked: boolean;
 
-  // Task state
-  _status: WorkerStatus;
-  assignedRunId: string | null;
-  currentTaskMessage: string | null;
-  taskQueue: QueuedTask[];
-  taskVisualTimer: Phaser.Time.TimerEvent | null;
-
   // Methods the sub-modules may call on Worker
   showBubble(message: string, ttl?: number, followWithDots?: boolean): void;
   showThinkingBubble(): void;
   hideThinkingBubble(): void;
   showEmote(emoteKey: string): void;
   hideEmote(): void;
-  setStatus(status: WorkerStatus): void;
   navigateTo(x: number, y: number, facePoi?: { x: number; y: number }): void;
   navigateHome(): void;
   stopIdleActivity(): void;

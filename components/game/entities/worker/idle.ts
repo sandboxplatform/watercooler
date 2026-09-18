@@ -47,7 +47,7 @@ export function stopIdleActivity(ctx: WorkerCtx) {
 
 export function scheduleWander(ctx: WorkerCtx) {
   stopIdleActivity(ctx);
-  if (!ctx.canWander || ctx._status !== "idle") return;
+  if (!ctx.canWander) return;
 
   const delay = Phaser.Math.Between(WANDER_MIN_DELAY, WANDER_MAX_DELAY);
   if (ctx.wanderTimer) ctx.wanderTimer.destroy();
@@ -57,7 +57,7 @@ export function scheduleWander(ctx: WorkerCtx) {
 }
 
 function tryStartWander(ctx: WorkerCtx) {
-  if (!ctx.canWander || ctx._status !== "idle") return;
+  if (!ctx.canWander) return;
 
   const now = ctx.scene.time.now;
   const sinceLast = now - wanderClock.lastStartedAt;
@@ -90,7 +90,7 @@ function wanderToPoi(ctx: WorkerCtx) {
   ctx.arrivalFacing = poi.facing ?? null;
 
   ctx.onArrival = () => {
-    if (ctx._status !== "idle" || !ctx.canWander) return;
+    if (!ctx.canWander) return;
     ctx.showBubble(poiBubbleText(poi.name), POI_STAY_MIN);
 
     const stayDuration = Phaser.Math.Between(POI_STAY_MIN, POI_STAY_MAX);
@@ -99,7 +99,7 @@ function wanderToPoi(ctx: WorkerCtx) {
       ctx.activityTimer = null;
     }
     ctx.activityTimer = ctx.scene.time.delayedCall(stayDuration, () => {
-      if (ctx._status !== "idle" || !ctx.canWander) return;
+      if (!ctx.canWander) return;
       ctx.onArrival = () => {
         ctx.isWandering = false;
         ctx.hideEmote();
@@ -124,7 +124,7 @@ function seatActivity(ctx: WorkerCtx) {
     ctx.activityTimer = null;
   }
   ctx.activityTimer = ctx.scene.time.delayedCall(duration, () => {
-    if (ctx._status !== "idle" || !ctx.canWander) return;
+    if (!ctx.canWander) return;
     ctx.hideEmote();
     scheduleWander(ctx);
     ctx.activityTimer = null;

@@ -3,13 +3,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { PanelRightClose } from "lucide-react";
 import { useStudio } from "@/lib/store";
-import { isVisibleChatMessage } from "@/lib/constants";
-import { MAIN_SESSION_KEY } from "@/lib/reducer";
 import { SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "@/lib/constants";
 import { saveSidebarWidth } from "@/lib/persistence";
 import ChatPanel from "./ChatPanel";
-import ActivityPanel from "./ActivityPanel";
-import { TaskList } from "./TaskPanel";
 import AchievementsPanel from "./AchievementsPanel";
 import PeoplePanel from "./PeoplePanel";
 import { useOnline } from "@/lib/presence-online";
@@ -23,7 +19,7 @@ import { useOnline } from "@/lib/presence-online";
  * Here it has a home of its own, alongside the office rather than on top of it.
  */
 
-export type SidebarTab = "chat" | "activity" | "tasks" | "badges" | "people";
+export type SidebarTab = "chat" | "badges" | "people";
 
 interface SidebarProps {
   open: boolean;
@@ -50,20 +46,6 @@ export default function Sidebar({
   const { state } = useStudio();
   const online = useOnline();
   const draggingRef = useRef(false);
-
-  const activeSessionKey = state.activeSessionKey ?? MAIN_SESSION_KEY;
-  // Room talk stays in view whichever session is being read: the person you
-  // are talking to may well be looking at a different one
-  const messages = state.chatMessages.filter(
-    (message) =>
-      (message.roomChat || message.role === "player" || message.sessionKey === activeSessionKey) &&
-      isVisibleChatMessage(message),
-  );
-  const tasks = state.tasks.filter((task) => task.sessionKey === activeSessionKey);
-  /** The Tasks tab is about the room, so it shows the lot. */
-  const busyCount = state.tasks.filter((task) =>
-    ["running", "submitted", "queued", "returning"].includes(task.status),
-  ).length;
 
   // ── Dragging the edge ──
   const startDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -128,7 +110,7 @@ export default function Sidebar({
   if (!open) return null;
 
   return (
-    <aside className="app-sidebar" style={{ width }} aria-label="Chat and activity">
+    <aside className="app-sidebar" style={{ width }} aria-label="Chat and the people here">
       <div
         className="app-sidebar__handle"
         onPointerDown={startDrag}
@@ -148,21 +130,6 @@ export default function Sidebar({
             onClick={() => onTabChange("chat")}
           >
             Chat
-          </button>
-          <button
-            type="button"
-            className={`app-sidebar__tab${tab === "activity" ? " is-active" : ""}`}
-            onClick={() => onTabChange("activity")}
-          >
-            Activity
-          </button>
-          <button
-            type="button"
-            className={`app-sidebar__tab${tab === "tasks" ? " is-active" : ""}`}
-            onClick={() => onTabChange("tasks")}
-          >
-            Tasks
-            {busyCount > 0 && <span className="app-sidebar__count">{busyCount}</span>}
           </button>
           <button
             type="button"
@@ -193,19 +160,7 @@ export default function Sidebar({
 
         <div className="app-sidebar__content">
           {tab === "chat" ? (
-            <ChatPanel
-              messages={messages}
-              tasks={tasks}
-              isConnected={state.connection === "connected"}
-              sessions={state.sessions}
-              activeSessionKey={state.activeSessionKey}
-            />
-          ) : tab === "activity" ? (
-            <ActivityPanel />
-          ) : tab === "tasks" ? (
-            <div className="app-sidebar__scroll">
-              <TaskList tasks={state.tasks} />
-            </div>
+            <ChatPanel messages={state.chatMessages} />
           ) : tab === "people" ? (
             <PeoplePanel />
           ) : (

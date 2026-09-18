@@ -11,7 +11,7 @@ pnpm install
 pnpm dev
 ```
 
-You'll need Node.js 22+ and pnpm. For live agent execution, install the `claude` or `auggie` CLI and sign in, or set `ANTHROPIC_API_KEY` for `AGENT_PROVIDER=claude-api`.
+You'll need Node.js 22+ and pnpm. Nothing else — `pnpm dev` is the whole world.
 
 ## Ground rules
 
@@ -21,8 +21,8 @@ You'll need Node.js 22+ and pnpm. For live agent execution, install the `claude`
 
 ## What we care about
 
-- Tasks should feel **spatial**, not abstract.
-- Worker behavior should be **readable at a glance**.
+- Everything should feel **spatial**, not abstract.
+- What people and workers are doing should be **readable at a glance**.
 - In-world interaction over hidden menus.
 - New UI should match the pixel HUD style.
 - New scenes should expand the world, not add settings pages.
@@ -31,14 +31,14 @@ You'll need Node.js 22+ and pnpm. For live agent execution, install the `claude`
 
 - Gameplay feel and interaction clarity
 - Scene and level design
-- Worker AI and pathfinding
+- Resident behaviour and pathfinding
 - HUD readability
 - Performance and code quality
 - Bug fixes with repro steps
 
 ## For designers
 
-You don't need to write TypeScript. Useful contributions include interaction proposals, scene flow mockups, level layouts, POI placement ideas, and economy/progression concepts for the marketplace expansion. Open an issue or draft to discuss before anyone writes code.
+You don't need to write TypeScript. Useful contributions include interaction proposals, scene flow mockups, level layouts and POI placement ideas. Open an issue or draft to discuss before anyone writes code.
 
 ## Pull requests
 

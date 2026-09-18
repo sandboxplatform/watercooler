@@ -8,7 +8,6 @@
 import { NextResponse } from "next/server";
 import { DEFAULT_ROOM, getRoomStore } from "@/lib/server/room-store";
 import { normaliseRoomSlug } from "@/lib/rooms";
-import { recordActivity } from "@/lib/server/presence-socket";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("PinballAPI");
@@ -42,21 +41,6 @@ export async function POST(request: Request) {
 
     const room = roomOf(request);
     const scores = getRoomStore().recordPinballScore(room, player || "Guest", score);
-
-    const place = scores.findIndex(
-      (s) => s.player === (player || "Guest") && s.score === Math.round(score),
-    );
-    recordActivity(room, {
-      kind: "game",
-      actor: player || "Guest",
-      text: `scored ${Math.round(score).toLocaleString()} at the cauldron`,
-      detail:
-        place === 0
-          ? "a new high score"
-          : place > 0
-            ? `number ${place + 1} on the board`
-            : undefined,
-    });
 
     return NextResponse.json({ scores });
   } catch (err) {

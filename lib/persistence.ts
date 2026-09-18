@@ -7,13 +7,10 @@
  * and whether onboarding has been seen.
  */
 
-import type { GatewayConfig } from "@/types/game";
 import { createLogger } from "./logger";
 import {
-  LS_CONFIG,
   LS_BGM_VOLUME,
   LS_PLAYER_NAME,
-  LS_ONBOARDING_DONE,
   LS_SIDEBAR_WIDTH,
   LS_SPRINTING,
   LS_WORLD_ZOOM,
@@ -75,14 +72,6 @@ export function lsSet(key: string, value: unknown) {
 
 // ── Domain-specific loaders ────────────────────────────
 
-export function loadGatewayConfig(): GatewayConfig | null {
-  return lsGet<GatewayConfig | null>(LS_CONFIG, null);
-}
-
-export function saveGatewayConfig(config: GatewayConfig) {
-  lsSet(LS_CONFIG, config);
-}
-
 export function loadPlayerName(): string {
   return lsGet<string>(LS_PLAYER_NAME, "Guest");
 }
@@ -129,14 +118,6 @@ export function loadWorldZoom(): number | null {
 
 export function saveWorldZoom(zoom: number) {
   lsSet(LS_WORLD_ZOOM, zoom);
-}
-
-export function loadOnboardingDone(): boolean {
-  return lsGet<boolean>(LS_ONBOARDING_DONE, false);
-}
-
-export function saveOnboardingDone() {
-  lsSet(LS_ONBOARDING_DONE, true);
 }
 
 /** How wide the reader left the chat column. Clamped, in case of a stale value. */

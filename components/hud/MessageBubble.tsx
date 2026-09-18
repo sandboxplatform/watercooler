@@ -1,59 +1,22 @@
 "use client";
 
-import { Square } from "lucide-react";
 import type { ChatMessage } from "@/types/game";
-import ToolBubble from "./ToolBubble";
 import { speakerLabel } from "@/lib/chat-speaker";
 import { getSelfId } from "@/lib/presence-self";
 import { loadPlayerName } from "@/lib/persistence";
 
-export default function MessageBubble({
-  msg,
-  actorName,
-  canStop,
-  onStop,
-}: {
-  msg: ChatMessage;
-  actorName?: string;
-  canStop?: boolean;
-  onStop?: () => void;
-}) {
-  if (msg.role === "system") {
-    return <div className="hud-chat__system">{msg.content}</div>;
-  }
-
-  if (msg.role === "tool") {
-    return <ToolBubble msg={msg} />;
-  }
-
-  const handleStop = () => {
-    if (onStop) onStop();
-  };
-
-  // Three voices in one log: you, another person in the room, and an agent
-  const variant = msg.role === "user" ? "user" : msg.role === "player" ? "player" : "assistant";
+export default function MessageBubble({ msg }: { msg: ChatMessage }) {
+  const mine = speakerLabel(msg, { id: getSelfId(), name: loadPlayerName() }) === "You";
 
   return (
-    <div className={`hud-chat__bubble hud-chat__bubble--${variant}`}>
+    <div className={`hud-chat__bubble hud-chat__bubble--${mine ? "user" : "player"}`}>
       <div className="hud-chat__header">
         <div className="hud-chat__role">
-          {speakerLabel(msg, { id: getSelfId(), name: loadPlayerName() }, actorName)}
+          {speakerLabel(msg, { id: getSelfId(), name: loadPlayerName() })}
         </div>
-        {canStop && msg.role === "user" && (
-          <button
-            type="button"
-            className="hud-chat__stop"
-            onClick={handleStop}
-            title="Stop task"
-            aria-label="Stop task"
-          >
-            <Square size={10} fill="currentColor" />
-          </button>
-        )}
       </div>
       <div className="hud-chat__content" data-message-id={msg.id}>
         {msg.content}
-        {msg.streaming ? <span className="pixel-cursor">▌</span> : null}
       </div>
     </div>
   );

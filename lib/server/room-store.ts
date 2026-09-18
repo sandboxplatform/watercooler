@@ -16,7 +16,6 @@ import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { createLogger } from "../logger";
-import { ACTIVITY_LIMIT, type ActivityEntry } from "../activity";
 import { normaliseEmail, type Account, type AccountProfile, type SignedIn } from "../accounts";
 import { personIdForEmail } from "./person-id";
 
@@ -29,13 +28,6 @@ export const DEFAULT_ROOM = process.env.ROOM_SLUG ?? "local";
 export const LOCAL_PLAYER = "local";
 
 const DB_PATH = process.env.ROOM_DB_PATH ?? join(process.cwd(), ".data", "watercooler.sqlite");
-
-/**
- * What a single room may spend on agents before it stops dispatching. This is a
- * hard stop rather than a warning: with an open room and a host-side API key,
- * the bill is the host's, and a runaway loop should end by itself.
- */
-export const ROOM_SPEND_LIMIT_USD = Number(process.env.ROOM_SPEND_LIMIT_USD ?? 50);
 
 /** How many strokes one board keeps before the oldest are dropped. */
 const BOARD_STROKE_LIMIT = 2000;
@@ -51,25 +43,18 @@ export interface PinballScore {
 
 /** Mirrors the client-side caps so the server cannot grow without bound. */
 export const LIMITS = {
-  tasks: 200,
   messages: 400,
-  sessions: 40,
 } as const;
 
 export interface RoomSnapshot {
-  tasks: unknown[];
   messages: unknown[];
-  sessions: unknown[];
   seats: unknown[];
-  activeSessionKey: string | null;
 }
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS rooms (
-  slug               TEXT PRIMARY KEY,
-  created_at         TEXT NOT NULL,
-  active_session_key TEXT,
-  spend_usd          REAL NOT NULL DEFAULT 0
+  slug       TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS players (
@@ -89,20 +74,6 @@ CREATE TABLE IF NOT EXISTS seats (
   PRIMARY KEY (room, seat_id)
 );
 
-CREATE TABLE IF NOT EXISTS tasks (
-  room              TEXT NOT NULL,
-  task_id           TEXT NOT NULL,
-  seat_id           TEXT,
-  session_key       TEXT,
-  status            TEXT,
-  requested_by      TEXT,
-  requested_by_name TEXT,
-  created_at        TEXT NOT NULL,
-  position          INTEGER NOT NULL,
-  data              TEXT NOT NULL,
-  PRIMARY KEY (room, task_id)
-);
-
 CREATE TABLE IF NOT EXISTS messages (
   room        TEXT NOT NULL,
   message_id  TEXT NOT NULL,
@@ -113,15 +84,6 @@ CREATE TABLE IF NOT EXISTS messages (
   position    INTEGER NOT NULL,
   data        TEXT NOT NULL,
   PRIMARY KEY (room, message_id)
-);
-
-CREATE TABLE IF NOT EXISTS sessions (
-  room        TEXT NOT NULL,
-  session_key TEXT NOT NULL,
-  updated_at  TEXT NOT NULL,
-  position    INTEGER NOT NULL,
-  data        TEXT NOT NULL,
-  PRIMARY KEY (room, session_key)
 );
 
 CREATE TABLE IF NOT EXISTS achievements (
@@ -142,19 +104,6 @@ CREATE TABLE IF NOT EXISTS board_strokes (
   PRIMARY KEY (room, stroke_id)
 );
 
-CREATE TABLE IF NOT EXISTS activity (
-  room      TEXT NOT NULL,
-  position  INTEGER NOT NULL,
-  at        TEXT NOT NULL,
-  kind      TEXT NOT NULL,
-  actor     TEXT NOT NULL,
-  text      TEXT NOT NULL,
-  detail    TEXT,
-  PRIMARY KEY (room, position)
-);
-
-CREATE INDEX IF NOT EXISTS activity_by_room ON activity (room, position);
-
 CREATE TABLE IF NOT EXISTS pinball_scores (
   room       TEXT NOT NULL,
   player     TEXT NOT NULL,
@@ -173,9 +122,7 @@ CREATE TABLE IF NOT EXISTS arcade_scores (
 );
 CREATE INDEX IF NOT EXISTS arcade_by_game ON arcade_scores (room, game, score DESC);
 CREATE INDEX IF NOT EXISTS strokes_by_room ON board_strokes (room, position);
-CREATE INDEX IF NOT EXISTS tasks_by_room ON tasks (room, position);
 CREATE INDEX IF NOT EXISTS messages_by_room ON messages (room, position);
-CREATE INDEX IF NOT EXISTS sessions_by_room ON sessions (room, position);
 
 CREATE TABLE IF NOT EXISTS people (
   id         TEXT PRIMARY KEY,
@@ -207,27 +154,6 @@ CREATE TABLE IF NOT EXISTS accounts (
 );
 `;
 
-/** The columns a table actually has, for a migration that must not assume. */
-function columnNames(db: DatabaseSync, table: string): Set<string> {
-  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-  return new Set(rows.map((row) => row.name));
-}
-
-/**
- * Add a column only where it is missing.
- *
- * The checked form of what used to be `try { ALTER } catch {}`. That could
- * not tell "the column is already there", which is the ordinary case, from a
- * typo, a locked file or a disk that is full — every one of them came back
- * as the same silence, and a database that failed to migrate went on being
- * written to.
- */
-function addColumn(db: DatabaseSync, table: string, column: string, definition: string) {
-  if (columnNames(db, table).has(column)) return;
-  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-  log.info(`added ${table}.${column}`);
-}
-
 interface Migration {
   /** What it does, for the log and for reading the ladder. */
   name: string;
@@ -255,10 +181,29 @@ const MIGRATIONS: readonly Migration[] = [
     name: "baseline",
     up: (db) => {
       db.exec(SCHEMA);
-      // Two columns that arrived before the ladder did, so a database made
-      // by an older build has the tables without them.
-      addColumn(db, "rooms", "spend_usd", "REAL NOT NULL DEFAULT 0");
-      addColumn(db, "tasks", "requested_by_name", "TEXT");
+    },
+  },
+  {
+    name: "drop the activity log",
+    up: (db) => {
+      // The panel that read it is gone, and nothing else ever did. A log
+      // with no reader is rows a room goes on paying to write.
+      db.exec("DROP INDEX IF EXISTS activity_by_room");
+      db.exec("DROP TABLE IF EXISTS activity");
+    },
+  },
+  {
+    name: "drop tasks and sessions",
+    up: (db) => {
+      // Agent dispatch is gone, and these held nothing else: a task, the
+      // conversation it belonged to, and what the room had spent running
+      // them. The rooms table keeps its two columns rather than being
+      // rebuilt — SQLite drops a column by copying the table, and an
+      // unused column costs a room nothing.
+      db.exec("DROP INDEX IF EXISTS tasks_by_room");
+      db.exec("DROP INDEX IF EXISTS sessions_by_room");
+      db.exec("DROP TABLE IF EXISTS tasks");
+      db.exec("DROP TABLE IF EXISTS sessions");
     },
   },
 ];
@@ -575,78 +520,6 @@ export class RoomStore {
     ).run(room, room, BOARD_STROKE_LIMIT);
   }
 
-  // ── Activity log ──────────────────────────────────────
-
-  /**
-   * Add a line to the room's log and hand it back with its position, which
-   * is the id the panel keys off and the order it reads in.
-   */
-  recordActivity(
-    room: string,
-    entry: { kind: string; actor: string; text: string; detail?: string; at?: string },
-  ): ActivityEntry {
-    this.ensureRoom(room);
-    const row = this.stmt("SELECT MAX(position) AS edge FROM activity WHERE room = ?").get(
-      room,
-    ) as { edge: number | null };
-    const position = (row?.edge ?? 0) + 1;
-    const at = entry.at ?? new Date().toISOString();
-
-    this.stmt(
-      "INSERT INTO activity (room, position, at, kind, actor, text, detail) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    ).run(
-      room,
-      position,
-      at,
-      entry.kind,
-      entry.actor.slice(0, 40),
-      entry.text.slice(0, 400),
-      entry.detail?.slice(0, 200) ?? null,
-    );
-
-    this.stmt(
-      `DELETE FROM activity WHERE room = ? AND position IN (
-           SELECT position FROM activity WHERE room = ? ORDER BY position DESC LIMIT -1 OFFSET ?
-         )`,
-    ).run(room, room, ACTIVITY_LIMIT);
-
-    return {
-      id: position,
-      at,
-      kind: entry.kind as ActivityEntry["kind"],
-      actor: entry.actor,
-      text: entry.text,
-      ...(entry.detail ? { detail: entry.detail } : {}),
-    };
-  }
-
-  /** The log, oldest first, which is how it reads. */
-  listActivity(room: string, limit = ACTIVITY_LIMIT): ActivityEntry[] {
-    this.ensureRoom(room);
-    const rows = this.stmt(
-      `SELECT position, at, kind, actor, text, detail FROM activity
-         WHERE room = ? ORDER BY position DESC LIMIT ?`,
-    ).all(room, limit) as Array<{
-      position: number;
-      at: string;
-      kind: string;
-      actor: string;
-      text: string;
-      detail: string | null;
-    }>;
-
-    return rows
-      .map((row) => ({
-        id: row.position,
-        at: row.at,
-        kind: row.kind as ActivityEntry["kind"],
-        actor: row.actor,
-        text: row.text,
-        ...(row.detail ? { detail: row.detail } : {}),
-      }))
-      .reverse();
-  }
-
   // ── Pinball ───────────────────────────────────────────
 
   /**
@@ -736,56 +609,6 @@ export class RoomStore {
     }>;
   }
 
-  /** How many tasks a seat has finished, for "first time" style rules. */
-  countCompletedTasksForSeat(room: string, seatId: string): number {
-    this.ensureRoom(room);
-    const row = this.stmt(
-      "SELECT COUNT(*) AS n FROM tasks WHERE room = ? AND seat_id = ? AND status = ?",
-    ).get(room, seatId, "completed") as { n: number } | undefined;
-    return row?.n ?? 0;
-  }
-
-  /** Seats a given person has given work to, and how many seats are staffed. */
-  assignmentBreadth(room: string, requesterName: string): { assigned: number; staffed: number } {
-    this.ensureRoom(room);
-    const assigned = this.stmt(
-      `SELECT COUNT(DISTINCT seat_id) AS n FROM tasks
-         WHERE room = ? AND requested_by_name = ? AND seat_id IS NOT NULL`,
-    ).get(room, requesterName) as { n: number } | undefined;
-
-    const seats = parseRows(
-      this.stmt("SELECT data FROM seats WHERE room = ?").all(room) as DataRow[],
-    ) as Array<{ assigned?: boolean }>;
-
-    return {
-      assigned: assigned?.n ?? 0,
-      staffed: seats.filter((seat) => seat.assigned).length,
-    };
-  }
-
-  /**
-   * Record what a run cost. Spend is tracked server-side because it is what a
-   * ceiling has to be enforced against — a client could simply not report it.
-   */
-  addSpend(room: string, usd: number) {
-    if (!Number.isFinite(usd) || usd <= 0) return;
-    this.ensureRoom(room);
-    this.stmt("UPDATE rooms SET spend_usd = spend_usd + ? WHERE slug = ?").run(usd, room);
-  }
-
-  /** True once this room has spent its allowance. */
-  isOverBudget(room: string): boolean {
-    return this.getSpend(room) >= ROOM_SPEND_LIMIT_USD;
-  }
-
-  getSpend(room: string): number {
-    this.ensureRoom(room);
-    const row = this.stmt("SELECT spend_usd FROM rooms WHERE slug = ?").get(room) as
-      | { spend_usd: number }
-      | undefined;
-    return row?.spend_usd ?? 0;
-  }
-
   ensureRoom(room: string) {
     this.stmt("INSERT OR IGNORE INTO rooms (slug, created_at) VALUES (?, ?)").run(
       room,
@@ -796,45 +619,16 @@ export class RoomStore {
   getSnapshot(room: string): RoomSnapshot {
     this.ensureRoom(room);
 
-    const roomRow = this.stmt("SELECT active_session_key FROM rooms WHERE slug = ?").get(room) as
-      | { active_session_key: string | null }
-      | undefined;
-
     return {
-      tasks: parseRows(
-        this.stmt("SELECT data FROM tasks WHERE room = ? ORDER BY position").all(room) as DataRow[],
-      ),
       messages: parseRows(
         this.stmt("SELECT data FROM messages WHERE room = ? ORDER BY position").all(
-          room,
-        ) as DataRow[],
-      ),
-      sessions: parseRows(
-        this.stmt("SELECT data FROM sessions WHERE room = ? ORDER BY position").all(
           room,
         ) as DataRow[],
       ),
       seats: parseRows(
         this.stmt("SELECT data FROM seats WHERE room = ? ORDER BY seat_id").all(room) as DataRow[],
       ),
-      activeSessionKey: roomRow?.active_session_key ?? null,
     };
-  }
-
-  /**
-   * The room's active session, on its own.
-   *
-   * The one field of a snapshot that anything asks for by itself, and
-   * `getSnapshot` is an expensive way to get it: every task, message,
-   * session and seat in the room, read off disk and JSON-parsed, to return
-   * one string.
-   */
-  activeSessionKey(room: string): string | null {
-    this.ensureRoom(room);
-    const row = this.stmt("SELECT active_session_key FROM rooms WHERE slug = ?").get(room) as
-      | { active_session_key: string | null }
-      | undefined;
-    return row?.active_session_key ?? null;
   }
 
   /**
@@ -854,43 +648,11 @@ export class RoomStore {
     return row !== undefined;
   }
 
-  setActiveSessionKey(room: string, key: string | null) {
-    this.ensureRoom(room);
-    this.stmt("UPDATE rooms SET active_session_key = ? WHERE slug = ?").run(key, room);
-  }
-
   /**
    * The client owns ordering and trimming of these collections today, so a
    * write replaces the room's whole slice inside one transaction. Per-entity
    * events arrive with the shared-world phase.
    */
-  replaceTasks(room: string, tasks: Record<string, unknown>[]) {
-    this.ensureRoom(room);
-    const capped = tasks.slice(0, LIMITS.tasks);
-    this.transaction(() => {
-      this.stmt("DELETE FROM tasks WHERE room = ?").run(room);
-      const insert = this.stmt(
-        `INSERT INTO tasks (room, task_id, seat_id, session_key, status, requested_by, created_at, position, data)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      );
-      capped.forEach((task, index) => {
-        const id = asString(task.taskId) ?? asString(task.runId);
-        if (!id) return;
-        insert.run(
-          room,
-          id,
-          asString(task.seatId),
-          asString(task.sessionKey),
-          asString(task.status),
-          asString(task.requestedBy) ?? LOCAL_PLAYER,
-          asString(task.createdAt) ?? new Date().toISOString(),
-          index,
-          JSON.stringify(task),
-        );
-      });
-    });
-  }
-
   replaceMessages(room: string, messages: Record<string, unknown>[]) {
     this.ensureRoom(room);
     const capped = messages.slice(-LIMITS.messages);
@@ -918,22 +680,6 @@ export class RoomStore {
     });
   }
 
-  replaceSessions(room: string, sessions: Record<string, unknown>[]) {
-    this.ensureRoom(room);
-    const capped = sessions.slice(0, LIMITS.sessions);
-    this.transaction(() => {
-      this.stmt("DELETE FROM sessions WHERE room = ?").run(room);
-      const insert = this.stmt(
-        "INSERT INTO sessions (room, session_key, updated_at, position, data) VALUES (?, ?, ?, ?, ?)",
-      );
-      capped.forEach((session, index) => {
-        const key = asString(session.sessionKey) ?? asString(session.key);
-        if (!key) return;
-        insert.run(room, key, new Date().toISOString(), index, JSON.stringify(session));
-      });
-    });
-  }
-
   replaceSeats(room: string, seats: Record<string, unknown>[]) {
     this.ensureRoom(room);
     this.transaction(() => {
@@ -954,53 +700,6 @@ export class RoomStore {
   // A shared room cannot use whole-slice writes: two people acting at once
   // would each send a list that omits the other's work, and the later write
   // would erase it. These apply one change at a time.
-
-  upsertTask(room: string, task: Record<string, unknown>) {
-    this.ensureRoom(room);
-    const id = asString(task.taskId) ?? asString(task.runId);
-    if (!id) return;
-
-    const existing = this.stmt("SELECT position FROM tasks WHERE room = ? AND task_id = ?").get(
-      room,
-      id,
-    ) as { position: number } | undefined;
-
-    // New tasks go to the head, matching the newest-first list the client keeps
-    const position = existing?.position ?? this.nextHeadPosition(room, "tasks");
-
-    this.stmt(
-      `INSERT INTO tasks (room, task_id, seat_id, session_key, status, requested_by, created_at, position, data)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (room, task_id) DO UPDATE SET
-           seat_id = excluded.seat_id,
-           session_key = excluded.session_key,
-           status = excluded.status,
-           requested_by = COALESCE(excluded.requested_by, tasks.requested_by),
-           data = excluded.data`,
-    ).run(
-      room,
-      id,
-      asString(task.seatId),
-      asString(task.sessionKey),
-      asString(task.status),
-      asString(task.requestedBy),
-      asString(task.createdAt) ?? new Date().toISOString(),
-      position,
-      JSON.stringify(task),
-    );
-
-    // Kept in a column so "gave work to every seat" is a query rather than a scan
-    const requesterName = asString(task.requestedByName);
-    if (requesterName) {
-      this.stmt("UPDATE tasks SET requested_by_name = ? WHERE room = ? AND task_id = ?").run(
-        requesterName,
-        room,
-        id,
-      );
-    }
-
-    this.trim(room, "tasks", LIMITS.tasks, "DESC");
-  }
 
   appendMessage(room: string, message: Record<string, unknown>) {
     this.ensureRoom(room);
@@ -1046,37 +745,6 @@ export class RoomStore {
     ).run(room, id, new Date().toISOString(), JSON.stringify(seat));
   }
 
-  upsertSession(room: string, session: Record<string, unknown>) {
-    this.ensureRoom(room);
-    const key = asString(session.sessionKey) ?? asString(session.key);
-    if (!key) return;
-
-    const existing = this.stmt(
-      "SELECT position FROM sessions WHERE room = ? AND session_key = ?",
-    ).get(room, key) as { position: number } | undefined;
-
-    this.stmt(
-      `INSERT INTO sessions (room, session_key, updated_at, position, data) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (room, session_key) DO UPDATE SET updated_at = excluded.updated_at, data = excluded.data`,
-    ).run(
-      room,
-      key,
-      new Date().toISOString(),
-      existing?.position ?? this.nextHeadPosition(room, "sessions"),
-      JSON.stringify(session),
-    );
-
-    this.trim(room, "sessions", LIMITS.sessions, "DESC");
-  }
-
-  /** Newest-first collections grow downward from the current minimum. */
-  private nextHeadPosition(room: string, table: "tasks" | "sessions"): number {
-    const row = this.stmt(`SELECT MIN(position) AS edge FROM ${table} WHERE room = ?`).get(
-      room,
-    ) as { edge: number | null };
-    return (row?.edge ?? 0) - 1;
-  }
-
   /** Oldest-first collections grow upward from the current maximum. */
   private nextTailPosition(room: string, table: "messages"): number {
     const row = this.stmt(`SELECT MAX(position) AS edge FROM ${table} WHERE room = ?`).get(
@@ -1085,21 +753,11 @@ export class RoomStore {
     return (row?.edge ?? 0) + 1;
   }
 
-  /**
-   * Keep a collection within its cap, dropping from the end that matters least:
-   * the oldest chat, and the oldest tasks and sessions.
-   */
-  private trim(
-    room: string,
-    table: "tasks" | "messages" | "sessions",
-    limit: number,
-    keep: "ASC" | "DESC",
-  ) {
-    const idColumn =
-      table === "tasks" ? "task_id" : table === "messages" ? "message_id" : "session_key";
+  /** Keep the chat within its cap, dropping the oldest lines first. */
+  private trim(room: string, table: "messages", limit: number, keep: "ASC" | "DESC") {
     this.stmt(
-      `DELETE FROM ${table} WHERE room = ? AND ${idColumn} IN (
-           SELECT ${idColumn} FROM ${table} WHERE room = ?
+      `DELETE FROM ${table} WHERE room = ? AND message_id IN (
+           SELECT message_id FROM ${table} WHERE room = ?
            ORDER BY position ${keep === "ASC" ? "DESC" : "ASC"}
            LIMIT -1 OFFSET ?
          )`,

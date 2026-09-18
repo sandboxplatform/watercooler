@@ -14,7 +14,8 @@ import { RoomStore, SCHEMA_VERSION } from "../room-store";
  * failure — a typo, a locked file, a full disk — looked exactly like the
  * ordinary case of the column already being there, and there was nowhere to
  * put a change that is not another column, because nothing recorded what
- * shape a database was in.
+ * shape a database was in. Dropping the agents' tables is exactly such a
+ * change, and it is what the ladder was built for.
  */
 
 const ROOM = "migrating-room";
@@ -55,9 +56,18 @@ function columnsOf(file: string, table: string): string[] {
   return rows.map((r) => r.name);
 }
 
+function tablesOf(file: string): string[] {
+  const db = new DatabaseSync(file);
+  const rows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as {
+    name: string;
+  }[];
+  db.close();
+  return rows.map((r) => r.name);
+}
+
 /**
- * A database as an older build left it: the tables it had then, at version 0,
- * without the two columns that arrived later.
+ * A database as an older build left it: the agents' tables and the room's
+ * log, at version 0, with a room and one line of chat already in them.
  */
 function olderBuild(file: string) {
   const db = new DatabaseSync(file);
@@ -66,6 +76,17 @@ function olderBuild(file: string) {
       slug               TEXT PRIMARY KEY,
       created_at         TEXT NOT NULL,
       active_session_key TEXT
+    );
+    CREATE TABLE messages (
+      room        TEXT NOT NULL,
+      message_id  TEXT NOT NULL,
+      session_key TEXT,
+      author_type TEXT NOT NULL,
+      author      TEXT,
+      created_at  TEXT NOT NULL,
+      position    INTEGER NOT NULL,
+      data        TEXT NOT NULL,
+      PRIMARY KEY (room, message_id)
     );
     CREATE TABLE tasks (
       room         TEXT NOT NULL,
@@ -79,21 +100,39 @@ function olderBuild(file: string) {
       data         TEXT NOT NULL,
       PRIMARY KEY (room, task_id)
     );
+    CREATE TABLE sessions (
+      room        TEXT NOT NULL,
+      session_key TEXT NOT NULL,
+      updated_at  TEXT NOT NULL,
+      position    INTEGER NOT NULL,
+      data        TEXT NOT NULL,
+      PRIMARY KEY (room, session_key)
+    );
+    CREATE TABLE activity (
+      room     TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      at       TEXT NOT NULL,
+      kind     TEXT NOT NULL,
+      actor    TEXT NOT NULL,
+      text     TEXT NOT NULL,
+      detail   TEXT,
+      PRIMARY KEY (room, position)
+    );
   `);
   db.prepare("INSERT INTO rooms (slug, created_at) VALUES (?, ?)").run(
     ROOM,
     "2026-01-01T00:00:00.000Z",
   );
   db.prepare(
-    `INSERT INTO tasks (room, task_id, status, created_at, position, data)
+    `INSERT INTO messages (room, message_id, author_type, created_at, position, data)
      VALUES (?, ?, ?, ?, ?, ?)`,
   ).run(
     ROOM,
-    "task-1",
-    "done",
+    "said-1",
+    "player",
     "2026-01-01T00:00:00.000Z",
     1,
-    JSON.stringify({ taskId: "task-1" }),
+    JSON.stringify({ id: "said-1", content: "morning" }),
   );
   db.close();
 }
@@ -113,10 +152,12 @@ describe("a database this build has just made", () => {
     expect(versionOf(path)).toBe(first);
   });
 
-  it("has the columns the queries use", () => {
+  it("is not given the agents' tables back", () => {
     open();
-    expect(columnsOf(path, "rooms")).toContain("spend_usd");
-    expect(columnsOf(path, "tasks")).toContain("requested_by_name");
+    const tables = tablesOf(path);
+    expect(tables).not.toContain("tasks");
+    expect(tables).not.toContain("sessions");
+    expect(tables).not.toContain("activity");
   });
 });
 
@@ -130,15 +171,16 @@ describe("a database an older build left behind", () => {
     expect(versionOf(path)).toBe(SCHEMA_VERSION);
   });
 
-  it("gains the columns it was missing", () => {
+  it("loses the tables the agents used, and their indexes with them", () => {
     olderBuild(path);
-    expect(columnsOf(path, "rooms")).not.toContain("spend_usd");
-    expect(columnsOf(path, "tasks")).not.toContain("requested_by_name");
+    expect(tablesOf(path)).toContain("tasks");
 
     open();
 
-    expect(columnsOf(path, "rooms")).toContain("spend_usd");
-    expect(columnsOf(path, "tasks")).toContain("requested_by_name");
+    const tables = tablesOf(path);
+    expect(tables).not.toContain("tasks");
+    expect(tables).not.toContain("sessions");
+    expect(tables).not.toContain("activity");
   });
 
   it("gains the tables it never had", () => {
@@ -154,28 +196,17 @@ describe("a database an older build left behind", () => {
 
     const store = open();
 
-    // The room and its one task are still there, and the column that did not
-    // exist when they were written reads as its default.
-    expect(store.getSpend(ROOM)).toBe(0);
-    expect(store.getSnapshot(ROOM).tasks).toEqual([{ taskId: "task-1" }]);
+    expect(store.getSnapshot(ROOM).messages).toEqual([{ id: "said-1", content: "morning" }]);
   });
 
   it("is usable the moment it is up", () => {
     olderBuild(path);
     const store = open();
 
-    // Both migrated columns, written and read back through the store.
-    store.addSpend(ROOM, 0.5);
-    expect(store.getSpend(ROOM)).toBeCloseTo(0.5, 5);
-
     store.upsertSeat(ROOM, { seatId: "seat-0", label: "Alice", assigned: true });
-    store.upsertTask(ROOM, {
-      taskId: "task-2",
-      message: "a job",
-      status: "queued",
-      requestedByName: "Coop",
-    });
-    expect(store.assignmentBreadth(ROOM, "Coop")).toEqual({ assigned: 0, staffed: 1 });
+    expect(store.getSnapshot(ROOM).seats).toEqual([
+      { seatId: "seat-0", label: "Alice", assigned: true },
+    ]);
   });
 });
 

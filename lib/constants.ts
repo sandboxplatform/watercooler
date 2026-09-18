@@ -1,5 +1,3 @@
-import type { ConnectionStatus } from "@/types/game";
-
 // ── Game canvas ──────────────────────────────────────────
 export const GAME_WIDTH = 1280;
 export const GAME_HEIGHT = 720;
@@ -82,22 +80,9 @@ export const BODY_OFFSET_RATIO_Y = 0.75;
 
 export const STUCK_MOVE_THRESHOLD = 0.5;
 
-// ── UI labels ────────────────────────────────────────────
-export const STATUS_LABELS: Record<ConnectionStatus, string> = {
-  disconnected: "Offline",
-  connecting: "Connecting",
-  connected: "Online",
-  error: "Error",
-  auth_failed: "Offline",
-  unreachable: "Offline",
-  rate_limited: "Offline",
-};
-
 // ── Persistence keys ─────────────────────────────────────
-export const LS_CONFIG = "watercooler:gateway-config";
 export const LS_BGM_VOLUME = "watercooler:bgm-volume";
 export const LS_PLAYER_NAME = "watercooler:player-name";
-export const LS_ONBOARDING_DONE = "watercooler:onboarding-done";
 export const LS_SIDEBAR_WIDTH = "watercooler:sidebar-width";
 /**
  * Sprinting or walking. Kept per browser rather than on the character,
@@ -118,7 +103,6 @@ export const DEFAULT_BGM_VOLUME = 0;
 
 // ── Limits ───────────────────────────────────────────────
 export const MAX_CHAT = 500;
-export const MAX_SESSIONS = 20;
 
 // ── Worker seat activity presets ─────────────────────────
 export interface SeatActivityDef {
@@ -243,19 +227,7 @@ export const PRESS_E_STYLE: {
   align: "center",
 };
 
-// ── Chat message filter ──────────────────────────────────
-export function isVisibleChatMessage(msg: { role: string; content: string }) {
-  return !(msg.role === "system" && msg.content.startsWith("Connected to "));
-}
-
 // ── Formatters (shared across HUD components) ────────────
-
-export function formatModelLabel(model: string) {
-  if (model.length <= 22) return model;
-  const pieces = model.split(/[/:]/).filter(Boolean);
-  const tail = pieces[pieces.length - 1];
-  return tail && tail.length <= 22 ? tail : `${model.slice(0, 19)}...`;
-}
 
 export function formatRelativeTime(iso?: string) {
   if (!iso) return "";

@@ -1,8 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# The agent runtime shells out to the Claude Code CLI, so the image needs both
-# the app and that binary. Node 24 matches local development and ships the
-# built-in SQLite the room store uses.
+# Node 24 matches local development and ships the built-in SQLite the room
+# store is built on.
 FROM node:24-slim AS base
 ENV PNPM_HOME="/pnpm" PATH="/pnpm:$PATH"
 RUN corepack enable
@@ -11,8 +10,6 @@ RUN corepack enable
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-# The Mettara SDK is vendored, not on npm; it has to be here before install.
-COPY vendor ./vendor
 RUN pnpm install --frozen-lockfile
 
 # ── Build ──────────────────────────────────────────────
@@ -20,9 +17,6 @@ FROM base AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# The provider is baked into the client bundle at build time, so it must be set
-# here as well as at runtime
-ENV AGENT_PROVIDER=claude-api
 # The TURN relay voice chat falls back to when two networks have no route
 # between them. NEXT_PUBLIC_* is inlined into the browser bundle by the build,
 # so setting these on the running service does nothing at all — they have to
@@ -43,15 +37,9 @@ FROM base AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-# git is needed by the agent CLI for repository-aware work
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends git ca-certificates \
-  && rm -rf /var/lib/apt/lists/* \
-  # The CLI's postinstall fetches its platform binary; npm skips install
-  # scripts for global installs by default, which would leave `claude` present
-  # but unable to run.
-  && npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code \
-  && claude --version
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
@@ -66,18 +54,12 @@ COPY --from=build /app/types ./types
 # so a file the start script needs has to be named here or the container
 # comes up with nothing to run.
 COPY --from=build /app/scripts/start.mjs ./scripts/start.mjs
-# node_modules/mettara-lib is a link into this folder
-COPY --from=build /app/vendor ./vendor
 
-# Mounted storage: without this the room database and every agent sandbox are
-# wiped on each deploy, and the office resets
+# Mounted storage: without this the room database is wiped on each deploy and
+# the office resets
 ENV ROOM_DB_PATH=/data/watercooler.sqlite
-ENV AGENT_WORKSPACE_ROOT=/data/agent-workspaces
 # The company's data lives on the volume too, and is seeded on first boot
 ENV ERP_DB_PATH=/data/erp.sqlite
-# Files people attach to tasks, kept with the rest
-ENV UPLOADS_DIR=/data/uploads
-ENV AGENT_PROVIDER=claude-api
 
 # Which commit this image is, for /api/health and the start-up log. Railway
 # sets RAILWAY_GIT_COMMIT_SHA itself on a deploy it triggered from the

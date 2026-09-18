@@ -1,38 +1,16 @@
 /**
  * Custom Next.js dev server.
  *
- * Attaches the presence socket and the agent CLI bridge (ws://localhost:3000/api/gateway)
- * so the browser never needs to spawn or reach an agent process directly.
+ * Attaches the presence socket, so everyone in a room sees everyone else.
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import { loadEnvConfig } from "@next/env";
 import next from "next";
 import { createLogger } from "./lib/logger";
-import {
-  attachCliBridge,
-  dispatchToWorker,
-  getWorkerRoster,
-  validateDispatchSecret,
-} from "./lib/cli-bridge";
-import { getCliProvider, isCliProviderId } from "./lib/cli-providers";
-import { getRoomStore } from "./lib/server/room-store";
 import { describeBuild } from "./lib/server/build-info";
-import { readBoard, readDesk } from "./lib/server/boards";
-import {
-  offeredProviders,
-  providerBlocked,
-  registerProviderSwitch,
-  rememberProvider,
-  rememberedProvider,
-} from "./lib/server/provider-choice";
-import { getBridgeProvider, setBridgeProvider } from "./lib/cli-bridge";
 import { attachPresenceSocket } from "./lib/server/presence-socket";
 import { ERP_DB_PATH, isEmpty, openErpDb, seedErpDatabase } from "./lib/erp/db";
-import { DEFAULT_ROOM_SLUG } from "./lib/rooms";
-import { readMettaraConfig } from "./lib/mettara/config";
-import { buildOfficeTools } from "./lib/mettara/office-tools";
-import { createToolsHandler, TOOLS_PATH } from "./lib/mettara/webhook";
 import {
   accessCookieHeader,
   clearedAccessCookieHeader,
@@ -64,18 +42,6 @@ const port = parseInt(process.env.PORT ?? "3000", 10);
 // while every lazily-read key in the same file worked — so the app would boot
 // on the wrong provider and say so in the HUD with no hint why.
 loadEnvConfig(process.cwd(), dev);
-
-const AGENT_PROVIDER = process.env.AGENT_PROVIDER ?? "claude";
-const CLI_PROVIDER = isCliProviderId(AGENT_PROVIDER)
-  ? getCliProvider(AGENT_PROVIDER)
-  : getCliProvider("claude");
-// The agents boot on the Claude implementation — the CLI, or the API-keyed
-// CLI where AGENT_PROVIDER says so — and Mettara is a switch away in the
-// HUD. AGENT_PROVIDER=mettara only says Mettara is wanted; the HUD's choice,
-// remembered in the room database, is what actually picks it.
-const DEFAULT_PROVIDER = CLI_PROVIDER.id !== "mettara" ? CLI_PROVIDER : getCliProvider("claude");
-// Expose provider to Next.js client code (compiled on-demand in dev)
-process.env.NEXT_PUBLIC_AGENT_PROVIDER = AGENT_PROVIDER;
 
 /**
  * Production with no code configured: serve nothing, but say so.
@@ -132,34 +98,6 @@ for (const problem of misconfiguredCodes()) {
 // whatever port the server is actually on.
 const app = next({ dev, port, hostname: process.env.HOSTNAME ?? "localhost" });
 const handle = app.getRequestHandler();
-
-const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
-
-/**
- * The door the agents' own tools come in by: loopback only, and a shared
- * secret. Answers the request and returns false when it is not welcome.
- *
- * One check for both endpoints. It was written out twice, identically, which
- * is the shape of thing that gets tightened in one place and not the other —
- * and this is the check that stands in for the cookie gate, since `server.ts`
- * answers these before the gate is consulted.
- */
-function fromAgentTools(
-  req: IncomingMessage,
-  res: ServerResponse,
-  method: "GET" | "POST",
-): boolean {
-  const refuse = (status: number, error: string) => {
-    res.writeHead(status, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error }));
-    return false;
-  };
-  if (req.method !== method) return refuse(405, "Method not allowed");
-  if (!LOOPBACK.has(req.socket.remoteAddress ?? "")) return refuse(403, "Forbidden");
-  const secret = req.headers["x-dispatch-secret"] as string | undefined;
-  if (!secret || !validateDispatchSecret(secret)) return refuse(401, "Invalid dispatch secret");
-  return true;
-}
 
 /**
  * Read a request body, refusing one too big to be honest.
@@ -219,48 +157,6 @@ function failRequest(res: ServerResponse, what: string, err: unknown) {
 
 /** Nothing a person types at the door is large. */
 const UNLOCK_BODY_LIMIT = 4 * 1024;
-/** A task can be a paragraph or two, and comes from our own tools. */
-const DISPATCH_BODY_LIMIT = 256 * 1024;
-
-// ── Internal dispatch endpoint for MCP tool → auggie bridge ──
-
-async function handleDispatch(req: IncomingMessage, res: ServerResponse) {
-  if (!fromAgentTools(req, res, "POST")) return;
-
-  const body = await readBody(req, res, DISPATCH_BODY_LIMIT);
-  if (body === null) return;
-
-  let seatId: unknown;
-  let task: unknown;
-  let room: unknown;
-  try {
-    ({ seatId, task, room } = JSON.parse(body));
-  } catch {
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Invalid JSON body" }));
-    return;
-  }
-  if (typeof seatId !== "string" || typeof task !== "string" || !seatId || !task) {
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "seatId and task are required" }));
-    return;
-  }
-
-  try {
-    const result = await dispatchToWorker(
-      seatId,
-      task,
-      typeof room === "string" ? room : undefined,
-    );
-    res.writeHead(result.error ? 500 : 200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(result));
-  } catch (err) {
-    res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: (err as Error).message }));
-  }
-}
-
-// ── The access gate ──
 
 /**
  * Exchange the shared code for a cookie.
@@ -512,55 +408,6 @@ function sentOutside(req: IncomingMessage, res: ServerResponse): boolean {
 }
 
 /**
- * What the office is working on, for the agents' MCP tools.
- *
- * Same door as dispatch: loopback only, and a shared secret. The boards'
- * credentials live in this process and stop here — the agent's tool server
- * gets the cards and tickets, never the keys.
- *
- * Read-only. There is no counterpart that writes.
- */
-function handleBoards(req: IncomingMessage, res: ServerResponse) {
-  if (!fromAgentTools(req, res, "GET")) return;
-
-  const params = new URL(req.url ?? "", "http://127.0.0.1").searchParams;
-  const what = params.get("what");
-  const reader = what === "desk" ? readDesk() : readBoard(params.get("board"));
-  reader
-    .then((answer) => {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(answer));
-    })
-    .catch((err: Error) => {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: err.message }));
-    });
-}
-
-// ── Inbound tool endpoint for Mettara AIs ──
-
-/**
- * Mettara AIs reach back into the office through one signed endpoint. It is
- * only mounted when the platform credentials are present: without a secret
- * there is nothing to verify signatures against, and an unauthenticated door
- * into worker dispatch is not one worth opening.
- */
-function buildMettaraTools() {
-  const config = readMettaraConfig();
-  if (!config) return null;
-  return createToolsHandler({
-    secret: config.apiSecret,
-    registry: buildOfficeTools({
-      listWorkers: (room) => getWorkerRoster(room),
-      dispatch: (seatId, task, room) => dispatchToWorker(seatId, task, room),
-      defaultRoom: DEFAULT_ROOM_SLUG,
-    }),
-  });
-}
-
-// ── Seat config sync for auggie worker roster ──
-
-/**
  * Build the company on first boot.
  *
  * A fresh deployment gets an empty volume, and agents told they have an ERP
@@ -601,23 +448,10 @@ if (unconfigured) {
     .prepare()
     .then(() => {
       ensureErpData();
-      const mettaraTools = buildMettaraTools();
       const server = createServer((req, res) => {
-        // Intercept internal API routes before Next.js. These authenticate
-        // themselves — a localhost-plus-secret check and an HMAC signature —
-        // and are not browser traffic, so the cookie gate does not apply.
-        if (pathOf(req) === "/api/internal/dispatch") {
-          void handleDispatch(req, res).catch((err) => failRequest(res, "dispatch", err));
-          return;
-        }
-        if (mettaraTools && pathOf(req) === TOOLS_PATH) {
-          void mettaraTools(req, res).catch((err) => failRequest(res, "mettara tools", err));
-          return;
-        }
-        if (pathOf(req) === "/api/internal/boards") {
-          handleBoards(req, res);
-          return;
-        }
+        // The door is answered before Next sees anything: it authenticates
+        // itself, and the two ways in and out of the world are the only
+        // paths the cookie gate cannot be asked about.
         if (pathOf(req) === "/api/unlock") {
           void handleUnlock(req, res).catch((err) => failRequest(res, "unlock", err));
           return;
@@ -635,41 +469,16 @@ if (unconfigured) {
         handle(req, res);
       });
 
-      // Players and agents ride separate sockets: presence is lossy and constant,
-      // agent traffic is rare and must not be dropped.
+      // The one socket the world needs: who is in a room, where they are
+      // standing, and what they said.
       attachPresenceSocket(server);
 
-      attachCliBridge(server, DEFAULT_PROVIDER);
-      // The HUD may have switched the agents to another AI before; come
-      // back on it, and let it switch again.
-      const defaultId = DEFAULT_PROVIDER.id;
-      const remembered = rememberedProvider(getRoomStore(), defaultId);
-      if (remembered && remembered !== defaultId) setBridgeProvider(getCliProvider(remembered));
-      registerProviderSwitch({
-        defaultId,
-        active: () => getBridgeProvider().id,
-        async switchTo(id) {
-          if (!offeredProviders(defaultId).includes(id))
-            return "That provider is not offered here.";
-          const blocked = await providerBlocked(id);
-          if (blocked) return blocked;
-          if (getBridgeProvider().id !== id) setBridgeProvider(getCliProvider(id));
-          rememberProvider(getRoomStore(), id);
-          return null;
-        },
-      });
       log.info(`Ready on http://localhost:${port}`);
       // Printed at start-up as well as served from /api/health, so a deploy's
       // own output says which commit it brought up — which is the first thing
       // you want when a fix is on main and the box is behaving as though it
       // is not.
       log.info(describeBuild());
-      log.info(
-        DEFAULT_PROVIDER.kind === "service"
-          ? `Provider: ${DEFAULT_PROVIDER.displayName} (hosted service)`
-          : `Provider: ${DEFAULT_PROVIDER.displayName} (bridging via ${DEFAULT_PROVIDER.binName} CLI)`,
-      );
-      if (mettaraTools) log.info(`Mettara tool endpoint: ${TOOLS_PATH}`);
 
       server.listen(port);
     })

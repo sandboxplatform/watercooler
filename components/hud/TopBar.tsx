@@ -5,6 +5,7 @@ import type { SeatState } from "@/types/game";
 import type { HudPanelId, HudDockItem } from "./HudDock";
 import CharacterPortrait from "./CharacterPortrait";
 import AccountButton from "./AccountButton";
+import LockButton from "./LockButton";
 
 interface TopBarProps {
   seats: SeatState[];
@@ -13,13 +14,6 @@ interface TopBarProps {
   onToggle: (id: HudPanelId) => void;
   iconOverrides?: Partial<Record<HudPanelId, string>>;
   onSeatClick?: (seatId: string) => void;
-}
-
-function seatDotColor(seat: SeatState): string {
-  if (!seat.assigned) return "gray";
-  if (seat.status === "running" || seat.status === "returning") return "yellow";
-  if (seat.status === "failed") return "red";
-  return "green";
 }
 
 /**
@@ -50,19 +44,15 @@ export default function TopBar({
           <button
             key={seat.seatId}
             type="button"
-            className={`topbar-agent-pill ${
-              seat.status === "running" || seat.status === "returning"
-                ? "topbar-agent-pill--active"
-                : ""
-            }`}
+            className="topbar-agent-pill"
             onClick={() => onSeatClick?.(seat.seatId)}
-            title={`${seat.label} — ${seat.status}`}
+            title={seat.roleTitle ? `${seat.label} — ${seat.roleTitle}` : seat.label}
           >
             <div className="topbar-agent-pill__avatar">
               <CharacterPortrait spritePath={seat.spritePath} name={seat.label} />
             </div>
             <span className="topbar-agent-pill__name">{seat.label}</span>
-            <span className={`pixel-dot pixel-dot--${seatDotColor(seat)}`} />
+            <span className={`pixel-dot pixel-dot--${seat.assigned ? "green" : "gray"}`} />
           </button>
         ))}
       </div>
@@ -94,6 +84,8 @@ export default function TopBar({
           );
         })}
         <AccountButton />
+        {/* The door, last in the row: the one button that takes you out of the world. */}
+        <LockButton />
       </div>
     </div>
   );

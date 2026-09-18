@@ -12,51 +12,23 @@ import {
   type ReactNode,
 } from "react";
 import React from "react";
-import type { SeatState, TaskItem, GatewayConfig, ChatMessage, TaskAttachment } from "@/types/game";
-import type { StudioSnapshot } from "@/types/game";
+import type { SeatState, ChatMessage, StudioSnapshot } from "@/types/game";
 import { gameEvents } from "./events";
-import { type PersistedSeatConfig, loadGatewayConfig, loadPlayerName } from "./persistence";
+import { type PersistedSeatConfig, loadPlayerName } from "./persistence";
 import { say } from "./room-speech";
 import type { SayScope } from "./presence-types";
-import { fetchRoomSnapshot, flushRoomWrites, saveRoomPatch } from "./room-client";
+import { fetchRoomSnapshot, flushRoomWrites } from "./room-client";
 import { watchRoomHistory } from "./room-travel";
-import {
-  type Action,
-  reducer,
-  initialState,
-  findTask,
-  mergeDiscoveredSeats,
-  MAIN_SESSION_KEY,
-} from "./reducer";
-import { useGateway } from "./hooks/useGateway";
-import { useSession } from "./hooks/useSession";
-import { useTaskRouter } from "./hooks/useTaskRouter";
+import { type Action, reducer, initialState, mergeDiscoveredSeats } from "./reducer";
 import { usePresence } from "./hooks/usePresence";
 import { useWorldSync } from "./hooks/useWorldSync";
-import {
-  markKnown,
-  primeFromSnapshot,
-  syncMessages,
-  syncSeats,
-  syncSessions,
-  syncTasks,
-} from "./room-sync";
-import { getDefaultGatewayUrl } from "./utils";
+import { markKnown, primeFromSnapshot, syncMessages, syncSeats } from "./room-sync";
 
 // ── Context ────────────────────────────────────────────
 
 interface StudioContextValue {
   state: StudioSnapshot;
-  connect: (config?: GatewayConfig) => void;
-  disconnect: () => void;
-  assignTask: (message: string, seatId?: string, attachments?: TaskAttachment[]) => void;
   updateSeatConfig: (seatId: string, patch: Partial<SeatState>) => void;
-  newSession: () => void;
-  switchSession: (sessionKey: string) => void;
-  prepareSessionForSeat: (seatId: string) => Promise<void>;
-  newSessionForSeat: (seatId: string) => void;
-  getBoundSessionForSeat: (seatId: string) => string | undefined;
-  loadSessionChat: (sessionKey: string) => Promise<ChatMessage[]>;
   /** Say something to the room, and keep it in the chat log. */
   sayInRoom: (text: string, scope?: SayScope) => void;
 }
@@ -75,13 +47,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const dispatchRef = useRef<Dispatch<Action>>(dispatch);
   dispatchRef.current = dispatch;
-  const tasksRef = useRef<TaskItem[]>(state.tasks);
-  tasksRef.current = state.tasks;
   const seatsRef = useRef<SeatState[]>(state.seats);
   seatsRef.current = state.seats;
   const seatConfigRef = useRef<PersistedSeatConfig[]>([]);
-  const activeSessionKeyRef = useRef<string | undefined>(undefined);
-  const taskCounterRef = useRef(0);
 
   /** True once the server snapshot has been applied; gates all writes. */
   const hydratedRef = useRef(false);
@@ -93,50 +61,6 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     dispatchRef.current({ type: "SYNC_SEATS", seats: mergedSeats });
   }, []);
 
-  const setActiveSessionKey = useCallback((sessionKey?: string) => {
-    activeSessionKeyRef.current = sessionKey;
-    saveRoomPatch({ activeSessionKey: sessionKey ?? null });
-    dispatchRef.current({ type: "SET_ACTIVE_SESSION", sessionKey });
-  }, []);
-
-  // ── Gateway hook ──
-  const gateway = useGateway({
-    dispatch: dispatchRef,
-    tasks: tasksRef,
-    seats: seatsRef,
-    activeSessionKey: activeSessionKeyRef,
-    setActiveSessionKey,
-    taskCounter: taskCounterRef,
-  });
-
-  const setActiveSessionKeyDirect = useCallback((key: string | undefined) => {
-    activeSessionKeyRef.current = key;
-  }, []);
-
-  // ── Session hook ──
-  const session = useSession({
-    dispatch: dispatchRef,
-    clientRef: gateway.clientRef,
-    activeSessionKey: activeSessionKeyRef,
-    setActiveSessionKey: setActiveSessionKeyDirect,
-    seenStarts: gateway.seenStartsRef,
-    bubbleAccum: gateway.bubbleAccumRef,
-    stoppedRunIds: gateway.stoppedRunIdsRef,
-  });
-
-  // ── Task router hook ──
-  const taskRouter = useTaskRouter({
-    dispatch: dispatchRef,
-    clientRef: gateway.clientRef,
-    tasks: tasksRef,
-    seats: seatsRef,
-    activeSessionKey: activeSessionKeyRef,
-    seatIdToSessionKey: session.seatIdToSessionKeyRef,
-    stoppedRunIds: gateway.stoppedRunIdsRef,
-    runActors: gateway.runActorRef,
-    nextTaskId: () => `aw_task_${++taskCounterRef.current}_${Date.now()}`,
-  });
-
   // Keep this browser's character on the room socket
   usePresence();
   // Apply world changes made by the other people in it
@@ -144,12 +68,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     dispatch: dispatchRef,
     seatConfigs: seatConfigRef,
     seats: seatsRef,
-    tasks: tasksRef,
-    activeSessionKey: activeSessionKeyRef,
   });
-
-  // ── Bootstrap: restore world state from the server + auto-connect ──
-  const inflightTaskIdsRef = useRef<string[]>([]);
 
   /**
    * Bumped when the address bar names a different room without a page load.
@@ -171,36 +90,18 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const savedConfig = loadGatewayConfig();
-    if (savedConfig) gateway.configRef.current = savedConfig;
-
     let cancelled = false;
-    let connectTimer: ReturnType<typeof setTimeout> | null = null;
 
     const bootstrap = async () => {
-      const snapshot = await fetchRoomSnapshot(MAIN_SESSION_KEY);
+      const snapshot = await fetchRoomSnapshot();
       if (cancelled) return;
 
-      const savedActiveKey = snapshot.activeSessionKey ?? undefined;
-      const fallbackSessionKey = savedActiveKey ?? MAIN_SESSION_KEY;
-      const tasks = snapshot.tasks;
-      const chat = snapshot.messages;
-      const sessions = snapshot.sessions;
       seatConfigRef.current = snapshot.seats;
 
       // Everything in the snapshot is already in the room; recording it stops
       // the first diff treating the restored world as brand new and shouting
       // all of it back at everyone.
-      primeFromSnapshot({ tasks, messages: chat, seats: snapshot.seats, sessions });
-
-      if (snapshot.budget) {
-        gameEvents.emit(
-          "budget-updated",
-          snapshot.budget.spentUsd,
-          snapshot.budget.limitUsd,
-          snapshot.budget.halted,
-        );
-      }
+      primeFromSnapshot({ messages: snapshot.messages, seats: snapshot.seats });
 
       // Writes are blocked until this point: the save effects run on mount with
       // empty state, and against a server that would erase the room before its
@@ -213,48 +114,15 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         applySeatMerge(discoveredSeatsRef.current);
       }
 
-      const hasRestoredData = tasks.length > 0 || chat.length > 0 || sessions.length > 0;
-      activeSessionKeyRef.current =
-        savedActiveKey ?? (hasRestoredData ? MAIN_SESSION_KEY : undefined);
-
-      if (hasRestoredData) {
-        dispatch({
-          type: "RESTORE",
-          tasks,
-          chatMessages: chat,
-          sessions,
-          activeSessionKey: fallbackSessionKey,
-        });
+      if (snapshot.messages.length > 0) {
+        dispatch({ type: "RESTORE", chatMessages: snapshot.messages });
       }
-      if (activeSessionKeyRef.current) {
-        dispatch({ type: "SET_ACTIVE_SESSION", sessionKey: activeSessionKeyRef.current });
-        saveRoomPatch({ activeSessionKey: activeSessionKeyRef.current });
-      }
-
-      // Track inflight tasks so other effects can reference them
-      const inflight = tasks.filter(
-        (t) => t.status === "running" || t.status === "submitted" || t.status === "returning",
-      );
-      inflightTaskIdsRef.current = inflight.map((t) => t.taskId);
-      for (const t of inflight) {
-        if (t.runId) gateway.seenStartsRef.current.add(t.runId);
-        gateway.seenStartsRef.current.add(t.taskId);
-        if (t.actorName && t.runId) gateway.runActorRef.current.set(t.runId, t.actorName);
-      }
-
-      // Auto-connect immediately; every provider runs through the in-process
-      // CLI bridge, so there is no manual config to wait on.
-      connectTimer = setTimeout(
-        () => gateway.connectImpl({ url: getDefaultGatewayUrl(), token: "" }),
-        80,
-      );
     };
 
     void bootstrap();
 
     return () => {
       cancelled = true;
-      if (connectTimer) clearTimeout(connectTimer);
       // Anything still queued would otherwise be lost on navigation
       void flushRoomWrites();
     };
@@ -266,70 +134,17 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     const unsub = gameEvents.on("seats-discovered", (discovered) => {
       discoveredSeatsRef.current = discovered;
       applySeatMerge(discovered);
-
-      for (const task of tasksRef.current) {
-        if (
-          task.seatId &&
-          (task.status === "running" || task.status === "submitted" || task.status === "returning")
-        ) {
-          dispatchRef.current({
-            type: "PATCH_SEAT_RUNTIME",
-            seatId: task.seatId,
-            patch: {
-              status: task.status === "returning" ? "returning" : "running",
-              runId: task.runId ?? task.taskId,
-              taskSnippet: task.message.slice(0, 28),
-              startedAt: task.createdAt,
-            },
-          });
-        }
-      }
     });
     return unsub;
   }, [applySeatMerge]);
 
-  // ── Stale task cleanup: mark inflight tasks as interrupted after timeout ──
-  useEffect(() => {
-    const inflightIds = inflightTaskIdsRef.current;
-    if (inflightIds.length === 0) return;
-
-    const timer = setTimeout(() => {
-      for (const taskId of inflightIds) {
-        const current = findTask(tasksRef.current, taskId);
-        if (
-          current &&
-          (current.status === "running" ||
-            current.status === "submitted" ||
-            current.status === "returning")
-        ) {
-          dispatchRef.current({
-            type: "UPDATE_TASK",
-            taskId: current.taskId,
-            patch: { status: "interrupted", completedAt: new Date().toISOString() },
-          });
-          if (current.runId) {
-            dispatchRef.current({
-              type: "SET_SEAT_STATUS",
-              runId: current.runId,
-              status: "empty",
-            });
-          }
-        }
-      }
-    }, 20_000);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // ── Share tasks, chat and sessions with the room ──
+  // ── Share the room's talk and its roster with everyone in it ──
   // One change at a time: sending whole collections would let a second player's
   // write erase work this client had not heard about yet.
   useEffect(() => {
     if (!hydratedRef.current) return;
-    syncTasks(state.tasks);
     syncMessages(state.chatMessages);
-    syncSessions(state.sessions);
-  }, [state.tasks, state.chatMessages, state.sessions]);
+  }, [state.chatMessages]);
 
   useEffect(() => {
     const configs: PersistedSeatConfig[] = state.seats.map((seat) => ({
@@ -343,27 +158,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     seatConfigRef.current = configs;
     if (hydratedRef.current) syncSeats(configs);
     gameEvents.emit("seat-configs-updated", state.seats);
-    // The agent bridge reads the roster from the room store, so syncSeats above
-    // is the only thing it needs; a separate push from each browser is what
-    // used to let one client's empty view wipe everyone's roster.
   }, [state.seats]);
-
-  // ── Cleanup ──
-  useEffect(() => {
-    const sessionTimer = gateway.sessionRefreshTimerRef;
-    const bubbleTimers = gateway.bubbleThrottleTimersRef;
-    const client = gateway.clientRef;
-    return () => {
-      if (sessionTimer.current) {
-        clearTimeout(sessionTimer.current);
-      }
-      for (const timer of bubbleTimers.current.values()) {
-        clearTimeout(timer);
-      }
-      client.current?.disconnect();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const updateSeatConfig = useCallback((seatId: string, patch: Partial<SeatState>) => {
     dispatchRef.current({ type: "UPDATE_SEAT_CONFIG", seatId, patch });
@@ -384,16 +179,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     const id = `said-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     if (!trimmed || !say(trimmed, scope, id)) return;
 
-    const message = {
+    const message: ChatMessage = {
       id,
-      runId: "",
-      role: "player",
       content: trimmed,
       actorName: loadPlayerName(),
       timestamp: new Date().toISOString(),
-      sessionKey: MAIN_SESSION_KEY,
-      roomChat: true,
-    } as ChatMessage;
+    };
     // The room socket carries the remark and the server keeps it; it is not
     // a change of ours for the sync to send a second time.
     markKnown(`message:${id}`, message);
@@ -402,22 +193,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
   return React.createElement(
     StudioContext.Provider,
-    {
-      value: {
-        state,
-        connect: gateway.connect,
-        disconnect: gateway.disconnect,
-        assignTask: taskRouter.assignTask,
-        updateSeatConfig,
-        newSession: session.newSession,
-        switchSession: session.switchSession,
-        prepareSessionForSeat: session.prepareSessionForSeat,
-        newSessionForSeat: session.newSessionForSeat,
-        getBoundSessionForSeat: session.getBoundSessionForSeat,
-        loadSessionChat: session.loadSessionChat,
-        sayInRoom,
-      },
-    },
+    { value: { state, updateSeatConfig, sayInRoom } },
     children,
   );
 }

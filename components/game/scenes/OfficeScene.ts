@@ -53,18 +53,10 @@ import { fetchPeople } from "@/lib/people-client";
 import { ensureSheet } from "../utils/sheets";
 import { letterOnWall } from "../utils/wall-lettering";
 import { createLogger } from "@/lib/logger";
-import {
-  BOSS_INTERACT_DISTANCE,
-  PLAYER_SPAWN_OFFSET_X,
-  PF_PADDING,
-  PRESS_E_STYLE,
-  BOSS_PROMPT_OFFSET_X,
-  BOSS_PROMPT_OFFSET_Y,
-} from "@/lib/constants";
+import { PLAYER_SPAWN_OFFSET_X, PF_PADDING } from "@/lib/constants";
 
 import { CameraController } from "../systems/CameraController";
 import { WorkerManager } from "../systems/WorkerManager";
-import { InteractionManager } from "../systems/InteractionManager";
 import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
 import { dialogOpen, typingInAField } from "@/lib/gamepad/dialogs";
@@ -84,8 +76,6 @@ const log = createLogger("OfficeScene");
 
 export class OfficeScene extends Phaser.Scene {
   private player!: Player;
-  private terminalZone: { x: number; y: number } | null = null;
-  private promptText: Phaser.GameObjects.Text | null = null;
   /** Whether this lobby staffs a help desk, from its map. */
   private counterHere = false;
   private navigator = new TapNavigator();
@@ -115,14 +105,11 @@ export class OfficeScene extends Phaser.Scene {
    */
   private presence: ScenePresence | null = null;
   private cleanupPresence: (() => void) | null = null;
-  private terminalOpen = false;
 
   /** sessionKey -> seatId: when a character executes a task, that session binds to the character */
-  private sessionBindings = new Map<string, string>();
 
   private cameraController!: CameraController;
   private workerManager!: WorkerManager;
-  private interactionManager!: InteractionManager;
   private doorManager!: DoorManager;
   /** Everything in the room you walk up to and press E at. */
   private fixtures!: FixtureManager;
@@ -398,14 +385,6 @@ export class OfficeScene extends Phaser.Scene {
 
     this.workerManager = new WorkerManager(this, workerSpawns, pois, pathfinder);
 
-    this.interactionManager = new InteractionManager(
-      this,
-      this.player,
-      this.workerManager,
-      this.cameraController,
-    );
-    this.interactionManager.initInteractionUI();
-
     this.doorManager = new DoorManager(this, this.player, () => this.workerManager.workers);
     this.doorManager.initDoors(parseTransitions(map));
 
@@ -503,16 +482,9 @@ export class OfficeScene extends Phaser.Scene {
       unsubRoom();
       unsubInteract();
     };
-    this.initBossSeat(bossSpawn, workerSpawns.length > 0);
+    this.initInteraction();
 
-    this.cleanupEventBridge = initSceneEventBridge(
-      this.workerManager,
-      this.interactionManager,
-      this.sessionBindings,
-      (open) => {
-        this.terminalOpen = open;
-      },
-    );
+    this.cleanupEventBridge = initSceneEventBridge(this.workerManager);
 
     gameEvents.emit("seats-discovered", workerSpawns);
 
@@ -823,27 +795,8 @@ export class OfficeScene extends Phaser.Scene {
     addSign(this, at, label, edge, side);
   }
 
-  /**
-   * The task terminal at the boss's seat, and the prompts for the board and
-   * the games. The terminal only exists where there are agents to give
-   * tasks to: in a room with no seats it would be a "Press E" over nothing.
-   */
-  private initBossSeat(bossSpawn: { x: number; y: number }, hasSeats: boolean) {
-    this.terminalZone = hasSeats ? { x: bossSpawn.x, y: bossSpawn.y } : null;
-
-    this.promptText = this.add
-      .text(
-        bossSpawn.x + BOSS_PROMPT_OFFSET_X,
-        bossSpawn.y - BOSS_PROMPT_OFFSET_Y,
-        "Press E",
-        PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle,
-      )
-      .setResolution(window.devicePixelRatio * 2)
-      .setOrigin(0, 0)
-      .setDepth(20)
-      .setVisible(false);
-    this.promptText.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
-
+  /** The "Press E" over everything in the room you can walk up to, and the key. */
+  private initInteraction() {
     // A prompt for each fixture the room carries, made from its entry.
     this.fixtures.createPrompts();
 
@@ -864,7 +817,6 @@ export class OfficeScene extends Phaser.Scene {
     this.presence = null;
 
     this.workerManager?.destroyAll();
-    this.interactionManager?.destroy();
   }
 
   // ── Update ─────────────────────────────────────────────
@@ -893,9 +845,7 @@ export class OfficeScene extends Phaser.Scene {
       // A press that starts on the worker menu belongs to the menu: it closes
       // itself on release, and without this the same gesture would then read
       // as a tap on the floor underneath it
-      down = this.interactionManager.interactionMenu.visible
-        ? null
-        : { x: pointer.x, y: pointer.y, at: pointer.downTime };
+      down = { x: pointer.x, y: pointer.y, at: pointer.downTime };
 
       // Touching the office means you have finished typing. A canvas cannot
       // hold focus of its own, so without this the chat box keeps it — and
@@ -918,8 +868,7 @@ export class OfficeScene extends Phaser.Scene {
       if (!isTap(start, { x: pointer.x, y: pointer.y, at: pointer.upTime })) return;
 
       // Anything with a panel over the office is driving its own input
-      if (this.terminalOpen || this.fixtures.anyOpen()) return;
-      if (this.interactionManager.interactionMenu.visible) return;
+      if (this.fixtures.anyOpen()) return;
 
       const world = pointer.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
       this.walkTo(world.x, world.y);
@@ -1015,12 +964,6 @@ export class OfficeScene extends Phaser.Scene {
     // while this player is in a menu or typing.
     this.presence?.update(delta);
 
-    if (this.interactionManager.interactionMenu.visible) {
-      this.interactionManager.interactionMenu.update(this.gamepad);
-      this.workerManager.updateAll();
-      return;
-    }
-
     // Just arrived: the character takes its steps and the keys wait. Doors
     // are not stepped meanwhile, so the doorway being stood in stays quiet.
     if (this.arrival.holdsInput) {
@@ -1046,13 +989,7 @@ export class OfficeScene extends Phaser.Scene {
 
     // A dialog is up: the HUD's controller driver has the pad, the keys
     // belong to the dialog, and the character stands still under it.
-    if (
-      this.terminalOpen ||
-      this.elevatorOpen ||
-      this.fixtures.anyOpen() ||
-      dialogOpen() ||
-      typingInAField()
-    ) {
+    if (this.elevatorOpen || this.fixtures.anyOpen() || dialogOpen() || typingInAField()) {
       this.workerManager.updateAll();
       this.doorManager.updateDoors();
       return;
@@ -1088,39 +1025,15 @@ export class OfficeScene extends Phaser.Scene {
     this.workerManager.updateAll();
     this.doorManager.updateDoors();
 
-    // Worker proximity: E on the keyboard, or confirm on the pad
+    // E on the keyboard, or confirm on the pad
     const interactPressed =
       Phaser.Input.Keyboard.JustDown(this.eKey) ||
       this.gamepad.justPressed("interact") ||
       this.takeVirtualInteract();
 
-    if (this.interactionManager.updateProximity(interactPressed)) {
-      return;
-    }
-
     // Everything you walk up to and press E at: the boards, the games,
     // the support queue. One loop over config/fixtures.ts, which is where
     // the distances, the prompts and the panels each one opens live.
-    if (this.fixtures.update(this.player.sprite, interactPressed)) return;
-
-    // Boss terminal interaction (only when no worker is nearby)
-    if (!this.interactionManager.nearestWorker && this.terminalZone && this.promptText) {
-      const dist = Phaser.Math.Distance.Between(
-        this.player.sprite.x,
-        this.player.sprite.y,
-        this.terminalZone.x,
-        this.terminalZone.y,
-      );
-      const near = dist < BOSS_INTERACT_DISTANCE;
-      this.promptText.setVisible(near);
-
-      if (near && interactPressed) {
-        this.terminalOpen = true;
-        this.promptText.setVisible(false);
-        gameEvents.emit("open-terminal");
-      }
-    } else if (this.promptText) {
-      this.promptText.setVisible(false);
-    }
+    this.fixtures.update(this.player.sprite, interactPressed);
   }
 }

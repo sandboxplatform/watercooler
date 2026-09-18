@@ -4,18 +4,12 @@ import type { SeatState } from "@/types/game";
 import CharacterPortrait from "../CharacterPortrait";
 
 function seatStateLabel(seat: SeatState) {
-  if (!seat.assigned) return "vacant";
-  if (seat.status === "empty") return "idle";
-  return seat.status;
+  return seat.assigned ? "at desk" : "vacant";
 }
 
 function seatSummary(seat: SeatState) {
   if (!seat.assigned) return "No crew assigned";
-  if (seat.status === "returning") return seat.taskSnippet ?? "Returning to desk";
-  if (seat.status === "running") return seat.taskSnippet ?? "Handling task";
-  if (seat.status === "done") return "Recently completed task";
-  if (seat.status === "failed") return "Last task failed";
-  return "Waiting at desk";
+  return seat.roleTitle ?? "Waiting at desk";
 }
 
 interface SeatListProps {
@@ -83,7 +77,7 @@ export default function SeatList({ seats, selectedSeatId, onSelectSeat }: SeatLi
                 </div>
               </div>
               <div
-                className={`seat-card__status ${statusLabel === "running" ? "seat-card__status--running" : ""}`}
+                className="seat-card__status"
                 style={{
                   color: statusLabel === "vacant" ? "var(--pixel-muted)" : "var(--pixel-text)",
                 }}

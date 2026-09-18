@@ -41,6 +41,8 @@ yarn-error.log*
 next-env.d.ts
 .cursor
 .claude
+# Nothing writes here any more — the agents that ran in these sandboxes are
+# gone. Kept so an existing checkout's leftovers stay out of `git status`.
 .agent-workspaces/
 
 .data/
@@ -49,5 +51,3 @@ next-env.d.ts
 .data/
 
 # Mettara SDK: only the Node library is used; the C# packages beside it stay local
-vendor/mettara-lib/*.nupkg
-vendor/mettara-lib/*.tar.gz

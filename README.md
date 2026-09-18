@@ -2,9 +2,9 @@
 
 # WaterCooler
 
-### A playable world where AI agents live, work, and collaborate
+### A playable world you walk around with other people
 
-Your agents deserve more than a terminal. Give them an office, a town, and eventually, a world.
+One server is one world. Open the link and you are in it, with everyone else who has.
 
 [![npm version](https://img.shields.io/npm/v/@geezerrrr/watercooler?color=cb0303&label=npm)](https://www.npmjs.com/package/@geezerrrr/watercooler)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
@@ -24,9 +24,15 @@ Your agents deserve more than a terminal. Give them an office, a town, and event
 
 ## What is this?
 
-WaterCooler is a pixel RPG for AI coding agents. You walk around an office as the boss, assign tasks face-to-face, and watch your AI agents work in real time. Not in a log, but in the room.
+WaterCooler is a pixel world you share with other people. A plaza with buildings
+round it, lobbies with a game in the corner, floors with desks and boards on the
+walls, an arcade, a ferry to an island. You walk around it, and so does everyone
+else who opened the same server — you see each other move, you talk in the room,
+and Global Chat carries your voice to everyone in the world at once.
 
-Today it's a local office. The goal is a shared online world: agents from different users collaborating across the network, a skill marketplace, a task delegation economy, and spatial UX for everything your agents can do.
+It began as an office for AI coding agents, and the agents have been taken out:
+there is no task assignment, no agent runtime and no provider to configure. The
+world they lived in is the part worth keeping, and it is what this is now.
 
 ## Quick Start
 
@@ -36,7 +42,7 @@ Run instantly with npx, no clone, no install:
 npx @geezerrrr/watercooler
 ```
 
-Open [http://localhost:3000](http://localhost:3000). You'll need the `claude` or `auggie` CLI installed and signed in for live agent execution.
+Open [http://localhost:3000](http://localhost:3000). Nothing else to install.
 
 Custom port:
 
@@ -70,6 +76,23 @@ lock everyone back out. Left unset, `pnpm dev` runs open with a warning, while a
 production server **serves nothing** rather than sit exposed: it answers its
 health check and refuses everything else with a 503 saying the code is missing,
 so a deployment tells you what it needs instead of failing as a bare 502.
+
+### Signing out
+
+The button at the top right, beside the account picture, gives this browser's
+access back: the cookie is cleared and you land on `/unlock`, needing the code
+again to get in. It asks twice — one press arms it, the second leaves, and it
+gives up after a few seconds if you do not — because getting back in needs a
+code that may have arrived in somebody else's link rather than being in your
+head.
+
+It also forgets the name, home and look kept in this browser, so the next
+person at the same keyboard starts afresh. That is the case it is for: a
+machine you are handing back. On your own machine you will be asked for those
+again the next time you come in.
+
+`/api/lock` is the same thing at the address bar, which is what you have left
+if you are locked out of the HUD.
 
 ### Sharing a link
 
@@ -108,8 +131,8 @@ is a campus — so his is the lift in each of its buildings that has floors. A v
 rides any lift except those in a building whose floors are private, and so does
 Nick, who is a friend rather than an employee: the lobby is always open.
 
-Somebody can stop being an agent and become a person. Sara was one of the residents
-— an agent the server walked about the building on a routine — until she was given a
+Somebody can stop being a resident and become a person. Sara was one of the residents
+— a character the server walked about the building on a routine — until she was given a
 code; now she walks in herself, wearing the same sheet. The two cannot both be true
 of one character: a resident's look is reserved to them and kept out of the picker
 entirely, so a code naming it would find nothing to wear.
@@ -133,103 +156,32 @@ For that, configure sign-in (below) — it layers on top.
 > `npx` on your own machine, which is what it is for; do not put it on an address
 > other people can reach. It says so on startup.
 
-## Agent providers
-
-Agents can be executed several ways, selected with the `AGENT_PROVIDER` env var:
-
-| Provider              | Value        | What runs the agent                                |
-| --------------------- | ------------ | -------------------------------------------------- |
-| Claude Code (default) | `claude`     | Local `claude` CLI, using your Claude subscription |
-| Claude (API key)      | `claude-api` | The same CLI against an Anthropic API key          |
-| Auggie                | `auggie`     | Local `auggie` CLI                                 |
-| Mettara AI            | `mettara`    | Mettara Connect's hosted AI, called over its SDK   |
-
-No provider needs a gateway, URL or token: the server emulates the gateway
-protocol in-process, so the app connects to itself on startup. The CLI
-providers spawn a binary per run; Mettara is a hosted service and answers in
-process.
-
-```bash
-pnpm dev                          # Claude Code
-AGENT_PROVIDER=mettara pnpm dev   # Mettara AI
-```
-
-### Claude Code provider
-
-Each seat runs in its own sandbox directory under `.agent-workspaces/<seat>/`
-(gitignored), created on demand, with `--permission-mode acceptEdits` — so
-agents can read, write and edit inside their own space and nothing outside it.
-Seat personality is passed via `--append-system-prompt`, and each seat's CLI
-session id is remembered so follow-up messages resume the same conversation.
-
-Optional env vars:
-
-| Variable                 | Default            | Purpose                                              |
-| ------------------------ | ------------------ | ---------------------------------------------------- |
-| `CLAUDE_BIN`             | resolved from PATH | Path to the `claude` executable                      |
-| `CLAUDE_PERMISSION_MODE` | `acceptEdits`      | Permission mode for spawned agents                   |
-| `CLAUDE_ALLOWED_TOOLS`   | —                  | Extra tools to allow, comma-separated (e.g. `Bash`)  |
-| `AGENT_TOWN_MODEL`       | CLI default        | Model for spawned agents (`opus`, `sonnet`, `haiku`) |
-
-Note that `--print` runs are non-interactive: a tool that is neither
-auto-approved by the permission mode nor named in `CLAUDE_ALLOWED_TOOLS` is
-denied rather than prompted for. Worker dispatch is exempt — the MCP dispatch
-tool is allowed automatically whenever more than one seat is staffed.
-
 ## Key features
 
-- **In-world task assignment:** Approach any worker and assign tasks through an RPG-style interaction menu. No forms, no dropdowns. You walk up and talk.
-- **Visible execution:** Tasks move through `queued > returning > sending > running > done/failed`. Worker bubbles show what's happening at each step. Tool calls are collapsible in the chat panel.
-- **Worker autonomy:** Idle workers roam the office: whiteboards, printers, sofas, bookshelves. They return to their seat before starting real work. Busy workers queue additional tasks.
-- **Session management:** Multiple sessions with quick switching, and a seat manager for configuring worker names, roles, and sprites.
+- **One world, shared:** Everyone on the server is in the same places. Walk into a lobby and you see who else is standing in it, and where they are looking.
+- **Global Chat:** Switch your microphone on and you are in one conversation with everyone in the world, wherever they are standing. Browser to browser; the server never hears it.
+- **Talking in the room:** Say something to the whole room, or only to the people standing near you. It appears over your character and in the panel beside the office.
+- **Things to walk up to:** Boards, a support queue, an arcade cabinet, a pinball table, a ping pong table, a boardroom table you can call a meeting at.
+- **Workers at their desks:** Idle workers roam the office — whiteboards, printers, sofas, bookshelves — and the seat manager sets their names, roles and sprites.
 
 ## How it works
 
 ```
-You approach a worker -> Press E -> Assign a task
-  -> Worker walks back to desk (if away)
-  -> Task is sent to the agent bridge
-  -> Streaming updates flow back as chat, tool calls, bubbles
-  -> Worker completes and picks up the next queued task
+You open the link  ->  the door checks your access code
+  ->  you pick a name, a home and a look
+  ->  you walk into a lobby, and everyone already there sees you arrive
+  ->  press E at anything with a prompt over it
 ```
 
 ## Tech stack
 
-| Layer         | Choice                                               |
-| ------------- | ---------------------------------------------------- |
-| App           | Next.js 16, React 19, TypeScript                     |
-| Game          | Phaser 3, Tiled maps, pixel sprite sheets            |
-| Agent runtime | Claude Code / Auggie CLI, or Mettara AI's hosted SDK |
-| State         | React context + reducer + typed event bus            |
-
-## Architecture
-
-Currently the game runs the agent CLI directly, spawned in-process by the server. The target architecture introduces a backend and standalone connector so that a cloud-hosted game UI can still reach an agent CLI running on your own machine:
-
-```mermaid
-flowchart LR
-    UI[Game UI]
-    Backend[WaterCooler Backend]
-    Connector[Connector]
-    CLI[Local Agent CLI]
-
-    UI -->|WSS| Backend
-    Connector -->|outbound WSS| Backend
-    Connector -->|local spawn| CLI
-```
-
-- **Game UI:** Phaser office + React HUD. Talks only to the backend.
-- **Backend:** Runs locally for dev, cloud for prod. Same code, same protocol.
-- **Connector:** Standalone process on the user's machine. Bridges a local agent CLI to the backend. Credentials never leave the local machine.
-
-## Roadmap
-
-- **Backend + Connector:** Decouple the game UI from the local machine; standalone connector bridges a local agent CLI to a shared backend
-- **Cloud deployment:** Log into `cloud.agent.town` and operate your own agents through the cloud world UI
-- **Shared world:** Multi-user presence, social interactions, cooperative rooms with opt-in projections
-- **Library scene:** Long-term memory as a walkable space (shelves, archives, research stations)
-- **Workshop scene:** Skill and tool management as physical stations in the world
-- **Town map + marketplace:** Expand beyond the office; acquire third-party skills, delegate tasks to external agents
+| Layer    | Choice                                           |
+| -------- | ------------------------------------------------ |
+| App      | Next.js 16, React 19, TypeScript                 |
+| Game     | Phaser 3, Tiled maps, pixel sprite sheets        |
+| Presence | One WebSocket, a custom Node server, SQLite      |
+| Voice    | WebRTC, browser to browser, one chat server-wide |
+| State    | React context + reducer + typed event bus        |
 
 ## Assets
 
@@ -242,56 +194,6 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md). We're especially looking for people 
 ## License
 
 [MIT](./LICENSE)
-
-### Mettara AI provider
-
-`AGENT_PROVIDER=mettara` runs agents on Mettara Connect instead of a local CLI.
-There is no binary to install and no sandbox directory — a turn is an API call.
-
-It needs two credentials on the server and the Mettara SDK, which is
-distributed as a tarball rather than from the public npm registry:
-
-The SDK is not on npm: put Mettara's Node library in `vendor/mettara-lib/` as
-`mettara-lib.cjs` (the `.cjs` name matters; see the README there) and run
-`pnpm install` once. The image copies that folder, so a deploy carries it.
-
-```bash
-cat >> .env.local <<'ENV'          # gitignored; never commit these
-METTARA_API_SECRET=...
-METTARA_PLATFORM_ID=...
-ENV
-AGENT_PROVIDER=mettara pnpm dev
-```
-
-Each seat is provisioned as its own Mettara user, so workers hold separate
-threads of conversation. The first turn opens a conversation and carries the
-seat's personality and the company briefing with it; later turns resume that
-conversation by id, exactly as the Claude providers resume a CLI session. The
-HUD's model field selects which assistant a seat talks to by Mettara technical
-name (`METTARA_AI_NAME` sets the default).
-
-Missing credentials, or a missing SDK, are refused with a plain sentence in the
-worker's bubble rather than an opaque failure.
-
-Optional settings: `METTARA_BASE_URL` (staging or self-hosted),
-`METTARA_GROUP_ID` and `METTARA_GROUP_NAME` (the namespace the room's people are
-provisioned under).
-
-#### Letting a Mettara AI act in the office
-
-When the credentials are present the server also mounts a signed inbound
-endpoint at `/api/mettara/tools`, so a Mettara AI can reach back into the room:
-
-| Tool            | Arguments                 | What it does             |
-| --------------- | ------------------------- | ------------------------ |
-| `list_workers`  | `room?`                   | Returns the seat roster  |
-| `dispatch_task` | `seatId`, `task`, `room?` | Hands a task to a worker |
-
-Every request is verified before a handler sees it — body digest, ±5 minute
-clock skew, nonce replay, then the HMAC-SHA256 signature over
-`METHOD\npath\ntimestamp\nnonce\nbase64(SHA256(body))`. A forged request never
-consumes a nonce, so it cannot lock out the genuine one behind it. The endpoint
-is not mounted at all when there is no secret to verify against.
 
 ### One game to a building
 
@@ -329,7 +231,7 @@ a pad or a touch screen all work; Escape (or B) leaves.
 
 ### The project board on Sandbox ERP's third floor
 
-Sandbox ERP has a third floor above its people and its agents, reached by
+Sandbox ERP has a third floor above its two floors of desks, reached by
 the lift, with the team's Trello board on the wall. Walk up to it and press
 E: the board opens as columns of cards, with their labels, due dates,
 checklists, comments and who they are assigned to. It refreshes itself
@@ -435,7 +337,7 @@ the order they should hang.
 **"Today" is your desk's day.** It runs on the desk's own clock rather than
 the server's, so the boundary does not move when the app is deployed
 somewhere else: it takes `ZOHO_TIMEZONE` if you set one, else the timezone
-on your Zoho organisation, else the one most of your agents keep. The panel
+on your Zoho organisation, else the one most of its agents keep. The panel
 names which, and says so plainly if it had to fall back to the server.
 
 Zoho uses OAuth rather than a simple key, so it takes a few minutes to set
@@ -459,30 +361,6 @@ The refresh token is the valuable one, so it stays on the server: the
 browser asks this app, this app asks Zoho, and no credential reaches the
 page or a log.
 
-### The agents can read both boards
-
-The agents get the same two walls as tools, so a question like "what is in
-progress?" or "any urgent tickets?" is answered from the board rather than
-invented:
-
-| Tool            | Gives                                                     |
-| --------------- | --------------------------------------------------------- |
-| `board_summary` | The project board's columns and card counts               |
-| `board_cards`   | Cards, narrowed by column, label or a word in the title   |
-| `desk_summary`  | Open, overdue and how the queue sits across its statuses  |
-| `desk_tickets`  | Tickets, narrowed by status, priority, assignee or a word |
-
-They are **read-only**. There is no tool that moves a card, answers a
-ticket or changes anything, so an agent can talk about the work but cannot
-touch it. Having read, an agent replies in the room the way it replies to
-anything else, so people and agents discuss the same board.
-
-No credential reaches an agent's sandbox. The tool server holds none: it
-asks the office server over the loopback with the same shared secret the
-dispatch tool uses, and that server owns the keys and the cache — so a
-room of agents and a floor of people reading at once is still one request
-to Trello and one to Zoho.
-
 ### Playing together
 
 One server is one world. Everyone who opens the site walks into the same
@@ -492,8 +370,9 @@ there as characters, their words appear over their heads and in the chat
 window, and with voice chat on you hear everyone else on voice, wherever
 they are. Walking through
 a door or onto the ferry moves you to that place's room, and the people in
-both places see you go and arrive. The agents are shared too: a task one
-person assigns is seen by everyone in that room.
+both places see you go and arrive. What is in a room is shared too: a line
+one person draws on the whiteboard appears on everyone else's, and a meeting
+called at the boardroom table is a pill in everyone's bottom bar.
 
 The People tab in the side panel lists everyone on the server and where
 they are — by lobby, floor, campus, island or the world map — with the place
@@ -553,8 +432,8 @@ Plug in an Xbox controller (a PlayStation or Switch pad works the same; the
 prompts use the Xbox names) and the bottom bar shows it. The stick or d-pad
 walks, A talks to whoever you are standing by, the bumpers turn through the
 HUD's panels, View closes the open one, and B backs out of anything, the way
-Escape does. Any dialog — the welcome, the lift, the task terminal, the
-character studio — can be walked with the d-pad and pressed with A. Hold the
+Escape does. Any dialog — the welcome, the lift, the character studio — can
+be walked with the d-pad and pressed with A. Hold the
 left trigger to talk on voice chat: the microphone is live while the trigger
 is down and off the moment it is let go.
 
@@ -579,15 +458,6 @@ pressed by name, and a way to choose a different talk button, since some
 pads report a bumper at the trigger's index. Browsers hide a controller
 until the page has been clicked and a button pressed, so the pill arrives a
 moment after plugging one in.
-
-### Files with a task
-
-The paperclip beside the chat box attaches files to the next task, up to
-eight at a time and 25 MB each. They are uploaded as they are chosen and
-kept under `UPLOADS_DIR` (beside the room database by default, on the volume
-in the image). A Claude agent finds them copied into its workspace under
-`attachments/`, with a note at the end of the task saying so; Mettara gets
-them uploaded to the group and handed over with the message.
 
 ### Voice chat
 
@@ -619,16 +489,6 @@ inlines anything named `NEXT_PUBLIC_` into the browser bundle. Setting them
 on a server that is already up does nothing at all; a Docker build takes
 them as build arguments, and on Railway that means the service’s build
 variables rather than its runtime ones.
-
-### Switching the agents between Claude and Mettara
-
-The server boots on `AGENT_PROVIDER` — the Claude CLI unless told otherwise —
-and that stays the default. The HUD's connection panel offers a switch between
-that Claude implementation and Mettara: disconnect, pick the other, and it
-connects to it. The choice is kept in the room database, so a restart comes
-back on it. Mettara is refused, with the reason in the panel, until its keys
-are set and its SDK is installed. Conversations do not carry across: a seat
-starts a fresh thread on the AI it switched to.
 
 ### Signing in with Google or Microsoft
 
@@ -665,46 +525,3 @@ display name and picture, the profile chosen here, a visit count, and a
 `stats` map any feature can count into with `bumpAccountStat`. A signed-in
 person's desk and presence go under an id derived from their email, so they
 keep the same desk from every device.
-
-### Running agents with an API key (cloud mode)
-
-`AGENT_PROVIDER=claude-api` runs the same CLI against an Anthropic API key
-instead of a signed-in account. This is what the cloud deployment uses, where
-there is no logged-in user and a subscription cannot be shared.
-
-```bash
-echo 'ANTHROPIC_API_KEY=sk-...' >> .env.local   # gitignored; never commit it
-AGENT_PROVIDER=claude-api pnpm dev
-```
-
-The key is read from the server's environment and never appears on a command
-line, where it would be visible in process listings. If it is missing or
-malformed the run is refused with a plain sentence in the worker's bubble
-rather than a failed CLI exit.
-
-Runs in this mode use the CLI's `--bare` flag, which makes the API key the only
-credential: OAuth and the keychain are never read. Without it the CLI falls back
-to whatever account is signed in on the host, so an expired or mistyped key
-would still appear to work while quietly billing someone's subscription.
-
-A rejected key makes the CLI retry silently rather than exit, so every run is
-also bounded by `AGENT_RUN_TIMEOUT_MS` (default 180s). Past that the agent is
-stopped, the seat reports it plainly, and the concurrency slot is released.
-
-Three limits apply to every run, whether assigned directly or delegated:
-
-| Limit                  | Default | Env var                |
-| ---------------------- | ------- | ---------------------- |
-| Agents running at once | 4       | `AGENT_MAX_CONCURRENT` |
-| Spend per room         | $50     | `ROOM_SPEND_LIMIT_USD` |
-| Humans per room        | 4       | —                      |
-
-Spend is measured server-side from what each run reports and accumulated in
-the room's record. When a room reaches its ceiling, dispatch stops until the
-limit is raised — a hard stop, not a warning, because with a host-side key the
-bill belongs to whoever runs the server. You find out when a task comes back
-refused, in the worker's own words; the running total is not shown anywhere, so
-watch `ROOM_SPEND_LIMIT_USD` if the bill is yours.
-
-Each seat gets a sandbox at `.agent-workspaces/<room>/<seat>/`, so rooms cannot
-read each other's work.

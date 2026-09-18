@@ -118,10 +118,6 @@ const nextConfig: NextConfig = {
    * `scripts/prepare-package.mjs` sets this when it builds for a publish.
    */
   output: process.env.BUILD_STANDALONE === "1" ? "standalone" : undefined,
-  env: {
-    // Keep this default in sync with AGENT_PROVIDER in server.ts
-    NEXT_PUBLIC_AGENT_PROVIDER: process.env.AGENT_PROVIDER ?? "claude",
-  },
   async headers() {
     // The security headers go on everything; the cache rules are narrower
     // and come after, so the more specific source wins for those paths.

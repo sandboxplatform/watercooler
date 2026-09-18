@@ -16,9 +16,7 @@ const ROLE_PRESETS = [
 ];
 
 function seatStateLabel(seat: SeatState) {
-  if (!seat.assigned) return "vacant";
-  if (seat.status === "empty") return "idle";
-  return seat.status;
+  return seat.assigned ? "at desk" : "vacant";
 }
 
 export interface SeatDetailPanelProps {
@@ -27,7 +25,6 @@ export interface SeatDetailPanelProps {
   effectiveRoleTitle: string;
   effectiveSpriteKey: string;
   effectiveSpritePath: string;
-  busy: boolean;
   canSave: boolean;
   onNameChange: (value: string) => void;
   onRoleTitleChange: (value: string) => void;
@@ -43,7 +40,6 @@ export default function SeatDetailPanel({
   effectiveRoleTitle,
   effectiveSpriteKey,
   effectiveSpritePath,
-  busy,
   canSave,
   onNameChange,
   onRoleTitleChange,
@@ -111,16 +107,10 @@ export default function SeatDetailPanel({
                 className="pixel-input hud-panel__input"
                 value={effectiveName}
                 onChange={(event) => onNameChange(event.target.value)}
-                disabled={busy}
                 placeholder="Crew name"
                 style={{ minHeight: 0, flex: 1 }}
               />
-              <MicButton
-                onTranscript={(text) => onNameChange(text)}
-                disabled={busy}
-                size={28}
-                what="name"
-              />
+              <MicButton onTranscript={(text) => onNameChange(text)} size={28} what="name" />
             </div>
           </div>
           <div>
@@ -130,16 +120,10 @@ export default function SeatDetailPanel({
                 className="pixel-input hud-panel__input"
                 value={effectiveRoleTitle}
                 onChange={(event) => onRoleTitleChange(event.target.value)}
-                disabled={busy}
                 placeholder="Role title"
                 style={{ minHeight: 0, flex: 1 }}
               />
-              <MicButton
-                onTranscript={(text) => onRoleTitleChange(text)}
-                disabled={busy}
-                size={28}
-                what="role"
-              />
+              <MicButton onTranscript={(text) => onRoleTitleChange(text)} size={28} what="role" />
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {ROLE_PRESETS.map((preset) => (
@@ -148,7 +132,6 @@ export default function SeatDetailPanel({
                   type="button"
                   className="pixel-button"
                   style={{ fontSize: 7, padding: "4px 6px" }}
-                  disabled={busy}
                   onClick={() => onRoleTitleChange(preset)}
                 >
                   {preset}
@@ -159,24 +142,16 @@ export default function SeatDetailPanel({
         </div>
       </div>
 
-      <div className="seat-hint">
-        {busy
-          ? "This seat is currently active. Finish or stop the task before changing crew assignment."
-          : "Select a portrait, set name and role, then save. Workers execute tasks from the main agent."}
-      </div>
+      <div className="seat-hint">Select a portrait, set name and role, then save.</div>
 
-      <SpritePreview
-        selectedSpriteKey={effectiveSpriteKey}
-        busy={busy}
-        onSelectSprite={onSpriteSelect}
-      />
+      <SpritePreview selectedSpriteKey={effectiveSpriteKey} onSelectSprite={onSpriteSelect} />
 
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
         <button
           type="button"
           className="pixel-button"
           onClick={onUnassign}
-          disabled={!selectedSeat.assigned || busy}
+          disabled={!selectedSeat.assigned}
         >
           Unassign
         </button>

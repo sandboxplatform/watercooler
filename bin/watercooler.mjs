@@ -12,21 +12,19 @@ const args = process.argv.slice(2);
 
 if (args.includes("--help") || args.includes("-h")) {
   console.log(`
-  \x1b[36m\x1b[1mWaterCooler\x1b[0m  Pixel-style AI Agent collaboration community
+  \x1b[36m\x1b[1mWaterCooler\x1b[0m  A pixel office you walk around with other people
 
   Usage
     $ watercooler [options]
 
   Options
-    --port     <number>  Port to listen on   (default: 3000)
-    --provider <name>    Agent provider: auggie (default: auggie)
-    -v, --version        Show version
-    -h, --help           Show this help message
+    --port <number>  Port to listen on   (default: 3000)
+    -v, --version    Show version
+    -h, --help       Show this help message
 
   Examples
     $ watercooler
     $ watercooler --port 8080
-    $ watercooler --provider auggie
 `);
   process.exit(0);
 }
@@ -44,13 +42,8 @@ function getArg(flag) {
 }
 
 const port = getArg("--port");
-const provider = getArg("--provider");
 
 if (port) process.env.PORT = port;
-if (provider) {
-  process.env.AGENT_PROVIDER = provider;
-  process.env.NEXT_PUBLIC_AGENT_PROVIDER = provider;
-}
 process.env.NODE_ENV = "production";
 
 const serverPath = resolve(root, ".next", "standalone", "server.prod.mjs");

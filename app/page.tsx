@@ -5,8 +5,6 @@ import { useCallback, useState, useSyncExternalStore } from "react";
 import { StudioProvider } from "@/lib/store";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GameErrorBoundary } from "@/components/game/GameErrorBoundary";
-import TerminalModal from "@/components/panel/TerminalModal";
-import WorkerSessionHistoryModal from "@/components/panel/WorkerSessionHistoryModal";
 import GameHud from "@/components/hud/GameHud";
 import Sidebar, { type SidebarTab } from "@/components/hud/Sidebar";
 import { loadSidebarWidth } from "@/lib/persistence";
@@ -88,9 +86,6 @@ export default function Page() {
             onWidthChange={setWidth}
             onClose={closeSidebar}
           />
-
-          <TerminalModal />
-          <WorkerSessionHistoryModal />
         </main>
       </StudioProvider>
     </ErrorBoundary>

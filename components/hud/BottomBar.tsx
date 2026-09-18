@@ -1,26 +1,22 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Gamepad2, Mic, MicOff, Sparkles, Users } from "lucide-react";
+import { Gamepad2, Mic, MicOff, Users } from "lucide-react";
 import { gameEvents } from "@/lib/events";
 import { useOnline } from "@/lib/presence-online";
 import { useVoice } from "@/lib/hooks/useVoice";
 import { meetingFor, useMeetings } from "@/lib/meeting";
 import { voiceChat } from "@/lib/voice/voice-chat";
-import { STATUS_LABELS, formatModelLabel } from "@/lib/constants";
-import type { ConnectionStatus, SessionMetrics } from "@/types/game";
 import ControllerCheck from "./ControllerCheck";
 import { buttonLabel } from "@/lib/gamepad/buttons";
 import { subscribeTalkButton, talkButton } from "@/lib/gamepad/bindings";
 
 interface BottomBarProps {
-  connection: ConnectionStatus;
-  sessionMetrics: SessionMetrics;
   /** Show the People panel — the list this pill is counting. */
   onShowPeople: () => void;
 }
 
-export default function BottomBar({ connection, sessionMetrics, onShowPeople }: BottomBarProps) {
+export default function BottomBar({ onShowPeople }: BottomBarProps) {
   /**
    * Everybody logged into the world, not everybody in this room.
    *
@@ -104,25 +100,9 @@ export default function BottomBar({ connection, sessionMetrics, onShowPeople }: 
         }
         aria-label="Who is in the world"
       >
-        <span
-          className={`pixel-dot pixel-dot--${
-            connection === "connected" ? "green" : connection === "connecting" ? "yellow" : "red"
-          }`}
-        />
-        <span>
-          {STATUS_LABELS[connection]}
-          {connection === "connected" && online.length > 0 ? ` (${online.length})` : ""}
-        </span>
+        <span className={`pixel-dot pixel-dot--${online.length > 0 ? "green" : "gray"}`} />
+        <span>Online{online.length > 0 ? ` (${online.length})` : ""}</span>
       </button>
-      {/* Only once a run has reported one: an empty pill says nothing. */}
-      {sessionMetrics.model ? (
-        <div className="hud-pill hud-pill--model">
-          <Sparkles size={10} />
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-            {formatModelLabel(sessionMetrics.model)}
-          </span>
-        </div>
-      ) : null}
       <button
         type="button"
         className={`hud-pill hud-pill--metric hud-pill--button hud-mic${

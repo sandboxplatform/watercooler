@@ -2386,3 +2386,32 @@
 .hud-pill--meeting {
   color: var(--pixel-accent);
 }
+
+/* ── The way out ───────────────────────────────────────
+ *
+ * One press arms it, the second leaves. Armed it is a word rather than an
+ * icon, because "Sure?" is the only thing on this bar that is asking a
+ * question and an icon cannot ask one.
+ */
+.topbar-lock {
+  color: var(--pixel-muted);
+}
+
+.topbar-lock:hover {
+  color: var(--pixel-text);
+}
+
+.topbar-lock--armed,
+.topbar-lock--armed:hover {
+  width: auto;
+  padding: 0 8px;
+  color: var(--pixel-bg);
+  background: var(--pixel-accent);
+  border-color: var(--pixel-accent);
+}
+
+.topbar-lock__confirm {
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}

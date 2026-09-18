@@ -31,7 +31,8 @@ export async function GET() {
   const { version, commit, sha, branch, source } = buildInfo();
   const build = { version, commit, sha, branch, source, startedAt: STARTED_AT };
   try {
-    getRoomStore().getSpend("health-probe");
+    // Touch the store so a database that will not open is a failed probe.
+    getRoomStore().ensureRoom("health-probe");
     return NextResponse.json({ ok: true, at: new Date().toISOString(), ...build });
   } catch (err) {
     return NextResponse.json(

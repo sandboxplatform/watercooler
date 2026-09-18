@@ -16,12 +16,11 @@ export class WorkerManager {
   private pathfinder: Pathfinder;
 
   workers: Worker[] = [];
-  runWorkerMap = new Map<string, Worker>();
   seatDefs: SeatDef[] = [];
   /** Sheets being fetched, so a seat is not requested twice while it loads. */
   private pending = new Set<string>();
   /** The last sync, replayed once a sheet arrives. */
-  private lastSync: { seats: SeatState[]; clearNearest: (worker: Worker) => void } | null = null;
+  private lastSync: SeatState[] | null = null;
 
   constructor(scene: Phaser.Scene, seatDefs: SeatDef[], pois: POI[], pathfinder: Pathfinder) {
     this.scene = scene;
@@ -48,8 +47,7 @@ export class WorkerManager {
           this.pending.delete(key);
           if (!ok) log.error(`sheet ${key} failed to load for seat ${seat.seatId}`);
           else log.info(`sheet ${key} ready; placing seat ${seat.seatId}`);
-          if (ok && this.lastSync)
-            this.syncWorkers(this.lastSync.seats, this.lastSync.clearNearest);
+          if (ok && this.lastSync) this.syncWorkers(this.lastSync);
         });
       }
       return null;
@@ -70,8 +68,8 @@ export class WorkerManager {
     return worker;
   }
 
-  syncWorkers(seats: SeatState[], clearNearest: (worker: Worker) => void) {
-    this.lastSync = { seats, clearNearest };
+  syncWorkers(seats: SeatState[]) {
+    this.lastSync = seats;
     const nextBySeatId = new Map(
       seats.filter((seat) => seat.assigned && seat.spriteKey).map((seat) => [seat.seatId, seat]),
     );
@@ -84,8 +82,6 @@ export class WorkerManager {
 
       if (!seat) {
         if (existing) {
-          this.cleanupWorkerRunIds(existing);
-          clearNearest(existing);
           existing.destroy();
           existingBySeatId.delete(seatDef.seatId);
         }
@@ -97,8 +93,6 @@ export class WorkerManager {
 
       if (needsRecreate) {
         if (existing) {
-          this.cleanupWorkerRunIds(existing);
-          clearNearest(existing);
           existing.destroy();
           existingBySeatId.delete(seatDef.seatId);
         }
@@ -112,41 +106,15 @@ export class WorkerManager {
     }
 
     for (const stale of existingBySeatId.values()) {
-      this.cleanupWorkerRunIds(stale);
-      clearNearest(stale);
       stale.destroy();
     }
 
     this.workers = nextWorkers;
   }
 
-  cleanupWorkerRunIds(worker: Worker) {
-    if (worker.assignedRunId) this.runWorkerMap.delete(worker.assignedRunId);
-    for (const task of worker.taskQueue) {
-      this.runWorkerMap.delete(task.runId);
-    }
-  }
-
   findBySeatId(seatId?: string): Worker | null {
     if (!seatId) return null;
     return this.workers.find((worker) => worker.seatId === seatId) ?? null;
-  }
-
-  /**
-   * Find the worker that owns a run. runWorkerMap is cleared the moment a task
-   * completes, but a final reply can arrive just after, so fall back to the
-   * worker still holding the run while it shows its result.
-   */
-  findByRunId(runId: string): Worker | null {
-    return (
-      this.runWorkerMap.get(runId) ??
-      this.workers.find((worker) => worker.assignedRunId === runId) ??
-      null
-    );
-  }
-
-  findIdle(): Worker | null {
-    return this.workers.find((worker) => worker.status === "idle") ?? null;
   }
 
   updateAll() {
@@ -156,6 +124,5 @@ export class WorkerManager {
   destroyAll() {
     for (const worker of this.workers) worker.destroy();
     this.workers = [];
-    this.runWorkerMap.clear();
   }
 }

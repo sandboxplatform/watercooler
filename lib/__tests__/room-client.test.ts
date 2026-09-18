@@ -31,7 +31,7 @@ function lastWriteBody() {
 
 describe("saveRoomPatch", () => {
   it("waits for the debounce before writing", () => {
-    saveRoomPatch({ tasks: [] });
+    saveRoomPatch({ messages: [] });
     expect(fetchMock).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
@@ -49,23 +49,17 @@ describe("saveRoomPatch", () => {
   });
 
   it("merges different slices queued together", () => {
-    saveRoomPatch({ tasks: [{ taskId: "t1" }] as never });
+    saveRoomPatch({ messages: [{ id: "m1" }] as never });
     saveRoomPatch({ seats: [{ seatId: "seat-0" }] as never });
     vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
 
     const body = lastWriteBody();
-    expect(body.tasks).toEqual([{ taskId: "t1" }]);
+    expect(body.messages).toEqual([{ id: "m1" }]);
     expect(body.seats).toEqual([{ seatId: "seat-0" }]);
   });
 
-  it("sends a cleared active session key rather than dropping it", () => {
-    saveRoomPatch({ activeSessionKey: null });
-    vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
-    expect(lastWriteBody()).toEqual({ activeSessionKey: null });
-  });
-
   it("starts a fresh batch after a write goes out", () => {
-    saveRoomPatch({ tasks: [{ taskId: "t1" }] as never });
+    saveRoomPatch({ messages: [{ id: "m1" }] as never });
     vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
     saveRoomPatch({ seats: [{ seatId: "seat-1" }] as never });
     vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
@@ -76,7 +70,7 @@ describe("saveRoomPatch", () => {
 
   it("survives a failing request without throwing", async () => {
     fetchMock.mockRejectedValueOnce(new Error("offline"));
-    saveRoomPatch({ tasks: [] });
+    saveRoomPatch({ messages: [] });
     vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
     await expect(flushRoomWrites()).resolves.toBeUndefined();
   });
@@ -84,7 +78,7 @@ describe("saveRoomPatch", () => {
 
 describe("flushRoomWrites", () => {
   it("writes immediately instead of waiting out the debounce", async () => {
-    saveRoomPatch({ tasks: [{ taskId: "t1" }] as never });
+    saveRoomPatch({ messages: [{ id: "m1" }] as never });
     await flushRoomWrites();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -96,44 +90,31 @@ describe("flushRoomWrites", () => {
 });
 
 describe("fetchRoomSnapshot", () => {
-  it("anchors rows with no session key to the active session", async () => {
+  it("reads the room the server hands back", async () => {
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        tasks: [{ taskId: "t1" }],
-        messages: [{ id: "m1" }],
-        sessions: [],
-        seats: [],
-        activeSessionKey: "agent:carol:main",
-      }),
+      jsonResponse({ messages: [{ id: "m1" }], seats: [{ seatId: "seat-0" }] }),
     );
 
-    const snapshot = await fetchRoomSnapshot("main");
-    expect(snapshot.tasks[0].sessionKey).toBe("agent:carol:main");
-    expect(snapshot.messages[0].sessionKey).toBe("agent:carol:main");
+    const snapshot = await fetchRoomSnapshot();
+    expect(snapshot.messages).toEqual([{ id: "m1" }]);
+    expect(snapshot.seats).toEqual([{ seatId: "seat-0" }]);
   });
 
-  it("falls back to the main session when the room has no active one", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ tasks: [{ taskId: "t1" }] }));
+  it("fills in the slices the server left out", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ messages: [{ id: "m1" }] }));
 
-    const snapshot = await fetchRoomSnapshot("main");
-    expect(snapshot.tasks[0].sessionKey).toBe("main");
-    expect(snapshot.activeSessionKey).toBeNull();
+    const snapshot = await fetchRoomSnapshot();
+    expect(snapshot.seats).toEqual([]);
   });
 
   it("opens an empty room rather than throwing when the server is unreachable", async () => {
     fetchMock.mockRejectedValueOnce(new Error("offline"));
-    await expect(fetchRoomSnapshot("main")).resolves.toEqual({
-      tasks: [],
-      messages: [],
-      sessions: [],
-      seats: [],
-      activeSessionKey: null,
-    });
+    await expect(fetchRoomSnapshot()).resolves.toEqual({ messages: [], seats: [] });
   });
 
   it("opens an empty room on a server error response", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: "boom" }, false, 500));
-    const snapshot = await fetchRoomSnapshot("main");
-    expect(snapshot.tasks).toEqual([]);
+    const snapshot = await fetchRoomSnapshot();
+    expect(snapshot.messages).toEqual([]);
   });
 });

@@ -1,9 +1,18 @@
 # WaterCooler
 
-A pixel RPG where AI agents live and work. You walk around an office as the boss,
-walk up to a worker, and assign a task face to face; the agent runs for real and
-you watch it happen in the room rather than in a log. Published to npm as
+A pixel office you walk around with other people. Workers sit at their desks,
+residents wander the buildings, and everyone who opens the site is in the same
+world — you see each other move, you hear each other on Global Chat, and you
+talk in the room rather than in a window beside it. Published to npm as
 `@geezerrrr/watercooler` and runnable with `npx @geezerrrr/watercooler`.
+
+**There is no agent dispatch.** It was taken out root and branch — the task
+system, the gateway, the CLI and hosted providers, the MCP and Mettara tools,
+the spend ceiling and the seat sandboxes. What was the boss and their workers
+is now a room with people in it. A seat is still a seat: it has a name, a role
+and a look, and somebody sits in it — it simply has nothing to be given.
+Anything below that still says "agents" means the residents, who are characters
+rather than anything that runs.
 
 The office is one building in a larger world: a world map with campuses, buildings
 with lobbies and floors, an arcade, a ferry to an island. One server is one world —
@@ -55,8 +64,8 @@ minute. Two things it will not catch, so run them by hand:
 six seconds and twelve of the 1,070 tests (see `vitest.config.ts`). They still
 run in CI and under `test:all`, which is what a push should use.
 
-`pnpm dev:next` exists but skips the WebSocket layer — presence, agent dispatch and
-voice all break under it. Only reach for it to isolate a pure-Next rendering issue.
+`pnpm dev:next` exists but skips the WebSocket layer — presence and voice both
+break under it. Only reach for it to isolate a pure-Next rendering issue.
 
 ## Architecture
 
@@ -66,204 +75,28 @@ is load-bearing: Next alone cannot hold the WebSocket upgrades this app needs.
 ```
 server.ts
 ├── attachPresenceSocket()   people, positions, speech, voice signalling
-├── attachCliBridge()        agent runs, over ws://…/api/gateway
-├── /api/internal/dispatch   localhost + shared-secret, for the MCP dispatch tool
-├── /api/mettara/tools       HMAC-signed inbound, mounted only when keys exist
 └── ensureErpData()          idempotent first-boot seed of the ERP database
 ```
 
-Two sockets on purpose: presence is lossy and constant, agent traffic is rare and
-must never be dropped. Don't merge them.
+There used to be a second socket beside it for agent runs, and the two were
+kept apart on purpose — presence is lossy and constant, agent traffic was rare
+and had to arrive. Only presence is left, and it is still the reason the
+custom server exists: Next alone cannot hold the upgrade, and Next middleware
+never sees one, which is why the access gate lives in `server.ts` too.
 
 ### The three layers
 
-| Layer      | Lives in                    | Rule                                                      |
-| ---------- | --------------------------- | --------------------------------------------------------- |
-| Game       | `components/game/`          | Phaser. No React imports, no JSX.                         |
-| HUD        | `components/hud/`, `panel/` | React + pixel CSS. Never touches Phaser objects directly. |
-| Server/lib | `lib/`, `lib/server/`       | Shared logic and state. `lib/server/` is server-only.     |
+| Layer      | Lives in              | Rule                                                      |
+| ---------- | --------------------- | --------------------------------------------------------- |
+| Game       | `components/game/`    | Phaser. No React imports, no JSX.                         |
+| HUD        | `components/hud/`     | React + pixel CSS. Never touches Phaser objects directly. |
+| Server/lib | `lib/`, `lib/server/` | Shared logic and state. `lib/server/` is server-only.     |
 
 Game and HUD talk **only** through the typed event bus in `lib/events.ts`
 (`gameEvents.on/emit`, with every event declared in `GameEventMap`). Adding a new
 interaction means adding an event there first. State lives in
 `lib/store.ts` + `lib/reducer.ts` (React context + reducer), not in component state
 and not on `window`.
-
-### Agent providers
-
-`AGENT_PROVIDER` picks who actually runs an agent:
-
-| Value        | What runs the agent                                   |
-| ------------ | ----------------------------------------------------- |
-| `claude`     | Local `claude` CLI, on the host's Claude subscription |
-| `claude-api` | The same CLI against an Anthropic API key             |
-| `auggie`     | Local `auggie` CLI                                    |
-| `mettara`    | Mettara Connect's hosted AI, over its SDK             |
-
-Every provider emulates the gateway protocol in-process, so the app connects to
-itself on startup and needs no gateway URL or token. Provider definitions are
-in `lib/cli-providers.ts`; the run loop is `lib/cli-bridge.ts`.
-
-**A run starts in exactly one place.** `runAgent` in `lib/cli-bridge.ts`
-owns the whole lifecycle — the service provider that answers in place or the
-CLI that is spawned, the time limit, stdout and stderr, the exit, and the
-count of what is running — and hands back one settled outcome. It reports
-nothing to a room, because that is the only real difference between the two
-ways work begins:
-
-| Path                  | Reports by                      | Also                                             |
-| --------------------- | ------------------------------- | ------------------------------------------------ |
-| Assigned face to face | `sendEvent` to the one client   | Passes `onSpawn`, so the HUD can stop it         |
-| Delegated by an agent | `broadcastEvent` to all of them | Resolves with the text, for the agent that asked |
-
-It was written twice, about ninety lines each, and keeping two copies in
-step is what the run count made expensive: `atCapacity` reads it, so a copy
-that leaked a place would quietly close the room. Both copies also gave the
-place back in two handlers, and a child that fails to spawn emits `error`
-and then `close` — with three other agents working, one bad spawn took the
-count from four to two and let a fifth past a ceiling of four. `Math.max`
-had been hiding it whenever the failing run was the only one.
-
-`lib/__tests__/cli-bridge.test.ts` pins the delegated path, which reaches
-the same lifecycle through a plain function call: the ceiling, the budget,
-the spend recorded, the session resumed, and a place given back however a
-run ends. The direct path answers a WebSocket client and is not covered.
-
-`AGENT_PROVIDER=mettara` only says Mettara is _wanted_ — the server still boots on
-the Claude implementation, and the HUD's connection panel is what actually switches.
-That choice is remembered in the room database (`lib/server/provider-choice.ts`), so
-a restart comes back on it. Mettara is refused, with the reason shown in the panel,
-until its keys are set and its SDK is installed. Conversations do not carry across a
-switch — a seat starts a fresh thread on whatever it switched to.
-
-**Two halves to "can it run".** `preflight` on a provider answers from the
-environment and cannot await; `ready` is the same question asked over the
-network, and only a hosted provider has one. Mettara's asks the group for its
-AIs, because the keys being right says nothing about there being anything to
-talk to: an empty group, or a `METTARA_AI_NAME` that names no AI it has, is a
-run that dies inside `createConversation` with nothing readable to show a
-person. Both are refused instead, in the panel and in the worker's bubble,
-naming the group and listing the AIs it does have. An **unanswerable** check
-is not a refusal — Mettara being unreachable says nothing about its AIs, and
-the run is about to reach the same host, so it is let through to fail with the
-real error. Only the "yes" is cached: provisioning an assistant happens while
-this server runs and must not need a restart to be noticed.
-
-`ready` is asked **before** `providerBlocked` in `lib/cli-bridge.ts`, never
-inside it. `runAgent` takes its place in the run count as it starts, so the
-ceiling only holds while the check and the claim sit in one synchronous
-stretch — an await between them lets a burst of five dispatches all read the
-same free count and every one of them through. Making `providerBlocked` async
-is how that was found; `cli-bridge.test.ts` now pins it with a readiness
-question that actually takes a moment.
-
-**Seat sandboxes.** Each seat runs in `.agent-workspaces/<room>/<seat>/`
-(gitignored, root overridable with `AGENT_WORKSPACE_ROOT`), created on demand, with
-`--permission-mode acceptEdits` — so an agent reads, writes and edits inside its own
-space and nothing outside it. Rooms cannot read each other's work. Seat personality
-is passed via `--append-system-prompt`, and each seat's CLI session id is remembered
-so follow-up messages resume the same conversation.
-
-`--print` runs are non-interactive: a tool that is neither auto-approved by the
-permission mode nor named in `CLAUDE_ALLOWED_TOOLS` is **denied rather than prompted
-for**. Worker dispatch is the exception — the MCP dispatch tool is allowed
-automatically whenever more than one seat is staffed.
-
-**`claude-api` specifics.** The key is read from the server environment and never
-appears on a command line, where process listings would expose it. Runs use the
-CLI's `--bare` flag, which makes the API key the only credential: without it the CLI
-falls back to whatever account is signed in on the host, so an expired or mistyped
-key would appear to work while quietly billing someone's subscription. A rejected key
-makes the CLI retry silently rather than exit, which is why every run is also bounded
-by a timeout. Missing or malformed keys are refused with a plain sentence in the
-worker's bubble, not an opaque failure.
-
-**Limits**, applied to every run whether assigned directly or delegated:
-
-| Limit                  | Default | Env var                |
-| ---------------------- | ------- | ---------------------- |
-| Agents running at once | 4       | `AGENT_MAX_CONCURRENT` |
-| Run duration           | 180s    | `AGENT_RUN_TIMEOUT_MS` |
-| Spend per room         | $50     | `ROOM_SPEND_LIMIT_USD` |
-| Humans per room        | 4       | —                      |
-
-**The duration limit binds a hosted turn too, and it can only abandon it.**
-A CLI that overstays is killed and the `close` that follows hands its place
-back; a service has no process to kill and the SDK takes no abort signal, so
-the request may run on to its own end and what stops is the room waiting on
-it. That is the half the ceiling is about: the service branch had no guard at
-all, so a request that never answered held its place for ever and four of
-them shut the room to work with nothing on screen to say why — and a streamed
-turn is exactly the shape of call that goes quiet halfway through. Because the
-run is abandoned rather than cancelled, its answer can still arrive
-afterwards, so the place is given back **once** — the same rule, and the same
-reason, as the spawn path's `released`.
-
-Spend is measured server-side from what each run reports and accumulated in the
-room's record. Hitting the ceiling is a hard stop on dispatch, not a warning — with
-a host-side key the bill belongs to whoever runs the server — and the refusal comes
-back as a plain sentence in the worker's bubble, which is the only place a person
-sees it. Nothing shows the running total: the HUD's pill was taken out, and
-`budget-updated` is still emitted from the room snapshot for whatever surfaces it
-next.
-
-### Mettara
-
-The SDK is not on npm. It goes in `vendor/mettara-lib/` as `mettara-lib.cjs` — the
-`.cjs` name matters — and is linked from `package.json`; run `pnpm install` once
-after adding it. The Docker image copies that folder, so a deploy carries it.
-
-Needs `METTARA_API_SECRET`, `METTARA_PLATFORM_ID` and `METTARA_EMAIL_DOMAIN`.
-Optional: `METTARA_BASE_URL` (staging or self-hosted), `METTARA_GROUP_ID` /
-`METTARA_GROUP_NAME` (the namespace the room's people are provisioned under),
-`METTARA_AI_NAME` (default assistant; the HUD's model field selects one by Mettara
-technical name).
-
-Each seat is provisioned as its own Mettara user, so workers hold separate threads.
-The first turn opens a conversation carrying the seat's personality and the company
-briefing; later turns resume it by id, exactly as the Claude providers resume a CLI
-session.
-
-**A seat needs an address, and it has to be a real one.** Mettara provisions
-each seat as a user and will not do it on a domain it cannot deliver to —
-`METTARA_EMAIL_DOMAIN` is the one you own, and a seat is
-`<seat-slug>@<that domain>`. The address was `@watercooler.local`, hard-coded,
-which meant **no seat could ever be provisioned on any deployment**: the
-service refuses it with `400 Invalid request`, the same answer it gives a bad
-signature, so it read as a broken credential rather than as a setting. Both
-that and the reserved domains (`example.com` and friends) are refused by
-`mettaraPreflight` instead, by name.
-
-**A turn is taken streamed, and only the `content` frames are the answer.**
-The plain `sendMessage` call cannot be used: its `content` is every frame the
-assistant emitted run together — the status text included — with the answer
-repeated at the end, so asking for "PONG" comes back as
-`"Analyzingis thinking...PONGPONG"`. Streamed, the frames arrive typed
-(`content`, `activity`, `reasoning`) and the other two are the assistant
-narrating itself, which is not what belongs in a worker's bubble. An SDK
-without `streamMessage` is refused at load as too old, rather than falling
-back to the plain call and letting the narration through.
-
-**Inbound tools.** When the credentials are present, `server.ts` mounts a signed
-endpoint at `/api/mettara/tools` (`lib/mettara/webhook.ts`) so a Mettara AI can reach
-back into the room:
-
-| Tool            | Arguments                 | Does                     |
-| --------------- | ------------------------- | ------------------------ |
-| `list_workers`  | `room?`                   | Returns the seat roster  |
-| `dispatch_task` | `seatId`, `task`, `room?` | Hands a task to a worker |
-
-Every request is verified before a handler sees it, in this order: body digest, ±5
-minute clock skew, the HMAC-SHA256 signature over
-`METHOD\npath\ntimestamp\nnonce\nbase64(SHA256(body))`, and **nonce replay last**.
-That last part is the order, not an afterthought: a forged request is turned away
-before the replay check, so it never consumes a nonce and cannot lock out the
-genuine one behind it. The endpoint is
-**not mounted at all** when there is no secret to verify against — don't add a
-fallback that mounts it unauthenticated.
-
-There is also `/api/internal/dispatch` for the MCP dispatch tool: localhost-only by
-remote address, plus an `x-dispatch-secret` header.
 
 ### The door
 
@@ -289,10 +122,19 @@ Two decisions in it:
 
 - **It answers a GET as well as a POST.** `SameSite=Lax` carries the cookie on
   a cross-site navigation, so a link on another page can sign somebody out —
-  against which: this is the only way out, signing back in is one link away,
-  the address bar is how anybody reaches it while nothing in the HUD offers
-  it, and a way out that needs a button somebody has to build first is no way
-  out at all.
+  against which: signing back in is one link away, and a way out that needs a
+  button somebody has to build first is no way out at all. The button now
+  exists (`components/hud/LockButton.tsx`, top right, beside the account) and
+  navigates to exactly this route rather than reimplementing it; the address
+  bar still works, which is what somebody locked out of the HUD has left.
+
+  It **asks twice** — one press arms it, the second leaves, and it disarms
+  itself after four seconds. Signing out of an account is one thing; this is
+  the whole world, and the code to get back in may have arrived in somebody
+  else's link rather than being in this person's head. It clears the browser
+  profile on the way out for the reason `AccountButton` does: this is the
+  button somebody presses on a machine they are handing back.
+
 - **It is on `isOpenPath`**, so it answers a cookie the gate would turn away —
   rotated, expired, or naming an identity this build no longer knows. Being
   locked out is the state you most want to be able to clear.
@@ -310,23 +152,21 @@ being worth it, the feature is one function (`handleCodeInLink` in `server.ts`).
 
 The gate lives in `server.ts`, not in Next middleware, because **middleware never
 sees a WebSocket upgrade**: both sockets attach to the Node server directly, so a
-middleware-only gate would leave presence and agent dispatch wide open. Every
-surface is covered in one place — pages, API routes, and both upgrades
-(`lib/cli-bridge.ts`, `lib/server/presence-socket.ts` each call `isAuthorized`).
+middleware-only gate would leave presence wide open. Every surface is covered
+in one place — pages, API routes, and the upgrade
+(`lib/server/presence-socket.ts` calls `isAuthorized`).
 `checkOrigin` beside it is **not** authentication: it only constrains browsers, and
 any other client can send whatever `Origin` it likes.
 
 Left open by design: `/unlock`, `/api/unlock` and `/api/lock`, `/api/health` (the host's
 liveness probe), `/api/auth/` (so sign-in can work), `/_next/` (without which the
-unlock page cannot render). `/api/mettara/tools` and `/api/internal/dispatch` are
-answered _before_ the gate — they are machine-to-machine and carry stronger
-authentication of their own.
+unlock page cannot render).
 
 **Without a code, production serves nothing and says so.** A deployment must not
 come up open, so with no `ACCESS_CODE` the server answers the health check and
 refuses every other request — sockets included — with a 503 naming what is
-missing. Nothing else is even built: no Next, no presence socket, no agent
-bridge, because `isAuthorized()` waves everything through when no code is
+missing. Nothing else is even built: no Next and no presence socket, because
+`isAuthorized()` waves everything through when no code is
 configured and a running server with the sockets attached would have been open to
 anyone. It used to `process.exit(1)` instead, which was equally closed and far
 worse to run: the host had nothing to route to, so the deployment showed a bare
@@ -802,14 +642,6 @@ whatever. The image takes them as build arguments (`Dockerfile`), which on
 Railway means adding them to the service's build variables; without that the
 deployed app has STUN and nothing else.
 
-### Task attachments
-
-Up to eight files per task, 25 MB each, uploaded as they are chosen and kept under
-`UPLOADS_DIR` (beside the room database by default, on the volume in the image). A
-Claude agent finds them copied into its workspace under `attachments/`, with a note
-appended to the task saying so; Mettara gets them uploaded to the group and handed
-over with the message. See `lib/attachments.ts` and `lib/server/uploads.ts`.
-
 ### Rooms and places
 
 A room is named by its slug and **the slug is in the URL, so the link is the
@@ -825,9 +657,10 @@ and server, so keep it import-free.
 /campus/<slug>          a campus (likewise)
 ```
 
-Slugs become directory names for agent sandboxes, which is why
-`normaliseRoomSlug` excludes separators and traversal outright rather than
-trusting callers.
+A slug reaches the filesystem nowhere any more, but `normaliseRoomSlug` still
+excludes separators and traversal outright rather than trusting callers: it is
+the one place that parses them, and a slug that cannot be a path is a slug
+nobody has to think about again.
 
 **Changing room is a page load, except in a lift.** A room is a URL, so
 moving between them was `location.assign` and the whole client came up
@@ -859,7 +692,7 @@ one floor while the game drew another.
 ### Floors
 
 A building with floors has a lobby, Floor 1 for its people's desks and
-Floor 2 for its agents'. Some have a third, **Floor 3 · Operations**, and
+Floor 2 for its workers'. Some have a third, **Floor 3 · Operations**, and
 what makes one is naming the boards that hang on its wall:
 
 ```ts
@@ -1447,21 +1280,27 @@ leaves the room, and the whiteboard swallows every key rather than only
 that one. The arcade was the third until a cabinet became one game — with
 no menu behind it there is nothing to back out to, so Escape leaves.
 
-The boss's terminal looks like a fixture and is not one. It is only there
-when the room has seats, it defers to a worker standing nearby, and its
-prompt hangs off the corner of the seat rather than over a thing, so it
-stays in the scene rather than adding three optional fields used by one
-entry.
+The boss's terminal was the one thing in a room that looked like a fixture
+and was not — it hung off the corner of a seat rather than over anything,
+and it existed to give work out. It is gone with the work, and so is the
+menu that opened when you walked up to a worker: a worker has nothing to be
+asked for, and a prompt that opens an empty menu is worse than no prompt.
 
 ### Storage
 
 Two SQLite databases (`node:sqlite`), deliberately separate:
 
-- **Room store** (`lib/server/room-store.ts`) — app state: seats, sessions, accounts,
-  presence, scores, achievements, activity, provider choice, spend.
+- **Room store** (`lib/server/room-store.ts`) — app state: seats, chat, accounts,
+  presence, scores, achievements.
 - **ERP** (`lib/erp/`, `ERP_DB_PATH`, default `.data/erp.sqlite`) — the fictional
-  company's data, seeded idempotently on first boot. Agents can write to it, so it
-  can be wiped and regenerated without touching anyone's room.
+  company's data, seeded idempotently on first boot. It can be wiped and
+  regenerated without touching anyone's room.
+
+Migrations 2 and 3 are what took the agents out of a database that already
+held them: `activity`, then `tasks` and `sessions`, dropped with their
+indexes. `rooms` keeps `active_session_key` and `spend_usd` rather than being
+rebuilt — SQLite drops a column by copying the table, and an unused column
+costs a room nothing.
 
 **The room store's shape is versioned.** `MIGRATIONS` in
 `lib/server/room-store.ts` is every change to it in order, the index being
@@ -1511,23 +1350,21 @@ file is the last moment before a test file's own imports are evaluated.
 ## Layout
 
 ```
-app/                    App Router pages + API routes (room, characters, people, agents, auth)
+app/                    App Router pages + API routes (room, characters, people, auth)
 components/
   game/
     PhaserGame.tsx      dynamic import, ssr:false; creates the Game in useEffect, destroys on return
     scenes/             OfficeScene, EntryScene, and OutdoorScene → WorldScene, CampusScene
-    entities/           Player, RemotePlayer, Worker (split under worker/), ChatBubble, InteractionMenu
-    systems/            camera, doors, gamepad, interaction, pathfinding bridge, presence, fixtures
+    entities/           Player, RemotePlayer, Worker (split under worker/), ChatBubble
+    systems/            camera, doors, gamepad, pathfinding bridge, presence, fixtures
     config/             animations, emotes — frame counts and timings live here, not inline
   hud/                  every React panel, plus hud.css (the pixel HUD)
-  panel/                terminal and session-history modals
 lib/
   events.ts store.ts reducer.ts    the state + event spine
   camera.ts legible.ts            how far out the camera stands, and how big lettering is drawn
   fixtures.ts                      what you walk up to and press E at, read by both layers
   room-travel.ts                   moving between rooms without a page load
-  cli-bridge.ts cli-providers.ts   agent execution
-  server/                          server-only: room store, presence hub/socket, residents, uploads
+  server/                          server-only: room store, presence hub/socket, residents, access
   server/room-broadcast.ts         the way anything server-side speaks into a room
   map/ world/                      map generation and world layout
   arcade/ pinball/ pong/           the games (Oak Island, Flappy, Snake, Breakout, Solitaire)
@@ -1535,7 +1372,6 @@ lib/
   voice/                           WebRTC voice, one conversation server-wide
   trello/ zoho/                    the two boards on an Operations floor, read-only
                                    (each with the counts drawn beside it: flow.ts, pulse.ts)
-  mettara/ mcp/                    Mettara client + signed webhook; MCP servers
 public/maps|tilesets|sprites|characters|audio|ui
 scripts/                build-map, seed-erp, sprite and world-art generators
 types/game.ts           shared game types
@@ -1619,7 +1455,7 @@ rather than its whole shape.
 
 ### Residents and wandering
 
-Residents (`lib/world/residents.ts`) are the agents who live in the buildings;
+Residents (`lib/world/residents.ts`) are the characters who live in the buildings;
 `ResidentSimulation` walks them through their **haunts** — desk, their
 organisation's rooms, its campus yard, outside — staying `DWELL_MS` at each.
 
@@ -1965,10 +1801,10 @@ component that does nothing but call the hook, and `act` from React itself —
 and a file that wants it says so with `// @vitest-environment jsdom` on its
 first line. Per file, so nothing else pays for it.
 
-`useTaskRouter` is the one covered so far, and the piece worth having is the
-queue: one task runs per session at a time, the rest wait, and the line only
-moves because `task-completed`, `task-failed` and `task-aborted` all drain
-it. Nothing else in the app knows a second task has to be held.
+`useTaskRouter` was the one thing covered by it, and it went with the tasks.
+The harness stays: it is fifteen lines, it is the only way to test a hook at
+all, and the next hook worth pinning down should not have to rediscover that
+React will not hand one its dispatcher outside a renderer.
 
 ## Conventions
 
@@ -2048,33 +1884,26 @@ it. Nothing else in the app knows a second task has to be held.
 
 From `CONTRIBUTING.md`, and worth holding to when adding anything:
 
-- Tasks should feel **spatial**, not abstract. In-world interaction over hidden menus.
-- Worker behaviour should be **readable at a glance**.
+- Everything should feel **spatial**, not abstract. In-world interaction over hidden menus.
+- What people and workers are doing should be **readable at a glance**.
 - New scenes should expand the world, not add settings pages.
 - New UI matches the pixel HUD style.
 
 ## Environment variables
 
-| Variable                                                                                          | Default                                 | Purpose                                                                  |
-| ------------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------ |
-| `ACCESS_CODE`                                                                                     | —                                       | Shared visitors' code; production refuses to boot with no code at all    |
-| `ACCESS_CODE_COOP` / `_ROB` / `_HUNTER` / `_NATHAN` / `_SARA` / `_ANDREW` / `_CAMPBELL` / `_NICK` | —                                       | One code each; brings its holder in as themselves                        |
-| `AGENT_PROVIDER`                                                                                  | `claude`                                | Which provider runs agents                                               |
-| `PORT` / `HOSTNAME`                                                                               | `3000` / `localhost`                    | Server bind; also builds auth callback URLs                              |
-| `ANTHROPIC_API_KEY`                                                                               | —                                       | Required by `claude-api`                                                 |
-| `CLAUDE_BIN` / `CLAUDE_PERMISSION_MODE` / `CLAUDE_ALLOWED_TOOLS`                                  | — / `acceptEdits` / —                   | Claude CLI tuning                                                        |
-| `AGENT_TOWN_MODEL`                                                                                | CLI default                             | `opus` \| `sonnet` \| `haiku`                                            |
-| `AGENT_MAX_CONCURRENT` / `AGENT_RUN_TIMEOUT_MS` / `ROOM_SPEND_LIMIT_USD`                          | 4 / 180000 / 50                         | Run limits                                                               |
-| `AGENT_WORKSPACE_ROOT`                                                                            | `.agent-workspaces`                     | Where seat sandboxes go                                                  |
-| `ERP_DB_PATH` / `UPLOADS_DIR`                                                                     | `.data/erp.sqlite` / beside the room db | Storage paths                                                            |
-| `ZOHO_PULSE_STATUSES`                                                                             | `New,Queue,In Progress`                 | The three standing statuses on Support's wall, in the order they hang    |
-| `ZOHO_TIMEZONE`                                                                                   | asked of the desk                       | Which clock "today" runs on; otherwise the org's, else its agents'       |
-| `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                                                      | —                                       | Required by the `mettara` provider                                       |
-| `METTARA_EMAIL_DOMAIN`                                                                            | —                                       | A domain you own; Mettara addresses each seat's user on it               |
-| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`                                       | —                                       | Auth.js sign-in; off when absent                                         |
-| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                                              | —                                       | TURN relay for voice behind strict NAT; **build time**, not run time     |
-| `CSP_CONNECT_SRC`                                                                                 | —                                       | Extra `connect-src` origins                                              |
-| `GIT_SHA`                                                                                         | —                                       | The commit `/api/health` reports; the Dockerfile takes it as a build arg |
+| Variable                                                                                          | Default                                         | Purpose                                                                  |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------ |
+| `ACCESS_CODE`                                                                                     | —                                               | Shared visitors' code; production refuses to boot with no code at all    |
+| `ACCESS_CODE_COOP` / `_ROB` / `_HUNTER` / `_NATHAN` / `_SARA` / `_ANDREW` / `_CAMPBELL` / `_NICK` | —                                               | One code each; brings its holder in as themselves                        |
+| `PORT` / `HOSTNAME`                                                                               | `3000` / `localhost`                            | Server bind; also builds auth callback URLs                              |
+| `ANTHROPIC_API_KEY`                                                                               | —                                               | Drawing a character sheet (`/api/characters/generate`); nothing else     |
+| `ROOM_DB_PATH` / `ERP_DB_PATH`                                                                    | `.data/watercooler.sqlite` / `.data/erp.sqlite` | Where the two databases live                                             |
+| `ZOHO_PULSE_STATUSES`                                                                             | `New,Queue,In Progress`                         | The three standing statuses on Support's wall, in the order they hang    |
+| `ZOHO_TIMEZONE`                                                                                   | asked of the desk                               | Which clock "today" runs on; otherwise the org's, else its agents'       |
+| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`                                       | —                                               | Auth.js sign-in; off when absent                                         |
+| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                                              | —                                               | TURN relay for voice behind strict NAT; **build time**, not run time     |
+| `CSP_CONNECT_SRC`                                                                                 | —                                               | Extra `connect-src` origins                                              |
+| `GIT_SHA`                                                                                         | —                                               | The commit `/api/health` reports; the Dockerfile takes it as a build arg |
 
 `README.md` covers the same ground as user-facing narrative, with setup walkthroughs
 and the feature tour (arcade, island, controller, playing together). Change behaviour
@@ -2084,8 +1913,7 @@ here and it likely needs updating there too.
 
 Dockerfile, Railway (`railway.json`). `prepublishOnly` runs
 `scripts/prepare-package.mjs`, which builds _and_ lays the tree out; the
-published package ships only `bin/` and `.next/standalone/`. The image copies
-`vendor/mettara-lib/`, so a deploy carries the Mettara SDK (see above).
+published package ships only `bin/` and `.next/standalone/`.
 
 **`output: "standalone"` is asked for only by a publish** —
 `BUILD_STANDALONE=1`, which that script sets. Nothing else wants the tree:
@@ -2094,7 +1922,7 @@ because the custom server is what holds the socket upgrades and the gate.
 Asking for it always meant every build wrote a second copy of the app nobody
 ran, and every production boot logged Next advising `node
 .next/standalone/server.js` — which would start Next's own server in place of
-ours, with no presence socket, no agent bridge and no door on the world.
+ours, with no presence socket and no door on the world.
 
 **The image's runtime stage copies a named list of files, not the repo.** A
 new file the server needs at runtime has to be named there or the container
@@ -2106,10 +1934,6 @@ went out without it once.
 have: `pnpm start` failed there while CI and the image, both Linux, stayed
 green. It means the machine this is developed on can run the build it ships,
 which is how a production-only change gets checked rather than trusted.
-
-Cloud deploys run `AGENT_PROVIDER=claude-api`: there is no signed-in user on the host
-and a subscription cannot be shared, so the API key is the credential and the spend
-limit is the guard.
 
 **Which build is live** comes back from `/api/health`, the one route the gate
 leaves open:

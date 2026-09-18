@@ -3,10 +3,9 @@
  *
  * Shared by client and server, so it must stay free of imports.
  *
- * A deliberate rule runs through these: none of them reward volume. The room
- * pays real money per task, so "complete 100 tasks" would be a badge that
- * spends the budget to earn itself. Every entry keys on variety, timing or
- * craft instead — breadth, thrift, proximity, working odd hours.
+ * A deliberate rule runs through these: none of them reward volume. Every
+ * entry keys on a moment rather than a tally — turning up, speaking first,
+ * being here when the room filled.
  */
 
 export type AchievementSubject = "agent" | "human";
@@ -21,43 +20,6 @@ export interface Achievement {
 }
 
 export const ACHIEVEMENTS: Achievement[] = [
-  // ── Agents (earned by the seat, so a character accrues a history) ──
-  {
-    code: "first-words",
-    subject: "agent",
-    title: "First Words",
-    description: "Finished their first task",
-    icon: "🗣",
-  },
-  {
-    code: "sub-contractor",
-    subject: "agent",
-    title: "Sub-contractor",
-    description: "Did work handed down by another agent, not a human",
-    icon: "🔗",
-  },
-  {
-    code: "night-shift",
-    subject: "agent",
-    title: "Night Shift",
-    description: "Finished a task with nobody in the office",
-    icon: "🌙",
-  },
-  {
-    code: "marathon",
-    subject: "agent",
-    title: "Marathon",
-    description: "Worked more than two minutes straight without stalling",
-    icon: "🏃",
-  },
-  {
-    code: "frugal",
-    subject: "agent",
-    title: "Frugal",
-    description: "Finished a task for less than a penny",
-    icon: "🪙",
-  },
-
   // ── Humans (earned by display name, which is the only identity a room has) ──
   {
     code: "walked-in",
@@ -79,13 +41,6 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: "Whisperer",
     description: "Said something only the people nearby could hear",
     icon: "🤫",
-  },
-  {
-    code: "foreman",
-    subject: "human",
-    title: "Foreman",
-    description: "Gave work to every staffed seat in the room",
-    icon: "📋",
   },
   {
     code: "full-house",

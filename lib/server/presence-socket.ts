@@ -21,7 +21,6 @@ import { BOSS_SPRITE_KEY } from "../characters/sprites";
 import { normaliseRoomSlug } from "../rooms";
 import { describeRoom, hasBoardroom, mayEnterRoom } from "../world/floors";
 import { achievementFor, type EarnedAchievement } from "../achievements";
-import type { ActivityEntry } from "../activity";
 import { isPongPayload } from "../pong/protocol";
 import { SHARED_BOARD, isStroke, sanitiseStroke } from "../whiteboard";
 import { onPlayerJoined, onPlayerSpoke, onRoomFull } from "./achievement-rules";
@@ -46,7 +45,7 @@ import {
 } from "../presence-types";
 
 import { ResidentSimulation } from "./residents";
-import { currentBroadcast, setRoomBroadcast } from "./room-broadcast";
+import { setRoomBroadcast } from "./room-broadcast";
 
 const log = createLogger("Presence");
 
@@ -123,27 +122,6 @@ let occupancyLookup: (slug: string) => number = () => 0;
 /** How many humans are in a room right now. Zero when the socket is not up. */
 export function humansInRoom(slug: string): number {
   return occupancyLookup(slug);
-}
-
-/**
- * Put a line in the room's log and tell everyone looking at it.
- *
- * Exported because the things worth logging happen all over: agent runs on
- * the bridge, badges and doors here, high scores in an API route. They all
- * come through this one door, so what is stored and what is on screen can
- * never drift apart.
- */
-export function recordActivity(
-  slug: string,
-  entry: { kind: ActivityEntry["kind"]; actor: string; text: string; detail?: string },
-): void {
-  try {
-    const saved = getRoomStore().recordActivity(slug, entry);
-    currentBroadcast()?.(slug, { type: "activity", entry: saved });
-  } catch (err) {
-    // A log line is never worth taking the room down for
-    log.warn("could not record activity:", (err as Error).message);
-  }
 }
 
 export function attachPresenceSocket(server: import("http").Server, path = "/api/room/socket") {
@@ -383,11 +361,6 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     if (!meeting || hub.count > 0) return false;
     meetings.delete(slug);
     log.info(`the meeting in "${slug}" ended: the room is empty`);
-    recordActivity(slug, {
-      kind: "human",
-      actor: meeting.host,
-      text: "'s meeting ended when the room emptied",
-    });
     return true;
   };
 
@@ -406,13 +379,6 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         description: definition.description,
         icon: definition.icon,
         at: item.earnedAt,
-      });
-
-      recordActivity(slug, {
-        kind: "badge",
-        actor: item.subjectName,
-        text: `earned ${definition.title}`,
-        detail: definition.description,
       });
     }
   };
@@ -443,7 +409,6 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     if (player) {
       log.info(`${player.name} left "${slug}" (${room.hub.count}/${room.hub.capacity})`);
       broadcast(slug, { type: "left", id, name: player.name });
-      recordActivity(slug, { kind: "human", actor: player.name, text: "left" });
     }
 
     // An empty room costs nothing to forget; its contents live in the store
@@ -467,25 +432,11 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     const by = author ? { id: author.id, name: author.name } : undefined;
 
     switch (change.entity) {
-      case "task": {
-        // Stamp who asked, unless the client already said
-        const task = { ...change.task };
-        if (!task.requestedBy && author) {
-          task.requestedBy = author.id;
-          task.requestedByName = author.name;
-        }
-        store.upsertTask(slug, task);
-        broadcast(slug, { type: "world", change: { entity: "task", task }, by }, authorId);
-        return;
-      }
       case "message":
         store.appendMessage(slug, change.message);
         break;
       case "seat":
         store.upsertSeat(slug, change.seat);
-        break;
-      case "session":
-        store.upsertSession(slug, change.session);
         break;
     }
 
@@ -534,18 +485,13 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     }
 
     try {
-      const store = getRoomStore();
-      store.appendMessage(slug, {
+      getRoomStore().appendMessage(slug, {
         id: said.id,
-        runId: "",
         role: "player",
         content: text,
         actorName: author.name,
         authorId: author.id,
         timestamp: said.at,
-        sessionKey: store.activeSessionKey(slug) ?? "main",
-        // Room talk, so it stays in view whichever session is being read
-        roomChat: true,
       });
     } catch (err) {
       log.warn("could not keep what was said:", (err as Error).message);
@@ -741,12 +687,6 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         // What is being held, of what they may know about: a meeting is
         // most useful to somebody who is not in the room yet.
         tellMeetings(id, ws);
-        recordActivity(slug, {
-          kind: "human",
-          actor: result.player.name,
-          text: "walked in",
-        });
-
         announce(slug, onPlayerJoined(slug, result.player.name));
         if (room.hub.count >= room.hub.capacity) {
           announce(
@@ -847,11 +787,6 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             log.info(`${player?.name ?? "someone"} cleared the board from "${slug}"`);
             // Everyone everywhere, including the author, so a wipe is unambiguous
             broadcastAll({ type: "board", action: "clear", by: player?.name });
-            recordActivity(slug, {
-              kind: "board",
-              actor: player?.name ?? "someone",
-              text: "wiped the whiteboard",
-            });
             return;
           }
 
@@ -928,20 +863,10 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             const since = new Date().toISOString();
             meetings.set(slug, { host: player?.name ?? "Someone", since });
             log.info(`${player?.name ?? "someone"} called a meeting in "${slug}"`);
-            recordActivity(slug, {
-              kind: "human",
-              actor: player?.name ?? "someone",
-              text: "called a meeting",
-            });
           } else {
             if (!running) return;
             meetings.delete(slug);
             log.info(`the meeting in "${slug}" ended`);
-            recordActivity(slug, {
-              kind: "human",
-              actor: player?.name ?? "someone",
-              text: "ended the meeting",
-            });
           }
           tellEveryoneMeetings();
           return;

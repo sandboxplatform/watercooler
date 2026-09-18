@@ -5,7 +5,6 @@ import { textureKeyFor } from "@/lib/characters/library";
 
 interface SpritePreviewProps {
   selectedSpriteKey: string;
-  busy: boolean;
   onSelectSprite: (spriteKey: string, spritePath: string, spriteLabel: string) => void;
 }
 
@@ -15,11 +14,7 @@ interface SpritePreviewProps {
  * Portraits come from the portrait route rather than the full sheet as a CSS
  * background; a grid of full sheets is a grid of 21-megapixel decodes.
  */
-export default function SpritePreview({
-  selectedSpriteKey,
-  busy,
-  onSelectSprite,
-}: SpritePreviewProps) {
+export default function SpritePreview({ selectedSpriteKey, onSelectSprite }: SpritePreviewProps) {
   const { characters, error } = useCharacterRoster();
 
   return (
@@ -38,8 +33,7 @@ export default function SpritePreview({
             type="button"
             className={`seat-card ${active ? "seat-card--active" : ""}`}
             onClick={() => onSelectSprite(key, character.sheetUrl, character.name)}
-            disabled={busy}
-            style={{ opacity: busy ? 0.65 : 1, cursor: busy ? "not-allowed" : "pointer" }}
+            style={{ cursor: "pointer" }}
           >
             <div className="seat-manager__sprite-preview">
               {/* eslint-disable-next-line @next/next/no-img-element -- our own generated PNG; next/image would only add a resize step to pixel art */}

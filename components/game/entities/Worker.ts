@@ -14,7 +14,7 @@ import {
 } from "@/lib/constants";
 
 // Sub-modules
-import type { WorkerCtx, WorkerStatus, QueuedTask, POI } from "./worker/types";
+import type { WorkerCtx, POI } from "./worker/types";
 import {
   BODY_WIDTH,
   BODY_HEIGHT,
@@ -30,16 +30,8 @@ import {
   scheduleWander as idleScheduleWander,
   stopIdleActivity as idleStopIdleActivity,
 } from "./worker/idle";
-import {
-  assignTask as taskAssignTask,
-  completeTask as taskCompleteTask,
-  failTask as taskFailTask,
-  abortTask as taskAbortTask,
-  enqueueTask as taskEnqueueTask,
-} from "./worker/task";
-
 export { resetWanderClock };
-export type { WorkerStatus, POI };
+export type { POI };
 
 export class Worker implements WorkerCtx {
   sprite: Phaser.Physics.Arcade.Sprite;
@@ -74,17 +66,8 @@ export class Worker implements WorkerCtx {
   activityTimer: Phaser.Time.TimerEvent | null = null;
   interactionLocked = false;
 
-  // Task state
-  _status: WorkerStatus = "idle";
-  assignedRunId: string | null = null;
-  currentTaskMessage: string | null = null;
-  taskQueue: QueuedTask[] = [];
-  taskVisualTimer: Phaser.Time.TimerEvent | null = null;
-
   // Internal
   private nameTag: Phaser.GameObjects.Text;
-  private taskStatusText: Phaser.GameObjects.Text;
-  private statusDot: Phaser.GameObjects.Arc;
   private emoteSprite: Phaser.GameObjects.Sprite | null = null;
   private currentEmoteKey: string | null = null;
   private initTimer: Phaser.Time.TimerEvent | null = null;
@@ -136,26 +119,7 @@ export class Worker implements WorkerCtx {
       .setOrigin(0.5, 0)
       .setDepth(20);
 
-    this.statusDot = scene.add.circle(x - this.nameTag.width / 2 - 6, nameY + 4, 3, 0x888888);
-    this.statusDot.setDepth(20);
-
-    this.taskStatusText = scene.add
-      .text(x, nameY + 12, "", {
-        fontFamily: '"Press Start 2P", monospace',
-        fontSize: "7px",
-        color: "#facc15",
-        backgroundColor: "rgba(0,0,0,0.8)",
-        padding: { x: 4, y: 2 },
-        align: "center",
-      })
-      .setOrigin(0.5, 0)
-      .setDepth(20)
-      .setVisible(false);
-
-    // Three objects rather than one container, because `update` moves them
-    // with the walking worker anyway — so the scale is read back off the
-    // name tag there and the offsets between them go up with it.
-    keepLegible(scene, this.nameTag, this.statusDot, this.taskStatusText);
+    keepLegible(scene, this.nameTag);
 
     this.bubble = new ChatBubble(scene);
     this.initEmoteSprite();
@@ -250,33 +214,6 @@ export class Worker implements WorkerCtx {
     }
   }
 
-  // ── Status ────────────────────────────────────────────
-
-  get status(): WorkerStatus {
-    return this._status;
-  }
-
-  setStatus(status: WorkerStatus) {
-    this._status = status;
-    const colors: Record<WorkerStatus, number> = {
-      idle: 0x888888,
-      working: 0xfacc15,
-      done: 0x22c55e,
-      failed: 0xef4444,
-    };
-    this.statusDot.setFillStyle(colors[status]);
-
-    if (status === "idle") {
-      this.canWander = true;
-      this.scheduleWander();
-    } else if (status === "working") {
-      this.stopIdleActivity();
-      this.canWander = false;
-    } else {
-      this.canWander = false;
-    }
-  }
-
   // ── Delegated: Movement ───────────────────────────────
 
   navigateTo(x: number, y: number, facePoi?: { x: number; y: number }) {
@@ -289,28 +226,6 @@ export class Worker implements WorkerCtx {
 
   isAtHomePose() {
     return movIsAtHomePose(this);
-  }
-
-  // ── Delegated: Task management ────────────────────────
-
-  assignTask(runId: string, taskMessage: string, onReady?: () => void) {
-    taskAssignTask(this, runId, taskMessage, onReady);
-  }
-
-  completeTask() {
-    taskCompleteTask(this);
-  }
-
-  failTask() {
-    taskFailTask(this);
-  }
-
-  abortTask(runId: string) {
-    return taskAbortTask(this, runId);
-  }
-
-  enqueueTask(runId: string, message: string, onReady?: () => void) {
-    taskEnqueueTask(this, runId, message, onReady);
   }
 
   // ── Delegated: Idle behavior ──────────────────────────
@@ -355,20 +270,6 @@ export class Worker implements WorkerCtx {
     this.pathfinder = pf;
   }
 
-  canInteract() {
-    return !this.interactionLocked;
-  }
-
-  isAwayFromDesk() {
-    return this.moveTarget !== null || this.isWandering || !this.isAtHomePose();
-  }
-
-  rebindAssignedRun(previousRunId: string, nextRunId: string) {
-    if (this.assignedRunId === previousRunId) {
-      this.assignedRunId = nextRunId;
-    }
-  }
-
   // ── Pause / Resume (boss proximity) ──────────────────
 
   pause() {
@@ -400,38 +301,7 @@ export class Worker implements WorkerCtx {
     if (!this.paused) updateMovement(this);
 
     const nameY = this.sprite.y + FRAME_HEIGHT / 2 + 2;
-    // Whatever `systems/legible` last wrote on the tag, so the dot beside it
-    // and the task line under it move out with it rather than being swallowed
-    // by a tag drawn twice the size on a handset. `width` is the unscaled
-    // width, which is why it is multiplied here.
-    const scale = this.nameTag.scaleX;
     this.nameTag.setPosition(this.sprite.x, nameY);
-    this.statusDot.setPosition(
-      this.sprite.x - (this.nameTag.width / 2 + 6) * scale,
-      nameY + 4 * scale,
-    );
-
-    const hasTask = this.assignedRunId || this.taskQueue.length > 0;
-    if (this.taskStatusText) {
-      this.taskStatusText.setPosition(this.sprite.x, nameY + 12 * scale);
-      if (hasTask) {
-        const parts: string[] = [];
-        if (this.currentTaskMessage) {
-          const snip =
-            this.currentTaskMessage.length > 20
-              ? `${this.currentTaskMessage.slice(0, 20)}...`
-              : this.currentTaskMessage;
-          parts.push(`📋 ${snip}`);
-        }
-        if (this.taskQueue.length > 0) {
-          parts.push(`Queue: ${this.taskQueue.length}`);
-        }
-        this.taskStatusText.setText(parts.join(" | "));
-        this.taskStatusText.setVisible(true);
-      } else {
-        this.taskStatusText.setVisible(false);
-      }
-    }
 
     if (this.emoteSprite) {
       this.emoteSprite.setPosition(this.sprite.x, this.sprite.y - FRAME_HEIGHT * EMOTE_Y_OFFSET);
@@ -451,20 +321,14 @@ export class Worker implements WorkerCtx {
     }
     this.interactionLocked = false;
     this.stopIdleActivity();
-    if (this.taskVisualTimer) {
-      this.taskVisualTimer.destroy();
-      this.taskVisualTimer = null;
-    }
     if (this.emoteSprite) {
       this.emoteSprite.removeAllListeners();
       this.emoteSprite.destroy();
       this.emoteSprite = null;
     }
     this.sprite.destroy();
-    legible(this.sprite.scene).forget(this.nameTag, this.statusDot, this.taskStatusText);
+    legible(this.sprite.scene).forget(this.nameTag);
     this.nameTag.destroy();
-    this.taskStatusText.destroy();
-    this.statusDot.destroy();
     this.bubble.destroy();
     this.pathfinder = null;
     this.onArrival = null;

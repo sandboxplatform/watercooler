@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-import type { GatewayConfig } from "@/types/game";
-
 // ── localStorage mock ────────────────────────────────────
 
 function createLocalStorageMock() {
@@ -108,20 +106,6 @@ describe("lsSet", () => {
 
     // Should not throw even when localStorage quota is exceeded
     expect(() => lsSet("big-key", "x".repeat(100))).not.toThrow();
-  });
-});
-
-describe("gateway config", () => {
-  it("round-trips GatewayConfig", async () => {
-    const { saveGatewayConfig, loadGatewayConfig } = await loadModule();
-    const config: GatewayConfig = { url: "https://gw.test", token: "tok-123" };
-    saveGatewayConfig(config);
-    expect(loadGatewayConfig()).toEqual(config);
-  });
-
-  it("returns null when nothing is stored", async () => {
-    const { loadGatewayConfig } = await loadModule();
-    expect(loadGatewayConfig()).toBeNull();
   });
 });
 

@@ -1,27 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import {
-  reducer,
-  initialState,
-  chatId,
-  generateSessionKey,
-  findTask,
-  findAssignableSeatIndex,
-  resolveSeatLabelForTask,
-  createEmptySessionMetrics,
-  mergeDiscoveredSeats,
-  MAIN_SESSION_KEY,
-} from "../reducer";
-import type { Action } from "../reducer";
-import type {
-  StudioSnapshot,
-  TaskItem,
-  ChatMessage,
-  SeatState,
-  SessionRecord,
-  SessionMetrics,
-} from "@/types/game";
+import { reducer, initialState, chatId, mergeDiscoveredSeats } from "../reducer";
+import type { StudioSnapshot, ChatMessage, SeatState } from "@/types/game";
 import type { SeatDef } from "@/components/game/utils/MapHelpers";
 import type { PersistedSeatConfig } from "@/lib/persistence";
+import { MAX_CHAT } from "../constants";
 
 // ── Factory helpers ─────────────────────────────────────────
 
@@ -30,7 +12,6 @@ function makeSeat(overrides: Partial<SeatState> = {}): SeatState {
     seatId: "seat-1",
     label: "Alice",
     assigned: true,
-    status: "empty",
     spawnX: 100,
     spawnY: 200,
     spawnFacing: "down",
@@ -38,34 +19,11 @@ function makeSeat(overrides: Partial<SeatState> = {}): SeatState {
   };
 }
 
-function makeTask(overrides: Partial<TaskItem> = {}): TaskItem {
-  return {
-    taskId: "task-1",
-    message: "Do something",
-    status: "submitted",
-    sessionKey: MAIN_SESSION_KEY,
-    createdAt: new Date().toISOString(),
-    ...overrides,
-  };
-}
-
 function makeChat(overrides: Partial<ChatMessage> = {}): ChatMessage {
   return {
     id: "chat-1",
-    runId: "run-1",
-    role: "user",
     content: "Hello",
     timestamp: new Date().toISOString(),
-    sessionKey: MAIN_SESSION_KEY,
-    ...overrides,
-  } as ChatMessage;
-}
-
-function makeSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
-  return {
-    key: "agent:main:session-1",
-    label: "Session 1",
-    createdAt: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -98,124 +56,14 @@ function makePersistedConfig(overrides: Partial<PersistedSeatConfig> = {}): Pers
 
 // ── Helper function tests ───────────────────────────────────
 
-describe("MAIN_SESSION_KEY", () => {
-  it("has the expected value", () => {
-    expect(MAIN_SESSION_KEY).toBe("agent:main:main");
-  });
-});
-
 describe("chatId", () => {
   it("returns a string starting with chat_", () => {
-    const id = chatId();
-    expect(id).toMatch(/^chat_\d+_\d+$/);
+    expect(chatId()).toMatch(/^chat_/);
   });
 
   it("returns unique ids on successive calls", () => {
-    const a = chatId();
-    const b = chatId();
-    expect(a).not.toBe(b);
-  });
-});
-
-describe("generateSessionKey", () => {
-  it("returns a string starting with agent:main:", () => {
-    const key = generateSessionKey();
-    expect(key).toMatch(/^agent:main:\d+_\d+$/);
-  });
-
-  it("returns unique keys on successive calls", () => {
-    const a = generateSessionKey();
-    const b = generateSessionKey();
-    expect(a).not.toBe(b);
-  });
-});
-
-describe("findTask", () => {
-  const tasks = [makeTask({ taskId: "t1", runId: "r1" }), makeTask({ taskId: "t2", runId: "r2" })];
-
-  it("finds a task by taskId", () => {
-    expect(findTask(tasks, "t1")).toBe(tasks[0]);
-  });
-
-  it("finds a task by runId", () => {
-    expect(findTask(tasks, "r2")).toBe(tasks[1]);
-  });
-
-  it("returns undefined when no match", () => {
-    expect(findTask(tasks, "nonexistent")).toBeUndefined();
-  });
-
-  it("returns undefined for empty array", () => {
-    expect(findTask([], "t1")).toBeUndefined();
-  });
-});
-
-describe("findAssignableSeatIndex", () => {
-  it("returns index of first assigned seat not running or returning", () => {
-    const seats = [
-      makeSeat({ seatId: "s1", assigned: true, status: "running" }),
-      makeSeat({ seatId: "s2", assigned: true, status: "empty" }),
-      makeSeat({ seatId: "s3", assigned: true, status: "empty" }),
-    ];
-    expect(findAssignableSeatIndex(seats)).toBe(1);
-  });
-
-  it("returns -1 when no assignable seat exists", () => {
-    const seats = [
-      makeSeat({ seatId: "s1", assigned: true, status: "running" }),
-      makeSeat({ seatId: "s2", assigned: false, status: "empty" }),
-    ];
-    expect(findAssignableSeatIndex(seats)).toBe(-1);
-  });
-
-  it("returns -1 for empty array", () => {
-    expect(findAssignableSeatIndex([])).toBe(-1);
-  });
-
-  it("skips returning seats", () => {
-    const seats = [
-      makeSeat({ seatId: "s1", assigned: true, status: "returning" }),
-      makeSeat({ seatId: "s2", assigned: true, status: "done" }),
-    ];
-    expect(findAssignableSeatIndex(seats)).toBe(1);
-  });
-});
-
-describe("resolveSeatLabelForTask", () => {
-  const seats = [
-    makeSeat({ seatId: "s1", label: "Alice", assigned: true, status: "running" }),
-    makeSeat({ seatId: "s2", label: "Bob", assigned: true, status: "empty" }),
-  ];
-
-  it("returns label for a specific seatId", () => {
-    expect(resolveSeatLabelForTask(seats, "s1")).toBe("Alice");
-  });
-
-  it("returns label for first assignable seat when no seatId given", () => {
-    expect(resolveSeatLabelForTask(seats)).toBe("Bob");
-  });
-
-  it("returns undefined when seatId does not exist", () => {
-    expect(resolveSeatLabelForTask(seats, "nonexistent")).toBeUndefined();
-  });
-
-  it("returns undefined when no assignable seat and no seatId", () => {
-    const allRunning = [makeSeat({ seatId: "s1", assigned: true, status: "running" })];
-    expect(resolveSeatLabelForTask(allRunning)).toBeUndefined();
-  });
-});
-
-describe("createEmptySessionMetrics", () => {
-  it("returns an object with fresh: false", () => {
-    const metrics = createEmptySessionMetrics();
-    expect(metrics).toEqual({ fresh: false });
-  });
-
-  it("returns a new object each time", () => {
-    const a = createEmptySessionMetrics();
-    const b = createEmptySessionMetrics();
-    expect(a).not.toBe(b);
-    expect(a).toEqual(b);
+    const ids = new Set([chatId(), chatId(), chatId()]);
+    expect(ids.size).toBe(3);
   });
 });
 
@@ -228,7 +76,6 @@ describe("mergeDiscoveredSeats", () => {
     expect(result[0].spawnX).toBe(100);
     expect(result[0].spawnY).toBe(200);
     expect(result[0].spawnFacing).toBe("down");
-    expect(result[0].status).toBe("empty");
   });
 
   it("applies stored config overrides", () => {
@@ -246,22 +93,14 @@ describe("mergeDiscoveredSeats", () => {
     expect(result[0].roleTitle).toBe("Architect");
   });
 
-  it("preserves runtime state from current seats", () => {
+  it("falls back to what the room already shows when nothing is stored", () => {
+    // The map is re-read on every room change; a rename made in this browser
+    // and not yet written back must not be lost on the way through.
     const discovered = [makeDiscoveredSeat({ seatId: "s1", index: 0 })];
-    const current = [
-      makeSeat({
-        seatId: "s1",
-        status: "running",
-        runId: "run-42",
-        taskSnippet: "doing work",
-        startedAt: "2025-01-01T00:00:00Z",
-      }),
-    ];
+    const current = [makeSeat({ seatId: "s1", label: "Renamed", roleTitle: "QA" })];
     const result = mergeDiscoveredSeats(discovered, [], current);
-    expect(result[0].status).toBe("running");
-    expect(result[0].runId).toBe("run-42");
-    expect(result[0].taskSnippet).toBe("doing work");
-    expect(result[0].startedAt).toBe("2025-01-01T00:00:00Z");
+    expect(result[0].label).toBe("Renamed");
+    expect(result[0].roleTitle).toBe("QA");
   });
 
   it("unassigned seats have no spriteKey/spritePath", () => {
@@ -271,6 +110,14 @@ describe("mergeDiscoveredSeats", () => {
     expect(result[0].assigned).toBe(false);
     expect(result[0].spriteKey).toBeUndefined();
     expect(result[0].spritePath).toBeUndefined();
+  });
+
+  it("takes the position from the map rather than from what was stored", () => {
+    const discovered = [makeDiscoveredSeat({ seatId: "s1", x: 640, y: 480, facing: "left" })];
+    const result = mergeDiscoveredSeats(discovered, [makePersistedConfig({ seatId: "s1" })], []);
+    expect(result[0].spawnX).toBe(640);
+    expect(result[0].spawnY).toBe(480);
+    expect(result[0].spawnFacing).toBe("left");
   });
 });
 
@@ -285,847 +132,134 @@ describe("reducer", () => {
 
   describe("initialState", () => {
     it("has expected defaults", () => {
-      expect(initialState.connection).toBe("disconnected");
       expect(initialState.seats).toEqual([]);
-      expect(initialState.tasks).toEqual([]);
       expect(initialState.chatMessages).toEqual([]);
-      expect(initialState.activeSessionKey).toBeUndefined();
-      expect(initialState.sessionMetrics).toEqual({ fresh: false });
-      expect(initialState.sessions).toEqual([]);
     });
   });
 
-  describe("SET_CONNECTION", () => {
-    it("updates connection status", () => {
-      const next = reducer(state, { type: "SET_CONNECTION", status: "connected" });
-      expect(next.connection).toBe("connected");
+  describe("UPSERT_CHAT", () => {
+    it("adds a message that is not already there", () => {
+      const next = reducer(state, { type: "UPSERT_CHAT", message: makeChat({ id: "m1" }) });
+      expect(next.chatMessages.map((m) => m.id)).toEqual(["m1"]);
     });
 
-    it("does not mutate other state", () => {
-      const next = reducer(state, { type: "SET_CONNECTION", status: "error" });
-      expect(next.tasks).toBe(state.tasks);
-      expect(next.seats).toBe(state.seats);
-    });
-  });
-
-  describe("ADD_TASK", () => {
-    it("prepends a task to the list", () => {
-      const task = makeTask({ taskId: "t1" });
-      const next = reducer(state, { type: "ADD_TASK", task });
-      expect(next.tasks).toHaveLength(1);
-      expect(next.tasks[0]).toBe(task);
-    });
-
-    it("prepends new tasks before existing ones", () => {
-      const t1 = makeTask({ taskId: "t1" });
-      const t2 = makeTask({ taskId: "t2" });
-      const s1 = reducer(state, { type: "ADD_TASK", task: t1 });
-      const s2 = reducer(s1, { type: "ADD_TASK", task: t2 });
-      expect(s2.tasks[0].taskId).toBe("t2");
-      expect(s2.tasks[1].taskId).toBe("t1");
-    });
-  });
-
-  describe("UPDATE_TASK", () => {
-    it("patches a task by taskId", () => {
-      state = makeState({ tasks: [makeTask({ taskId: "t1", status: "submitted" })] });
-      const next = reducer(state, {
-        type: "UPDATE_TASK",
-        taskId: "t1",
-        patch: { status: "running" },
-      });
-      expect(next.tasks[0].status).toBe("running");
-    });
-
-    it("patches a task by runId", () => {
-      state = makeState({
-        tasks: [makeTask({ taskId: "t1", runId: "r1", status: "submitted" })],
-      });
-      const next = reducer(state, {
-        type: "UPDATE_TASK",
-        taskId: "r1",
-        patch: { status: "completed", result: "Done" },
-      });
-      expect(next.tasks[0].status).toBe("completed");
-      expect(next.tasks[0].result).toBe("Done");
-    });
-
-    it("leaves unmatched tasks unchanged", () => {
-      const t1 = makeTask({ taskId: "t1" });
-      const t2 = makeTask({ taskId: "t2" });
-      state = makeState({ tasks: [t1, t2] });
-      const next = reducer(state, {
-        type: "UPDATE_TASK",
-        taskId: "t1",
-        patch: { status: "running" },
-      });
-      expect(next.tasks[1]).toEqual(t2);
-    });
-  });
-
-  describe("APPEND_CHAT", () => {
-    it("appends a chat message", () => {
-      const msg = makeChat({ id: "c1", content: "Hi" });
-      const next = reducer(state, { type: "APPEND_CHAT", message: msg });
-      expect(next.chatMessages).toHaveLength(1);
-      expect(next.chatMessages[0]).toBe(msg);
-    });
-
-    it("skips redundant connection messages", () => {
-      const msg = makeChat({
-        id: "c1",
-        role: "system",
-        content: "Connected to ws://localhost",
-      });
-      const next = reducer(state, { type: "APPEND_CHAT", message: msg });
-      expect(next.chatMessages).toHaveLength(0);
-      expect(next).toBe(state);
-    });
-
-    it("does not skip non-connection system messages", () => {
-      const msg = makeChat({
-        id: "c1",
-        role: "system",
-        content: "Session started",
-      });
-      const next = reducer(state, { type: "APPEND_CHAT", message: msg });
-      expect(next.chatMessages).toHaveLength(1);
-    });
-  });
-
-  describe("APPEND_DELTA", () => {
-    it("appends delta to existing assistant message with matching runId", () => {
-      const existing = makeChat({
-        id: "c1",
-        runId: "run-1",
-        role: "assistant",
-        content: "Hello",
-      });
-      state = makeState({ chatMessages: [existing] });
-      const next = reducer(state, {
-        type: "APPEND_DELTA",
-        runId: "run-1",
-        delta: " world",
-      });
-      expect(next.chatMessages[0].content).toBe("Hello world");
-      expect((next.chatMessages[0] as { streaming?: boolean }).streaming).toBe(true);
-    });
-
-    it("creates a new assistant message if none found", () => {
-      state = makeState({
-        tasks: [makeTask({ taskId: "t1", runId: "run-1" })],
-      });
-      const next = reducer(state, {
-        type: "APPEND_DELTA",
-        runId: "run-1",
-        delta: "Hi",
+    it("replaces a message with the same id rather than showing it twice", () => {
+      // Everyone's own remark lands locally the moment they send it, and the
+      // server relays it back under the same id.
+      const first = reducer(state, { type: "UPSERT_CHAT", message: makeChat({ id: "m1" }) });
+      const next = reducer(first, {
+        type: "UPSERT_CHAT",
+        message: makeChat({ id: "m1", content: "edited" }),
       });
       expect(next.chatMessages).toHaveLength(1);
-      expect(next.chatMessages[0].role).toBe("assistant");
-      expect(next.chatMessages[0].content).toBe("Hi");
-      expect((next.chatMessages[0] as { streaming?: boolean }).streaming).toBe(true);
+      expect(next.chatMessages[0].content).toBe("edited");
     });
 
-    it("sets actorName on existing message if not already set", () => {
-      const existing = makeChat({
-        id: "c1",
-        runId: "run-1",
-        role: "assistant",
-        content: "Hello",
-      });
-      state = makeState({ chatMessages: [existing] });
-      const next = reducer(state, {
-        type: "APPEND_DELTA",
-        runId: "run-1",
-        delta: " there",
-        actorName: "Alice",
-      });
-      expect(next.chatMessages[0].actorName).toBe("Alice");
+    it("keeps the object it was given, so the sync does not echo it back", () => {
+      // room-sync recognises an already-known object by reference.
+      const message = makeChat({ id: "m1" });
+      const next = reducer(state, { type: "UPSERT_CHAT", message });
+      expect(next.chatMessages[0]).toBe(message);
     });
 
-    it("does not overwrite existing actorName", () => {
-      const existing = makeChat({
-        id: "c1",
-        runId: "run-1",
-        role: "assistant",
-        content: "Hi",
-        actorName: "Bob",
-      });
-      state = makeState({ chatMessages: [existing] });
-      const next = reducer(state, {
-        type: "APPEND_DELTA",
-        runId: "run-1",
-        delta: "!",
-        actorName: "Alice",
-      });
-      expect(next.chatMessages[0].actorName).toBe("Bob");
+    it("drops the oldest lines once past the cap", () => {
+      let next = state;
+      for (let i = 0; i < MAX_CHAT + 5; i++) {
+        next = reducer(next, { type: "UPSERT_CHAT", message: makeChat({ id: `m${i}` }) });
+      }
+      expect(next.chatMessages).toHaveLength(MAX_CHAT);
+      expect(next.chatMessages[0].id).toBe("m5");
     });
 
-    it("does not modify tool messages", () => {
-      const toolMsg: ChatMessage = {
-        id: "c1",
-        runId: "run-1",
-        role: "tool",
-        content: "output",
-        timestamp: new Date().toISOString(),
-        sessionKey: MAIN_SESSION_KEY,
-        toolName: "read_file",
-      };
-      // An assistant message before the tool message
-      const assistantMsg = makeChat({
-        id: "c0",
-        runId: "run-1",
-        role: "assistant",
-        content: "Let me check",
-      });
-      state = makeState({ chatMessages: [assistantMsg, toolMsg] });
-      const next = reducer(state, {
-        type: "APPEND_DELTA",
-        runId: "run-1",
-        delta: " more",
-      });
-      // Should find the assistant message (last assistant by runId), not the tool
-      // Tool message at index 1 is the last with runId, but it's role=tool
-      // The search goes backwards: finds tool first (skipped due to role check), then finds assistant
-      expect(next.chatMessages[1].content).toBe("output"); // tool unchanged
-    });
-  });
-
-  describe("FINALIZE_ASSISTANT", () => {
-    it("replaces content and sets streaming false", () => {
-      const existing = makeChat({
-        id: "c1",
-        runId: "run-1",
-        role: "assistant",
-        content: "partial...",
-        streaming: true,
-      } as Partial<ChatMessage>);
-      state = makeState({ chatMessages: [existing] });
-      const next = reducer(state, {
-        type: "FINALIZE_ASSISTANT",
-        runId: "run-1",
-        content: "Final content",
-      });
-      expect(next.chatMessages[0].content).toBe("Final content");
-      expect((next.chatMessages[0] as { streaming?: boolean }).streaming).toBe(false);
-    });
-
-    it("creates a new message if no existing assistant found", () => {
-      state = makeState({
-        tasks: [makeTask({ taskId: "t1", runId: "run-1" })],
-      });
-      const next = reducer(state, {
-        type: "FINALIZE_ASSISTANT",
-        runId: "run-1",
-        content: "Complete response",
-      });
-      expect(next.chatMessages).toHaveLength(1);
-      expect(next.chatMessages[0].content).toBe("Complete response");
-      expect((next.chatMessages[0] as { streaming?: boolean }).streaming).toBe(false);
-    });
-
-    it("sets actorName if not already present", () => {
-      const existing = makeChat({
-        id: "c1",
-        runId: "run-1",
-        role: "assistant",
-        content: "partial",
-      });
-      state = makeState({ chatMessages: [existing] });
-      const next = reducer(state, {
-        type: "FINALIZE_ASSISTANT",
-        runId: "run-1",
-        content: "done",
-        actorName: "Carol",
-      });
-      expect(next.chatMessages[0].actorName).toBe("Carol");
-    });
-  });
-
-  describe("SET_RUN_ACTOR", () => {
-    it("sets actorName on all assistant messages for a runId", () => {
-      state = makeState({
-        chatMessages: [
-          makeChat({ id: "c1", runId: "run-1", role: "assistant", content: "Hi" }),
-          makeChat({ id: "c2", runId: "run-1", role: "user", content: "Hey" }),
-          makeChat({ id: "c3", runId: "run-2", role: "assistant", content: "Bye" }),
-        ],
-      });
-      const next = reducer(state, {
-        type: "SET_RUN_ACTOR",
-        runId: "run-1",
-        actorName: "Alice",
-      });
-      expect(next.chatMessages[0].actorName).toBe("Alice");
-      expect(next.chatMessages[1].actorName).toBeUndefined(); // user message
-      expect(next.chatMessages[2].actorName).toBeUndefined(); // different runId
-    });
-  });
-
-  describe("SET_ACTIVE_SESSION", () => {
-    it("sets the active session key", () => {
-      const next = reducer(state, {
-        type: "SET_ACTIVE_SESSION",
-        sessionKey: "agent:main:session-1",
-      });
-      expect(next.activeSessionKey).toBe("agent:main:session-1");
-    });
-
-    it("can clear active session", () => {
-      state = makeState({ activeSessionKey: "something" });
-      const next = reducer(state, {
-        type: "SET_ACTIVE_SESSION",
-        sessionKey: undefined,
-      });
-      expect(next.activeSessionKey).toBeUndefined();
-    });
-  });
-
-  describe("SET_SESSION_METRICS", () => {
-    it("replaces session metrics", () => {
-      const metrics: SessionMetrics = {
-        fresh: true,
-        usedTokens: 1000,
-        maxContextTokens: 100000,
-        model: "claude-opus-4",
-      };
-      const next = reducer(state, { type: "SET_SESSION_METRICS", metrics });
-      expect(next.sessionMetrics).toBe(metrics);
-    });
-  });
-
-  describe("ASSIGN_SEAT", () => {
-    it("assigns a run to the first assignable seat", () => {
-      state = makeState({
-        seats: [
-          makeSeat({ seatId: "s1", assigned: true, status: "running", runId: "other" }),
-          makeSeat({ seatId: "s2", assigned: true, status: "empty" }),
-        ],
-      });
-      const next = reducer(state, {
-        type: "ASSIGN_SEAT",
-        runId: "run-1",
-        taskSnippet: "Do X",
-      });
-      expect(next.seats[1].status).toBe("running");
-      expect(next.seats[1].runId).toBe("run-1");
-      expect(next.seats[1].taskSnippet).toBe("Do X");
-      expect(next.seats[1].startedAt).toBeDefined();
-    });
-
-    it("assigns to a specific seatId", () => {
-      state = makeState({
-        seats: [
-          makeSeat({ seatId: "s1", assigned: true, status: "empty" }),
-          makeSeat({ seatId: "s2", assigned: true, status: "empty" }),
-        ],
-      });
-      const next = reducer(state, {
-        type: "ASSIGN_SEAT",
-        runId: "run-1",
-        taskSnippet: "Do Y",
-        seatId: "s2",
-      });
-      expect(next.seats[0].status).toBe("empty"); // s1 unchanged
-      expect(next.seats[1].status).toBe("running");
-      expect(next.seats[1].runId).toBe("run-1");
-    });
-
-    it("returns unchanged state if no assignable seat", () => {
-      state = makeState({
-        seats: [makeSeat({ seatId: "s1", assigned: true, status: "running", runId: "r0" })],
-      });
-      const next = reducer(state, {
-        type: "ASSIGN_SEAT",
-        runId: "run-1",
-        taskSnippet: "Do Z",
-      });
-      expect(next).toBe(state);
-    });
-
-    it("does not reassign a seat already running with a different runId", () => {
-      state = makeState({
-        seats: [makeSeat({ seatId: "s1", assigned: true, status: "running", runId: "run-old" })],
-      });
-      const next = reducer(state, {
-        type: "ASSIGN_SEAT",
-        runId: "run-new",
-        taskSnippet: "New task",
-        seatId: "s1",
-      });
-      expect(next).toBe(state);
-    });
-
-    it("allows reassigning a seat with the same runId", () => {
-      state = makeState({
-        seats: [makeSeat({ seatId: "s1", assigned: true, status: "running", runId: "run-1" })],
-      });
-      const next = reducer(state, {
-        type: "ASSIGN_SEAT",
-        runId: "run-1",
-        taskSnippet: "Same run",
-        seatId: "s1",
-      });
-      expect(next.seats[0].runId).toBe("run-1");
-      expect(next.seats[0].taskSnippet).toBe("Same run");
-    });
-
-    it("returns unchanged state when seatId not found", () => {
-      state = makeState({ seats: [makeSeat({ seatId: "s1" })] });
-      const next = reducer(state, {
-        type: "ASSIGN_SEAT",
-        runId: "run-1",
-        taskSnippet: "X",
-        seatId: "nonexistent",
-      });
-      expect(next).toBe(state);
-    });
-  });
-
-  describe("BIND_SEAT_RUN", () => {
-    it("updates runId on the seat that had the old taskId as runId", () => {
-      state = makeState({
-        seats: [
-          makeSeat({ seatId: "s1", runId: "task-1", status: "running" }),
-          makeSeat({ seatId: "s2", runId: "other", status: "running" }),
-        ],
-      });
-      const next = reducer(state, {
-        type: "BIND_SEAT_RUN",
-        taskId: "task-1",
-        runId: "run-1",
-      });
-      expect(next.seats[0].runId).toBe("run-1");
-      expect(next.seats[1].runId).toBe("other");
-    });
-  });
-
-  describe("SET_SEAT_STATUS", () => {
-    it("updates status of seats matching runId", () => {
-      state = makeState({
-        seats: [
-          makeSeat({ seatId: "s1", runId: "run-1", status: "running" }),
-          makeSeat({ seatId: "s2", runId: "run-2", status: "running" }),
-        ],
-      });
-      const next = reducer(state, {
-        type: "SET_SEAT_STATUS",
-        runId: "run-1",
-        status: "done",
-      });
-      expect(next.seats[0].status).toBe("done");
-      expect(next.seats[1].status).toBe("running");
-    });
-
-    it("clears runtime fields when setting status to empty", () => {
-      state = makeState({
-        seats: [
-          makeSeat({
-            seatId: "s1",
-            runId: "run-1",
-            status: "running",
-            taskSnippet: "working",
-            startedAt: "2025-01-01T00:00:00Z",
-          }),
-        ],
-      });
-      const next = reducer(state, {
-        type: "SET_SEAT_STATUS",
-        runId: "run-1",
-        status: "empty",
-      });
-      expect(next.seats[0].status).toBe("empty");
-      expect(next.seats[0].runId).toBeUndefined();
-      expect(next.seats[0].taskSnippet).toBeUndefined();
-      expect(next.seats[0].startedAt).toBeUndefined();
-    });
-  });
-
-  describe("PATCH_SEAT_RUNTIME", () => {
-    it("patches runtime fields on the seat matching seatId", () => {
-      state = makeState({
-        seats: [
-          makeSeat({ seatId: "s1", status: "empty" }),
-          makeSeat({ seatId: "s2", status: "empty" }),
-        ],
-      });
-      const next = reducer(state, {
-        type: "PATCH_SEAT_RUNTIME",
-        seatId: "s1",
-        patch: { status: "running", runId: "run-1" },
-      });
-      expect(next.seats[0].status).toBe("running");
-      expect(next.seats[0].runId).toBe("run-1");
-      expect(next.seats[1].status).toBe("empty");
+    it("leaves the seats alone", () => {
+      const withSeats = makeState({ seats: [makeSeat()] });
+      const next = reducer(withSeats, { type: "UPSERT_CHAT", message: makeChat() });
+      expect(next.seats).toBe(withSeats.seats);
     });
   });
 
   describe("SYNC_SEATS", () => {
-    it("replaces all seats", () => {
-      const newSeats = [makeSeat({ seatId: "new-1" }), makeSeat({ seatId: "new-2" })];
-      const next = reducer(state, { type: "SYNC_SEATS", seats: newSeats });
-      expect(next.seats).toBe(newSeats);
+    it("replaces the roster outright", () => {
+      const seats = [makeSeat({ seatId: "s1" }), makeSeat({ seatId: "s2" })];
+      const next = reducer(state, { type: "SYNC_SEATS", seats });
+      expect(next.seats).toBe(seats);
     });
   });
 
   describe("UPDATE_SEAT_CONFIG", () => {
-    it("patches the matching seat config", () => {
-      state = makeState({
-        seats: [makeSeat({ seatId: "s1", label: "Alice", assigned: true })],
+    it("patches the named seat and leaves the others alone", () => {
+      const withSeats = makeState({
+        seats: [makeSeat({ seatId: "s1" }), makeSeat({ seatId: "s2", label: "Bob" })],
       });
-      const next = reducer(state, {
-        type: "UPDATE_SEAT_CONFIG",
-        seatId: "s1",
-        patch: { label: "Renamed", roleTitle: "Lead" },
-      });
-      expect(next.seats[0].label).toBe("Renamed");
-      expect(next.seats[0].roleTitle).toBe("Lead");
-    });
-
-    it("resets fields when unassigning a seat", () => {
-      state = makeState({
-        seats: [
-          makeSeat({
-            seatId: "s1",
-            label: "Alice",
-            assigned: true,
-            roleTitle: "Worker",
-            spriteKey: "char_01",
-            spritePath: "/chars/01.png",
-            status: "running",
-            runId: "run-1",
-            taskSnippet: "work",
-            startedAt: "2025-01-01",
-          }),
-        ],
-      });
-      const next = reducer(state, {
-        type: "UPDATE_SEAT_CONFIG",
-        seatId: "s1",
-        patch: { assigned: false },
-      });
-      expect(next.seats[0].assigned).toBe(false);
-      expect(next.seats[0].label).toBe("Alice"); // original label preserved
-      expect(next.seats[0].roleTitle).toBeUndefined();
-      expect(next.seats[0].spriteKey).toBeUndefined();
-      expect(next.seats[0].spritePath).toBeUndefined();
-      expect(next.seats[0].status).toBe("empty");
-      expect(next.seats[0].runId).toBeUndefined();
-      expect(next.seats[0].taskSnippet).toBeUndefined();
-      expect(next.seats[0].startedAt).toBeUndefined();
-    });
-
-    it("does not modify non-matching seats", () => {
-      state = makeState({
-        seats: [
-          makeSeat({ seatId: "s1", label: "Alice" }),
-          makeSeat({ seatId: "s2", label: "Bob" }),
-        ],
-      });
-      const next = reducer(state, {
+      const next = reducer(withSeats, {
         type: "UPDATE_SEAT_CONFIG",
         seatId: "s1",
         patch: { label: "Carol" },
       });
+      expect(next.seats[0].label).toBe("Carol");
       expect(next.seats[1].label).toBe("Bob");
     });
-  });
 
-  describe("RESET_SEATS", () => {
-    it("resets all seats to empty, clears runtime fields", () => {
-      state = makeState({
+    it("ignores a seat id the room does not have", () => {
+      const withSeats = makeState({ seats: [makeSeat({ seatId: "s1" })] });
+      const next = reducer(withSeats, {
+        type: "UPDATE_SEAT_CONFIG",
+        seatId: "nobody",
+        patch: { label: "Carol" },
+      });
+      expect(next.seats[0].label).toBe("Alice");
+    });
+
+    it("strips the crew from a seat being emptied, but keeps its name", () => {
+      // A vacant seat is still a desk in the room; it just has nobody at it.
+      const withSeats = makeState({
         seats: [
           makeSeat({
             seatId: "s1",
-            status: "running",
-            runId: "run-1",
-            taskSnippet: "x",
-            startedAt: "t",
-          }),
-          makeSeat({
-            seatId: "s2",
-            status: "done",
-            runId: "run-2",
-            taskSnippet: "y",
-            startedAt: "t",
+            roleTitle: "QA",
+            spriteKey: "char_01",
+            spritePath: "/chars/01.png",
           }),
         ],
       });
-      const next = reducer(state, { type: "RESET_SEATS" });
-      for (const seat of next.seats) {
-        expect(seat.status).toBe("empty");
-        expect(seat.runId).toBeUndefined();
-        expect(seat.taskSnippet).toBeUndefined();
-        expect(seat.startedAt).toBeUndefined();
-      }
-    });
-
-    it("preserves non-runtime fields", () => {
-      state = makeState({
-        seats: [makeSeat({ seatId: "s1", label: "Alice", assigned: true, spriteKey: "char_01" })],
+      const next = reducer(withSeats, {
+        type: "UPDATE_SEAT_CONFIG",
+        seatId: "s1",
+        patch: { assigned: false },
       });
-      const next = reducer(state, { type: "RESET_SEATS" });
       expect(next.seats[0].label).toBe("Alice");
-      expect(next.seats[0].assigned).toBe(true);
-      expect(next.seats[0].spriteKey).toBe("char_01");
+      expect(next.seats[0].roleTitle).toBeUndefined();
+      expect(next.seats[0].spriteKey).toBeUndefined();
+      expect(next.seats[0].spritePath).toBeUndefined();
     });
   });
 
   describe("RESTORE", () => {
-    it("restores tasks, chatMessages, sessions, and activeSessionKey", () => {
-      const tasks = [makeTask({ taskId: "t1" })];
-      const chatMessages = [makeChat({ id: "c1" })];
-      const sessions = [makeSession({ key: "s1" })];
+    it("brings back the room's talk", () => {
       const next = reducer(state, {
         type: "RESTORE",
-        tasks,
-        chatMessages,
-        sessions,
-        activeSessionKey: "s1",
+        chatMessages: [makeChat({ id: "m1" }), makeChat({ id: "m2" })],
       });
-      expect(next.tasks).toBe(tasks);
-      expect(next.chatMessages).toEqual(chatMessages);
-      expect(next.sessions).toBe(sessions);
-      expect(next.activeSessionKey).toBe("s1");
+      expect(next.chatMessages.map((m) => m.id)).toEqual(["m1", "m2"]);
     });
 
-    it("filters out redundant connection messages", () => {
-      const chatMessages = [
-        makeChat({ id: "c1", role: "system", content: "Connected to ws://localhost" }),
-        makeChat({ id: "c2", role: "user", content: "Hello" }),
-      ];
-      const next = reducer(state, {
-        type: "RESTORE",
-        tasks: [],
-        chatMessages,
-        sessions: [],
-      });
-      expect(next.chatMessages).toHaveLength(1);
-      expect(next.chatMessages[0].id).toBe("c2");
+    it("keeps only the newest when the room holds more than the cap", () => {
+      const many = Array.from({ length: MAX_CHAT + 5 }, (_, i) => makeChat({ id: `m${i}` }));
+      const next = reducer(state, { type: "RESTORE", chatMessages: many });
+      expect(next.chatMessages).toHaveLength(MAX_CHAT);
+      expect(next.chatMessages[0].id).toBe("m5");
     });
 
-    it("falls back to existing activeSessionKey if none provided", () => {
-      state = makeState({ activeSessionKey: "existing-key" });
-      const next = reducer(state, {
-        type: "RESTORE",
-        tasks: [],
-        chatMessages: [],
-        sessions: [],
-      });
-      expect(next.activeSessionKey).toBe("existing-key");
-    });
-
-    it("preserves seats and connection", () => {
-      const seats = [makeSeat({ seatId: "s1" })];
-      state = makeState({ seats, connection: "connected" });
-      const next = reducer(state, {
-        type: "RESTORE",
-        tasks: [],
-        chatMessages: [],
-        sessions: [],
-      });
-      expect(next.seats).toBe(seats);
-      expect(next.connection).toBe("connected");
+    it("does not disturb the seats the scene has already reported", () => {
+      const withSeats = makeState({ seats: [makeSeat()] });
+      const next = reducer(withSeats, { type: "RESTORE", chatMessages: [] });
+      expect(next.seats).toBe(withSeats.seats);
     });
   });
 
-  describe("NEW_SESSION", () => {
-    it("sets new session as active and resets seats and metrics", () => {
-      state = makeState({
-        seats: [makeSeat({ seatId: "s1", status: "running", runId: "run-1" })],
-        sessionMetrics: { fresh: true, usedTokens: 500 },
-      });
-      const session = makeSession({ key: "new-key" });
-      const next = reducer(state, { type: "NEW_SESSION", session });
-      expect(next.activeSessionKey).toBe("new-key");
-      expect(next.sessionMetrics).toEqual({ fresh: false });
-      expect(next.seats[0].status).toBe("empty");
-      expect(next.seats[0].runId).toBeUndefined();
-    });
-
-    it("prepends session to list and deduplicates", () => {
-      const existing = makeSession({ key: "s1" });
-      state = makeState({ sessions: [existing] });
-      const newSession = makeSession({ key: "s1", label: "Updated" });
-      const next = reducer(state, { type: "NEW_SESSION", session: newSession });
-      expect(next.sessions).toHaveLength(1);
-      expect(next.sessions[0]).toBe(newSession);
-    });
-
-    it("limits sessions to MAX_SESSIONS", () => {
-      const sessions = Array.from({ length: 25 }, (_, i) =>
-        makeSession({ key: `s${i}`, label: `Session ${i}` }),
-      );
-      state = makeState({ sessions });
-      const newSession = makeSession({ key: "new" });
-      const next = reducer(state, { type: "NEW_SESSION", session: newSession });
-      expect(next.sessions.length).toBeLessThanOrEqual(20);
-      expect(next.sessions[0].key).toBe("new");
-    });
-  });
-
-  describe("SET_SESSIONS", () => {
-    it("merges incoming sessions with existing, preserving local labels", () => {
-      state = makeState({
-        sessions: [makeSession({ key: "s1", label: "My Label" })],
-      });
-      const next = reducer(state, {
-        type: "SET_SESSIONS",
-        sessions: [makeSession({ key: "s1", label: "Server Label" })],
-      });
-      // existing label is preserved via the merge logic
-      expect(next.sessions[0].label).toBe("My Label");
-    });
-
-    it("adds new incoming sessions", () => {
-      state = makeState({ sessions: [makeSession({ key: "s1" })] });
-      const next = reducer(state, {
-        type: "SET_SESSIONS",
-        sessions: [makeSession({ key: "s1" }), makeSession({ key: "s2" })],
-      });
-      expect(next.sessions.length).toBeGreaterThanOrEqual(2);
-    });
-
-    it("keeps local-only sessions", () => {
-      state = makeState({
-        sessions: [makeSession({ key: "local-only" }), makeSession({ key: "shared" })],
-      });
-      const next = reducer(state, {
-        type: "SET_SESSIONS",
-        sessions: [makeSession({ key: "shared" })],
-      });
-      const keys = next.sessions.map((s) => s.key);
-      expect(keys).toContain("local-only");
-      expect(keys).toContain("shared");
-    });
-
-    it("limits total sessions", () => {
-      const many = Array.from({ length: 25 }, (_, i) => makeSession({ key: `s${i}` }));
-      state = makeState({ sessions: many });
-      const next = reducer(state, {
-        type: "SET_SESSIONS",
-        sessions: Array.from({ length: 25 }, (_, i) => makeSession({ key: `new${i}` })),
-      });
-      expect(next.sessions.length).toBeLessThanOrEqual(20);
-    });
-  });
-
-  describe("HYDRATE_SESSION_CHAT", () => {
-    it("keeps the room's talk and other people's signed tasks when a session comes in from the gateway", () => {
-      const at = (n: number) => new Date(1_700_000_000_000 + n * 1000).toISOString();
-      const base = { runId: "", sessionKey: "main" };
-      const state = {
-        ...initialState,
-        chatMessages: [
-          {
-            ...base,
-            id: "a",
-            role: "user",
-            content: "mine",
-            timestamp: at(1),
-            authorId: "me",
-            actorName: "Ann",
-          },
-          {
-            ...base,
-            id: "b",
-            role: "player",
-            content: "hello all",
-            timestamp: at(2),
-            actorName: "Bob",
-            roomChat: true,
-          },
-          {
-            ...base,
-            id: "c",
-            role: "user",
-            content: "bob's task",
-            timestamp: at(3),
-            authorId: "bob",
-            actorName: "Bob",
-          },
-          { ...base, id: "d", role: "assistant", content: "stale reply", timestamp: at(4) },
-        ] as ChatMessage[],
-      };
-      const next = reducer(state, {
-        type: "HYDRATE_SESSION_CHAT",
-        sessionKey: "main",
-        chatMessages: [
-          { ...base, id: "g1", role: "user", content: "mine", timestamp: at(1) },
-          { ...base, id: "g2", role: "user", content: "bob's task", timestamp: at(3) },
-          { ...base, id: "g3", role: "assistant", content: "fresh reply", timestamp: at(5) },
-        ] as ChatMessage[],
-      });
-      expect(next.chatMessages.map((m) => m.id)).toEqual(["a", "b", "c", "g3"]);
-    });
-
-    it("replaces chat messages for a specific session and filters connection messages", () => {
-      state = makeState({
-        chatMessages: [
-          makeChat({ id: "c1", sessionKey: "session-A", content: "old A" }),
-          makeChat({ id: "c2", sessionKey: "session-B", content: "keep B" }),
-        ],
-      });
-      const incoming = [makeChat({ id: "c3", sessionKey: "session-A", content: "new A" })];
-      const next = reducer(state, {
-        type: "HYDRATE_SESSION_CHAT",
-        sessionKey: "session-A",
-        chatMessages: incoming,
-      });
-      expect(next.chatMessages.find((m) => m.id === "c1")).toBeUndefined();
-      expect(next.chatMessages.find((m) => m.id === "c2")).toBeDefined();
-      expect(next.chatMessages.find((m) => m.id === "c3")).toBeDefined();
-    });
-
-    it("filters redundant connection messages from incoming", () => {
-      const incoming = [
-        makeChat({
-          id: "c1",
-          sessionKey: "session-A",
-          role: "system",
-          content: "Connected to ws://localhost",
-        }),
-        makeChat({ id: "c2", sessionKey: "session-A", content: "real message" }),
-      ];
-      const next = reducer(state, {
-        type: "HYDRATE_SESSION_CHAT",
-        sessionKey: "session-A",
-        chatMessages: incoming,
-      });
-      expect(next.chatMessages.find((m) => m.id === "c1")).toBeUndefined();
-      expect(next.chatMessages.find((m) => m.id === "c2")).toBeDefined();
-    });
-  });
-
-  describe("SWITCH_SESSION", () => {
-    it("sets activeSessionKey, resets metrics, and resets seat runtime", () => {
-      state = makeState({
-        seats: [
-          makeSeat({
-            seatId: "s1",
-            status: "running",
-            runId: "r1",
-            taskSnippet: "x",
-            startedAt: "t",
-          }),
-        ],
-        sessionMetrics: { fresh: true, usedTokens: 1000 },
-        activeSessionKey: "old-key",
-      });
-      const next = reducer(state, {
-        type: "SWITCH_SESSION",
-        sessionKey: "new-key",
-      });
-      expect(next.activeSessionKey).toBe("new-key");
-      expect(next.sessionMetrics).toEqual({ fresh: false });
-      expect(next.seats[0].status).toBe("empty");
-      expect(next.seats[0].runId).toBeUndefined();
-    });
-  });
-
-  describe("unknown action", () => {
-    it("returns the state unchanged", () => {
-      const next = reducer(state, { type: "UNKNOWN_ACTION" } as unknown as Action);
+  describe("an action it does not know", () => {
+    it("hands back the state it was given", () => {
+      const next = reducer(state, { type: "NOT_A_THING" } as never);
       expect(next).toBe(state);
     });
   });

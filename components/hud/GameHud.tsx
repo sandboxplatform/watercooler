@@ -6,16 +6,12 @@ import "./hud.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useStudio } from "@/lib/store";
 import { useBgm } from "@/lib/useBgm";
-import { loadOnboardingDone, loadGatewayConfig, saveOnboardingDone } from "@/lib/persistence";
 import type { HudDockItem, HudPanelId } from "./HudDock";
 import TopBar from "./TopBar";
 import BottomBar from "./BottomBar";
-import ConnectionPanel from "./ConnectionPanel";
-import WorkerPanel from "./WorkerPanel";
 import SeatManagerModal from "./SeatManagerModal";
 import CharacterStudio from "./CharacterStudio";
 import MusicControls from "./MusicControls";
-import OnboardingOverlay from "./OnboardingOverlay";
 import Welcome from "./Welcome";
 import AlreadyOnline from "./AlreadyOnline";
 import GamepadDriver from "./GamepadDriver";
@@ -55,9 +51,6 @@ export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: 
   const [openPanel, setOpenPanel] = useState<HudPanelId | null>(null);
   const [seatManagerOpen, setSeatManagerOpen] = useState(false);
   const [studioOpen, setStudioOpen] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(
-    () => !loadOnboardingDone() && !loadGatewayConfig(),
-  );
 
   // Keep the building's register current: name or home may have changed.
   // And a change made here — a new character, say — follows someone
@@ -70,32 +63,9 @@ export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: 
     });
   }, []);
 
-  // Auto-dismiss onboarding when connection panel opens
-  useEffect(() => {
-    if (showOnboarding && openPanel === "connection") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to panel open
-      setShowOnboarding(false);
-      saveOnboardingDone();
-    }
-  }, [showOnboarding, openPanel]);
-
-  // Auto-open connection panel on auth/connection failures
-  useEffect(() => {
-    if (
-      state.connection === "auth_failed" ||
-      state.connection === "unreachable" ||
-      state.connection === "rate_limited"
-    ) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to connection state
-      setOpenPanel("connection");
-    } else if (state.connection === "connected") {
-      setOpenPanel((prev) => (prev === "connection" ? null : prev));
-    }
-  }, [state.connection]);
-
   // Gamepad shoulder buttons cycle the HUD panels; Back closes whatever is open
   useEffect(() => {
-    const order: HudPanelId[] = ["chat", "music", "connection", "tasks", "workers"];
+    const order: HudPanelId[] = ["chat", "music", "workers"];
 
     const unsubCycle = gameEvents.on("hud-cycle-panel", (direction) => {
       setSeatManagerOpen(false);
@@ -131,12 +101,6 @@ export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: 
           label: "Music",
           icon: asset("/ui/icons/icon-music.png"),
           iconActive: asset("/ui/icons/icon-music-active.png"),
-        },
-        {
-          id: "connection" as const,
-          label: "Connection",
-          icon: asset("/ui/icons/icon-connection.png"),
-          iconActive: asset("/ui/icons/icon-connection-active.png"),
         },
         // Who you are in the world: opens the character studio.
         {
@@ -198,20 +162,12 @@ export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: 
       {topRightPanelOpen && (
         <div className="hud-topright-flyout">
           {openPanel === "music" ? <MusicControls bgm={bgm} /> : null}
-          {openPanel === "connection" ? <ConnectionPanel /> : null}
-          {openPanel === "workers" ? (
-            <WorkerPanel seats={state.seats} onOpenManager={() => setSeatManagerOpen(true)} />
-          ) : null}
         </div>
       )}
 
       {/* Bottom area: status pills (left) + chat dock (right) */}
       <div className="layout-bottom">
-        <BottomBar
-          connection={state.connection}
-          sessionMetrics={state.sessionMetrics}
-          onShowPeople={onShowPeople}
-        />
+        <BottomBar onShowPeople={onShowPeople} />
 
         {/* Spacer pushes chat to right */}
         <div style={{ flex: "1 1 auto" }} />
@@ -248,8 +204,6 @@ export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: 
       />
 
       <CharacterStudio open={studioOpen} onClose={() => setStudioOpen(false)} />
-
-      {showOnboarding && <OnboardingOverlay onDone={() => setShowOnboarding(false)} />}
     </div>
   );
 }

@@ -57,14 +57,9 @@ export default function SeatManagerModal({
     : (selectedSeat.spritePath ?? WORKER_SPRITES[0]?.path ?? "");
 
   const assignedCount = seats.filter((seat) => seat.assigned).length;
-  const busy = selectedSeat.status === "running" || selectedSeat.status === "returning";
 
   const canSave = Boolean(
-    effectiveName.trim() &&
-    effectiveRoleTitle.trim() &&
-    effectiveSpriteKey &&
-    effectiveSpritePath &&
-    !busy,
+    effectiveName.trim() && effectiveRoleTitle.trim() && effectiveSpriteKey && effectiveSpritePath,
   );
 
   const beginDraftForSeat = (seat: SeatState) => {
@@ -92,7 +87,6 @@ export default function SeatManagerModal({
   };
 
   const handleUnassign = () => {
-    if (busy) return;
     updateSeatConfig(selectedSeat.seatId, {
       assigned: false,
       roleTitle: undefined,
@@ -166,7 +160,6 @@ export default function SeatManagerModal({
           effectiveRoleTitle={effectiveRoleTitle}
           effectiveSpriteKey={effectiveSpriteKey}
           effectiveSpritePath={effectiveSpritePath}
-          busy={busy}
           canSave={canSave}
           onNameChange={handleNameChange}
           onRoleTitleChange={handleRoleTitleChange}
