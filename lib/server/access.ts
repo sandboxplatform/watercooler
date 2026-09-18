@@ -193,6 +193,11 @@ export function misconfiguredCodes(): string[] {
  */
 export function isOpenPath(pathname: string): boolean {
   if (pathname === "/unlock" || pathname === "/api/unlock") return true;
+  // Signing out has to work from a cookie that is already unusable —
+  // rotated, expired, or naming an identity this build no longer knows.
+  // Every one of those is turned away by the gate, and being turned away
+  // is the state you most want to be able to clear.
+  if (pathname === "/api/lock") return true;
   if (pathname === "/api/health" || pathname === "/favicon.ico") return true;
   return pathname.startsWith("/api/auth/") || pathname.startsWith("/_next/");
 }
@@ -343,12 +348,30 @@ export function cookieFrom(header: string | undefined, name: string): string | u
  * cross-site form posts do not carry it.
  */
 export function accessCookieHeader(token: string, secure: boolean): string {
+  return cookieHeader(token, Math.floor(TTL_MS / 1000), secure);
+}
+
+/**
+ * The same cookie, expired: what signing out sets.
+ *
+ * Built by the same function that sets it because a browser matches a
+ * cookie on its name, path and domain — cleared under a different `Path`
+ * it is a different cookie, and the live one stays exactly where it was
+ * with a successful-looking response to show for it. There is no session
+ * store behind any of this, so a cookie that survives is still a way in
+ * until it expires of its own accord.
+ */
+export function clearedAccessCookieHeader(secure: boolean): string {
+  return cookieHeader("", 0, secure);
+}
+
+function cookieHeader(value: string, maxAge: number, secure: boolean): string {
   const parts = [
-    `${ACCESS_COOKIE}=${token}`,
+    `${ACCESS_COOKIE}=${value}`,
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
-    `Max-Age=${Math.floor(TTL_MS / 1000)}`,
+    `Max-Age=${maxAge}`,
   ];
   if (secure) parts.push("Secure");
   return parts.join("; ");

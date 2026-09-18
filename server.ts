@@ -35,6 +35,7 @@ import { buildOfficeTools } from "./lib/mettara/office-tools";
 import { createToolsHandler, TOOLS_PATH } from "./lib/mettara/webhook";
 import {
   accessCookieHeader,
+  clearedAccessCookieHeader,
   clearFailures,
   clientIp,
   codeFromUrl,
@@ -324,6 +325,44 @@ async function handleUnlock(req: IncomingMessage, res: ServerResponse) {
 }
 
 /**
+ * Give the cookie back.
+ *
+ * The only way out there was: the cookie is `HttpOnly`, so nothing on the
+ * page can reach it, and there is no session store to drop it from — a
+ * cookie handed over stays a way in for its whole week unless the code
+ * behind it is rotated, which turns out everybody holding that code rather
+ * than the one browser that asked to leave.
+ *
+ * A GET as well as a POST, and that is a decision. `SameSite=Lax` carries
+ * the cookie on a cross-site navigation, so a link on another page can sign
+ * somebody out — and the answer to that is to sign back in, which is one
+ * link away. Against it: this is the only way out, the address bar is how
+ * anybody will reach it while nothing in the HUD offers it, and a way out
+ * that needs a button somebody has to build first is no way out at all.
+ */
+function handleLock(req: IncomingMessage, res: ServerResponse) {
+  const header = clearedAccessCookieHeader(!dev);
+  log.info(`lock: ${clientIp(req)} signed out`);
+  if ((req.method ?? "GET").toUpperCase() === "POST") {
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Set-Cookie": header,
+      "Cache-Control": "no-store",
+    });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+  // A navigation goes to the door, which is the one page that will answer
+  // now — landing on a 401 would read as something having gone wrong.
+  res.writeHead(302, {
+    Location: "/unlock",
+    "Set-Cookie": header,
+    "Cache-Control": "no-store",
+  });
+  res.end();
+}
+
+/**
  * Trade a `?code=` in the link for the cookie, then send the browser to the
  * same place without it. Returns true when the request has been answered.
  *
@@ -581,6 +620,10 @@ if (unconfigured) {
         }
         if (pathOf(req) === "/api/unlock") {
           void handleUnlock(req, res).catch((err) => failRequest(res, "unlock", err));
+          return;
+        }
+        if (pathOf(req) === "/api/lock") {
+          handleLock(req, res);
           return;
         }
         // Everything below this line needs the cookie: pages, API routes, uploads.

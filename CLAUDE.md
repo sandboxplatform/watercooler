@@ -272,7 +272,30 @@ signed cookie (`lib/server/access.ts`) either by typing it at `/unlock` or by
 arriving with `?code=…` on any path, which is what makes a shareable bookmark
 possible. The cookie is an HMAC over its own expiry keyed by the code, so there is
 no session store — and **rotating `ACCESS_CODE` invalidates every cookie already
-issued**, which is the entire revocation story.
+issued**, which is the whole of revocation from the server's end.
+
+**`/api/lock` is the other end of it: one browser giving its cookie back.**
+There was no way out at all. The cookie is `HttpOnly`, so nothing on the page
+can reach it, and with no session store to drop it from, a cookie handed over
+stayed a way in for its whole week — the only answer being to rotate the code,
+which turns out everybody holding it rather than the one browser that asked to
+leave. The route sets the same cookie at `Max-Age=0`, which is why
+`clearedAccessCookieHeader` is built by the same function as the one that sets
+it: a browser matches a cookie on its name and path, so cleared under a
+different `Path` it is a different cookie and the live one stays exactly where
+it was, with a successful-looking response to show for it.
+
+Two decisions in it:
+
+- **It answers a GET as well as a POST.** `SameSite=Lax` carries the cookie on
+  a cross-site navigation, so a link on another page can sign somebody out —
+  against which: this is the only way out, signing back in is one link away,
+  the address bar is how anybody reaches it while nothing in the HUD offers
+  it, and a way out that needs a button somebody has to build first is no way
+  out at all.
+- **It is on `isOpenPath`**, so it answers a cookie the gate would turn away —
+  rotated, expired, or naming an identity this build no longer knows. Being
+  locked out is the state you most want to be able to clear.
 
 **The code in a link costs something.** Unlike a typed password it lands in browser
 history, in the host's request log, and in whatever chat window the link is pasted
@@ -293,7 +316,7 @@ surface is covered in one place — pages, API routes, and both upgrades
 `checkOrigin` beside it is **not** authentication: it only constrains browsers, and
 any other client can send whatever `Origin` it likes.
 
-Left open by design: `/unlock` and `/api/unlock`, `/api/health` (the host's
+Left open by design: `/unlock`, `/api/unlock` and `/api/lock`, `/api/health` (the host's
 liveness probe), `/api/auth/` (so sign-in can work), `/_next/` (without which the
 unlock page cannot render). `/api/mettara/tools` and `/api/internal/dispatch` are
 answered _before_ the gate — they are machine-to-machine and carry stronger

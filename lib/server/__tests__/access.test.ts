@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
+  ACCESS_COOKIE,
   accessCookieHeader,
   clearFailures,
+  clearedAccessCookieHeader,
   codeFromUrl,
   codeMatches,
   gateEnabled,
@@ -290,12 +292,38 @@ describe("the Set-Cookie header", () => {
     expect(accessCookieHeader("token", true)).toContain("Secure");
     expect(accessCookieHeader("token", false)).not.toContain("Secure");
   });
+
+  /**
+   * Signing out has to clear the cookie that is actually there, and a
+   * browser matches one on its name and path: under a different `Path` it
+   * is a different cookie, the live one stays where it was, and the answer
+   * still says it worked. There being no session store, that cookie would
+   * go on opening the door for the rest of its week.
+   */
+  it("clears the same cookie it sets, not a different one", () => {
+    for (const secure of [true, false]) {
+      const set = accessCookieHeader("token", secure);
+      const cleared = clearedAccessCookieHeader(secure);
+      const attributes = (header: string) =>
+        header
+          .split(";")
+          .slice(1)
+          .map((part) => part.trim())
+          .filter((part) => !part.startsWith("Max-Age="));
+      expect(attributes(cleared)).toEqual(attributes(set));
+      expect(cleared).toContain("Max-Age=0");
+      expect(cleared.startsWith(`${ACCESS_COOKIE}=;`)).toBe(true);
+    }
+  });
 });
 
 describe("which paths answer before anyone has a cookie", () => {
   it("opens the door itself, the health probe and the build's assets", () => {
     expect(isOpenPath("/unlock")).toBe(true);
     expect(isOpenPath("/api/unlock")).toBe(true);
+    // The way out, which has to answer a cookie the gate would turn away:
+    // being locked out is the state you most want to be able to clear.
+    expect(isOpenPath("/api/lock")).toBe(true);
     expect(isOpenPath("/api/health")).toBe(true);
     expect(isOpenPath("/_next/static/chunk.js")).toBe(true);
     expect(isOpenPath("/api/auth/callback/google")).toBe(true);
