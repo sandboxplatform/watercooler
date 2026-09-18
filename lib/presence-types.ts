@@ -21,6 +21,26 @@ export const HEARTBEAT_MS = 5_000;
 export const IDLE_TIMEOUT_MS = 15_000;
 
 /**
+ * How long the place is held for the connection already standing in it.
+ *
+ * One person holds one place and the one already there keeps it, so a
+ * second connection claiming the same personal code is turned away. The
+ * trouble is that a page load is a new connection too — walking through a
+ * building's front door, a refresh, reopening the tab — and behind a proxy
+ * the socket the old page left behind is not closed promptly at the
+ * server. Refusing on the strength of that alone would shut somebody out
+ * of their own world with their own ghost, for as long as the heartbeat
+ * takes to notice it, which is twice HEARTBEAT_MS.
+ *
+ * So the one in possession is pinged and given this long to answer. A
+ * browser that is really there replies in tens of milliseconds and the
+ * newcomer is refused; a ghost never replies and the newcomer walks in
+ * after a second. A second's pause on a reload, against two of the same
+ * person in the world at once.
+ */
+export const CLAIM_GRACE_MS = 1_000;
+
+/**
  * How fast a person moves, in px/s.
  *
  * They live here, with the presence types, because both sides need them and
@@ -273,10 +293,10 @@ export interface RejectedMessage {
   type: "rejected";
   /**
    * `full` — the room is at its human limit. `private` — not yours to
-   * enter. `elsewhere` — you have arrived again somewhere else, and this
-   * connection is the one being let go.
+   * enter. `already-online` — you are in the world on another connection,
+   * which keeps its place; this one is turned away.
    */
-  reason: "full" | "private" | "elsewhere";
+  reason: "full" | "private" | "already-online";
   /** Only meaningful for `full`. */
   capacity?: number;
 }

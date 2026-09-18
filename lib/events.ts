@@ -41,6 +41,15 @@ export interface GameEventMap {
   "presence-left": [id: string];
   /** How many humans are in the room, for the HUD. */
   "presence-count": [count: number, capacity: number];
+  /**
+   * The door was shut on this browser, and it is not trying again.
+   *
+   * One person holds one session: somebody already in the world on this
+   * code keeps their place, and this window is refused. Standing down
+   * quietly would leave a person looking at a world with nobody in it —
+   * themselves included — and nothing to say why, so the HUD says it.
+   */
+  "presence-refused": [reason: "already-online"];
   /** Somebody on voice chat started or stopped talking; the scene marks them. */
   "voice-speaking": [id: string, speaking: boolean];
   /** What the room has spent on agents, and the ceiling it stops at. */

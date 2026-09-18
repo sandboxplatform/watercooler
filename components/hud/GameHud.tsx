@@ -17,6 +17,7 @@ import CharacterStudio from "./CharacterStudio";
 import MusicControls from "./MusicControls";
 import OnboardingOverlay from "./OnboardingOverlay";
 import Welcome from "./Welcome";
+import AlreadyOnline from "./AlreadyOnline";
 import GamepadDriver from "./GamepadDriver";
 import { profileSnapshot, subscribeToProfile } from "@/lib/profile";
 import { registerProfile } from "@/lib/people-client";
@@ -171,6 +172,7 @@ export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: 
     <div className="hud-overlay">
       <GamepadDriver />
       <Welcome />
+      <AlreadyOnline />
       <ElevatorModal />
       <AchievementToast />
       <Whiteboard />

@@ -129,12 +129,15 @@ export function usePresence() {
           break;
         case "rejected":
           joinedRef.current = false;
-          if (message.reason === "elsewhere") {
-            // The same person is in a room on another connection, and this
-            // is the one being let go. Coming back would take the place
-            // straight off them, and the two would trade it for ever.
-            log.warn("we are in the room on another connection; standing down");
+          if (message.reason === "already-online") {
+            // The same person is in the world on another connection, which
+            // keeps its place: this window is the second one. Reconnecting
+            // would only ask the same question and get the same answer, so
+            // it stops — and says so, since a world with nobody in it and
+            // no explanation reads as the app being broken.
+            log.warn("this person is already online elsewhere; standing down");
             stopRoomSocket();
+            gameEvents.emit("presence-refused", "already-online");
             break;
           }
           if (message.reason === "private") {

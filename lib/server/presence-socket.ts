@@ -28,6 +28,7 @@ import { onPlayerJoined, onPlayerSpoke, onRoomFull } from "./achievement-rules";
 import { createLogger } from "../logger";
 import {
   EARSHOT_PX,
+  CLAIM_GRACE_MS,
   HEARTBEAT_MS,
   TICK_MS,
   isClientMessage,
@@ -35,6 +36,7 @@ import {
   type Facing,
   type OnlineMessage,
   type PresencePlayer,
+  type JoinMessage,
   type MeetingNotice,
   type SayScope,
   type ServerMessage,
@@ -216,6 +218,79 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     const slug = roomOf.get(id);
     return slug ? rooms.get(slug)?.sockets.get(id) : undefined;
   };
+
+  /**
+   * The other connection holding this identity, if somebody is already in
+   * the world as them.
+   *
+   * Server-wide, not per room: "two Coops" is one person in two places at
+   * once whether or not the two places are the same one. It used to ask
+   * only about the room being joined, so the same code in a lobby and on
+   * the floor above it was two people in the Online list and two names
+   * over two characters.
+   *
+   * Being in a room is what counts as being online — a connection that has
+   * upgraded and not yet said where it is standing is nobody yet, and the
+   * whole of a join is about to follow it.
+   */
+  const heldBy = (identity: AccessIdentity, exceptId: string): string | null => {
+    for (const [other, held] of identityByConnection) {
+      if (other === exceptId) continue;
+      if (held !== identity) continue;
+      if (!roomOf.has(other)) continue;
+      return other;
+    }
+    return null;
+  };
+
+  /**
+   * Whether the connection in possession is really still there.
+   *
+   * Asked rather than assumed, because the commonest reason for a second
+   * connection claiming one person's code is that person reloading: a page
+   * load is a new socket, and behind a proxy the old one is not closed at
+   * the server for some seconds yet. Refusing on the strength of a socket
+   * that is still open would shut somebody out of their own world with
+   * their own ghost.
+   *
+   * A ping is what tells them apart, exactly as it does for the heartbeat:
+   * a browser that is there answers at once, a ghost never answers. See
+   * CLAIM_GRACE_MS for the wait, which is only ever felt by a newcomer
+   * whose predecessor is dead.
+   */
+  const stillThere = (id: string): Promise<boolean> => {
+    const socket = socketFor(id);
+    if (!socket || socket.readyState !== WebSocket.OPEN) return Promise.resolve(false);
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (alive: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        socket.off("pong", answered);
+        resolve(alive);
+      };
+      const answered = () => finish(true);
+      const timer = setTimeout(() => finish(false), CLAIM_GRACE_MS);
+      socket.on("pong", answered);
+      try {
+        socket.ping();
+      } catch {
+        finish(false);
+      }
+    });
+  };
+
+  /**
+   * Identities whose place is being contested right now.
+   *
+   * The challenge above takes a moment, and a third connection arriving
+   * inside it would find the incumbent still in the room and start a
+   * second challenge of its own — two newcomers, each told the ghost is
+   * gone, both let in. Whoever is already contesting it has the claim;
+   * anybody else is turned away while it is decided.
+   */
+  const claiming = new Set<AccessIdentity>();
 
   const broadcast = (slug: string, message: ServerMessage, exceptId?: string) => {
     const room = rooms.get(slug);
@@ -577,6 +652,155 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         return permittedLook(identity, wanted, fallback);
       };
 
+      /**
+       * Walk this connection into a room: the whole of a join, once the
+       * place is known to be theirs to take.
+       *
+       * It is a function rather than the body of the handler because the
+       * claim below may have to wait a moment before it knows, and a join
+       * that has waited is otherwise a second copy of all of this.
+       */
+      const admit = (join: JoinMessage) => {
+        const slug = normaliseRoomSlug(join.room);
+        // A private building's floors. The lift will not carry a visitor
+        // and the floor's page turns them away, but neither is the gate:
+        // the browser asks for whatever room it likes over this socket, so
+        // the answer is checked against the cookie the way a look is.
+        if (!mayEnterRoom(slug, identity)) {
+          log.warn(`refused a join to "${slug}": not ${identity}'s floor`);
+          send(ws, { type: "rejected", reason: "private" });
+          ws.close();
+          return;
+        }
+        // Walking from one place to another on the same connection: out
+        // of the old room first, so nobody there keeps a ghost of you.
+        const previous = roomOf.get(id);
+        if (previous === slug) {
+          const room = rooms.get(slug);
+          const player = room?.hub.get(id);
+          if (room && player) {
+            room.hub.place(id, {
+              x: coerceNumber(join.x, player.x),
+              y: coerceNumber(join.y, player.y),
+              facing: coerceFacing(join.facing),
+              name: typeof join.name === "string" ? join.name : undefined,
+              spriteKey:
+                typeof join.spriteKey === "string"
+                  ? lookFor(join.spriteKey, player.spriteKey)
+                  : undefined,
+            });
+            broadcastOnline();
+            send(ws, {
+              type: "welcome",
+              you: id,
+              players: room.hub.snapshot(),
+              capacity: room.hub.capacity,
+            });
+            send(ws, { type: "online", people: onlineList() });
+            tellMeetings(id, ws);
+            return;
+          }
+        }
+        if (previous) drop(id);
+        const room = roomFor(slug);
+
+        const result = room.hub.join(id, {
+          name: typeof join.name === "string" ? join.name : "Guest",
+          // The default look rather than a word: a refused claim on a
+          // first join has nothing to keep, and the fallback has to name
+          // a sheet somebody can be drawn in. "player" named none, so
+          // every scene and the People panel alike fell through to the
+          // default on their own — which looked like an answer and was
+          // the absence of one.
+          spriteKey: lookFor(join.spriteKey, BOSS_SPRITE_KEY),
+          x: coerceNumber(join.x),
+          y: coerceNumber(join.y),
+          facing: coerceFacing(join.facing),
+        });
+
+        if (!result.ok) {
+          log.info(`refused a join to "${slug}": full (${room.hub.capacity} humans)`);
+          send(ws, { type: "rejected", reason: "full", capacity: result.capacity });
+          ws.close();
+          return;
+        }
+
+        room.sockets.set(id, ws);
+        roomOf.set(id, slug);
+        if (micOf.get(id)) room.hub.setMic(id, true);
+        log.info(`${result.player.name} joined "${slug}" (${room.hub.count}/${room.hub.capacity})`);
+
+        send(ws, {
+          type: "welcome",
+          you: id,
+          players: room.hub.snapshot(),
+          capacity: room.hub.capacity,
+        });
+        broadcast(slug, { type: "joined", player: result.player }, id);
+        broadcastOnline();
+        // What is being held, of what they may know about: a meeting is
+        // most useful to somebody who is not in the room yet.
+        tellMeetings(id, ws);
+        recordActivity(slug, {
+          kind: "human",
+          actor: result.player.name,
+          text: "walked in",
+        });
+
+        announce(slug, onPlayerJoined(slug, result.player.name));
+        if (room.hub.count >= room.hub.capacity) {
+          announce(
+            slug,
+            onRoomFull(
+              slug,
+              room.hub.snapshot().map((p) => p.name),
+            ),
+          );
+        }
+      };
+
+      /**
+       * Somebody is already in the world on this code. Decide which of the
+       * two connections is real, and let exactly one of them stand.
+       *
+       * The one in possession is asked whether it is still there. If it
+       * answers, it keeps its place and this connection is refused. If it
+       * does not, it was a page that has gone — a reload, a door, a closed
+       * tab whose socket a proxy is still holding open — and this
+       * connection takes over from it.
+       */
+      const claim = async (join: JoinMessage, contested: string) => {
+        if (claiming.has(identity)) {
+          log.info(`${identity} is already being claimed; turning this one away`);
+          send(ws, { type: "rejected", reason: "already-online" });
+          ws.close();
+          return;
+        }
+        claiming.add(identity);
+        let alive: boolean;
+        try {
+          alive = await stillThere(contested);
+        } finally {
+          claiming.delete(identity);
+        }
+
+        if (alive) {
+          log.info(`${identity} is already online; refusing a second connection`);
+          send(ws, { type: "rejected", reason: "already-online" });
+          ws.close();
+          return;
+        }
+
+        log.info(`${identity}'s earlier connection is gone; letting this one in`);
+        const stale = socketFor(contested);
+        drop(contested);
+        stale?.terminate();
+
+        // The newcomer may itself have gone while we waited.
+        if (ws.readyState !== WebSocket.OPEN) return;
+        admit(join);
+      };
+
       ws.on("message", (raw) => {
         let parsed: unknown;
         try {
@@ -587,125 +811,25 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         if (!isClientMessage(parsed)) return;
 
         if (parsed.type === "join") {
-          const slug = normaliseRoomSlug(parsed.room);
-          // A private building's floors. The lift will not carry a visitor
-          // and the floor's page turns them away, but neither is the gate:
-          // the browser asks for whatever room it likes over this socket, so
-          // the answer is checked against the cookie the way a look is.
-          // One person, one place. A personal code names exactly one
-          // person, so a second connection claiming it is that same
-          // someone arriving again — most often because the last page's
-          // socket outlived the page, which a proxy between browser and
-          // server makes routine. The earlier one is let go, and told why
-          // so it does not simply reconnect and take the place back.
+          // One person, one session. A personal code names exactly one
+          // person, so a second connection claiming it is a second window
+          // onto somebody who is already in the world — and two of one
+          // person walking about is the thing this rule exists to make
+          // impossible. The one already in possession keeps its place and
+          // the newcomer is turned away, told which refusal it is so it
+          // stands down rather than reconnecting into the same answer.
+          //
+          // Server-wide, not per room, because two Coops is two Coops
+          // whether they are in the same room or two floors apart.
           //
           // Only for a personal identity: the shared code is many people,
           // so two visitors are two visitors and both belong here.
-          if (identity !== "visitor") {
-            const here = rooms.get(slug);
-            for (const [other, socket] of [...(here?.sockets ?? [])]) {
-              if (other === id) continue;
-              if (identityByConnection.get(other) !== identity) continue;
-              log.info(`${identity} arrived again; letting the older connection go`);
-              send(socket, { type: "rejected", reason: "elsewhere" });
-              drop(other);
-              socket.close();
-            }
-          }
-
-          if (!mayEnterRoom(slug, identity)) {
-            log.warn(`refused a join to "${slug}": not ${identity}'s floor`);
-            send(ws, { type: "rejected", reason: "private" });
-            ws.close();
+          const contested = identity !== "visitor" ? heldBy(identity, id) : null;
+          if (contested) {
+            void claim(parsed, contested);
             return;
           }
-          // Walking from one place to another on the same connection: out
-          // of the old room first, so nobody there keeps a ghost of you.
-          const previous = roomOf.get(id);
-          if (previous === slug) {
-            const room = rooms.get(slug);
-            const player = room?.hub.get(id);
-            if (room && player) {
-              room.hub.place(id, {
-                x: coerceNumber(parsed.x, player.x),
-                y: coerceNumber(parsed.y, player.y),
-                facing: coerceFacing(parsed.facing),
-                name: typeof parsed.name === "string" ? parsed.name : undefined,
-                spriteKey:
-                  typeof parsed.spriteKey === "string"
-                    ? lookFor(parsed.spriteKey, player.spriteKey)
-                    : undefined,
-              });
-              broadcastOnline();
-              send(ws, {
-                type: "welcome",
-                you: id,
-                players: room.hub.snapshot(),
-                capacity: room.hub.capacity,
-              });
-              send(ws, { type: "online", people: onlineList() });
-              tellMeetings(id, ws);
-              return;
-            }
-          }
-          if (previous) drop(id);
-          const room = roomFor(slug);
-
-          const result = room.hub.join(id, {
-            name: typeof parsed.name === "string" ? parsed.name : "Guest",
-            // The default look rather than a word: a refused claim on a
-            // first join has nothing to keep, and the fallback has to name
-            // a sheet somebody can be drawn in. "player" named none, so
-            // every scene and the People panel alike fell through to the
-            // default on their own — which looked like an answer and was
-            // the absence of one.
-            spriteKey: lookFor(parsed.spriteKey, BOSS_SPRITE_KEY),
-            x: coerceNumber(parsed.x),
-            y: coerceNumber(parsed.y),
-            facing: coerceFacing(parsed.facing),
-          });
-
-          if (!result.ok) {
-            log.info(`refused a join to "${slug}": full (${room.hub.capacity} humans)`);
-            send(ws, { type: "rejected", reason: "full", capacity: result.capacity });
-            ws.close();
-            return;
-          }
-
-          room.sockets.set(id, ws);
-          roomOf.set(id, slug);
-          if (micOf.get(id)) room.hub.setMic(id, true);
-          log.info(
-            `${result.player.name} joined "${slug}" (${room.hub.count}/${room.hub.capacity})`,
-          );
-
-          send(ws, {
-            type: "welcome",
-            you: id,
-            players: room.hub.snapshot(),
-            capacity: room.hub.capacity,
-          });
-          broadcast(slug, { type: "joined", player: result.player }, id);
-          broadcastOnline();
-          // What is being held, of what they may know about: a meeting is
-          // most useful to somebody who is not in the room yet.
-          tellMeetings(id, ws);
-          recordActivity(slug, {
-            kind: "human",
-            actor: result.player.name,
-            text: "walked in",
-          });
-
-          announce(slug, onPlayerJoined(slug, result.player.name));
-          if (room.hub.count >= room.hub.capacity) {
-            announce(
-              slug,
-              onRoomFull(
-                slug,
-                room.hub.snapshot().map((p) => p.name),
-              ),
-            );
-          }
+          admit(parsed);
           return;
         }
 

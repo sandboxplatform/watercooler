@@ -577,12 +577,49 @@ A room's people live in a `PresenceHub`, keyed by connection rather than by
 person: one browser tab is one player. Two rules keep that from showing a
 person twice.
 
-**One person, one place.** A personal code names exactly one person, so a
-second connection claiming `coop` or `rob` is that same someone arriving
-again. The earlier connection is dropped from the room and told
-`rejected: "elsewhere"`, and `stopRoomSocket` keeps it from reconnecting —
-without that last part two tabs trade the place back and forth for ever. The
-shared code is exempt: many people hold it, so two visitors are two people.
+**One person, one session.** A personal code names exactly one person, so a
+second connection claiming `coop` or `rob` is a second window onto somebody
+already in the world. **The one in possession keeps its place and the
+newcomer is refused** `rejected: "already-online"`, and `stopRoomSocket`
+keeps it from reconnecting into the same answer over and over. The shared
+code is exempt: many people hold it, so two visitors are two people.
+
+**It is asked of the whole server, not of the room being joined.** Two Coops
+is two Coops whether they are in one room or two floors apart — and the
+Online pill counts the world, so the pair showed up side by side in it.
+`heldBy` scans every connection's identity against the room each is standing
+in, since a connection that has upgraded and not yet joined is nobody yet.
+
+**The one in possession is pinged before it is believed, and that is the
+part to keep.** A page load is a new connection too — the front door of a
+building, a refresh, a reopened tab — and behind a proxy the socket the old
+page left behind is not closed promptly at the server. Refusing on the
+strength of an open socket alone would shut somebody out of their own world
+with their own ghost, for twice `HEARTBEAT_MS`, on every door they walk
+through. So the incumbent is sent a ping and given `CLAIM_GRACE_MS` to
+answer: a browser that is really there replies in tens of milliseconds and
+the newcomer is turned away; a ghost never replies and the newcomer takes
+over from it. A second's pause on a reload is what that costs, and it is
+only ever paid by somebody whose predecessor is already dead.
+
+`claiming` is the other half of it. The challenge takes a moment, and a
+third connection arriving inside that moment would find the incumbent still
+in the room and start a second challenge of its own — two newcomers, each
+told the ghost is gone, both let in. Whoever is already contesting an
+identity has the claim; anybody else is refused while it is decided.
+
+**Being refused is shown, not just logged.** The socket stands down for
+good, so a person who was told nothing would be looking at a world with
+nobody in it — themselves included — and no reason for it, which reads as
+the app being broken rather than as the rule working.
+`components/hud/AlreadyOnline.tsx` is the screen, off the `presence-refused`
+event.
+
+The question this asks is **which code opened the door**, not which account
+is signed in: a signed-in person is still `visitor` to this socket unless
+they hold a personal code, so two tabs on one Google account are two
+visitors. Giving accounts the same rule means carrying the session through
+the upgrade, which is a different change.
 
 **A dead socket is noticed.** The heartbeat pings every `HEARTBEAT_MS` and
 now reads the pongs; a connection that misses one is terminated. It used to
@@ -594,9 +631,11 @@ that was catching it.
 Both exist because of a bug that only appeared in production: behind
 Railway's proxy the browser navigating away does not promptly close the
 socket at the server, so walking out of a building meant meeting yourself at
-the door for fifteen seconds. It does not reproduce against a local server,
-where the close is immediate — `lib/server/__tests__/presence-identity.test.ts`
-drives real sockets against a real server to hold the rule down.
+the door for fifteen seconds. That same fact is why the claim above pings
+before it refuses — the ghost holding the place is exactly this socket. None
+of it reproduces against a local server, where the close is immediate, so
+`lib/server/__tests__/presence-identity.test.ts` drives real sockets against
+a real server and stands a paused one in for a page that has gone.
 
 The client closes on `pagehide` too, guarded on `persisted` so a hidden tab
 or a backgrounded phone is not taken out of the room for looking away.
