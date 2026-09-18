@@ -14,8 +14,9 @@ import { RoomStore, SCHEMA_VERSION } from "../room-store";
  * failure — a typo, a locked file, a full disk — looked exactly like the
  * ordinary case of the column already being there, and there was nowhere to
  * put a change that is not another column, because nothing recorded what
- * shape a database was in. Dropping the agents' tables is exactly such a
- * change, and it is what the ladder was built for.
+ * shape a database was in. Dropping the agents' tables — and, after them,
+ * the chat log — is exactly such a change, and it is what the ladder was
+ * built for.
  */
 
 const ROOM = "migrating-room";
@@ -54,6 +55,13 @@ function columnsOf(file: string, table: string): string[] {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
   db.close();
   return rows.map((r) => r.name);
+}
+
+function rowsIn(file: string, table: string): number {
+  const db = new DatabaseSync(file);
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number };
+  db.close();
+  return row.n;
 }
 
 function tablesOf(file: string): string[] {
@@ -152,12 +160,13 @@ describe("a database this build has just made", () => {
     expect(versionOf(path)).toBe(first);
   });
 
-  it("is not given the agents' tables back", () => {
+  it("is not given the tables of features that have gone", () => {
     open();
     const tables = tablesOf(path);
     expect(tables).not.toContain("tasks");
     expect(tables).not.toContain("sessions");
     expect(tables).not.toContain("activity");
+    expect(tables).not.toContain("messages");
   });
 });
 
@@ -183,6 +192,15 @@ describe("a database an older build left behind", () => {
     expect(tables).not.toContain("activity");
   });
 
+  it("loses the chat log, remarks and all", () => {
+    olderBuild(path);
+    expect(rowsIn(path, "messages")).toBe(1);
+
+    open();
+
+    expect(tablesOf(path)).not.toContain("messages");
+  });
+
   it("gains the tables it never had", () => {
     olderBuild(path);
     open();
@@ -194,9 +212,10 @@ describe("a database an older build left behind", () => {
   it("keeps what was already in it", () => {
     olderBuild(path);
 
-    const store = open();
+    open();
 
-    expect(store.getSnapshot(ROOM).messages).toEqual([{ id: "said-1", content: "morning" }]);
+    // The room itself outlives every feature that has been taken out of it.
+    expect(rowsIn(path, "rooms")).toBe(1);
   });
 
   it("is usable the moment it is up", () => {

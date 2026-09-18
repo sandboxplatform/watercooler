@@ -41,13 +41,7 @@ export interface PinballScore {
   scored_at: string;
 }
 
-/** Mirrors the client-side caps so the server cannot grow without bound. */
-export const LIMITS = {
-  messages: 400,
-} as const;
-
 export interface RoomSnapshot {
-  messages: unknown[];
   seats: unknown[];
 }
 
@@ -72,18 +66,6 @@ CREATE TABLE IF NOT EXISTS seats (
   updated_at TEXT NOT NULL,
   data       TEXT NOT NULL,
   PRIMARY KEY (room, seat_id)
-);
-
-CREATE TABLE IF NOT EXISTS messages (
-  room        TEXT NOT NULL,
-  message_id  TEXT NOT NULL,
-  session_key TEXT,
-  author_type TEXT NOT NULL,
-  author      TEXT,
-  created_at  TEXT NOT NULL,
-  position    INTEGER NOT NULL,
-  data        TEXT NOT NULL,
-  PRIMARY KEY (room, message_id)
 );
 
 CREATE TABLE IF NOT EXISTS achievements (
@@ -122,7 +104,6 @@ CREATE TABLE IF NOT EXISTS arcade_scores (
 );
 CREATE INDEX IF NOT EXISTS arcade_by_game ON arcade_scores (room, game, score DESC);
 CREATE INDEX IF NOT EXISTS strokes_by_room ON board_strokes (room, position);
-CREATE INDEX IF NOT EXISTS messages_by_room ON messages (room, position);
 
 CREATE TABLE IF NOT EXISTS people (
   id         TEXT PRIMARY KEY,
@@ -206,6 +187,18 @@ const MIGRATIONS: readonly Migration[] = [
       db.exec("DROP TABLE IF EXISTS sessions");
     },
   },
+  {
+    name: "drop the chat log",
+    up: (db) => {
+      // Chat is gone, and nothing reads this back or writes to it. What
+      // people say to each other is Global Chat, which is audio between
+      // browsers and was never kept anywhere; what a resident says is a
+      // bubble that fades. The rows were the agents' transcript, and
+      // latterly remarks typed into a window beside the office.
+      db.exec("DROP INDEX IF EXISTS messages_by_room");
+      db.exec("DROP TABLE IF EXISTS messages");
+    },
+  },
 ];
 
 /** The shape this build expects. */
@@ -240,22 +233,6 @@ function parseRows(rows: DataRow[]): unknown[] {
   return out;
 }
 
-/**
- * What kind of speaker a stored message belongs to.
- *
- * There is only one kind now — a person, in a room — so an unmarked message
- * is a person's. It used to fall back to `"system"`, which was right while
- * agents wrote here and is wrong now for the opposite reason: the browser
- * stopped sending a `role` at all when the agents went, so every remark
- * anybody made through this path would have been filed as machinery, hidden
- * from the room's own history and invisible to `hasSpoken`. The old values
- * are still read back out of rows written before that, which is what
- * `getSnapshot` filters on.
- */
-function authorTypeOf(message: Record<string, unknown>): string {
-  return asString(message.role) ?? "player";
-}
-
 function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
@@ -268,11 +245,9 @@ export class RoomStore {
    *
    * `prepare` parses and plans the statement every time it is called, and
    * every method here called it afresh — including `ensureRoom`, which runs
-   * ahead of nearly every other one, and `appendMessage`, which runs on every
-   * line anybody says. The SQL is a fixed set of literals (the handful built
-   * from a table name among them, since the tables are a closed list), so it
-   * compiles once and is reused for the life of the process, which is what a
-   * prepared statement is for.
+   * ahead of nearly every other one. The SQL is a fixed set of literals, so
+   * it compiles once and is reused for the life of the process, which is
+   * what a prepared statement is for.
    */
   private statements = new Map<string, StatementSync>();
 
@@ -636,17 +611,6 @@ export class RoomStore {
     this.ensureRoom(room);
 
     return {
-      // Only what a person said. A room that ran agents still holds their
-      // transcript — the task somebody typed, the reply, the tool calls, a
-      // provider's error — and none of it is a remark in a room: it carries
-      // no speaker this build understands, so every line of it came back
-      // labelled as the reader's own. The rows are left alone; they are
-      // simply not this table's job any more.
-      messages: parseRows(
-        this.stmt(
-          "SELECT data FROM messages WHERE room = ? AND author_type = 'player' ORDER BY position",
-        ).all(room) as DataRow[],
-      ),
       seats: parseRows(
         this.stmt("SELECT data FROM seats WHERE room = ? ORDER BY seat_id").all(room) as DataRow[],
       ),
@@ -654,52 +618,10 @@ export class RoomStore {
   }
 
   /**
-   * Whether anybody has ever spoken in this room, for the "first thing said"
-   * badge.
-   *
-   * `author_type` is the message's `role`, written by `appendMessage`, so
-   * this is a one-row existence check against an indexed column rather than
-   * parsing the room's whole history to look at a single field of it. It is
-   * asked on every line anybody says.
-   */
-  hasSpoken(room: string): boolean {
-    this.ensureRoom(room);
-    const row = this.stmt(
-      "SELECT 1 AS found FROM messages WHERE room = ? AND author_type = 'player' LIMIT 1",
-    ).get(room) as { found: number } | undefined;
-    return row !== undefined;
-  }
-
-  /**
    * The client owns ordering and trimming of these collections today, so a
    * write replaces the room's whole slice inside one transaction. Per-entity
    * events arrive with the shared-world phase.
    */
-  replaceMessages(room: string, messages: Record<string, unknown>[]) {
-    this.ensureRoom(room);
-    const capped = messages.slice(-LIMITS.messages);
-    this.transaction(() => {
-      this.stmt("DELETE FROM messages WHERE room = ?").run(room);
-      const insert = this.stmt(
-        `INSERT INTO messages (room, message_id, author_type, author, created_at, position, data)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      );
-      capped.forEach((message, index) => {
-        const id = asString(message.id);
-        if (!id) return;
-        insert.run(
-          room,
-          id,
-          authorTypeOf(message),
-          asString(message.actorName),
-          asString(message.timestamp) ?? new Date().toISOString(),
-          index,
-          JSON.stringify(message),
-        );
-      });
-    });
-  }
-
   replaceSeats(room: string, seats: Record<string, unknown>[]) {
     this.ensureRoom(room);
     this.transaction(() => {
@@ -721,39 +643,6 @@ export class RoomStore {
   // would each send a list that omits the other's work, and the later write
   // would erase it. These apply one change at a time.
 
-  appendMessage(room: string, message: Record<string, unknown>) {
-    this.ensureRoom(room);
-    const id = asString(message.id);
-    if (!id) return;
-
-    const existing = this.stmt(
-      "SELECT position FROM messages WHERE room = ? AND message_id = ?",
-    ).get(room, id) as { position: number } | undefined;
-
-    const position = existing?.position ?? this.nextTailPosition(room, "messages");
-
-    // `session_key` is left out rather than written null: the column is a
-    // leftover of the conversations agents held, and nothing reads it.
-    this.stmt(
-      `INSERT INTO messages (room, message_id, author_type, author, created_at, position, data)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (room, message_id) DO UPDATE SET
-           author_type = excluded.author_type,
-           author = excluded.author,
-           data = excluded.data`,
-    ).run(
-      room,
-      id,
-      authorTypeOf(message),
-      asString(message.actorName) ?? asString(message.author),
-      asString(message.timestamp) ?? new Date().toISOString(),
-      position,
-      JSON.stringify(message),
-    );
-
-    this.trim(room, "messages", LIMITS.messages, "ASC");
-  }
-
   upsertSeat(room: string, seat: Record<string, unknown>) {
     this.ensureRoom(room);
     const id = asString(seat.seatId);
@@ -763,25 +652,6 @@ export class RoomStore {
       `INSERT INTO seats (room, seat_id, updated_at, data) VALUES (?, ?, ?, ?)
          ON CONFLICT (room, seat_id) DO UPDATE SET updated_at = excluded.updated_at, data = excluded.data`,
     ).run(room, id, new Date().toISOString(), JSON.stringify(seat));
-  }
-
-  /** Oldest-first collections grow upward from the current maximum. */
-  private nextTailPosition(room: string, table: "messages"): number {
-    const row = this.stmt(`SELECT MAX(position) AS edge FROM ${table} WHERE room = ?`).get(
-      room,
-    ) as { edge: number | null };
-    return (row?.edge ?? 0) + 1;
-  }
-
-  /** Keep the chat within its cap, dropping the oldest lines first. */
-  private trim(room: string, table: "messages", limit: number, keep: "ASC" | "DESC") {
-    this.stmt(
-      `DELETE FROM ${table} WHERE room = ? AND message_id IN (
-           SELECT message_id FROM ${table} WHERE room = ?
-           ORDER BY position ${keep === "ASC" ? "DESC" : "ASC"}
-           LIMIT -1 OFFSET ?
-         )`,
-    ).run(room, room, limit);
   }
 
   private transaction(fn: () => void) {

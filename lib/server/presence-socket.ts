@@ -23,10 +23,9 @@ import { describeRoom, hasBoardroom, mayEnterRoom } from "../world/floors";
 import { achievementFor, type EarnedAchievement } from "../achievements";
 import { isPongPayload } from "../pong/protocol";
 import { SHARED_BOARD, isStroke, sanitiseStroke } from "../whiteboard";
-import { onPlayerJoined, onPlayerSpoke, onRoomFull } from "./achievement-rules";
+import { onPlayerJoined, onRoomFull } from "./achievement-rules";
 import { createLogger } from "../logger";
 import {
-  EARSHOT_PX,
   CLAIM_GRACE_MS,
   HEARTBEAT_MS,
   TICK_MS,
@@ -37,11 +36,9 @@ import {
   type PresencePlayer,
   type JoinMessage,
   type MeetingNotice,
-  type SayScope,
   type ServerMessage,
   type WorldChange,
   isVoiceSignal,
-  speechId,
 } from "../presence-types";
 
 import { ResidentSimulation } from "./residents";
@@ -432,84 +429,12 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     const by = author ? { id: author.id, name: author.name } : undefined;
 
     switch (change.entity) {
-      case "message":
-        store.appendMessage(slug, change.message);
-        break;
       case "seat":
         store.upsertSeat(slug, change.seat);
         break;
     }
 
     broadcast(slug, { type: "world", change, by }, authorId);
-  };
-
-  /**
-   * Pass on something a human said, and keep it with the room's history so it
-   * is still there after a refresh.
-   *
-   * "nearby" is filtered by the positions presence already tracks: it reaches
-   * whoever is within earshot, which is the point of having an office rather
-   * than a chat window.
-   */
-  const relaySpeech = (
-    slug: string,
-    authorId: string,
-    text: string,
-    scope: SayScope,
-    id: string | null,
-  ) => {
-    const room = rooms.get(slug);
-    if (!room) return;
-
-    const author = room.hub.get(authorId);
-    if (!author) return;
-
-    const said = {
-      type: "said" as const,
-      id: id ?? randomUUID(),
-      from: { id: author.id, name: author.name },
-      text,
-      at: new Date().toISOString(),
-      scope,
-    };
-
-    // "First thing said" is judged before this remark is stored. `hasSpoken`
-    // is a one-row existence check; reading the room's whole history and
-    // scanning it for a `role` was the same answer for a great deal more
-    // work, on the path of every line anybody says.
-    let isFirstSpeech = false;
-    try {
-      isFirstSpeech = !getRoomStore().hasSpoken(slug);
-    } catch {
-      // If we cannot tell, do not award rather than award wrongly
-    }
-
-    try {
-      getRoomStore().appendMessage(slug, {
-        id: said.id,
-        role: "player",
-        content: text,
-        actorName: author.name,
-        authorId: author.id,
-        timestamp: said.at,
-      });
-    } catch (err) {
-      log.warn("could not keep what was said:", (err as Error).message);
-    }
-
-    // Only a "nearby" remark needs anybody's position, and then one lookup
-    // per listener rather than a scan of the roster inside the loop.
-    for (const [listenerId, socket] of room.sockets) {
-      if (listenerId === authorId) continue;
-      if (scope === "nearby") {
-        const listener = room.hub.get(listenerId);
-        if (!listener) continue;
-        if (Math.hypot(listener.x - author.x, listener.y - author.y) > EARSHOT_PX) continue;
-      }
-      send(socket, said);
-    }
-
-    announce(slug, onPlayerSpoke(slug, author.name, scope, isFirstSpeech));
   };
 
   // Standing still is not the same as being gone: a player who never moves
@@ -797,19 +722,6 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           broadcastAll(
             { type: "board", action: "draw", stroke, done: parsed.done === true, by: player?.name },
             id,
-          );
-          return;
-        }
-
-        if (parsed.type === "say") {
-          const text = typeof parsed.text === "string" ? parsed.text.trim().slice(0, 500) : "";
-          if (!text) return;
-          relaySpeech(
-            slug,
-            id,
-            text,
-            parsed.scope === "nearby" ? "nearby" : "room",
-            speechId(parsed.id),
           );
           return;
         }

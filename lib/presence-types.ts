@@ -142,31 +142,11 @@ export interface MoveMessage {
  * at once, sending whole collections means the later write erases the other
  * person's work.
  */
-export type WorldChange =
-  | { entity: "message"; message: Record<string, unknown> }
-  | { entity: "seat"; seat: Record<string, unknown> };
+export type WorldChange = { entity: "seat"; seat: Record<string, unknown> };
 
 export interface WorldMessage {
   type: "world";
   change: WorldChange;
-}
-
-/** How far a "nearby" remark carries, in pixels — roughly five tiles. */
-export const EARSHOT_PX = 260;
-
-export type SayScope = "room" | "nearby";
-
-export interface SayMessage {
-  type: "say";
-  text: string;
-  scope: SayScope;
-  /**
-   * The speaker's own id for the remark. They show it to themselves the
-   * moment they send it; the server keeps and relays it under the same id,
-   * so when the room's history comes back it is the same message, not a
-   * second copy.
-   */
-  id?: string;
 }
 
 /** A mark added to the room's whiteboard, or a request to wipe it. */
@@ -251,7 +231,6 @@ export type ClientMessage =
   | JoinMessage
   | MoveMessage
   | WorldMessage
-  | SayMessage
   | BoardMessage
   | PongRelayMessage
   | VoiceRelayMessage
@@ -342,14 +321,20 @@ export interface WorldBroadcast {
   by?: { id: string; name: string };
 }
 
-/** Something a human said, as heard by everyone in range. */
+/**
+ * Something said out loud, drawn as a bubble over the speaker's head.
+ *
+ * Only the residents say anything now: the chat that let a person type a
+ * remark is gone, and with it the log that kept one. So this is the server
+ * telling a room what one of its characters just said, and it is over when
+ * the bubble fades — nothing stores it and nothing sends it back.
+ */
 export interface SaidMessage {
   type: "said";
   id: string;
   from: { id: string; name: string };
   text: string;
   at: string;
-  scope: SayScope;
 }
 
 /** A handshake step arriving from another player. */
@@ -419,7 +404,6 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     type === "join" ||
     type === "move" ||
     type === "world" ||
-    type === "say" ||
     type === "board" ||
     type === "pong" ||
     type === "voice" ||
@@ -427,11 +411,6 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     type === "boarded" ||
     type === "meeting"
   );
-}
-
-/** A remark's id as the speaker chose it, if it is one the store can take; else null. */
-export function speechId(raw: unknown): string | null {
-  return typeof raw === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(raw) ? raw : null;
 }
 
 /** The most a session description may weigh; a real one is a few kilobytes. */
@@ -448,7 +427,7 @@ export function isVoiceSignal(value: unknown): value is VoiceSignal {
   return false;
 }
 
-const WORLD_ENTITIES = ["message", "seat"] as const;
+const WORLD_ENTITIES = ["seat"] as const;
 
 export function isWorldChange(value: unknown): value is WorldChange {
   if (typeof value !== "object" || value === null) return false;

@@ -5,11 +5,10 @@
  *
  * The server owns the world; this module fetches it and writes changes back.
  * Writes are coalesced and debounced, because the store persists whole
- * collections on every reducer change and a burst of remarks should not be a
+ * collections on every reducer change and a burst of edits should not be a
  * request apiece.
  */
 
-import type { ChatMessage } from "@/types/game";
 import type { PersistedSeatConfig } from "./persistence";
 import { createLogger } from "./logger";
 
@@ -33,17 +32,14 @@ function endpointForRoom(): string {
 export const WRITE_DEBOUNCE_MS = 400;
 
 export interface RoomSnapshot {
-  messages: ChatMessage[];
   seats: PersistedSeatConfig[];
 }
 
 export interface RoomPatch {
-  messages?: ChatMessage[];
   seats?: PersistedSeatConfig[];
 }
 
 const EMPTY: RoomSnapshot = {
-  messages: [],
   seats: [],
 };
 
@@ -60,7 +56,6 @@ export async function fetchRoomSnapshot(): Promise<RoomSnapshot> {
     }
     const raw = (await response.json()) as Partial<RoomSnapshot>;
     return {
-      messages: raw.messages ?? [],
       seats: raw.seats ?? [],
     };
   } catch (err) {

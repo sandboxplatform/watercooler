@@ -5,18 +5,12 @@
  * The provider (store.ts) wires this to React context.
  */
 
-import type { SeatState, ChatMessage, StudioSnapshot } from "@/types/game";
-import { MAX_CHAT } from "./constants";
+import type { SeatState, StudioSnapshot } from "@/types/game";
 import { WORKER_SPRITES } from "@/components/game/config/animations";
 import type { SeatDef as DiscoveredSeat } from "@/components/game/utils/MapHelpers";
 import type { PersistedSeatConfig } from "./persistence";
 
 // ── Helpers ────────────────────────────────────────────
-
-let _chatSeq = 0;
-export function chatId(): string {
-  return `chat_${Date.now()}_${++_chatSeq}`;
-}
 
 export function mergeDiscoveredSeats(
   discovered: DiscoveredSeat[],
@@ -53,36 +47,19 @@ export function mergeDiscoveredSeats(
 // ── Actions ────────────────────────────────────────────
 
 export type Action =
-  /** Apply a remark from another player, without duplicating it. */
-  | { type: "UPSERT_CHAT"; message: ChatMessage }
   | { type: "SYNC_SEATS"; seats: SeatState[] }
-  | { type: "UPDATE_SEAT_CONFIG"; seatId: string; patch: Partial<SeatState> }
-  | { type: "RESTORE"; chatMessages: ChatMessage[] };
+  | { type: "UPDATE_SEAT_CONFIG"; seatId: string; patch: Partial<SeatState> };
 
 // ── Initial state ──────────────────────────────────────
 
 export const initialState: StudioSnapshot = {
   seats: [],
-  chatMessages: [],
 };
 
 // ── Reducer ────────────────────────────────────────────
 
 export function reducer(state: StudioSnapshot, action: Action): StudioSnapshot {
   switch (action.type) {
-    case "UPSERT_CHAT": {
-      const index = state.chatMessages.findIndex((message) => message.id === action.message.id);
-      if (index === -1) {
-        return {
-          ...state,
-          chatMessages: [...state.chatMessages, action.message].slice(-MAX_CHAT),
-        };
-      }
-      const chatMessages = [...state.chatMessages];
-      chatMessages[index] = action.message;
-      return { ...state, chatMessages };
-    }
-
     case "SYNC_SEATS":
       return { ...state, seats: action.seats };
 
@@ -101,9 +78,6 @@ export function reducer(state: StudioSnapshot, action: Action): StudioSnapshot {
           return next;
         }),
       };
-
-    case "RESTORE":
-      return { ...state, chatMessages: action.chatMessages.slice(-MAX_CHAT) };
 
     default:
       return state;

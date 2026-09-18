@@ -2,7 +2,7 @@
 
 import { useEffect, type Dispatch, type MutableRefObject } from "react";
 import type { Action } from "../reducer";
-import type { ChatMessage, SeatState } from "@/types/game";
+import type { SeatState } from "@/types/game";
 import type { PersistedSeatConfig } from "../persistence";
 import { acquireRoomSocket, onRoomMessage } from "../room-socket";
 import { gameEvents } from "../events";
@@ -41,18 +41,9 @@ export function useWorldSync(refs: WorldSyncRefs) {
       }
 
       if (message.type === "said") {
-        // The server has already kept the remark, so it is known here before
-        // it lands in the state — or the sync would send it back out as a
-        // change of ours, and everyone would see it twice.
-        const said: ChatMessage = {
-          id: message.id,
-          content: message.text,
-          actorName: message.from.name,
-          authorId: message.from.id,
-          timestamp: message.at,
-        };
-        markKnown(`message:${said.id}`, said);
-        refs.dispatch.current({ type: "UPSERT_CHAT", message: said });
+        // Nothing keeps it: a remark is a bubble over somebody's head for a
+        // few seconds and then it is gone. Residents are the only ones who
+        // speak now, and what they say belongs to the moment they say it.
         gameEvents.emit("player-said", message.from.id, message.text);
         return;
       }
@@ -61,13 +52,6 @@ export function useWorldSync(refs: WorldSyncRefs) {
       const { change } = message;
 
       switch (change.entity) {
-        case "message": {
-          const chatMessage = change.message as unknown as ChatMessage;
-          if (!chatMessage?.id) return;
-          markKnown(`message:${chatMessage.id}`, chatMessage);
-          refs.dispatch.current({ type: "UPSERT_CHAT", message: chatMessage });
-          break;
-        }
         case "seat": {
           const seat = change.seat as unknown as PersistedSeatConfig;
           if (!seat?.seatId) return;

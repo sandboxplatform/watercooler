@@ -14,7 +14,6 @@
  * the room forever.
  */
 
-import type { ChatMessage } from "@/types/game";
 import type { PersistedSeatConfig } from "./persistence";
 import type { WorldChange } from "./presence-types";
 import { sendRoom } from "./room-socket";
@@ -37,13 +36,6 @@ function send(change: WorldChange) {
   sendRoom({ type: "world", change });
 }
 
-export function syncMessages(messages: ChatMessage[]) {
-  for (const message of messages) {
-    if (seen(`message:${message.id}`, message)) continue;
-    send({ entity: "message", message: message as unknown as Record<string, unknown> });
-  }
-}
-
 export function syncSeats(seats: PersistedSeatConfig[]) {
   for (const seat of seats) {
     if (seen(`seat:${seat.seatId}`, seat)) continue;
@@ -55,11 +47,7 @@ export function syncSeats(seats: PersistedSeatConfig[]) {
  * Seed the ledger from the opening snapshot. Without this, the first diff
  * after load would treat the entire restored world as new and broadcast it.
  */
-export function primeFromSnapshot(snapshot: {
-  messages: ChatMessage[];
-  seats: PersistedSeatConfig[];
-}) {
-  for (const message of snapshot.messages) known.set(`message:${message.id}`, message);
+export function primeFromSnapshot(snapshot: { seats: PersistedSeatConfig[] }) {
   for (const seat of snapshot.seats) known.set(`seat:${seat.seatId}`, seat);
 }
 

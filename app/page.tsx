@@ -39,12 +39,13 @@ export default function Page() {
    */
   const [sidebarOpen, setSidebarOpen] = useState(false);
   /**
-   * Which tab the column is showing. Here rather than inside it, because
-   * the HUD opens it on a tab of its own choosing: the Online pill in the
-   * bottom bar is a count of the people the People tab lists, so pressing
-   * it has to land there rather than on whatever was last read.
+   * Which tab the column is showing, and People is where it opens. The
+   * Online pill in the bottom bar is a count of exactly that list, so
+   * pressing it has to land there rather than on whatever was last read —
+   * and People is the first tab, so a column opened any other way starts
+   * on it too.
    */
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("chat");
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("people");
   const wideEnough = useSyncExternalStore(subscribeToNothing, readWideEnough, () => true);
 
   const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
@@ -61,7 +62,7 @@ export default function Page() {
   return (
     <ErrorBoundary>
       <StudioProvider>
-        {/* The office on the left, the record of what happened on the right */}
+        {/* The office on the left, who is in it on the right */}
         <main className="app-shell">
           <div className="app-stage">
             <GameErrorBoundary>

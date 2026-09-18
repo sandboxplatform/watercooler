@@ -2,9 +2,20 @@
 
 A pixel office you walk around with other people. Workers sit at their desks,
 residents wander the buildings, and everyone who opens the site is in the same
-world — you see each other move, you hear each other on Global Chat, and you
-talk in the room rather than in a window beside it. Published to npm as
-`@geezerrrr/watercooler` and runnable with `npx @geezerrrr/watercooler`.
+world — you see each other move and you hear each other on Global Chat.
+Published to npm as `@geezerrrr/watercooler` and runnable with
+`npx @geezerrrr/watercooler`.
+
+**There is no text chat.** There was a Chat tab in the column beside the
+office, an input box in it and a log of everything anybody had typed, kept
+in the room's database. All of it is gone: the panel, the `say` message on
+the socket, the `messages` table, and the two badges — Icebreaker and
+Whisperer — that were earned by talking. Talking is **Global Chat**, which
+is audio between browsers and one conversation for the whole server. The
+column beside the office is now **People** and **Badges**, in that order,
+and the Online pill opens it on People. A `said` message still comes down
+the socket, because the residents remark on arriving; it draws a bubble
+that fades and nothing keeps it.
 
 **There is no agent dispatch.** It was taken out root and branch — the task
 system, the gateway, the CLI and hosted providers, the MCP and Mettara tools,
@@ -1145,7 +1156,11 @@ Two things the office needs and says so at the call site:
 | Option          | Why                                                                                                                                                                                                                                                                                                                    |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `depth: "flat"` | A room stacks people at one depth. Its props sit at 4 and the local player at 5, so a resident given a depth off their own feet is drawn over the counter they stand behind. Outdoors leaves it unset and everyone sorts by their feet, which is the only thing that reads right when somebody walks below a building. |
-| `ownSay`        | This browser's own remark, over its own character                                                                                                                                                                                                                                                                      |
+
+There was an `ownSay` beside it — this browser's own remark, over its own
+character — and it went with the chat that was the only thing that sent
+one. Every bubble in a room is now somebody else's, which is what
+`RemotePlayerManager` already draws.
 
 The handle's `say(id, text)` is for a scene with something of its own to
 put over somebody — the office announcing an achievement. If you touch
@@ -1290,7 +1305,7 @@ asked for, and a prompt that opens an empty menu is worse than no prompt.
 
 Two SQLite databases (`node:sqlite`), deliberately separate:
 
-- **Room store** (`lib/server/room-store.ts`) — app state: seats, chat, accounts,
+- **Room store** (`lib/server/room-store.ts`) — app state: seats, accounts,
   presence, scores, achievements.
 - **ERP** (`lib/erp/`, `ERP_DB_PATH`, default `.data/erp.sqlite`) — the fictional
   company's data, seeded idempotently on first boot. It can be wiped and
@@ -1298,7 +1313,10 @@ Two SQLite databases (`node:sqlite`), deliberately separate:
 
 Migrations 2 and 3 are what took the agents out of a database that already
 held them: `activity`, then `tasks` and `sessions`, dropped with their
-indexes. `rooms` keeps `active_session_key` and `spend_usd` rather than being
+indexes. Migration 4 took `messages` with the chat, which is the same
+argument one step later: the rows were the agents' transcript and, after
+them, remarks typed into a window beside the office, and nothing reads
+either. `rooms` keeps `active_session_key` and `spend_usd` rather than being
 rebuilt — SQLite drops a column by copying the table, and an unused column
 costs a room nothing.
 

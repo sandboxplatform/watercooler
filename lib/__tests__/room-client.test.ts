@@ -31,7 +31,7 @@ function lastWriteBody() {
 
 describe("saveRoomPatch", () => {
   it("waits for the debounce before writing", () => {
-    saveRoomPatch({ messages: [] });
+    saveRoomPatch({ seats: [] });
     expect(fetchMock).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
@@ -39,27 +39,17 @@ describe("saveRoomPatch", () => {
   });
 
   it("collapses a burst into a single request", () => {
-    // The store persists on every reducer change; a streaming reply must not
-    // become a request per token.
-    for (let i = 0; i < 20; i++) saveRoomPatch({ messages: [{ id: `m${i}` }] as never });
+    // The store persists on every reducer change; dragging a seat about must
+    // not become a request per frame.
+    for (let i = 0; i < 20; i++) saveRoomPatch({ seats: [{ seatId: `seat-${i}` }] as never });
     vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(lastWriteBody().messages).toEqual([{ id: "m19" }]);
-  });
-
-  it("merges different slices queued together", () => {
-    saveRoomPatch({ messages: [{ id: "m1" }] as never });
-    saveRoomPatch({ seats: [{ seatId: "seat-0" }] as never });
-    vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
-
-    const body = lastWriteBody();
-    expect(body.messages).toEqual([{ id: "m1" }]);
-    expect(body.seats).toEqual([{ seatId: "seat-0" }]);
+    expect(lastWriteBody().seats).toEqual([{ seatId: "seat-19" }]);
   });
 
   it("starts a fresh batch after a write goes out", () => {
-    saveRoomPatch({ messages: [{ id: "m1" }] as never });
+    saveRoomPatch({ seats: [{ seatId: "seat-0" }] as never });
     vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
     saveRoomPatch({ seats: [{ seatId: "seat-1" }] as never });
     vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
@@ -70,7 +60,7 @@ describe("saveRoomPatch", () => {
 
   it("survives a failing request without throwing", async () => {
     fetchMock.mockRejectedValueOnce(new Error("offline"));
-    saveRoomPatch({ messages: [] });
+    saveRoomPatch({ seats: [] });
     vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
     await expect(flushRoomWrites()).resolves.toBeUndefined();
   });
@@ -78,7 +68,7 @@ describe("saveRoomPatch", () => {
 
 describe("flushRoomWrites", () => {
   it("writes immediately instead of waiting out the debounce", async () => {
-    saveRoomPatch({ messages: [{ id: "m1" }] as never });
+    saveRoomPatch({ seats: [{ seatId: "seat-0" }] as never });
     await flushRoomWrites();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -91,17 +81,14 @@ describe("flushRoomWrites", () => {
 
 describe("fetchRoomSnapshot", () => {
   it("reads the room the server hands back", async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({ messages: [{ id: "m1" }], seats: [{ seatId: "seat-0" }] }),
-    );
+    fetchMock.mockResolvedValueOnce(jsonResponse({ seats: [{ seatId: "seat-0" }] }));
 
     const snapshot = await fetchRoomSnapshot();
-    expect(snapshot.messages).toEqual([{ id: "m1" }]);
     expect(snapshot.seats).toEqual([{ seatId: "seat-0" }]);
   });
 
   it("fills in the slices the server left out", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ messages: [{ id: "m1" }] }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({}));
 
     const snapshot = await fetchRoomSnapshot();
     expect(snapshot.seats).toEqual([]);
@@ -109,12 +96,12 @@ describe("fetchRoomSnapshot", () => {
 
   it("opens an empty room rather than throwing when the server is unreachable", async () => {
     fetchMock.mockRejectedValueOnce(new Error("offline"));
-    await expect(fetchRoomSnapshot()).resolves.toEqual({ messages: [], seats: [] });
+    await expect(fetchRoomSnapshot()).resolves.toEqual({ seats: [] });
   });
 
   it("opens an empty room on a server error response", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: "boom" }, false, 500));
     const snapshot = await fetchRoomSnapshot();
-    expect(snapshot.messages).toEqual([]);
+    expect(snapshot.seats).toEqual([]);
   });
 });

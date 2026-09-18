@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { reducer, initialState, chatId, mergeDiscoveredSeats } from "../reducer";
-import type { StudioSnapshot, ChatMessage, SeatState } from "@/types/game";
+import { reducer, initialState, mergeDiscoveredSeats } from "../reducer";
+import type { StudioSnapshot, SeatState } from "@/types/game";
 import type { SeatDef } from "@/components/game/utils/MapHelpers";
 import type { PersistedSeatConfig } from "@/lib/persistence";
-import { MAX_CHAT } from "../constants";
 
 // ── Factory helpers ─────────────────────────────────────────
 
@@ -15,15 +14,6 @@ function makeSeat(overrides: Partial<SeatState> = {}): SeatState {
     spawnX: 100,
     spawnY: 200,
     spawnFacing: "down",
-    ...overrides,
-  };
-}
-
-function makeChat(overrides: Partial<ChatMessage> = {}): ChatMessage {
-  return {
-    id: "chat-1",
-    content: "Hello",
-    timestamp: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -55,17 +45,6 @@ function makePersistedConfig(overrides: Partial<PersistedSeatConfig> = {}): Pers
 }
 
 // ── Helper function tests ───────────────────────────────────
-
-describe("chatId", () => {
-  it("returns a string starting with chat_", () => {
-    expect(chatId()).toMatch(/^chat_/);
-  });
-
-  it("returns unique ids on successive calls", () => {
-    const ids = new Set([chatId(), chatId(), chatId()]);
-    expect(ids.size).toBe(3);
-  });
-});
 
 describe("mergeDiscoveredSeats", () => {
   it("creates seats from discovered definitions with defaults", () => {
@@ -133,48 +112,6 @@ describe("reducer", () => {
   describe("initialState", () => {
     it("has expected defaults", () => {
       expect(initialState.seats).toEqual([]);
-      expect(initialState.chatMessages).toEqual([]);
-    });
-  });
-
-  describe("UPSERT_CHAT", () => {
-    it("adds a message that is not already there", () => {
-      const next = reducer(state, { type: "UPSERT_CHAT", message: makeChat({ id: "m1" }) });
-      expect(next.chatMessages.map((m) => m.id)).toEqual(["m1"]);
-    });
-
-    it("replaces a message with the same id rather than showing it twice", () => {
-      // Everyone's own remark lands locally the moment they send it, and the
-      // server relays it back under the same id.
-      const first = reducer(state, { type: "UPSERT_CHAT", message: makeChat({ id: "m1" }) });
-      const next = reducer(first, {
-        type: "UPSERT_CHAT",
-        message: makeChat({ id: "m1", content: "edited" }),
-      });
-      expect(next.chatMessages).toHaveLength(1);
-      expect(next.chatMessages[0].content).toBe("edited");
-    });
-
-    it("keeps the object it was given, so the sync does not echo it back", () => {
-      // room-sync recognises an already-known object by reference.
-      const message = makeChat({ id: "m1" });
-      const next = reducer(state, { type: "UPSERT_CHAT", message });
-      expect(next.chatMessages[0]).toBe(message);
-    });
-
-    it("drops the oldest lines once past the cap", () => {
-      let next = state;
-      for (let i = 0; i < MAX_CHAT + 5; i++) {
-        next = reducer(next, { type: "UPSERT_CHAT", message: makeChat({ id: `m${i}` }) });
-      }
-      expect(next.chatMessages).toHaveLength(MAX_CHAT);
-      expect(next.chatMessages[0].id).toBe("m5");
-    });
-
-    it("leaves the seats alone", () => {
-      const withSeats = makeState({ seats: [makeSeat()] });
-      const next = reducer(withSeats, { type: "UPSERT_CHAT", message: makeChat() });
-      expect(next.seats).toBe(withSeats.seats);
     });
   });
 
@@ -231,29 +168,6 @@ describe("reducer", () => {
       expect(next.seats[0].roleTitle).toBeUndefined();
       expect(next.seats[0].spriteKey).toBeUndefined();
       expect(next.seats[0].spritePath).toBeUndefined();
-    });
-  });
-
-  describe("RESTORE", () => {
-    it("brings back the room's talk", () => {
-      const next = reducer(state, {
-        type: "RESTORE",
-        chatMessages: [makeChat({ id: "m1" }), makeChat({ id: "m2" })],
-      });
-      expect(next.chatMessages.map((m) => m.id)).toEqual(["m1", "m2"]);
-    });
-
-    it("keeps only the newest when the room holds more than the cap", () => {
-      const many = Array.from({ length: MAX_CHAT + 5 }, (_, i) => makeChat({ id: `m${i}` }));
-      const next = reducer(state, { type: "RESTORE", chatMessages: many });
-      expect(next.chatMessages).toHaveLength(MAX_CHAT);
-      expect(next.chatMessages[0].id).toBe("m5");
-    });
-
-    it("does not disturb the seats the scene has already reported", () => {
-      const withSeats = makeState({ seats: [makeSeat()] });
-      const next = reducer(withSeats, { type: "RESTORE", chatMessages: [] });
-      expect(next.seats).toBe(withSeats.seats);
     });
   });
 

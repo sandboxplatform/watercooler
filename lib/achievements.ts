@@ -4,8 +4,13 @@
  * Shared by client and server, so it must stay free of imports.
  *
  * A deliberate rule runs through these: none of them reward volume. Every
- * entry keys on a moment rather than a tally — turning up, speaking first,
- * being here when the room filled.
+ * entry keys on a moment rather than a tally — turning up, being here when
+ * the room filled.
+ *
+ * Two of them were about talking — the first thing said in a room, and a
+ * remark only the people nearby could hear — and they went with the chat
+ * that was the only way to earn either. A badge nobody can get is worse in
+ * a list than no badge at all: it reads as something still to find.
  */
 
 export type AchievementSubject = "agent" | "human";
@@ -27,20 +32,6 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: "Walked In",
     description: "Turned up for the first time",
     icon: "🚪",
-  },
-  {
-    code: "icebreaker",
-    subject: "human",
-    title: "Icebreaker",
-    description: "Said the first thing out loud",
-    icon: "💬",
-  },
-  {
-    code: "whisperer",
-    subject: "human",
-    title: "Whisperer",
-    description: "Said something only the people nearby could hear",
-    icon: "🤫",
   },
   {
     code: "full-house",

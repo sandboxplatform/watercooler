@@ -1,5 +1,6 @@
 "use client";
 
+import { Users } from "lucide-react";
 import { gameEvents } from "@/lib/events";
 import "./hud.css";
 
@@ -65,7 +66,7 @@ export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: 
 
   // Gamepad shoulder buttons cycle the HUD panels; Back closes whatever is open
   useEffect(() => {
-    const order: HudPanelId[] = ["chat", "music", "workers"];
+    const order: HudPanelId[] = ["music", "workers"];
 
     const unsubCycle = gameEvents.on("hud-cycle-panel", (direction) => {
       setSeatManagerOpen(false);
@@ -92,7 +93,7 @@ export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: 
     };
   }, []);
 
-  // Top-right toolbar items (everything except chat)
+  // Top-right toolbar items
   const toolItems: HudDockItem[] = useMemo(
     () =>
       [
@@ -130,7 +131,7 @@ export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: 
     [bgm.volume],
   );
 
-  const topRightPanelOpen = openPanel && openPanel !== "chat";
+  const topRightPanelOpen = openPanel !== null;
 
   return (
     <div className="hud-overlay">
@@ -165,33 +166,27 @@ export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: 
         </div>
       )}
 
-      {/* Bottom area: status pills (left) + chat dock (right) */}
+      {/* Bottom area: status pills (left) + the column's own button (right) */}
       <div className="layout-bottom">
         <BottomBar onShowPeople={onShowPeople} />
 
-        {/* Spacer pushes chat to right */}
+        {/* Spacer pushes the column's button to the right */}
         <div style={{ flex: "1 1 auto" }} />
 
-        {/* Chat lives in the column beside the office; this shows it again */}
-        <div className="hud-chat-dock">
+        {/*
+          The column beside the office — People, and the badges people have
+          earned. This hides it and shows it again on whichever tab it was
+          last left on; the Online pill opens it on People.
+        */}
+        <div className="hud-side-dock">
           <button
             type="button"
-            className={`hud-chat-dock__btn ${sidebarOpen ? "hud-chat-dock__btn--active" : ""}`}
+            className={`hud-side-dock__btn ${sidebarOpen ? "hud-side-dock__btn--active" : ""}`}
             onClick={onToggleSidebar}
-            title={sidebarOpen ? "Hide chat" : "Show chat"}
+            title={sidebarOpen ? "Hide the panel" : "Show who is here"}
           >
-            <img
-              src={
-                sidebarOpen
-                  ? asset("/ui/icons/icon-chat-active.png")
-                  : asset("/ui/icons/icon-chat.png")
-              }
-              alt="Chat"
-              width={28}
-              height={28}
-              style={{ imageRendering: "pixelated" }}
-            />
-            <span className="hud-chat-dock__label">Chat</span>
+            <Users size={20} />
+            <span className="hud-side-dock__label">People</span>
           </button>
         </div>
       </div>

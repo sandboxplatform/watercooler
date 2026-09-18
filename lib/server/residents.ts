@@ -319,7 +319,6 @@ export class ResidentSimulation {
       from: { id: presenceIdFor(state.resident), name: state.resident.name },
       text: haunt.kind === "station" ? lines.onDuty : lines.away,
       at: new Date(this.now()).toISOString(),
-      scope: "room",
     });
   }
 

@@ -265,7 +265,6 @@ export class OfficeScene extends Phaser.Scene {
       this,
       { x: this.player.sprite.x, y: this.player.sprite.y, facing: this.player.direction },
       {
-        ownSay: (text) => this.player?.say(text),
         ownVoice: (inChat, speaking) => this.player?.setVoice(inChat, speaking),
         // A room stacks people at one depth. Its props sit at 4 and the
         // local player at 5, so a resident given a depth off their own feet

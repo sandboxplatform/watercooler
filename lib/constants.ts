@@ -101,9 +101,6 @@ export const SIDEBAR_DEFAULT_WIDTH = 380;
 // ── Audio ────────────────────────────────────────────────
 export const DEFAULT_BGM_VOLUME = 0;
 
-// ── Limits ───────────────────────────────────────────────
-export const MAX_CHAT = 500;
-
 // ── Worker seat activity presets ─────────────────────────
 export interface SeatActivityDef {
   emote: string;

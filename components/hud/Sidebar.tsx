@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { PanelRightClose } from "lucide-react";
-import { useStudio } from "@/lib/store";
 import { SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "@/lib/constants";
 import { saveSidebarWidth } from "@/lib/persistence";
-import ChatPanel from "./ChatPanel";
 import AchievementsPanel from "./AchievementsPanel";
 import PeoplePanel from "./PeoplePanel";
 import { useOnline } from "@/lib/presence-online";
@@ -13,13 +11,17 @@ import { useOnline } from "@/lib/presence-online";
 /**
  * The column that stays.
  *
- * Chat used to be a flyout over the office, which meant the record of what
- * the agents had actually done — the figures they looked up, the answers they
- * gave — was hidden behind a button, and hid the room when you opened it.
- * Here it has a home of its own, alongside the office rather than on top of it.
+ * People first, because it is the question the column exists to answer —
+ * who else is about, and where — and because the Online pill in the bottom
+ * bar counts exactly this list and opens it. Badges are the second glance.
+ *
+ * There was a Chat tab ahead of both and it has gone with the feature. A
+ * log of what was said, in a window beside the office, is the thing this
+ * world was built not to have; talking is Global Chat, which is a
+ * microphone and a pill in the bottom bar.
  */
 
-export type SidebarTab = "chat" | "badges" | "people";
+export type SidebarTab = "people" | "badges";
 
 interface SidebarProps {
   open: boolean;
@@ -43,7 +45,6 @@ export default function Sidebar({
   onWidthChange,
   onClose,
 }: SidebarProps) {
-  const { state } = useStudio();
   const online = useOnline();
   const draggingRef = useRef(false);
 
@@ -110,7 +111,7 @@ export default function Sidebar({
   if (!open) return null;
 
   return (
-    <aside className="app-sidebar" style={{ width }} aria-label="Chat and the people here">
+    <aside className="app-sidebar" style={{ width }} aria-label="Who is here, and their badges">
       <div
         className="app-sidebar__handle"
         onPointerDown={startDrag}
@@ -126,10 +127,12 @@ export default function Sidebar({
         <div className="app-sidebar__tabs">
           <button
             type="button"
-            className={`app-sidebar__tab${tab === "chat" ? " is-active" : ""}`}
-            onClick={() => onTabChange("chat")}
+            className={`app-sidebar__tab${tab === "people" ? " is-active" : ""}`}
+            onClick={() => onTabChange("people")}
+            title="Everyone online, and where they are"
           >
-            Chat
+            People
+            {online.length > 0 && <span className="app-sidebar__count">{online.length}</span>}
           </button>
           <button
             type="button"
@@ -137,15 +140,6 @@ export default function Sidebar({
             onClick={() => onTabChange("badges")}
           >
             Badges
-          </button>
-          <button
-            type="button"
-            className={`app-sidebar__tab${tab === "people" ? " is-active" : ""}`}
-            onClick={() => onTabChange("people")}
-            title="Everyone online, and where they are"
-          >
-            People
-            {online.length > 0 && <span className="app-sidebar__count">{online.length}</span>}
           </button>
           <button
             type="button"
@@ -159,13 +153,7 @@ export default function Sidebar({
         </div>
 
         <div className="app-sidebar__content">
-          {tab === "chat" ? (
-            <ChatPanel messages={state.chatMessages} />
-          ) : tab === "people" ? (
-            <PeoplePanel />
-          ) : (
-            <AchievementsPanel />
-          )}
+          {tab === "people" ? <PeoplePanel /> : <AchievementsPanel />}
         </div>
       </div>
     </aside>

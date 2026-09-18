@@ -27,8 +27,8 @@ One server is one world. Open the link and you are in it, with everyone else who
 WaterCooler is a pixel world you share with other people. A plaza with buildings
 round it, lobbies with a game in the corner, floors with desks and boards on the
 walls, an arcade, a ferry to an island. You walk around it, and so does everyone
-else who opened the same server — you see each other move, you talk in the room,
-and Global Chat carries your voice to everyone in the world at once.
+else who opened the same server — you see each other move, and Global Chat
+carries your voice to everyone in the world at once.
 
 It began as an office for AI coding agents, and the agents have been taken out:
 there is no task assignment, no agent runtime and no provider to configure. The
@@ -160,7 +160,6 @@ For that, configure sign-in (below) — it layers on top.
 
 - **One world, shared:** Everyone on the server is in the same places. Walk into a lobby and you see who else is standing in it, and where they are looking.
 - **Global Chat:** Switch your microphone on and you are in one conversation with everyone in the world, wherever they are standing. Browser to browser; the server never hears it.
-- **Talking in the room:** Say something to the whole room, or only to the people standing near you. It appears over your character and in the panel beside the office.
 - **Things to walk up to:** Boards, a support queue, an arcade cabinet, a pinball table, a ping pong table, a boardroom table you can call a meeting at.
 - **Workers at their desks:** Idle workers roam the office — whiteboards, printers, sofas, bookshelves — and the seat manager sets their names, roles and sprites.
 
@@ -366,17 +365,22 @@ page or a log.
 One server is one world. Everyone who opens the site walks into the same
 places: up to six people on the world map, six in each lobby and on each
 floor, six on a campus or the island. Wherever you are, you see the others
-there as characters, their words appear over their heads and in the chat
-window, and with voice chat on you hear everyone else on voice, wherever
-they are. Walking through
+there as characters, and with Global Chat on you hear everyone else on it,
+wherever they are. Walking through
 a door or onto the ferry moves you to that place's room, and the people in
 both places see you go and arrive. What is in a room is shared too: a line
 one person draws on the whiteboard appears on everyone else's, and a meeting
 called at the boardroom table is a pill in everyone's bottom bar.
 
-The People tab in the side panel lists everyone on the server and where
-they are — by lobby, floor, campus, island or the world map — with the place
-you are in first.
+The panel beside the office has two tabs. **People** lists everyone on the
+server and where they are — by lobby, floor, campus, island or the world
+map — with the place you are in first, and it is what the Online pill in the
+bottom bar counts and opens. **Badges** is the second: what you have earned
+for turning up and for being here when a room filled.
+
+There is no text chat. There was a Chat tab ahead of both, with a box to
+type a remark into and a log of everything anybody had said, and it is
+gone — talking is Global Chat.
 
 ### The island across the water
 
@@ -419,8 +423,8 @@ down for twenty seconds. Press it again to go back to walking. The legs speed
 up to match, which is how you can tell which one you are in.
 
 It is left Shift only: right Shift keeps meaning what it usually means, and
-neither does anything while you are typing in the chat box or a panel is open,
-where Shift is a modifier rather than a binding.
+neither does anything while a panel with a text box in it is open, where
+Shift is a modifier rather than a binding.
 
 Sprinting applies however you are moving — the keys, a controller stick, or a
 tapped route. Only the short walk out of a doorway on arriving is always at

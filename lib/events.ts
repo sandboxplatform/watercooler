@@ -147,8 +147,6 @@ export interface GameEventMap {
    */
   "player-sprite-chosen": [spriteKey: string, spritePath: string];
   "player-said": [playerId: string, text: string];
-  /** This browser's own remark, to show over our own character. */
-  "self-said": [text: string];
 }
 
 type Listener<T extends unknown[]> = (...args: T) => void;

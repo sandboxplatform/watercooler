@@ -38,15 +38,12 @@ export interface ScenePresence {
 }
 
 export interface PresenceOptions {
-  /** This browser's own remark, to show over our own character. */
-  ownSay?: (text: string) => void;
   /**
    * This browser's own place in Global Chat, for the mark over our own head.
    *
-   * The same shape as `ownSay` and for the same reason: everybody else is
-   * drawn by `RemotePlayerManager`, and the one character it does not own
-   * is ours. Without it the only person in the room with no mark would be
-   * the one who joined the chat.
+   * Everybody else is drawn by `RemotePlayerManager`, and the one character
+   * it does not own is ours. Without it the only person in the room with no
+   * mark would be the one who joined the chat.
    */
   ownVoice?: (inChat: boolean, speaking: boolean) => void;
   /**
@@ -119,7 +116,6 @@ export function attachPresence(
     gameEvents.on("presence-left", (id) => live() && manager.remove(id)),
     gameEvents.on("player-said", (id, text) => live() && manager.say(id, text)),
     gameEvents.on("voice-speaking", (id, speaking) => live() && manager.setSpeaking(id, speaking)),
-    ...(options.ownSay ? [gameEvents.on("self-said", options.ownSay)] : []),
     ...(options.ownVoice ? [gameEvents.on("voice-self", options.ownVoice)] : []),
   ];
 

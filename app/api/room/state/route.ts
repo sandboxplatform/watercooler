@@ -30,7 +30,6 @@ export async function GET(request: Request) {
 }
 
 interface StatePatch {
-  messages?: Record<string, unknown>[];
   seats?: Record<string, unknown>[];
 }
 
@@ -46,7 +45,6 @@ export async function PUT(request: Request) {
 
   try {
     const store = getRoomStore();
-    if (Array.isArray(patch.messages)) store.replaceMessages(room, patch.messages);
     if (Array.isArray(patch.seats)) store.replaceSeats(room, patch.seats);
     return NextResponse.json({ ok: true });
   } catch (err) {

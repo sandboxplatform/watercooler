@@ -3,7 +3,7 @@
  *
  * Evaluated on the server rather than in the browser: a client could simply
  * claim a badge. Each rule is cheap — a single counter query at most —
- * because these run on every arrival and every remark.
+ * because these run on every arrival.
  */
 
 import { getRoomStore } from "./room-store";
@@ -38,18 +38,6 @@ function grant(
 export function onPlayerJoined(room: string, name: string): EarnedAchievement[] {
   const earned: EarnedAchievement[] = [];
   grant(room, "human", name, name, "walked-in", earned);
-  return earned;
-}
-
-export function onPlayerSpoke(
-  room: string,
-  name: string,
-  scope: "room" | "nearby",
-  isFirstInRoom: boolean,
-): EarnedAchievement[] {
-  const earned: EarnedAchievement[] = [];
-  if (isFirstInRoom) grant(room, "human", name, name, "icebreaker", earned);
-  if (scope === "nearby") grant(room, "human", name, name, "whisperer", earned);
   return earned;
 }
 
