@@ -144,3 +144,20 @@ export function generatedSheetPath(key: string): string | null {
   const id = key.slice(GENERATED_PREFIX.length);
   return id ? `/api/characters/${id}` : null;
 }
+
+/**
+ * The sheet behind any texture key at all — one that ships, or an upload.
+ *
+ * Three places were asking this separately and none of them the same way:
+ * the scene dressing somebody in the room, the People panel drawing their
+ * portrait, and the browser putting on the look the socket accepted. It
+ * belongs where the keys are, so a fourth caller cannot miss the uploaded
+ * half of it the way the first one did.
+ *
+ * Null for a key that names no sheet — the caller decides whether that is a
+ * person to leave in the default look or a fetch to skip.
+ */
+export function sheetPathFor(key: string): string | null {
+  if (key === BOSS_SPRITE_KEY) return BOSS_SPRITE_PATH;
+  return WORKER_SPRITES.find((sprite) => sprite.key === key)?.path ?? generatedSheetPath(key);
+}

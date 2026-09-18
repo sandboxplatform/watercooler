@@ -1,8 +1,7 @@
 import * as Phaser from "phaser";
 import { RemotePlayerManager } from "./RemotePlayerManager";
 import { ensureSheet } from "../utils/sheets";
-import { WORKER_SPRITES } from "../config/animations";
-import { generatedSheetPath } from "@/lib/characters/library";
+import { sheetPathFor } from "@/lib/characters/library";
 import { gameEvents } from "@/lib/events";
 import { createLogger } from "@/lib/logger";
 import type { PresencePlayer } from "@/lib/presence-types";
@@ -82,7 +81,7 @@ export function attachPresence(
       // A sheet that ships with the game, or one somebody uploaded — the
       // second was missing, so anybody wearing their own look was drawn as
       // the default for everyone but themselves.
-      const path = WORKER_SPRITES.find((w) => w.key === key)?.path ?? generatedSheetPath(key);
+      const path = sheetPathFor(key);
       if (!path) continue;
       fetching.add(key);
       ensureSheet(scene, key, path, (ok) => {

@@ -7,8 +7,8 @@ import { useOnline } from "@/lib/presence-online";
 import { getSelfId } from "@/lib/presence-self";
 import { currentRoom } from "@/lib/room-client";
 import { describeRoom } from "@/lib/world/places";
-import { SPRITE_KEY, SPRITE_PATH, WORKER_SPRITES } from "@/components/game/config/animations";
-import { generatedSheetPath } from "@/lib/characters/library";
+import { SPRITE_PATH } from "@/components/game/config/animations";
+import { sheetPathFor } from "@/lib/characters/library";
 import type { OnlinePerson } from "@/lib/presence-types";
 
 /**
@@ -18,19 +18,6 @@ import type { OnlinePerson } from "@/lib/presence-types";
  * and "where did they go?" are both answered at a glance. The list is the
  * server's, refreshed as people come, go and walk between places.
  */
-
-/**
- * The sheet somebody is actually wearing.
- *
- * A sheet that ships with the game, or one somebody uploaded — the second
- * was missing, so anybody in a look of their own was listed here as the
- * default character while the room drew them correctly. The room's own
- * lookup (`dress` in systems/scene-presence.ts) is this one.
- */
-function spritePathFor(key: string): string {
-  if (key === SPRITE_KEY) return SPRITE_PATH;
-  return WORKER_SPRITES.find((w) => w.key === key)?.path ?? generatedSheetPath(key) ?? SPRITE_PATH;
-}
 
 interface Group {
   room: string;
@@ -89,7 +76,7 @@ export default function PeoplePanel() {
                 className={`people__row${person.id === me ? " people__row--me" : ""}`}
               >
                 <CharacterPortrait
-                  spritePath={spritePathFor(person.spriteKey)}
+                  spritePath={sheetPathFor(person.spriteKey) ?? SPRITE_PATH}
                   name={person.name}
                   small
                 />

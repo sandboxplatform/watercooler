@@ -165,10 +165,20 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     this.physics.add.collider(this.player.sprite, walls);
 
     // Look like yourself out here too.
+    //
+    // The sheet is not preloaded out here, so this lands a moment after the
+    // scene is up — by which time the socket may have settled the look for
+    // us: a claim the cookie does not allow is refused, and the answer goes
+    // on over the bus while this is still loading. Landing afterwards, it
+    // put the refused look straight back on, and the person went on seeing
+    // a face nobody else in the world could see. So the remembered look is
+    // asked again on arrival rather than captured: it is the one record of
+    // what we are wearing, and it is already the accepted one.
     const remembered = rememberedCharacter();
     if (remembered && remembered.key !== SPRITE_KEY) {
       ensureSheet(this, remembered.key, remembered.path, (ok) => {
-        if (ok) this.player.wearSprite(this, remembered.key);
+        if (!ok || rememberedCharacter()?.key !== remembered.key) return;
+        this.player.wearSprite(this, remembered.key);
       });
     }
 

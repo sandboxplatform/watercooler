@@ -12,7 +12,8 @@ import {
 import { currentRoom } from "../room-client";
 import { createLogger } from "../logger";
 import { loadPlayerName } from "../persistence";
-import { rememberedCharacter } from "../characters/choice";
+import { rememberCharacter, rememberedCharacter } from "../characters/choice";
+import { sheetPathFor } from "../characters/library";
 import { SPRITE_KEY } from "@/components/game/config/animations";
 import { rememberSelfId } from "../presence-self";
 import { rememberPlayers } from "../presence-roster";
@@ -37,6 +38,8 @@ export function usePresence() {
   const latestRef = useRef<{ x: number; y: number; facing: Facing; moving: boolean } | null>(null);
   const sentAtRef = useRef(0);
   const joinedRef = useRef(false);
+  // The look this browser last claimed, to compare against the one it got.
+  const askedRef = useRef<string | null>(null);
 
   useEffect(() => {
     const release = acquireRoomSocket();
@@ -54,11 +57,13 @@ export function usePresence() {
     /** Walk into the place the address bar names, standing where the scene put us. */
     const join = (spawn: { x: number; y: number; facing: Facing }, look?: string) => {
       joinedRef.current = false;
+      const spriteKey = look ?? rememberedCharacter()?.key ?? SPRITE_KEY;
+      askedRef.current = spriteKey;
       sendRoom({
         type: "join",
         room: currentRoom(),
         name: loadPlayerName(),
-        spriteKey: look ?? rememberedCharacter()?.key ?? SPRITE_KEY,
+        spriteKey,
         x: spawn.x,
         y: spawn.y,
         facing: spawn.facing,
@@ -84,6 +89,33 @@ export function usePresence() {
       join(next);
     });
 
+    /**
+     * Put this browser into the look the room actually gave us.
+     *
+     * The socket clamps a claimed look against the cookie — a visitor may not
+     * walk in wearing somebody's own face — and it used to do so in silence.
+     * The scene goes on drawing whatever localStorage remembers, so you
+     * looked like yourself on your own screen and like the default character
+     * to everybody else in the world, with nothing anywhere to say why. The
+     * welcome carries our own entry, so the refusal is answerable here.
+     *
+     * It settles rather than loops: putting a look on re-joins in it, and
+     * the welcome that follows carries back the one we asked for.
+     */
+    const wearWhatWeWereGiven = (players: PresencePlayer[], you: string) => {
+      const mine = players.find((player) => player.id === you);
+      const asked = askedRef.current;
+      if (!mine || !asked || mine.spriteKey === asked) return;
+      const path = sheetPathFor(mine.spriteKey);
+      if (!path) {
+        log.error(`the room put us in "${mine.spriteKey}", which names no sheet`);
+        return;
+      }
+      log.warn(`the look "${asked}" is not ours to wear; wearing "${mine.spriteKey}"`);
+      rememberCharacter({ key: mine.spriteKey, path });
+      gameEvents.emit("player-sprite-chosen", mine.spriteKey, path);
+    };
+
     const unsubMessage = onRoomMessage((message) => {
       switch (message.type) {
         case "welcome":
@@ -93,6 +125,7 @@ export function usePresence() {
           joinedRef.current = true;
           log.info(`joined as ${message.you} (${message.players.length}/${message.capacity})`);
           publish(message.players);
+          wearWhatWeWereGiven(message.players, message.you);
           break;
         case "rejected":
           joinedRef.current = false;

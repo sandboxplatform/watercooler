@@ -17,6 +17,7 @@ import { PresenceHub } from "./presence-hub";
 import { getRoomStore } from "./room-store";
 import { identityOf, isAuthorized, personaFor, type AccessIdentity } from "./access";
 import { mayWear } from "../characters/library";
+import { BOSS_SPRITE_KEY } from "../characters/sprites";
 import { normaliseRoomSlug } from "../rooms";
 import { describeRoom, hasBoardroom, mayEnterRoom } from "../world/floors";
 import { achievementFor, type EarnedAchievement } from "../achievements";
@@ -652,7 +653,13 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
           const result = room.hub.join(id, {
             name: typeof parsed.name === "string" ? parsed.name : "Guest",
-            spriteKey: lookFor(parsed.spriteKey, "player"),
+            // The default look rather than a word: a refused claim on a
+            // first join has nothing to keep, and the fallback has to name
+            // a sheet somebody can be drawn in. "player" named none, so
+            // every scene and the People panel alike fell through to the
+            // default on their own — which looked like an answer and was
+            // the absence of one.
+            spriteKey: lookFor(parsed.spriteKey, BOSS_SPRITE_KEY),
             x: coerceNumber(parsed.x),
             y: coerceNumber(parsed.y),
             facing: coerceFacing(parsed.facing),

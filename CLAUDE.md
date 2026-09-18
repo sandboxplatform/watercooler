@@ -423,6 +423,26 @@ this a visitor?" rather than "may they wear this?" — so every personal code
 was a way into everybody else's face, and a persona with no sheet of their
 own into the lot.
 
+**A clamped connection is told, and puts on what it was given.** The clamp
+answered the whole world and not the browser it refused: the scene goes on
+drawing whatever `lib/characters/choice.ts` remembers, so somebody wearing a
+look that was turned down looked like themselves on their own screen and like
+the default character to everybody else, with nothing anywhere to say why —
+the same fault an uploaded sheet once had, from the other end. The welcome
+carries our own entry, so `usePresence` compares it with what was claimed and
+wears the difference, which re-joins in it and settles on the next welcome.
+
+Two things that fell out of fixing it:
+
+- **The fallback has to name a sheet.** A refused claim with nothing to keep —
+  a visitor's first join — fell back to the word `"player"`, which is no
+  texture key at all: every scene and the People panel alike fell through to
+  the default sheet on their own, so it read as an answer everywhere while
+  being the absence of one. It is `BOSS_SPRITE_KEY` now.
+- **`sheetPathFor`** (`lib/characters/library.ts`) is the one way back from a
+  key to a sheet — shipped or uploaded. Three places had written it out
+  separately and the newest was the only one that knew about the boss.
+
 The list an agent may be dressed from is a different question and stays the
 roster: a seat wears whatever has been uploaded to the room.
 

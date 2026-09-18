@@ -10,8 +10,10 @@ import {
   librarySheetPath,
   looksFor,
   mayWear,
+  sheetPathFor,
   textureKeyFor,
 } from "../library";
+import { BOSS_SPRITE_KEY, BOSS_SPRITE_PATH } from "../sprites";
 import { RESIDENTS } from "../../world/residents";
 
 describe("the library roster", () => {
@@ -162,6 +164,21 @@ describe("the library roster", () => {
   it("says nothing about a key that is not an upload", () => {
     expect(generatedSheetPath("character_02")).toBeNull();
     expect(generatedSheetPath("generated:")).toBeNull();
+  });
+
+  /**
+   * The one lookup three places had each written for themselves. The boss is
+   * the part to hold: he is the default look a refused claim falls back to
+   * and he is not in `WORKER_SPRITES`, so a lookup that only searches that
+   * list answers null for the very key it is most often asked about.
+   */
+  it("finds the sheet behind any key at all", () => {
+    expect(sheetPathFor(BOSS_SPRITE_KEY)).toBe(BOSS_SPRITE_PATH);
+    expect(sheetPathFor("character_coop")).toBe("/characters/Coop_48x48.png");
+    expect(sheetPathFor(textureKeyFor({ id: "kai-abc", key: "x", source: "sheet" }))).toBe(
+      "/api/characters/kai-abc",
+    );
+    expect(sheetPathFor("player")).toBeNull();
   });
 
   it("resolves a library id to its shipped file and nothing else", () => {

@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
 import WebSocket from "ws";
 import type { PresencePlayer } from "../../presence-types";
+import { BOSS_SPRITE_KEY } from "../../characters/sprites";
 
 /**
  * Nobody walks in wearing somebody else's face.
@@ -102,9 +103,15 @@ describe("the look a connection claims", () => {
    * The likenesses are of real people and belong to them. A visitor holds a
    * code that was passed around, so the refusal leaves them in what they had
    * — the default, on a first join.
+   *
+   * The default look, and it has to be a key that names a sheet. It was the
+   * word "player", which names none: every scene fell through to the default
+   * sheet on its own and so did the People panel, so it read as the right
+   * answer everywhere while being the absence of one — and the browser that
+   * had been refused went on drawing itself as Coop, alone in the world.
    */
   it("refuses a visitor somebody's likeness", async () => {
-    expect(await looksLike("visitor", "character_coop", "look-b")).toBe("player");
+    expect(await looksLike("visitor", "character_coop", "look-b")).toBe(BOSS_SPRITE_KEY);
   });
 
   /**
