@@ -76,6 +76,27 @@ const ARRIVED_PX = 8;
 const LEAVE_WALK_MS = 30_000;
 /** How long they wait for somebody in the way before going somewhere else. */
 const MAKE_WAY_MS = 3000;
+/**
+ * Near enough to have walked up to somebody: a tile and a half, the same
+ * reach as the things in a room you press E at.
+ */
+export const GREET_PX = 72;
+/**
+ * And how far off counts as having left again.
+ *
+ * Wider than the first on purpose. Somebody standing right on the boundary
+ * drifts a pixel either side of it as they breathe, and without the gap
+ * every one of those crossings is another greeting.
+ */
+export const GREET_CLEAR_PX = 120;
+/**
+ * The least time between two of them, however many people walk up.
+ *
+ * A bubble is a few seconds long, so a second greeting inside that window
+ * lands on top of the first — and a row of people arriving one after another
+ * would otherwise set a resident off once each.
+ */
+export const GREET_QUIET_MS = 8000;
 /** How many places to try before settling for a crowded one. */
 const SPACING_TRIES = 8;
 /** Which way a step aside goes: along the front of a door, not into it. */
@@ -122,6 +143,18 @@ interface State {
   leaveBy: number;
   /** Since when somebody has been standing in their way; 0 when nobody is. */
   heldSince: number;
+  /** Whether somebody is currently stood near enough to have been greeted. */
+  greeted: boolean;
+  /**
+   * When they last greeted anybody, so they do not do it twice in a breath;
+   * 0 when they never have, as `heldSince` is 0 for nobody in the way.
+   *
+   * The 0 is load-bearing rather than tidy: a plain `now - greetedAt` reads
+   * a fresh simulation as having just said something, and on a clock that
+   * starts at zero — which is every test in this file — that swallows the
+   * first greeting of the run entirely.
+   */
+  greetedAt: number;
 }
 
 function firstHaunt(resident: Resident, kind?: PlaceKind): Haunt {
@@ -163,6 +196,8 @@ export class ResidentSimulation {
         leavingFor: null,
         leaveBy: 0,
         heldSince: 0,
+        greeted: false,
+        greetedAt: 0,
       };
       this.states.set(resident.id, state);
       this.arrive(state, haunt, at);
@@ -204,6 +239,7 @@ export class ResidentSimulation {
       if (state.leavingFor) this.goIfAtTheDoor(state, now);
       else if (now >= state.until) this.moveOn(state, now);
       this.walk(state, now);
+      this.greet(state, now);
       state.lastTick = now;
     }
   }
@@ -262,6 +298,7 @@ export class ResidentSimulation {
     state.target = null;
     state.legs = [];
     state.heldSince = 0;
+    state.greeted = false;
     state.pauseUntil = now + ARRIVAL_PAUSE_MS;
     const doorway = doorwayFor(state.resident, haunt);
     const area = wanderArea(haunt, state.resident);
@@ -310,14 +347,55 @@ export class ResidentSimulation {
    */
   private remark(state: State, haunt: Haunt) {
     const lines = state.resident.lines;
-    if (!lines || !state.room) return;
+    if (!lines) return;
+    this.say(state, haunt.kind === "station" ? lines.onDuty : lines.away);
+  }
+
+  /**
+   * What a resident says to somebody who walks up to them.
+   *
+   * Edge-triggered: it is somebody arriving that is worth remarking on, so
+   * one greeting per arrival rather than one per tick of standing there.
+   * Whether they have gone again is asked at the wider radius, and there is
+   * a quiet period besides — between them, walking to and fro at the edge of
+   * a chicken's hearing cannot make him cluck like a metronome.
+   *
+   * It is asked of the hub rather than of the other residents, because only
+   * a person walks up to anybody: the residents are sent to places nobody is
+   * standing in, and two of them meeting is the simulation, not company.
+   */
+  private greet(state: State, now: number) {
+    const greeting = state.resident.greeting;
+    if (!greeting || !state.room) return;
+    const { hub } = this.host.roomFor(state.room);
+    const reach = state.greeted ? GREET_CLEAR_PX : GREET_PX;
+    if (!hub.personNear({ x: state.x, y: state.y }, reach)) {
+      state.greeted = false;
+      return;
+    }
+    if (state.greeted) return;
+    state.greeted = true;
+    if (state.greetedAt && now - state.greetedAt < GREET_QUIET_MS) return;
+    state.greetedAt = now;
+    this.say(state, greeting);
+  }
+
+  /**
+   * Put something over a resident's head, in the room they are standing in.
+   *
+   * Through the same broadcast the socket relays a person's speech over, so
+   * it arrives at every client as an ordinary remark and the room's bubbles
+   * draw it without knowing a resident is not a person.
+   */
+  private say(state: State, text: string) {
+    if (!state.room) return;
     const say = currentBroadcast();
     if (!say) return;
     say(state.room, {
       type: "said",
       id: `resident:${state.resident.id}:${this.now()}`,
       from: { id: presenceIdFor(state.resident), name: state.resident.name },
-      text: haunt.kind === "station" ? lines.onDuty : lines.away,
+      text,
       at: new Date(this.now()).toISOString(),
     });
   }

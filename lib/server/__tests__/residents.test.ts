@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { PresenceHub } from "../presence-hub";
-import { ResidentSimulation, WANDER_SPEED_PX_S, presenceIdFor } from "../residents";
+import {
+  GREET_CLEAR_PX,
+  GREET_PX,
+  GREET_QUIET_MS,
+  ResidentSimulation,
+  WANDER_SPEED_PX_S,
+  presenceIdFor,
+} from "../residents";
 import {
   PERSONAL_SPACE_PX,
   RESIDENTS,
@@ -26,6 +33,7 @@ const yoshi = RESIDENTS[0];
 const mark = residentById("mark")!;
 const steve = residentById("steve")!;
 const doc = residentById("doc")!;
+const michael = residentById("michael")!;
 
 /**
  * @param now the same clock the simulation is driven by.
@@ -435,8 +443,8 @@ describe("someone on a station", () => {
 });
 
 /**
- * Doc is the only resident who says anything, and what he says depends on
- * where he is: at his post in Support, or off for a wander.
+ * Doc remarks on arriving somewhere, and what he says depends on where he
+ * is: at his post in Support, or off for a wander.
  *
  * It goes out over the same broadcast a person's speech is relayed on, so
  * the room draws it in an ordinary bubble without knowing he is not a
@@ -490,6 +498,161 @@ describe("what a resident says", () => {
     const { host } = world();
     new ResidentSimulation(host, { now: () => 0, random: () => 0.5 });
     expect(heard.every((h) => h.from === presenceIdFor(doc))).toBe(true);
+    setRoomBroadcast(null);
+  });
+});
+
+/**
+ * Michael says his one word to whoever walks up to him.
+ *
+ * Unlike Doc's remarks it is not something the resident does on his own
+ * account: it is an answer to somebody arriving, so what has to hold is that
+ * it goes off once for an arrival rather than once a tick for as long as
+ * they stand there — and that the residents milling about outside are not
+ * arrivals.
+ */
+describe("what a resident says when you walk up", () => {
+  function listening() {
+    const heard: { room: string; text: string; from: string }[] = [];
+    setRoomBroadcast((room, message) => {
+      if (message.type !== "said") return;
+      heard.push({ room, text: message.text, from: message.from.id });
+    });
+    return heard;
+  }
+
+  /** A simulation with Michael out on the map, and the map's hub to hand. */
+  function outside(clock: () => number) {
+    const { rooms, host } = world(clock);
+    const sim = new ResidentSimulation(host, { now: clock, random: () => 0.5 });
+    return { sim, hub: rooms.get(WORLD_ROOM_SLUG)!.hub };
+  }
+
+  function whereIsHe(sim: ResidentSimulation): { x: number; y: number } {
+    const spot = sim.whereabouts().find((w) => w.id === michael.id)!.spot;
+    if (!spot) throw new Error("Michael is nowhere");
+    return spot;
+  }
+
+  const clucks = (heard: { from: string }[]) =>
+    heard.filter((h) => h.from === presenceIdFor(michael)).length;
+
+  function person(hub: PresenceHub, at: { x: number; y: number }) {
+    hub.join("visitor", {
+      name: "Coop",
+      spriteKey: "character_boss",
+      x: at.x,
+      y: at.y,
+      facing: "down",
+    });
+  }
+
+  it("clucks when somebody stands next to him", () => {
+    let clock = 0;
+    const heard = listening();
+    const { sim, hub } = outside(() => clock);
+    person(hub, whereIsHe(sim));
+    clock += 120;
+    sim.tick(clock);
+    const mine = heard.filter((h) => h.from === presenceIdFor(michael));
+    expect(mine).toHaveLength(1);
+    expect(mine[0].text).toBe("Cluck!");
+    expect(mine[0].room).toBe(WORLD_ROOM_SLUG);
+    setRoomBroadcast(null);
+  });
+
+  it("says nothing to somebody across the map", () => {
+    let clock = 0;
+    const heard = listening();
+    const { sim, hub } = outside(() => clock);
+    const him = whereIsHe(sim);
+    person(hub, { x: him.x + GREET_CLEAR_PX * 4, y: him.y });
+    for (let i = 0; i < 20; i++) {
+      clock += 120;
+      sim.tick(clock);
+    }
+    expect(clucks(heard)).toBe(0);
+    setRoomBroadcast(null);
+  });
+
+  /** One cluck for the arrival, not one a tick for as long as they stay. */
+  it("does not cluck at somebody who is already there", () => {
+    let clock = 0;
+    const heard = listening();
+    const { sim, hub } = outside(() => clock);
+    person(hub, whereIsHe(sim));
+    for (let i = 0; i < 40; i++) {
+      clock += 120;
+      sim.tick(clock);
+      // Follow him about, so it is the same visit throughout rather than
+      // him wandering out of earshot and back into it.
+      hub.place("visitor", { ...whereIsHe(sim), facing: "down" });
+    }
+    expect(clock).toBeLessThan(GREET_QUIET_MS);
+    expect(clucks(heard)).toBe(1);
+    setRoomBroadcast(null);
+  });
+
+  it("clucks again for somebody who went away and came back", () => {
+    let clock = 0;
+    const heard = listening();
+    const { sim, hub } = outside(() => clock);
+    person(hub, whereIsHe(sim));
+    clock += 120;
+    sim.tick(clock);
+    expect(clucks(heard)).toBe(1);
+
+    hub.leave("visitor");
+    while (clock < GREET_QUIET_MS * 2) {
+      clock += 120;
+      sim.tick(clock);
+    }
+    expect(clucks(heard)).toBe(1);
+
+    person(hub, whereIsHe(sim));
+    clock += 120;
+    sim.tick(clock);
+    expect(clucks(heard)).toBe(2);
+    setRoomBroadcast(null);
+  });
+
+  /** The others out taking the air are the simulation, not company. */
+  it("is not set off by the other residents", () => {
+    let clock = 0;
+    const heard = listening();
+    const { sim, hub } = outside(() => clock);
+    const him = whereIsHe(sim);
+    hub.join("resident:someone-else", {
+      name: "Bud",
+      spriteKey: "character_bud",
+      x: him.x,
+      y: him.y,
+      facing: "down",
+      resident: true,
+    });
+    for (let i = 0; i < 20; i++) {
+      clock += 120;
+      sim.tick(clock);
+    }
+    expect(clucks(heard)).toBe(0);
+    setRoomBroadcast(null);
+  });
+
+  /** The reach is a walk-up, and letting go of somebody is wider than taking hold. */
+  it("hears people at arm's length and no further", () => {
+    expect(GREET_PX).toBeLessThan(GREET_CLEAR_PX);
+    let clock = 0;
+    const heard = listening();
+    const { sim, hub } = outside(() => clock);
+    const him = whereIsHe(sim);
+    person(hub, { x: him.x + GREET_PX + GREET_CLEAR_PX, y: him.y });
+    clock += 120;
+    sim.tick(clock);
+    expect(clucks(heard)).toBe(0);
+    hub.place("visitor", { ...whereIsHe(sim), facing: "down" });
+    clock += 120;
+    sim.tick(clock);
+    expect(clucks(heard)).toBe(1);
     setRoomBroadcast(null);
   });
 });

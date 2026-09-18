@@ -77,6 +77,15 @@ export interface Resident {
    * which is the right amount for somebody walking past.
    */
   lines?: { onDuty: string; away: string };
+  /**
+   * What they say when somebody walks up to them.
+   *
+   * Not one of `lines`: those are remarks on arriving somewhere, which is a
+   * thing the resident does, and this is an answer to somebody else turning
+   * up. The simulation is what decides how near is near and how often it
+   * bears saying.
+   */
+  greeting?: string;
 }
 
 /** A post in a room, by the sprite's centre, and the way they face at it. */
@@ -187,6 +196,7 @@ export const RESIDENTS: readonly Resident[] = [
     home: null,
     spriteKey: "character_michael",
     wanders: true,
+    greeting: "Cluck!",
   },
 ];
 

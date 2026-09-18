@@ -1627,7 +1627,33 @@ adding one takes their sheet out of the player picker automatically — which is
 why a wanderer still needs a `WORKER_SPRITES` entry: that is where
 `scene-presence.ts` looks up the sheet to load for a presence player.
 
-Michael, a chicken in a necktie, is the first and so far only wanderer.
+Michael, a chicken in a necktie, is the first and so far only wanderer. He
+also has a `greeting` — "Cluck!" — which is the other kind of thing a
+resident says: `lines` are remarks on arriving somewhere, which they do on
+their own account, and a greeting is an answer to somebody walking up.
+
+It is the server's, like every other thing a resident does, so the bubble is
+over his head on everyone's screen and not only on the screen of whoever
+walked up. Three rules keep one word from becoming a stuck horn, all in
+`lib/server/residents.ts`:
+
+| Rule             | What it does                                                                                    |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
+| Edge-triggered   | Once for an arrival, not once a tick for as long as somebody stands there                       |
+| `GREET_CLEAR_PX` | Wider than `GREET_PX`, so somebody hovering on the boundary does not cross it twice a second    |
+| `GREET_QUIET_MS` | A floor under the gap between two of them, so a queue of arrivals is one cluck rather than five |
+
+It asks the room's hub rather than the simulation, because only a **person**
+counts as somebody walking up: `personNear` skips the residents — who are
+sent to places nobody is standing in anyway — and skips anyone hidden in a
+lift. It answers without allocating, for the reason `get` does not use
+`snapshot()`: this is asked of a room on every tick.
+
+One thing that looks like tidiness and is not: `greetedAt` is 0 for _never_,
+the way `heldSince` is 0 for nobody in the way. A plain `now - greetedAt`
+reads a fresh simulation as having just spoken, which on a clock that starts
+at zero — every test in `residents.test.ts` — swallows the first greeting of
+the run.
 
 **A station** is the other way to have no desk:
 `station: { room, x, y, facing, paces? }` puts a resident at a post in a room,

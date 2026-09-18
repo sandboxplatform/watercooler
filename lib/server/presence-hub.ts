@@ -176,6 +176,27 @@ export class PresenceHub {
   }
 
   /**
+   * Whether a person is standing within `range` of a point.
+   *
+   * People only: a resident is not somebody to be walked up to, and one out
+   * of sight — in the lift — is not standing anywhere anybody can see.
+   *
+   * It takes no allocation for the same reason `get` does not: this is
+   * asked of a room on every tick of the simulation, and `snapshot().some(…)`
+   * would build the whole room to answer it each time.
+   */
+  personNear(at: { x: number; y: number }, range: number): boolean {
+    const limit = range * range;
+    for (const player of this.players.values()) {
+      if (player.resident || player.hidden) continue;
+      const dx = player.x - at.x;
+      const dy = player.y - at.y;
+      if (dx * dx + dy * dy <= limit) return true;
+    }
+    return false;
+  }
+
+  /**
    * Apply a movement update. Positions are clamped to what sprinting could
    * cover since the player's last move — over a bounded window, so a modified
    * client cannot save up a teleport by standing still — which is what stops
