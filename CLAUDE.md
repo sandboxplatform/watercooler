@@ -1873,6 +1873,30 @@ React will not hand one its dispatcher outside a renderer.
   lettering in the app. A new panel asks for a name; a hard-coded `font-size`
   under 13px is a panel that will not follow. In-world lettering is not part of
   this; it has a rule of its own, below.
+
+  **The column beside the office resolves the same names larger**, on
+  `.app-sidebar` in `hud.css`. Everywhere else in the HUD is a label glanced
+  at — a pill, a prompt, a count — and the sizes are chosen so none of it
+  takes screen away from the office. The column is the one surface that is
+  _read_: names, who earned what, and a sentence apiece saying why, in a list
+  the eye travels down. At `--fs-xs` that was 8px, which is the size a name
+  tag is drawn at over somebody's head — right for a glance and not for a
+  paragraph.
+
+  **Its reading sizes start at 12px, which is the font's own.** ArkPixel is
+  drawn on a 12px body, so 12 is where a glyph lands on whole pixels instead
+  of being a shrunken picture of itself — below it the strokes are resampled
+  and the type stops being crisp, which is most of what "hard to read" meant
+  here. `--fs-xs` is the column's body text and is the one to keep there;
+  the names under it are for the chips and the small print beside it.
+
+  Re-resolving the names rather than making each rule in the column ask for a
+  bigger one is what keeps the rule above true in there: a panel added to the
+  column goes on asking for `--fs-sm` and lands legible. It costs the office
+  nothing, since the column's width is the reader's, dragged to whatever they
+  want; and every value is at or above what the 760px query sets, so a
+  handset keeps what that query gave it.
+
 - **In-world lettering carries a scale against the camera's.** `legibleScale`
   in `lib/legible.ts` is the rule, `systems/legible.ts` applies it, and
   anything registered with `keepLegible` is redrawn at the size it was

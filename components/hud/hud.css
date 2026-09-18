@@ -879,7 +879,41 @@
   pointer-events: none;
 }
 
+/* The column reads its own scale, a couple of names up from the HUD's.
+
+   Everything else in the HUD is a label glanced at — a pill, a prompt, a
+   count — and the sizes in `app/globals.css` are chosen so none of it takes
+   screen away from the office. This column is the one place in the app that
+   is *read*: names, who earned what, and a sentence apiece saying why. At
+   `--fs-xs` that is 8px of a 12px pixel font, sitting still in a panel the
+   eye travels down — the size the office's own name tags are drawn at, and
+   those are glanced at over somebody's head.
+
+   The reading sizes sit at 12px and up, which is the font's own size —
+   ArkPixel is drawn on a 12px body, so that is where a glyph lands on whole
+   pixels and stops being a shrunken-down picture of itself. Below it the
+   strokes are resampled and the type stops being crisp, which is most of
+   what "hard to read" meant here. `--fs-xs` is the column's body text and
+   it is the one to keep there; the names below it are for the chips and the
+   small print beside it.
+
+   The names are re-resolved here rather than each rule in the column asking
+   for a bigger one, so a panel added to this column goes on asking for
+   `--fs-sm` and lands legible. That is the whole point of having a scale.
+   It costs the office nothing either way: the column's width is the
+   reader's, dragged to whatever they want.
+
+   Never below the phone scale — every value here is at or above what the
+   760px query sets, so a handset keeps what that query gave it. */
 .app-sidebar {
+  --fs-3xs: 9px;
+  --fs-2xs: 10px;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 15px;
+  --fs-xl: 16px;
+
   color: var(--pixel-text);
   position: relative;
   flex: 0 0 auto;
@@ -1847,15 +1881,19 @@
 
 .badges__row {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
   font-size: var(--fs-xs);
 }
 
-/* Not yet won: shown, but plainly not theirs */
+/* Not yet won: shown, but plainly not theirs.
+
+   It was 0.45, which took the muted detail text to about 2:1 against the
+   panel behind it — the row was not dim, it was gone. Half the point of
+   listing a badge nobody has won is that it can be read. */
 .badges__row--locked {
-  opacity: 0.45;
+  opacity: 0.7;
 }
 
 .badges__icon {
