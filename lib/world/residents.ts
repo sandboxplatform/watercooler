@@ -117,14 +117,12 @@ export const RESIDENTS: readonly Resident[] = [
     home: "castle-atlantic",
     spriteKey: "character_data_scientist",
   },
-  {
-    id: "sara",
-    name: "Sara",
-    title: "Operations",
-    org: "sandbox-erp",
-    home: "sandbox-erp",
-    spriteKey: "character_sara",
-  },
+  // Sara is not here: she holds a code of her own and walks in as herself,
+  // at a keyboard rather than on a routine (`PERSONAS` in
+  // lib/server/access.ts). Which is also what frees her sheet — `RESERVED`
+  // in lib/characters/library.ts is built from this list, and a reserved
+  // look is out of the library `looksFor` searches, so a persona named
+  // after a resident could not have been dressed in their own face.
   {
     id: "spud",
     name: "Bud",
@@ -349,8 +347,8 @@ export function roomToStand(
  * plaza began at the origin. The plaza then moved behind `CENTRE_X` and the
  * constant did not, so the row ended up at the foot of Chester's wall, half
  * a mile west of the thing it is named after and inside the bottom strip of
- * the building's picture. Yoshi and Sara stood in there with only their name
- * tags showing.
+ * the building's picture. The first two residents to take the air stood in
+ * there with only their name tags showing.
  */
 const FOUNTAIN = SCENERY.find((p) => p.kind === "fountain")!;
 export const OUTSIDE_SPOT = { x: FOUNTAIN.x - 140, y: FOUNTAIN.y + 60 };
@@ -538,8 +536,9 @@ function placeInRow(index: number): { x: number; y: number } {
  * The first is theirs alone — the row is walked by the position each holds
  * in the cast — so however many of these two places are taken, a resident
  * always has one nobody else wants. Only the second is shared, and it is
- * shared by the people who work in the same building: Sara and Bud both
- * chose the doorstep of Sandbox ERP and stood in each other.
+ * shared by the people who work in the same building: Bud and Doc both have
+ * the doorstep of Sandbox ERP, and before the rule below they stood in each
+ * other.
  */
 export function outsideSpots(resident: Resident): { x: number; y: number }[] {
   const index = Math.max(

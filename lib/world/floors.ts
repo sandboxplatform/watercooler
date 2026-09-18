@@ -286,15 +286,25 @@ export const PRIVATE_LIFTS: readonly string[] = ["sandbox-erp", "castle-atlantic
  * works at Castle Atlantic and rides Castle Atlantic's.
  *
  * **An empty list is not the same as no entry.** No entry means the person is
- * held to the building's own rule, which is how a visitor gets every lift but
- * the private ones. An empty list means no lift anywhere, which is Campbell.
- * Anything reading this with `if (!reach)` would hand him the lot.
+ * held to the building's own rule, which is how a visitor — and Nick, who is
+ * a friend rather than an employee — gets every lift but the private ones. An
+ * empty list means no lift anywhere, and anything reading this with
+ * `if (!reach)` would hand its holder the lot instead. Nobody holds one
+ * today; `floors.test.ts` keeps the two apart all the same.
+ *
+ * The buildings are named one by one rather than by organisation, because
+ * this answers a room slug: Homestar is a campus, so Campbell's reach is the
+ * three of its buildings with floors above the ground — its store, warehouse
+ * and field crew have no lift to ride.
  */
 export const LIFT_REACH: Partial<Record<AccessIdentity, "every" | readonly string[]>> = {
   coop: "every",
   rob: "every",
   hunter: ["castle-atlantic"],
-  campbell: [],
+  nathan: ["sandbox-erp"],
+  sara: ["sandbox-erp"],
+  andrew: ["sandbox-erp"],
+  campbell: ["homestar-sales", "homestar-finance", "homestar-operations"],
 };
 
 /** What the lift says to somebody it will not carry. */

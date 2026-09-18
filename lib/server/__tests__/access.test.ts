@@ -16,12 +16,17 @@ import {
   urlWithoutCode,
   verifyToken,
 } from "../access";
+import { RESIDENTS } from "../../world/residents";
 
 const CODE = "11111111-2222-3333-4444-555555555555";
 const COOP_CODE = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const ROB_CODE = "99999999-8888-7777-6666-555555555555";
 const HUNTER_CODE = "12121212-3434-5656-7878-909090909090";
 const CAMPBELL_CODE = "abcdabcd-1234-5678-9abc-def012345678";
+const NATHAN_CODE = "0f0f0f0f-1e1e-2d2d-3c3c-4b4b4b4b4b4b";
+const NICK_CODE = "5a5a5a5a-6969-7878-8787-96969696a5a5";
+const SARA_CODE = "c3c3c3c3-d4d4-e5e5-f6f6-070707070707";
+const ANDREW_CODE = "1b1b1b1b-2c2c-3d3d-4e4e-5f5f5f5f5f5f";
 
 const VARS = [
   "ACCESS_CODE",
@@ -29,6 +34,10 @@ const VARS = [
   "ACCESS_CODE_ROB",
   "ACCESS_CODE_HUNTER",
   "ACCESS_CODE_CAMPBELL",
+  "ACCESS_CODE_NATHAN",
+  "ACCESS_CODE_NICK",
+  "ACCESS_CODE_SARA",
+  "ACCESS_CODE_ANDREW",
 ] as const;
 const original = Object.fromEntries(VARS.map((v) => [v, process.env[v]]));
 
@@ -38,6 +47,10 @@ beforeEach(() => {
   process.env.ACCESS_CODE_ROB = ROB_CODE;
   process.env.ACCESS_CODE_HUNTER = HUNTER_CODE;
   process.env.ACCESS_CODE_CAMPBELL = CAMPBELL_CODE;
+  process.env.ACCESS_CODE_NATHAN = NATHAN_CODE;
+  process.env.ACCESS_CODE_NICK = NICK_CODE;
+  process.env.ACCESS_CODE_SARA = SARA_CODE;
+  process.env.ACCESS_CODE_ANDREW = ANDREW_CODE;
 });
 
 afterEach(() => {
@@ -77,6 +90,10 @@ describe("whose code it is", () => {
     expect(identityForCode(ROB_CODE)).toBe("rob");
     expect(identityForCode(HUNTER_CODE)).toBe("hunter");
     expect(identityForCode(CAMPBELL_CODE)).toBe("campbell");
+    expect(identityForCode(NATHAN_CODE)).toBe("nathan");
+    expect(identityForCode(NICK_CODE)).toBe("nick");
+    expect(identityForCode(SARA_CODE)).toBe("sara");
+    expect(identityForCode(ANDREW_CODE)).toBe("andrew");
   });
 
   it("refuses a wrong code, an empty one, and a prefix of a real one", () => {
@@ -124,6 +141,10 @@ describe("the cookie handed out at the door", () => {
     // so this is what would catch a new person being wired everywhere but there.
     expect(verifyToken(mintToken("hunter")!)).toBe("hunter");
     expect(verifyToken(mintToken("campbell")!)).toBe("campbell");
+    expect(verifyToken(mintToken("nathan")!)).toBe("nathan");
+    expect(verifyToken(mintToken("nick")!)).toBe("nick");
+    expect(verifyToken(mintToken("sara")!)).toBe("sara");
+    expect(verifyToken(mintToken("andrew")!)).toBe("andrew");
   });
 
   it("mints nothing when there is no code to key it with", () => {
@@ -144,6 +165,10 @@ describe("the cookie handed out at the door", () => {
     expect(verifyToken(`${expiry}.rob.${signature}`)).toBeNull();
     expect(verifyToken(`${expiry}.hunter.${signature}`)).toBeNull();
     expect(verifyToken(`${expiry}.campbell.${signature}`)).toBeNull();
+    expect(verifyToken(`${expiry}.nathan.${signature}`)).toBeNull();
+    expect(verifyToken(`${expiry}.nick.${signature}`)).toBeNull();
+    expect(verifyToken(`${expiry}.sara.${signature}`)).toBeNull();
+    expect(verifyToken(`${expiry}.andrew.${signature}`)).toBeNull();
   });
 
   it("refuses a token whose expiry has been pushed out by hand", () => {
@@ -208,14 +233,44 @@ describe("what a cookie entitles someone to", () => {
     expect(persona.characterKey).toBe("character_hunter");
   });
 
-  it("names Campbell, who works nowhere yet and so has no desk", () => {
-    // Same fact as his empty LIFT_REACH rather than a second one: a desk on
-    // a floor he cannot ride up to is not a desk he has. The missing home is
-    // also what starts him on the world map, via sentOutside in server.ts.
+  it("seats Nathan, Sara and Andrew at Sandbox ERP, each in their own look", () => {
+    for (const who of ["nathan", "sara", "andrew"] as const) {
+      const persona = personaFor(who)!;
+      expect(persona.name, who).toBe(who[0].toUpperCase() + who.slice(1));
+      expect(persona.home, who).toBe("sandbox-erp");
+      expect(persona.characterKey, who).toBe(`character_${who}`);
+    }
+  });
+
+  /**
+   * Sara was a resident until she was given a code, and the two states are
+   * mutually exclusive: `RESERVED` keeps a resident's look out of the library
+   * `looksFor` searches, so a persona named after one would be offered the
+   * shared cast — everybody's face but her own.
+   */
+  it("keeps Sara out of the residents, now that her code names her sheet", () => {
+    expect(RESIDENTS.some((r) => r.name === "Sara")).toBe(false);
+    expect(RESIDENTS.some((r) => r.spriteKey === "character_sara")).toBe(false);
+  });
+
+  it("puts Campbell at Homestar, which is a campus rather than a room", () => {
+    // `home` is an organisation — what the welcome screen asks a visitor to
+    // pick — so a campus is the campus itself. Which of its buildings he
+    // can ride up in is LIFT_REACH's answer, not this one.
     const persona = personaFor("campbell")!;
     expect(persona.name).toBe("Campbell");
+    expect(persona.home).toBe("homestar");
+    expect(persona.characterKey).toBe("character_campbell");
+  });
+
+  it("names Nick, a friend, who works nowhere and so has no desk", () => {
+    // A face and a name of his own, and no office: the missing home is what
+    // starts him on the world map, via sentOutside in server.ts, and what
+    // leaves the welcome screen with nothing to write in for him.
+    const persona = personaFor("nick")!;
+    expect(persona.name).toBe("Nick");
     expect(persona.home).toBeUndefined();
-    expect(persona.characterKey).toBeUndefined();
+    expect(persona.characterKey).toBe("character_nick");
   });
 
   it("gives a visitor no persona, so they choose for themselves and work nowhere", () => {

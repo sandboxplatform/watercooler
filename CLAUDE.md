@@ -330,7 +330,11 @@ into somebody else's, and rotating one person's code turns out only them.
 | `ACCESS_CODE_COOP`     | `coop`     | Brought in as Coop, at Sandbox ERP, wearing his own look          |
 | `ACCESS_CODE_ROB`      | `rob`      | The same, as Rob                                                  |
 | `ACCESS_CODE_HUNTER`   | `hunter`   | Brought in as Hunter, at Castle Atlantic, wearing his own look    |
-| `ACCESS_CODE_CAMPBELL` | `campbell` | As Campbell, who works nowhere yet: no desk, no lift, no sheet    |
+| `ACCESS_CODE_NATHAN`   | `nathan`   | As Nathan, at Sandbox ERP, riding that one lift and no other      |
+| `ACCESS_CODE_SARA`     | `sara`     | As Sara, the same — she was one of the residents until this       |
+| `ACCESS_CODE_ANDREW`   | `andrew`   | As Andrew, the same                                               |
+| `ACCESS_CODE_CAMPBELL` | `campbell` | As Campbell, at Homestar — a campus, so each of its lifts         |
+| `ACCESS_CODE_NICK`     | `nick`     | As Nick, a friend: his own look, no office, a visitor's lifts     |
 
 **Adding a person is four places, and one of them bites.** `AccessIdentity`
 (`lib/identity.ts`), a `Persona` and the `IDENTITIES` list (both
@@ -348,17 +352,36 @@ set while their office and their face arrive whenever they arrive. The
 welcome screen asks for whichever is missing and writes in the rest, rather
 than the code inventing an answer — the alternative for a look was naming a
 file that is not there, which is a texture that 404s and a broken card in
-their own picker. Campbell is in that state on both counts: named, working
-nowhere, and asked which look to wear. Hunter was too until his sheet
-arrived.
+their own picker. Nick is in that state on one of the two: his likeness is
+drawn, and he works nowhere, so he is asked for no office. Hunter and
+Campbell were both in it until their sheets arrived, and Campbell until he
+went to work at Homestar.
+
+**A resident cannot also hold a code, and the reason is their face.**
+`RESERVED` in `lib/characters/library.ts` is built from `RESIDENTS`, and a
+reserved look is kept out of `LIBRARY_CHARACTERS` — the list `looksFor`
+searches. So a `Persona` naming a resident's sheet finds nothing, falls
+through to the shared cast, and its holder is offered everybody's face but
+their own. Sara was a resident until she was given a code; she came out of
+`RESIDENTS` in the same change, which is what freed her sheet into the
+library. The two states are exclusive, and `access.test.ts` says so rather
+than leaving it to be rediscovered.
+
+**`home` is an organisation, not a room.** It is what the welcome screen
+asks a visitor to pick, and `isHome` checks it against `ORGANISATIONS` — so
+Campbell's is `homestar`, which is a campus and no room at all. `LIFT_REACH`
+is the other half and names buildings, because that is asked of a room slug.
+The two look like the same fact and are not: one says who somebody works
+for, the other says which doors open.
 
 **"Works nowhere" is not the same question as "is a visitor",** and the two
-came apart with Campbell. `worksNowhere` in `Welcome.tsx` is a visitor _or_ a
-persona with no `home`: both skip the office half of the screen, because
-otherwise Campbell is shown a list of offices none of which is his. Same for
-`landsOutside`, which now takes whether they have a building rather than the
+came apart with Campbell, who now works at Homestar; Nick is the case today.
+`worksNowhere` in `Welcome.tsx` is a visitor _or_ a persona with no `home`:
+both skip the office half of the screen, because otherwise somebody with no
+office is shown a list of offices none of which is theirs. Same for
+`landsOutside`, which takes whether they have a building rather than the
 identity — the root is the default room and the default room is an office, so
-it is no more Campbell's than a stranger's.
+it is no more Nick's than a stranger's.
 
 **A visitor starts outside.** The root is the default room, and the default
 room is an office — somebody's building. A visitor has no building, so landing
@@ -372,9 +395,11 @@ plaza.
 **A look belongs to whoever it is of.** `looksFor` in
 `lib/characters/library.ts` is the one rule: somebody whose own code names
 their sheet wears that sheet and nothing else, and everybody with no sheet of
-their own — a visitor, and equally Campbell, whose likeness has not been drawn
+their own — a visitor, and equally a persona whose likeness has not been drawn
 yet — chooses from the **shared cast**, the premade four and The Boss. Coop's
-and Rob's likenesses are no more Campbell's to put on than a stranger's.
+and Rob's likenesses are no more a newcomer's to put on than a stranger's.
+Every personal code names a sheet as it stands, so the shared cast is the
+visitor's screen and nobody else's.
 
 So the picker is a **visitor's screen**: there is nothing for it to offer
 somebody with one look, and the HUD's Character button is not drawn for them
@@ -395,7 +420,8 @@ else's face. A persona is put back into **their own sheet** rather than into
 whatever the connection last claimed, which may be the impersonation itself.
 A persona used to be exempt from the clamp outright — the check asked "is
 this a visitor?" rather than "may they wear this?" — so every personal code
-was a way into everybody else's face, and Campbell's into the lot.
+was a way into everybody else's face, and a persona with no sheet of their
+own into the lot.
 
 The list an agent may be dressed from is a different question and stays the
 roster: a seat wears whatever has been uploaded to the room.
@@ -409,20 +435,34 @@ they answer different questions:
 - `LIFT_REACH` is how far a named person may go, which is their business
   rather than the building's.
 
-| Person   | Reach                 | Rides                                       |
-| -------- | --------------------- | ------------------------------------------- |
-| Coop     | `"every"`             | Every lift in the world                     |
-| Rob      | `"every"`             | The same                                    |
-| Hunter   | `["castle-atlantic"]` | Only where he works — not even a public one |
-| Campbell | `[]`                  | Nothing, anywhere                           |
-| visitor  | _no entry_            | Everything except a private building's      |
+| Person   | Reach                          | Rides                                       |
+| -------- | ------------------------------ | ------------------------------------------- |
+| Coop     | `"every"`                      | Every lift in the world                     |
+| Rob      | `"every"`                      | The same                                    |
+| Hunter   | `["castle-atlantic"]`          | Only where he works — not even a public one |
+| Nathan   | `["sandbox-erp"]`              | The same, at his own building               |
+| Sara     | `["sandbox-erp"]`              | The same                                    |
+| Andrew   | `["sandbox-erp"]`              | The same                                    |
+| Campbell | Homestar's three office blocks | Only where he works, which is a campus      |
+| Nick     | _no entry_                     | Everything except a private building's      |
+| visitor  | _no entry_                     | The same                                    |
+
+Campbell's is a list of **buildings**, not his organisation: this is asked
+about a room slug, and Homestar is a campus — `homestar-sales`,
+`homestar-finance` and `homestar-operations` are the three of its buildings
+with floors to ride to, and its store, warehouse and field crew have no lift
+at all. A single-building organisation's slug happens to be both, which is
+why Hunter's and Nathan's read as their employer.
 
 `"every"` means every lift **including a building made private later**, which
 is what "all the elevators" has to mean or it quietly stops being true the
 next time a building is shut. And **an empty list is not the same as no
 entry**: no entry falls through to the building's own rule, which is how a
-visitor gets the public lifts; an empty list is no lift anywhere. Anything
-reading `LIFT_REACH` with `if (!reach)` hands Campbell the lot.
+visitor — and Nick, a friend rather than an employee — gets the public lifts;
+an empty list is no lift anywhere. Nobody holds an empty one today, Campbell
+having gone to work; `floors.test.ts` lends him one for the length of an
+assertion rather than leave the distinction untested, because anything
+reading `LIFT_REACH` with `if (!reach)` hands its holder the lot.
 
 It used to be one record keyed by building, saying who may go up in each. That
 could express neither of the rules above — a person barred from the _public_
@@ -1132,8 +1172,9 @@ Two things the office needs and says so at the call site:
 The handle's `say(id, text)` is for a scene with something of its own to
 put over somebody — the office announcing an achievement. If you touch
 preloading, check that people still look like themselves: a room that
-renders is not proof that it is right, and Sara and Bud both work at
-Sandbox ERP in different sheets, which is the pair to look at.
+renders is not proof that it is right, so stand two of Sandbox ERP's own
+in one room — Bud is a resident and Sara walks in on her own code, in
+different sheets, which is the pair to look at.
 
 **A map declares only the tilesets it draws from.** The source map carries all
 sixteen of the pack's sheets, and every generated room used to inherit the lot
@@ -1445,11 +1486,13 @@ ten seconds and never in between. That is what made a resident two things —
 somebody who walks indoors and a picture outside — and both of the faults
 that came of it were invisible to the server:
 
-- **Two of them in one place.** Sara and Bud both have the doorstep of
-  Sandbox ERP among their two places outside (`outsideSpots`: their own
-  spot in the row in front of the fountain, and the path to their own
-  building's door). Both were sent to it and neither asked whether it was
-  taken, so they stood inside each other for the length of a stay.
+- **Two of them in one place.** Sandbox ERP's residents share the
+  doorstep of their building among their two places outside
+  (`outsideSpots`: their own spot in the row in front of the fountain, and
+  the path to their own building's door). Both were sent to it and neither
+  asked whether it was taken, so they stood inside each other for the
+  length of a stay. Sara and Bud were the pair; Sara holds a code now, and
+  Doc took her place in it.
 - **Nobody walked.** They appeared at a spot, and appeared at another one
   when the stay was up.
 
@@ -1685,11 +1728,14 @@ late to be told.
 
 **They report; they do not refuse, and that should stay that way.** Which
 proportions the cast has is the artist's call, and the cast does not in fact
-agree: four sheets are 64px (Rob, Sara, Steve, Yoshi), three are 60px (Doc,
-Mark, Yash), Hunter is 58px and Coop is 68px with his feet on row 89. Bud and
-Michael — an egg and a chicken — are exempt outright. A height rule in
-`sheetFaults` would refuse the last two and the artist's judgement along with
-them; the exemption list belongs beside the report, which is where it is.
+agree: four sheets are 64px (Rob, Sara, Steve, Yoshi), four are 60px (Doc,
+Mark, Nathan, Yash), Hunter and Campbell are 58px, and Coop and Nick are 68px
+with their feet on row 89. Bud, Michael and Andrew — an egg, a chicken and a
+fish finger in spectacles — are exempt outright, which is `SHAPES` in
+`scripts/check-sheets.ts`. A height rule in `sheetFaults` would refuse those
+three and the artist's judgement along with them; the exemption list belongs
+beside the report, which is where it is, and somebody who is not a person
+goes on it as they are installed.
 
 What the report must **not** do is measure something that fires on
 everything. `check:delivery` briefly held the feet band, rows 72-91, to the
@@ -1864,26 +1910,26 @@ From `CONTRIBUTING.md`, and worth holding to when adding anything:
 
 ## Environment variables
 
-| Variable                                                                 | Default                                 | Purpose                                                                  |
-| ------------------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------ |
-| `ACCESS_CODE`                                                            | —                                       | Shared visitors' code; production refuses to boot with no code at all    |
-| `ACCESS_CODE_COOP` / `_ROB` / `_HUNTER` / `_CAMPBELL`                    | —                                       | One code each; brings its holder in as themselves                        |
-| `AGENT_PROVIDER`                                                         | `claude`                                | Which provider runs agents                                               |
-| `PORT` / `HOSTNAME`                                                      | `3000` / `localhost`                    | Server bind; also builds auth callback URLs                              |
-| `ANTHROPIC_API_KEY`                                                      | —                                       | Required by `claude-api`                                                 |
-| `CLAUDE_BIN` / `CLAUDE_PERMISSION_MODE` / `CLAUDE_ALLOWED_TOOLS`         | — / `acceptEdits` / —                   | Claude CLI tuning                                                        |
-| `AGENT_TOWN_MODEL`                                                       | CLI default                             | `opus` \| `sonnet` \| `haiku`                                            |
-| `AGENT_MAX_CONCURRENT` / `AGENT_RUN_TIMEOUT_MS` / `ROOM_SPEND_LIMIT_USD` | 4 / 180000 / 50                         | Run limits                                                               |
-| `AGENT_WORKSPACE_ROOT`                                                   | `.agent-workspaces`                     | Where seat sandboxes go                                                  |
-| `ERP_DB_PATH` / `UPLOADS_DIR`                                            | `.data/erp.sqlite` / beside the room db | Storage paths                                                            |
-| `ZOHO_PULSE_STATUSES`                                                    | `New,Queue,In Progress`                 | The three standing statuses on Support's wall, in the order they hang    |
-| `ZOHO_TIMEZONE`                                                          | asked of the desk                       | Which clock "today" runs on; otherwise the org's, else its agents'       |
-| `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                             | —                                       | Required by the `mettara` provider                                       |
-| `METTARA_EMAIL_DOMAIN`                                                   | —                                       | A domain you own; Mettara addresses each seat's user on it               |
-| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`              | —                                       | Auth.js sign-in; off when absent                                         |
-| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT; **build time**, not run time     |
-| `CSP_CONNECT_SRC`                                                        | —                                       | Extra `connect-src` origins                                              |
-| `GIT_SHA`                                                                | —                                       | The commit `/api/health` reports; the Dockerfile takes it as a build arg |
+| Variable                                                                                          | Default                                 | Purpose                                                                  |
+| ------------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------ |
+| `ACCESS_CODE`                                                                                     | —                                       | Shared visitors' code; production refuses to boot with no code at all    |
+| `ACCESS_CODE_COOP` / `_ROB` / `_HUNTER` / `_NATHAN` / `_SARA` / `_ANDREW` / `_CAMPBELL` / `_NICK` | —                                       | One code each; brings its holder in as themselves                        |
+| `AGENT_PROVIDER`                                                                                  | `claude`                                | Which provider runs agents                                               |
+| `PORT` / `HOSTNAME`                                                                               | `3000` / `localhost`                    | Server bind; also builds auth callback URLs                              |
+| `ANTHROPIC_API_KEY`                                                                               | —                                       | Required by `claude-api`                                                 |
+| `CLAUDE_BIN` / `CLAUDE_PERMISSION_MODE` / `CLAUDE_ALLOWED_TOOLS`                                  | — / `acceptEdits` / —                   | Claude CLI tuning                                                        |
+| `AGENT_TOWN_MODEL`                                                                                | CLI default                             | `opus` \| `sonnet` \| `haiku`                                            |
+| `AGENT_MAX_CONCURRENT` / `AGENT_RUN_TIMEOUT_MS` / `ROOM_SPEND_LIMIT_USD`                          | 4 / 180000 / 50                         | Run limits                                                               |
+| `AGENT_WORKSPACE_ROOT`                                                                            | `.agent-workspaces`                     | Where seat sandboxes go                                                  |
+| `ERP_DB_PATH` / `UPLOADS_DIR`                                                                     | `.data/erp.sqlite` / beside the room db | Storage paths                                                            |
+| `ZOHO_PULSE_STATUSES`                                                                             | `New,Queue,In Progress`                 | The three standing statuses on Support's wall, in the order they hang    |
+| `ZOHO_TIMEZONE`                                                                                   | asked of the desk                       | Which clock "today" runs on; otherwise the org's, else its agents'       |
+| `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                                                      | —                                       | Required by the `mettara` provider                                       |
+| `METTARA_EMAIL_DOMAIN`                                                                            | —                                       | A domain you own; Mettara addresses each seat's user on it               |
+| `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`                                       | —                                       | Auth.js sign-in; off when absent                                         |
+| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                                              | —                                       | TURN relay for voice behind strict NAT; **build time**, not run time     |
+| `CSP_CONNECT_SRC`                                                                                 | —                                       | Extra `connect-src` origins                                              |
+| `GIT_SHA`                                                                                         | —                                       | The commit `/api/health` reports; the Dockerfile takes it as a build arg |
 
 `README.md` covers the same ground as user-facing narrative, with setup walkthroughs
 and the feature tour (arcade, island, controller, playing together). Change behaviour

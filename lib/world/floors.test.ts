@@ -154,7 +154,13 @@ describe("who may ride the lift", () => {
     coop: [true, true, true, true],
     rob: [true, true, true, true],
     hunter: [false, true, false, false],
-    campbell: [false, false, false, false],
+    nathan: [true, false, false, false],
+    sara: [true, false, false, false],
+    andrew: [true, false, false, false],
+    campbell: [false, false, true, false],
+    // A friend, so no reach of his own: the buildings decide, exactly as
+    // they do for a visitor.
+    nick: [false, false, true, true],
     visitor: [false, false, true, true],
   };
 
@@ -176,19 +182,46 @@ describe("who may ride the lift", () => {
   });
 
   /**
-   * The difference between an empty reach and no reach at all. Campbell's
-   * list is empty, which is no lift anywhere; a visitor has no list, so the
-   * building decides and an unlisted one carries them.
+   * The difference between an empty reach and no reach at all. Nobody holds
+   * an empty list today — Campbell had one until he went to work at Homestar
+   * — but the two answers have to stay apart, because the tempting way to
+   * read this table is `if (!reach)`, which hands an empty list every lift
+   * the building is willing to open. So one is lent out for the length of
+   * the assertion rather than left untested until it next matters.
    */
   it("keeps an empty reach apart from no reach at all", () => {
-    expect(mayRideLift("a-building-nobody-has-built-yet", "campbell")).toBe(false);
+    const reach = LIFT_REACH as Record<string, "every" | readonly string[] | undefined>;
+    expect(reach.nick).toBeUndefined();
+    try {
+      reach.nick = [];
+      expect(mayRideLift("a-building-nobody-has-built-yet", "nick")).toBe(false);
+    } finally {
+      delete reach.nick;
+    }
     expect(mayRideLift("a-building-nobody-has-built-yet", "visitor")).toBe(true);
   });
 
-  /** Hunter rides where he works and nowhere else, private or not. */
-  it("holds Hunter to his own building", () => {
+  /** Everybody who rides one building's lift and no other. */
+  it("holds a person to their own building", () => {
     expect(LIFT_REACH.hunter).toEqual(["castle-atlantic"]);
     expect(mayRideLift("sandbox-erp", "hunter")).toBe(false);
+    for (const who of ["nathan", "sara", "andrew"] as const) {
+      expect(LIFT_REACH[who], who).toEqual(["sandbox-erp"]);
+      expect(mayRideLift("castle-atlantic", who), who).toBe(false);
+    }
+  });
+
+  /**
+   * Campbell's is a campus, so his reach is its buildings rather than its
+   * name: a room slug is what this is asked about, and `homestar` is no
+   * room. Only the three with floors — the store, the warehouse and the
+   * field crew have no lift to ride.
+   */
+  it("carries Campbell up in every Homestar building that has floors", () => {
+    for (const building of ["homestar-sales", "homestar-finance", "homestar-operations"]) {
+      expect(mayRideLift(building, "campbell"), building).toBe(true);
+    }
+    expect(mayRideLift("homestar", "campbell")).toBe(false);
   });
 
   it("knows which buildings are private", () => {
@@ -219,12 +252,17 @@ describe("who may be in a room", () => {
     // Not Hunter: he works at Castle Atlantic, and his own floors are there.
     expect(mayEnterRoom("sandbox-erp-floor-2", "hunter")).toBe(false);
     expect(mayEnterRoom("castle-atlantic-floor-2", "hunter")).toBe(true);
-    // Campbell rides nothing, so no floor of any building is his.
+    // Campbell works at Homestar, so its floors are his and nobody else's
+    // are — a campus is buildings, which is what the slug carries.
+    expect(mayEnterRoom("homestar-sales-floor-1", "campbell")).toBe(true);
     expect(mayEnterRoom("castle-atlantic-floor-2", "campbell")).toBe(false);
-    expect(mayEnterRoom("homestar-sales-floor-1", "campbell")).toBe(false);
     // But a lobby, the world map and a campus are still everyone's.
     expect(mayEnterRoom("castle-atlantic", "campbell")).toBe(true);
     expect(mayEnterRoom("world", "campbell")).toBe(true);
+    // Nick has no reach of his own, so the buildings answer for him exactly
+    // as they do for a visitor: the public floors, and not the private ones.
+    expect(mayEnterRoom("sandbox-erp-floor-2", "nick")).toBe(false);
+    expect(mayEnterRoom("homestar-sales-floor-1", "nick")).toBe(true);
   });
 
   /**

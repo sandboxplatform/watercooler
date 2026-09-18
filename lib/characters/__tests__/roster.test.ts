@@ -42,7 +42,23 @@ describe("the library roster", () => {
     const names = LIBRARY_CHARACTERS.map((c) => c.name);
     // Doc's sheet is here on disk but not on this list: he became a resident,
     // and a resident's look is reserved to them.
-    expect(names).toEqual(["Alice", "Bob", "Carol", "Dave", "The Boss", "Coop", "Rob", "Hunter"]);
+    expect(names).toEqual([
+      "Alice",
+      "Bob",
+      "Carol",
+      "Dave",
+      "The Boss",
+      "Coop",
+      "Rob",
+      "Hunter",
+      "Nathan",
+      // Sara's sheet is on this list because she stopped being a resident:
+      // a resident's look is reserved to them and never offered at all.
+      "Sara",
+      "Andrew",
+      "Campbell",
+      "Nick",
+    ]);
   });
 
   /**
@@ -54,7 +70,11 @@ describe("the library roster", () => {
    */
   it("offers a visitor the shared cast only, never a likeness", () => {
     expect(SHARED_CAST.map((c) => c.name)).toEqual(["Alice", "Bob", "Carol", "Dave", "The Boss"]);
-    expect(SHARED_CAST.some((c) => ["Coop", "Rob", "Hunter"].includes(c.name))).toBe(false);
+    expect(
+      SHARED_CAST.some((c) =>
+        ["Coop", "Rob", "Hunter", "Nathan", "Sara", "Andrew", "Campbell", "Nick"].includes(c.name),
+      ),
+    ).toBe(false);
     expect(looksFor(null)).toEqual(SHARED_CAST);
     expect(mayWear(null, "character_02")).toBe(true);
     expect(mayWear(null, "character_09")).toBe(true);
@@ -81,10 +101,11 @@ describe("the library roster", () => {
   });
 
   /**
-   * Campbell: named by his own code, with no sheet drawn for him yet. He
-   * chooses, because there is nothing of his own to wear — but he chooses
-   * from the same cast a visitor does, since Coop's likeness is no more his
-   * than a stranger's.
+   * Somebody named by their own code with no sheet drawn for them yet. They
+   * choose, because there is nothing of their own to wear — but from the same
+   * cast a visitor does, since Coop's likeness is no more theirs than a
+   * stranger's. Campbell was the case until his sheet arrived; every persona
+   * names one today, which is why this asks the rule rather than a person.
    */
   it("gives somebody with no sheet of their own the shared cast", () => {
     expect(looksFor({})).toEqual(SHARED_CAST);
@@ -98,7 +119,16 @@ describe("the library roster", () => {
    * of why, which is the unlocked picker this rule exists to close.
    */
   it("keeps every persona's named sheet in the library", () => {
-    for (const key of ["character_coop", "character_rob", "character_hunter"]) {
+    for (const key of [
+      "character_coop",
+      "character_rob",
+      "character_hunter",
+      "character_nathan",
+      "character_sara",
+      "character_andrew",
+      "character_campbell",
+      "character_nick",
+    ]) {
       expect(
         looksFor({ characterKey: key }).map((c) => c.key),
         key,

@@ -78,10 +78,12 @@ describe("the residents", () => {
     }
   });
 
-  it("are Yoshi at Castle Atlantic, Sara, Bud and Doc at Sandbox ERP, Yash at Mettara, Steve at Chester, Mark at Homestar", () => {
+  it("are Yoshi at Castle Atlantic, Bud and Doc at Sandbox ERP, Yash at Mettara, Steve at Chester, Mark at Homestar", () => {
     const names = (org: string) => residentsOf(org).map((r) => r.name);
     expect(names("castle-atlantic")).toEqual(["Yoshi"]);
-    expect(names("sandbox-erp")).toEqual(["Sara", "Bud", "Doc"]);
+    // Sara worked here until she was given a code of her own: she is a
+    // person now, so she walks in rather than being walked about.
+    expect(names("sandbox-erp")).toEqual(["Bud", "Doc"]);
     expect(names("mettara")).toEqual(["Yash"]);
     expect(names("chester")).toEqual(["Steve"]);
     expect(names("homestar")).toEqual(["Mark"]);
@@ -289,9 +291,11 @@ describe("desks", () => {
     expect(deskSpot(yoshi).y).toBeGreaterThan(0);
   });
 
-  it("go two to a floor at Sandbox ERP, in order", () => {
-    expect(residentsAt("sandbox-erp").map((r) => r.name)).toEqual(["Sara", "Bud"]);
-    expect(deskOf(residentById("spud")!)).toBe(1);
+  it("seat Sandbox ERP's one desk-holding agent at the first desk", () => {
+    // Two of them until Sara became a person; Doc has a station rather than
+    // a desk, which is why he is not here either.
+    expect(residentsAt("sandbox-erp").map((r) => r.name)).toEqual(["Bud"]);
+    expect(deskOf(residentById("spud")!)).toBe(0);
   });
 
   it("put Mark in Homestar Sales and nowhere else on the campus", () => {

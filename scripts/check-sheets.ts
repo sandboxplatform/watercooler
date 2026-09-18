@@ -50,7 +50,7 @@ const DIR = join(process.cwd(), "public/characters");
 const STANDARD = { top: 28, bottom: 91, height: 64 };
 
 /** Characters that are deliberately not people, and so not held to it. */
-const SHAPES = new Set(["Bud", "Michael"]);
+const SHAPES = new Set(["Bud", "Michael", "Andrew"]);
 
 /** Not cast at all: the blank grid an artist starts from. */
 const NOT_CAST = new Set(["Character_Template"]);

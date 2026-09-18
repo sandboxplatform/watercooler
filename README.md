@@ -94,20 +94,31 @@ characters that ship with the game, and start out on the world map. Visitors wor
 nowhere, so they choose no office and have no desk.
 
 Someone who works here gets a code of their own instead — `ACCESS_CODE_COOP`,
-`ACCESS_CODE_ROB`, `ACCESS_CODE_HUNTER`, `ACCESS_CODE_CAMPBELL` — which they keep
-to themselves. It names them: they are brought straight in as themselves, at their
+`ACCESS_CODE_ROB`, `ACCESS_CODE_HUNTER`, `ACCESS_CODE_NATHAN`,
+`ACCESS_CODE_SARA`, `ACCESS_CODE_ANDREW`, `ACCESS_CODE_CAMPBELL`,
+`ACCESS_CODE_NICK` — which they keep to themselves. It names them: they are brought straight in as themselves, at their
 own building, wearing their own look, without being asked. Their likeness is
 theirs, and no visitor can put it on.
 
 Which floors they can reach is their own business too. Coop and Rob work at Sandbox
-ERP and ride every lift in the world; Hunter works at Castle Atlantic and rides
-Castle Atlantic's; Campbell rides none for now. A visitor rides any lift except
-those in a building whose floors are private — the lobby is always open.
+ERP and ride every lift in the world; everybody else rides where they work and
+nowhere else. Hunter works at Castle Atlantic and rides Castle Atlantic's; Nathan,
+Sara and Andrew are at Sandbox ERP and ride its; and Campbell is at Homestar, which
+is a campus — so his is the lift in each of its buildings that has floors. A visitor
+rides any lift except those in a building whose floors are private, and so does
+Nick, who is a friend rather than an employee: the lobby is always open.
+
+Somebody can stop being an agent and become a person. Sara was one of the residents
+— an agent the server walked about the building on a routine — until she was given a
+code; now she walks in herself, wearing the same sheet. The two cannot both be true
+of one character: a resident's look is reserved to them and kept out of the picker
+entirely, so a code naming it would find nothing to wear.
 
 Somebody can be named before they have an office or a face. Their code still brings
 them in as themselves, and the welcome screen asks only for the parts that are
-missing rather than putting somebody else's on them. Campbell is at that stage: he
-works nowhere so far, so he has no desk and picks his own look.
+missing rather than putting somebody else's on them. Nick is at that stage on one
+of the two: he has his own look, and works nowhere, so he has no desk and starts
+out on the world map.
 
 Give every code a different value. Two people sharing one, or a personal code that
 is also the shared one, hands that identity to whoever holds it — the server says

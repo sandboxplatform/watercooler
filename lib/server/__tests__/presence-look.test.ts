@@ -120,13 +120,15 @@ describe("the look a connection claims", () => {
   });
 
   /**
-   * Campbell is named by his own code with no sheet drawn for him yet, so he
-   * chooses — from the cast a visitor chooses from, since Coop's likeness is
-   * no more his than a stranger's. A persona used to be exempt from this
-   * check outright, which is exactly the hole that left.
+   * The same for the newest likeness on the list, which is the half that
+   * rots: a persona used to be exempt from this check outright, and the
+   * exemption showed only on somebody nobody thought to test. Campbell is
+   * held to his own sheet, and Coop's is as far out of his reach as a
+   * stranger's.
    */
-  it("gives somebody with no sheet of their own the shared cast and no more", async () => {
-    expect(await looksLike("campbell", "character_02", "look-f")).toBe("character_02");
-    expect(await looksLike("campbell", "character_coop", "look-g")).toBe("player");
+  it("holds every persona to their own sheet, not only the first ones", async () => {
+    expect(await looksLike("campbell", "character_campbell", "look-f")).toBe("character_campbell");
+    expect(await looksLike("campbell", "character_coop", "look-g")).toBe("character_campbell");
+    expect(await looksLike("campbell", "character_02", "look-h")).toBe("character_campbell");
   });
 });

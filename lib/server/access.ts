@@ -40,11 +40,13 @@ export interface Persona {
   identity: AccessIdentity;
   name: string;
   /**
-   * Tenant slug of the office they work out of.
+   * Slug of the *organisation* they work for — what the welcome screen asks
+   * a visitor to pick, so a campus is the campus rather than one of its
+   * buildings. Campbell's is `homestar`, which is no room at all.
    *
-   * Absent for somebody who works nowhere yet: they get no desk and no
-   * office written in, exactly as a visitor does. A home whose floors they
-   * cannot ride up to would not be a home — see `LIFT_REACH`.
+   * Absent for somebody who works nowhere: they get no desk and no office
+   * written in, exactly as a visitor does. A home whose floors they cannot
+   * ride up to would not be a home — see `LIFT_REACH`.
    */
   home?: string;
   /**
@@ -63,10 +65,27 @@ const PERSONAS: readonly Persona[] = [
   // Castle Atlantic is where Hunter works, and `LIFT_REACH` carries the
   // other half of that: his is the one lift he rides.
   { identity: "hunter", name: "Hunter", home: "castle-atlantic", characterKey: "character_hunter" },
-  // Neither yet: Campbell is named, and works nowhere so far. That is the
-  // same fact as his empty `LIFT_REACH` rather than a second one — a desk on
-  // a floor he cannot reach is not a desk he has.
-  { identity: "campbell", name: "Campbell" },
+  // Nathan works at Sandbox ERP like Coop and Rob, and rides its lift the
+  // way Hunter rides his own building's: where he works, and nowhere else.
+  // "Every lift in the world" is the two of them and stays that way.
+  { identity: "nathan", name: "Nathan", home: "sandbox-erp", characterKey: "character_nathan" },
+  // Sara was a resident — an agent the server walked about on a routine —
+  // until she was given a code. Her sheet came out of `RESIDENTS` with her:
+  // a resident's look is reserved to them and so kept out of the library
+  // `looksFor` searches, which would have left her persona unable to wear
+  // her own face.
+  { identity: "sara", name: "Sara", home: "sandbox-erp", characterKey: "character_sara" },
+  { identity: "andrew", name: "Andrew", home: "sandbox-erp", characterKey: "character_andrew" },
+  // Campbell works at Homestar, which is a campus: one organisation with a
+  // building per department. `home` is an organisation rather than a room,
+  // so it is the campus itself; `LIFT_REACH` names the three of its
+  // buildings that have floors to ride to.
+  { identity: "campbell", name: "Campbell", home: "homestar", characterKey: "character_campbell" },
+  // Nick is a friend rather than an employee: he has a name and a face of
+  // his own and works nowhere, so no office is written in and he picks up
+  // no lift beyond the ones a visitor already rides. The missing `home` is
+  // also what starts him on the world map, via `sentOutside` in server.ts.
+  { identity: "nick", name: "Nick", characterKey: "character_nick" },
 ];
 
 export function personaFor(identity: AccessIdentity): Persona | null {
@@ -89,7 +108,17 @@ function codeFor(identity: AccessIdentity): string | null {
  * recognise a cookie naming one that is missing, so forgetting an entry
  * turns that person away with a code that is set and correct.
  */
-const IDENTITIES: readonly AccessIdentity[] = ["coop", "rob", "hunter", "campbell", "visitor"];
+const IDENTITIES: readonly AccessIdentity[] = [
+  "coop",
+  "rob",
+  "hunter",
+  "nathan",
+  "sara",
+  "andrew",
+  "campbell",
+  "nick",
+  "visitor",
+];
 
 /** How long a cookie lasts before the code must be entered again. */
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
