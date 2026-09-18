@@ -836,7 +836,10 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           // neither would hear an answer.
           const to = typeof parsed.to === "string" ? parsed.to : "";
           if (!to || to === id || !isVoiceSignal(parsed.signal)) return;
-          if (parsed.signal.kind === "hello") {
+          // Both halves of the greeting say the same thing about the sender:
+          // a microphone is on over there. Counting only the "hello" left
+          // whoever answered one reading as off until their own tick.
+          if (parsed.signal.kind === "hello" || parsed.signal.kind === "hi") {
             micOf.set(id, true);
             room.hub.setMic(id, true);
           }

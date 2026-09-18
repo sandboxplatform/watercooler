@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { iceUrls } from "./lib/voice/ice";
+
 const extraConnectSrc = process.env.CSP_CONNECT_SRC ?? "";
 
 const securityHeaders = [
@@ -14,6 +16,13 @@ const securityHeaders = [
       [
         "connect-src 'self'",
         "ws://localhost:* ws://127.0.0.1:* wss://localhost:* wss://127.0.0.1:*",
+        // Voice chat's STUN and TURN servers. `connect-src` covers an ICE
+        // server as much as a fetch, and one it does not name is dropped in
+        // silence — which leaves a browser with only the candidates it can
+        // see on its own network, so voice worked across a room and never
+        // across the internet. Read from `lib/voice/ice`, the same list the
+        // peer connections are built from.
+        ...iceUrls(),
         extraConnectSrc,
       ]
         .filter(Boolean)

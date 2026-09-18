@@ -31,6 +31,7 @@ import { onRoomMessage, sendRoom } from "../room-socket";
 import { onlinePeople, subscribeOnline } from "../presence-online";
 import { getSelfId } from "../presence-self";
 import type { OnlinePerson, VoiceSignal } from "../presence-types";
+import { STUN_URL, TURN_URL } from "./ice";
 import { offers } from "./proximity";
 import { rememberVoice, voiceWasOn } from "./remember";
 
@@ -57,13 +58,18 @@ export interface VoiceView {
   reason: string | null;
 }
 
-/** Voice in the wild: STUN to find a route, and a TURN relay if one is given. */
+/**
+ * Voice in the wild: STUN to find a route, and a TURN relay if one is given.
+ *
+ * The addresses come from `./ice`, which `next.config.ts` reads too — the
+ * Content-Security-Policy has to name every one of them or the browser drops
+ * it without saying so.
+ */
 function iceServers(): RTCIceServer[] {
-  const servers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
-  const turn = process.env.NEXT_PUBLIC_TURN_URL;
-  if (turn) {
+  const servers: RTCIceServer[] = [{ urls: STUN_URL }];
+  if (TURN_URL) {
     servers.push({
-      urls: turn,
+      urls: TURN_URL,
       username: process.env.NEXT_PUBLIC_TURN_USERNAME,
       credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
     });
@@ -75,6 +81,38 @@ function iceServers(): RTCIceServer[] {
 const SPEAKING_RMS = 0.02;
 const LEVEL_POLL_MS = 120;
 
+/**
+ * How long a connection may sit unfinished before it is started again.
+ *
+ * Long enough for a slow network to finish the ICE exchange, short enough
+ * that a handshake nobody is going to answer is not mistaken for one in
+ * progress. `disconnected` is inside it too: WebRTC drops through that
+ * state on an ordinary hiccup and usually comes back on its own.
+ */
+const NEGOTIATE_GRACE_MS = 8_000;
+
+/** The least time between two hellos to the same person. */
+const GREET_RETRY_MS = 5_000;
+
+/** The most, once it is clear the two networks cannot reach each other. */
+const GREET_MAX_MS = 60_000;
+
+/** How often the connections are looked over while the microphone is on. */
+const SWEEP_MS = 4_000;
+
+/**
+ * How long to leave it before saying hello again, after so many tries.
+ *
+ * Two people whose networks have no route between them — no relay, and a
+ * NAT that will not be traversed — never connect however often they are
+ * introduced, and a hello every five seconds for the length of a session
+ * is noise on the socket for nothing. It backs off to a minute and stays
+ * there, so the retry still happens the moment the network allows it.
+ */
+function backoff(tries: number): number {
+  return Math.min(GREET_RETRY_MS * 2 ** Math.min(tries, 4), GREET_MAX_MS);
+}
+
 interface Peer {
   pc: RTCPeerConnection;
   /** Keeps Chrome decoding the stream; Web Audio does the actual playing. */
@@ -84,6 +122,16 @@ interface Peer {
   /** ICE that arrived before the remote description did. */
   earlyIce: RTCIceCandidateInit[];
   speaking: boolean;
+  /** Negotiation, one step at a time: two at once wedge the connection. */
+  work: Promise<void>;
+  /** When the connection last changed state, for telling stalled from slow. */
+  changedAt: number;
+}
+
+/** When somebody was last said hello to, and how many times running. */
+interface Greeting {
+  at: number;
+  tries: number;
 }
 
 class VoiceChat {
@@ -107,8 +155,16 @@ class VoiceChat {
   private levelTimer: ReturnType<typeof setInterval> | null = null;
   /** Connections that failed outright since the microphone came on. */
   private failedPeers = 0;
-  /** Whom this browser has said hello to since the microphone came on. */
-  private greeted = new Set<string>();
+  /**
+   * Whom this browser has said hello to, when, and how often running.
+   *
+   * It was a plain set, which made it a gate rather than a record: greeting
+   * somebody put them in it for good, so a handshake that failed was never
+   * tried again. With the time in it the sweep can retry, and back off.
+   */
+  private greetedAt = new Map<string, Greeting>();
+  /** Looks the connections over while the microphone is on. */
+  private sweepTimer: ReturnType<typeof setInterval> | null = null;
   private levels = new Float32Array(1024);
   /**
    * Which switching-on this is, so one that was called off can tell.
@@ -149,22 +205,21 @@ class VoiceChat {
           // A "left" is somebody leaving *this room* — most often for the
           // room next door, on the same socket and the same connection.
           // Ending their voice on it was right while the chat was the
-          // room's; now it would cut a conversation off at every lift ride
-          // and never mend it, since they stay greeted and so nobody says
-          // hello again. Who has actually gone is the server's list, below.
+          // room's; now it would cut a conversation off at every lift ride,
+          // for no better reason than that they walked upstairs. Who has
+          // actually gone is the server's own list, below.
           else if (message.type === "welcome") {
             // A new room, or a reconnection: it does not know the microphone
-            // is on until told, and nobody in it has been greeted yet.
-            if (this.view.status === "on") {
-              sendRoom({ type: "mic", on: true });
-              this.greeted.clear();
-            }
-            this.roster();
+            // is on until told. Who to say hello to again is the sweep's
+            // question, not this one — it used to forget everybody here,
+            // which re-greeted people already being heard perfectly well.
+            if (this.view.status === "on") sendRoom({ type: "mic", on: true });
+            this.sweep();
           }
         }),
         // Who is on the server, not who is in this room: someone switching
         // their microphone on two floors up is somebody to say hello to.
-        subscribeOnline(() => this.roster()),
+        subscribeOnline(() => this.sweep()),
       ];
       // The microphone was on when the last page was left: on again here.
       if (voiceWasOn() && this.view.status === "off") void this.enable();
@@ -250,8 +305,16 @@ class VoiceChat {
     // The room counts who is on voice; then tell everyone here, and
     // those with a microphone on will answer.
     sendRoom({ type: "mic", on: true });
-    this.greeted = new Set(this.everyoneElse().map((p) => p.id));
-    for (const player of this.everyoneElse()) this.send(player.id, { kind: "hello" });
+    // Everybody, whatever the server last said about their microphone: this
+    // is the announcement, and somebody whose flag has not reached us yet
+    // still needs telling. The sweep is the retry and is choosier.
+    const now = Date.now();
+    for (const player of this.everyoneElse()) {
+      this.greetedAt.set(player.id, { at: now, tries: 1 });
+      this.send(player.id, { kind: "hello" });
+    }
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
+    this.sweepTimer = setInterval(() => this.sweep(), SWEEP_MS);
     this.census();
   }
 
@@ -265,11 +328,13 @@ class VoiceChat {
     for (const id of [...this.peers.keys()]) this.drop(id);
     if (this.levelTimer) clearInterval(this.levelTimer);
     this.levelTimer = null;
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
+    this.sweepTimer = null;
     this.local?.getTracks().forEach((track) => track.stop());
     this.local = null;
     this.localAnalyser = null;
     sendRoom({ type: "mic", on: false });
-    this.greeted.clear();
+    this.greetedAt.clear();
     this.publish({
       status: "off",
       peers: 0,
@@ -289,6 +354,11 @@ class VoiceChat {
    */
   private everyoneElse(): OnlinePerson[] {
     const me = getSelfId();
+    // Before the welcome frame there is no telling ourselves from anybody
+    // else, and the list would otherwise have this browser in it — greeting
+    // itself, and counting one person too many on the pill. The sweep runs
+    // again on the `online` that follows every welcome, so nothing is lost.
+    if (!me) return [];
     return onlinePeople().filter((p) => p.id !== me);
   }
 
@@ -301,42 +371,97 @@ class VoiceChat {
     const me = getSelfId();
     if (!me) return;
     switch (signal.kind) {
+      /**
+       * They have just switched on, or given up on us and started again.
+       * Either way what they were holding is gone, so whatever we hold for
+       * them is half a connection: throw it away and begin.
+       *
+       * It used to be ignored outright when a connection to them already
+       * existed, which is what made one lost handshake permanent. Every way
+       * of dropping a peer is one-sided — a `failed` is noticed by whichever
+       * side noticed it — so the side that dropped said hello and the side
+       * that had not said nothing at all, for the rest of the session.
+       */
       case "hello":
-        // They just switched on. Say hello back so they know we are on
-        // too, then whichever of us has the lower id opens the line.
-        if (!this.peers.has(from)) {
-          this.send(from, { kind: "hello" });
-          if (offers(me, from)) await this.offerTo(from);
-        }
+        this.drop(from);
+        this.send(from, { kind: "hi" });
+        if (offers(me, from)) await this.offerTo(from);
+        return;
+      // The answer to ours. Deliberately not a second `hello`: that would be
+      // answered in turn, and two sides that each start again on one never
+      // finish starting again.
+      case "hi":
+        // A connection already under way is the offer this would make.
+        if (this.peers.has(from)) return;
+        if (offers(me, from)) await this.offerTo(from);
         return;
       case "bye":
         this.drop(from);
         return;
       case "offer": {
         const peer = this.peer(from);
-        await peer.pc.setRemoteDescription({ type: "offer", sdp: signal.sdp });
-        await this.flushIce(peer);
-        const answer = await peer.pc.createAnswer();
-        await peer.pc.setLocalDescription(answer);
-        this.send(from, { kind: "answer", sdp: answer.sdp ?? "" });
+        await this.negotiate(from, peer, async () => {
+          // Both sides offered. Only the lower id does, so this is two
+          // restarts crossing rather than the ordinary case — give way,
+          // since ours is about to be answered in any event. Without the
+          // rollback this throws, and a throw here leaves the connection
+          // half-described with nothing to notice it.
+          if (peer.pc.signalingState === "have-local-offer") {
+            await peer.pc.setLocalDescription({ type: "rollback" });
+          }
+          await peer.pc.setRemoteDescription({ type: "offer", sdp: signal.sdp });
+          await this.flushIce(peer);
+          const answer = await peer.pc.createAnswer();
+          await peer.pc.setLocalDescription(answer);
+          this.send(from, { kind: "answer", sdp: answer.sdp ?? "" });
+        });
         return;
       }
       case "answer": {
         const peer = this.peers.get(from);
         if (!peer) return;
-        await peer.pc.setRemoteDescription({ type: "answer", sdp: signal.sdp });
-        await this.flushIce(peer);
+        await this.negotiate(from, peer, async () => {
+          // An answer to an offer that has since been superseded. Taking it
+          // throws, and the connection it would wedge is the live one.
+          if (peer.pc.signalingState !== "have-local-offer") return;
+          await peer.pc.setRemoteDescription({ type: "answer", sdp: signal.sdp });
+          await this.flushIce(peer);
+        });
         return;
       }
       case "ice": {
         const peer = this.peers.get(from);
         if (!peer) return;
         const candidate = signal.candidate as RTCIceCandidateInit;
-        if (peer.pc.remoteDescription) await peer.pc.addIceCandidate(candidate).catch(() => {});
-        else peer.earlyIce.push(candidate);
+        await this.negotiate(from, peer, async () => {
+          if (peer.pc.remoteDescription) await peer.pc.addIceCandidate(candidate).catch(() => {});
+          else peer.earlyIce.push(candidate);
+        });
         return;
       }
     }
+  }
+
+  /**
+   * One step at a time, per connection, and never thrown away.
+   *
+   * Signals were handled as they arrived, which with two greetings crossing
+   * means two negotiations on one `RTCPeerConnection` at once: the second
+   * throws `InvalidStateError`, the throw lands in a promise nobody holds,
+   * and the connection is left half-described for the rest of the session.
+   * Queued, and a failure is logged rather than lost.
+   */
+  private negotiate(id: string, peer: Peer, step: () => Promise<void>): Promise<void> {
+    const next = peer.work
+      .then(() => {
+        // Dropped while this waited its turn: every one of these throws on
+        // a closed connection, and the result is not wanted in any case.
+        if (this.peers.get(id) !== peer) return;
+        return step();
+      })
+      .catch((err: Error) => log.warn(`voice handshake with ${id} failed:`, err.message));
+    peer.work = next;
+    return next;
   }
 
   private async flushIce(peer: Peer) {
@@ -346,9 +471,11 @@ class VoiceChat {
 
   private async offerTo(id: string) {
     const peer = this.peer(id);
-    const offer = await peer.pc.createOffer();
-    await peer.pc.setLocalDescription(offer);
-    this.send(id, { kind: "offer", sdp: offer.sdp ?? "" });
+    await this.negotiate(id, peer, async () => {
+      const offer = await peer.pc.createOffer();
+      await peer.pc.setLocalDescription(offer);
+      this.send(id, { kind: "offer", sdp: offer.sdp ?? "" });
+    });
   }
 
   /** The connection to one person, made on first use. */
@@ -363,6 +490,8 @@ class VoiceChat {
       analyser: null,
       earlyIce: [],
       speaking: false,
+      work: Promise.resolve(),
+      changedAt: Date.now(),
     };
     this.peers.set(id, peer);
     for (const track of this.local?.getTracks() ?? []) pc.addTrack(track, this.local!);
@@ -373,14 +502,21 @@ class VoiceChat {
     };
     pc.ontrack = (event) => this.hear(id, peer, event.streams[0] ?? new MediaStream([event.track]));
     pc.onconnectionstatechange = () => {
+      peer.changedAt = Date.now();
       if (pc.connectionState === "failed") {
-        // No route between the two networks: the HUD says so, since the
-        // fix — a TURN relay — is not something a person can do mid-chat.
+        // No route between the two networks *this time*: the HUD says so,
+        // since the fix — a TURN relay — is not something a person can do
+        // mid-chat. The sweep tries again, more slowly each time.
         this.failedPeers += 1;
         log.warn(`voice could not connect to ${id}; a relay (TURN) may be needed`);
         this.drop(id);
       } else if (pc.connectionState === "closed") this.drop(id);
-      else if (pc.connectionState === "connected") log.info(`voice connected to ${id}`);
+      else if (pc.connectionState === "connected") {
+        // It worked, so the next thing to go wrong is worth trying hard at.
+        const greeting = this.greetedAt.get(id);
+        if (greeting) greeting.tries = 0;
+        log.info(`voice connected to ${id}`);
+      }
       this.count();
     };
     return peer;
@@ -388,6 +524,11 @@ class VoiceChat {
 
   /** Their voice arrives: play it. */
   private hear(id: string, peer: Peer, stream: MediaStream) {
+    // A second track on this connection, or one renegotiated: whatever was
+    // playing is not this stream, and leaving it attached leaves a node in
+    // the graph reading a source that has gone.
+    peer.source?.disconnect();
+    if (peer.sink) peer.sink.srcObject = null;
     // The element is what plays, and it needs no audio context, which a
     // browser may keep suspended. The context only listens, to see when
     // they are talking.
@@ -422,22 +563,53 @@ class VoiceChat {
     this.count();
   }
 
-  /** The list changed: greet anyone new, forget anyone gone from the server. */
-  private roster() {
+  /**
+   * Look the connections over: forget anyone gone from the server, and say
+   * hello again to anyone we ought to be able to hear and cannot.
+   *
+   * This is the retry, and until it existed there was none — a handshake
+   * that did not complete stayed uncompleted until somebody switched their
+   * microphone off and on. Run on a timer while the microphone is on, on
+   * every change to the server's list, and on arriving in a new room.
+   */
+  private sweep() {
     this.census();
     if (this.view.status !== "on") return;
     const others = this.everyoneElse();
     const online = new Set(others.map((p) => p.id));
     for (const id of [...this.peers.keys()]) if (!online.has(id)) this.drop(id);
-    // Someone new: say hello, so a person who arrives after the microphone
-    // went on is connected to as well.
-    for (const player of others) {
-      if (this.greeted.has(player.id)) continue;
-      this.greeted.add(player.id);
-      this.send(player.id, { kind: "hello" });
+    for (const id of [...this.greetedAt.keys()]) if (!online.has(id)) this.greetedAt.delete(id);
+
+    const now = Date.now();
+    for (const person of others) {
+      // Somebody with their microphone off has nothing to answer with, and
+      // when they switch it on theirs is the hello that starts this.
+      if (!person.mic) continue;
+      if (this.settled(this.peers.get(person.id), now)) continue;
+      const greeting = this.greetedAt.get(person.id) ?? { at: 0, tries: 0 };
+      if (now - greeting.at < backoff(greeting.tries)) continue;
+      this.greetedAt.set(person.id, { at: now, tries: greeting.tries + 1 });
+      // A hello tells them to throw away what they hold for us; ours has to
+      // go the same way, or their offer arrives at a connection that has
+      // already moved on and is refused by its own state.
+      this.drop(person.id);
+      this.send(person.id, { kind: "hello" });
     }
-    for (const id of [...this.greeted]) if (!online.has(id)) this.greeted.delete(id);
     this.count();
+  }
+
+  /** Connected, or on the way there and not yet out of time. */
+  private settled(peer: Peer | undefined, now: number): boolean {
+    if (!peer) return false;
+    const state = peer.pc.connectionState;
+    if (state === "connected") return true;
+    // `disconnected` is in here on purpose: WebRTC passes through it on an
+    // ordinary hiccup and usually comes back without being asked. What it
+    // must not do is stay there, which is what the grace period decides.
+    if (state === "new" || state === "connecting" || state === "disconnected") {
+      return now - peer.changedAt < NEGOTIATE_GRACE_MS;
+    }
+    return false;
   }
 
   /** How many are on the server, and how many of them are on voice — this browser included. */
@@ -458,7 +630,12 @@ class VoiceChat {
     const connected = all.filter((p) => p.pc.connectionState === "connected");
     const patch = {
       peers: connected.length,
-      connecting: all.filter((p) => ["new", "connecting"].includes(p.pc.connectionState)).length,
+      // `disconnected` belongs with these rather than with nothing: it is a
+      // connection that may well come back, and the sweep restarts it if it
+      // does not. Left out, the pill read "0" over audio still flowing.
+      connecting: all.filter((p) =>
+        ["new", "connecting", "disconnected"].includes(p.pc.connectionState),
+      ).length,
       failed: this.failedPeers,
     };
     if (

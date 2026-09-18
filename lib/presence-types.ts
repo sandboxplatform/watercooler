@@ -174,7 +174,14 @@ export interface PongRelayMessage {
  * rest is the standard offer, answer and ICE exchange.
  */
 export type VoiceSignal =
+  /** I am on voice. Throw away whatever you hold for me and start again. */
   | { kind: "hello" }
+  /**
+   * The answer to a `hello`, and the only reason there are two words for
+   * what looks like one thing: a `hello` answered with a `hello` is itself
+   * answered, and two sides that each start again on one never stop.
+   */
+  | { kind: "hi" }
   | { kind: "bye" }
   | { kind: "offer"; sdp: string }
   | { kind: "answer"; sdp: string }
@@ -432,7 +439,7 @@ const SDP_LIMIT = 20_000;
 export function isVoiceSignal(value: unknown): value is VoiceSignal {
   if (typeof value !== "object" || value === null) return false;
   const { kind, sdp, candidate } = value as Record<string, unknown>;
-  if (kind === "hello" || kind === "bye") return true;
+  if (kind === "hello" || kind === "hi" || kind === "bye") return true;
   if (kind === "offer" || kind === "answer") {
     return typeof sdp === "string" && sdp.length > 0 && sdp.length <= SDP_LIMIT;
   }

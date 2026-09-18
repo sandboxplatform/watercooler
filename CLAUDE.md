@@ -575,9 +575,47 @@ to hold the handshake to crossing rooms — and to still being a post box rather
 megaphone, since nothing else about the app would notice a signal going to the wrong
 person.
 
-Routing uses a public STUN server. Browsers behind strict NATs need a TURN relay:
-`NEXT_PUBLIC_TURN_URL`, `NEXT_PUBLIC_TURN_USERNAME`, `NEXT_PUBLIC_TURN_CREDENTIAL`,
-offered alongside when set.
+**A greeting is an instruction to start again.** `hello` says a microphone
+is on and means "throw away whatever you hold for me"; `hi` is its answer and
+is deliberately a second word, because a `hello` answered with a `hello` is
+itself answered and two sides that each start again on one never finish
+starting again. Whichever id sorts lower then offers (`offers` in
+`proximity.ts`), so the two of them agree without saying so.
+
+It used to be ignored outright when a connection to that person already
+existed, and that one `if` is most of why voice chat worked about one time in
+fifty. **A connection is two-sided and every way of losing one is one-sided:**
+a `failed` is noticed by whichever side noticed it, and `roster` dropped
+anybody briefly missing from the server's list. So the side that dropped said
+hello and the side that had not said nothing at all — silently, for the rest of
+the session.
+
+Three things follow, all in `lib/voice/voice-chat.ts`:
+
+| What        | Rule                                                                                                                                                                              |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sweep`     | The retry, on a timer. Anyone on mic without a settled connection is greeted again, backing off from 5s to a minute. There was none before — `greeted` was a set, so a gate       |
+| `negotiate` | One step at a time per connection. Two crossing greetings meant two negotiations on one `RTCPeerConnection`: the second throws into a promise nobody holds and wedges it for good |
+| `settled`   | `disconnected` counts as still connecting for `NEGOTIATE_GRACE_MS` — WebRTC passes through it on a hiccup and usually comes back on its own                                       |
+
+`lib/voice/__tests__/handshake.test.ts` pins all of it against a stub
+`RTCPeerConnection`: which messages go out and when, not WebRTC.
+
+**Routing uses a public STUN server, and the policy has to say so.**
+`connect-src` covers an ICE server exactly as it covers a fetch, and one it
+does not name is **dropped without a word** — which leaves a browser holding
+only the candidates it can see on its own network. So the addresses live in
+`lib/voice/ice.ts`, which `voice-chat.ts` builds peer connections from and
+`next.config.ts` reads for the header: written down twice, it is a policy that
+stops naming a server the moment somebody changes one.
+
+Browsers behind strict NATs need a TURN relay: `NEXT_PUBLIC_TURN_URL`,
+`NEXT_PUBLIC_TURN_USERNAME`, `NEXT_PUBLIC_TURN_CREDENTIAL`, offered alongside
+when set. **`NEXT_PUBLIC_` means the build, not the run** — Next inlines them
+into the browser bundle, so setting them on a running service does nothing
+whatever. The image takes them as build arguments (`Dockerfile`), which on
+Railway means adding them to the service's build variables; without that the
+deployed app has STUN and nothing else.
 
 ### Task attachments
 
@@ -1843,7 +1881,7 @@ From `CONTRIBUTING.md`, and worth holding to when adding anything:
 | `METTARA_API_SECRET` / `METTARA_PLATFORM_ID`                             | —                                       | Required by the `mettara` provider                                       |
 | `METTARA_EMAIL_DOMAIN`                                                   | —                                       | A domain you own; Mettara addresses each seat's user on it               |
 | `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`              | —                                       | Auth.js sign-in; off when absent                                         |
-| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT                                   |
+| `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                     | —                                       | TURN relay for voice behind strict NAT; **build time**, not run time     |
 | `CSP_CONNECT_SRC`                                                        | —                                       | Extra `connect-src` origins                                              |
 | `GIT_SHA`                                                                | —                                       | The commit `/api/health` reports; the Dockerfile takes it as a build arg |
 

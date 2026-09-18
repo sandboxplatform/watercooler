@@ -23,6 +23,19 @@ COPY . .
 # The provider is baked into the client bundle at build time, so it must be set
 # here as well as at runtime
 ENV AGENT_PROVIDER=claude-api
+# The TURN relay voice chat falls back to when two networks have no route
+# between them. NEXT_PUBLIC_* is inlined into the browser bundle by the build,
+# so setting these on the running service does nothing at all — they have to
+# be here, which with a Dockerfile builder means build arguments Railway is
+# told to pass. Without them the browser has STUN and nothing else, and two
+# people behind strict NATs never hear each other however well the handshake
+# works.
+ARG NEXT_PUBLIC_TURN_URL=""
+ARG NEXT_PUBLIC_TURN_USERNAME=""
+ARG NEXT_PUBLIC_TURN_CREDENTIAL=""
+ENV NEXT_PUBLIC_TURN_URL=${NEXT_PUBLIC_TURN_URL}
+ENV NEXT_PUBLIC_TURN_USERNAME=${NEXT_PUBLIC_TURN_USERNAME}
+ENV NEXT_PUBLIC_TURN_CREDENTIAL=${NEXT_PUBLIC_TURN_CREDENTIAL}
 RUN pnpm build
 
 # ── Runtime ────────────────────────────────────────────

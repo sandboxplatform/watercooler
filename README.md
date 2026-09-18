@@ -596,6 +596,12 @@ Routing uses a public STUN server. Browsers behind strict NATs may need a
 TURN relay: set `NEXT_PUBLIC_TURN_URL`, `NEXT_PUBLIC_TURN_USERNAME` and
 `NEXT_PUBLIC_TURN_CREDENTIAL` and it is offered alongside.
 
+Those three are read **when the app is built**, not when it runs — Next
+inlines anything named `NEXT_PUBLIC_` into the browser bundle. Setting them
+on a server that is already up does nothing at all; a Docker build takes
+them as build arguments, and on Railway that means the service’s build
+variables rather than its runtime ones.
+
 ### Switching the agents between Claude and Mettara
 
 The server boots on `AGENT_PROVIDER` — the Claude CLI unless told otherwise —
