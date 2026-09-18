@@ -6,6 +6,7 @@ import { SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "@/l
 import { saveSidebarWidth } from "@/lib/persistence";
 import AchievementsPanel from "./AchievementsPanel";
 import PeoplePanel from "./PeoplePanel";
+import SidebarFooter from "./SidebarFooter";
 import { useOnline } from "@/lib/presence-online";
 
 /**
@@ -35,6 +36,13 @@ interface SidebarProps {
   width: number;
   onWidthChange: (width: number) => void;
   onClose: () => void;
+  /**
+   * Whether the volume slider at the foot of the column is up. Held by the
+   * page rather than here, because a controller's shoulder buttons turn the
+   * HUD's panels and this is one of them.
+   */
+  musicOpen: boolean;
+  onToggleMusic: () => void;
 }
 
 export default function Sidebar({
@@ -44,6 +52,8 @@ export default function Sidebar({
   width,
   onWidthChange,
   onClose,
+  musicOpen,
+  onToggleMusic,
 }: SidebarProps) {
   const online = useOnline();
   const draggingRef = useRef(false);
@@ -155,6 +165,9 @@ export default function Sidebar({
         <div className="app-sidebar__content">
           {tab === "people" ? <PeoplePanel /> : <AchievementsPanel />}
         </div>
+
+        {/* The music and the way out, at the foot of the column that holds them */}
+        <SidebarFooter musicOpen={musicOpen} onToggleMusic={onToggleMusic} />
       </div>
     </aside>
   );

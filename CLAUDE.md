@@ -135,9 +135,12 @@ Two decisions in it:
   a cross-site navigation, so a link on another page can sign somebody out —
   against which: signing back in is one link away, and a way out that needs a
   button somebody has to build first is no way out at all. The button now
-  exists (`components/hud/LockButton.tsx`, top right, beside the account) and
-  navigates to exactly this route rather than reimplementing it; the address
-  bar still works, which is what somebody locked out of the HUD has left.
+  exists (`components/hud/LockButton.tsx`) and navigates to exactly this route
+  rather than reimplementing it; the address bar still works, which is what
+  somebody locked out of the HUD has left. It sits at the foot of the People
+  column with the music (`SidebarFooter.tsx`), not in the corner of the
+  office: it is pressed once a session at most, and the corner of the office
+  is a place a button is looked at all of it.
 
   It **asks twice** — one press arms it, the second leaves, and it disarms
   itself after four seconds. Signing out of an account is one thing; this is

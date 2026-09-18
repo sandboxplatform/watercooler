@@ -5,7 +5,6 @@ import type { SeatState } from "@/types/game";
 import type { HudPanelId, HudDockItem } from "./HudDock";
 import CharacterPortrait from "./CharacterPortrait";
 import AccountButton from "./AccountButton";
-import LockButton from "./LockButton";
 
 interface TopBarProps {
   seats: SeatState[];
@@ -83,9 +82,12 @@ export default function TopBar({
             </button>
           );
         })}
+        {/*
+          The door was last in this row and is now at the foot of the column,
+          with the music: two buttons nobody presses twice in a session, kept
+          off the corner of the office for the whole of it.
+        */}
         <AccountButton />
-        {/* The door, last in the row: the one button that takes you out of the world. */}
-        <LockButton />
       </div>
     </div>
   );

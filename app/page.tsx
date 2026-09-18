@@ -46,14 +46,34 @@ export default function Page() {
    * on it too.
    */
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("people");
+  /**
+   * Whether the volume slider at the foot of the column is up.
+   *
+   * It is the page's rather than the column's because two things reach it
+   * from opposite sides: the button in the footer, and a controller's
+   * shoulder buttons, which the HUD over the office is the one listening
+   * for. Neither is the other's parent, so it sits above them both.
+   */
+  const [musicOpen, setMusicOpen] = useState(false);
   const wideEnough = useSyncExternalStore(subscribeToNothing, readWideEnough, () => true);
 
-  const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
-  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+  // Closing the column takes the slider with it: it lives in there.
+  const closeSidebar = useCallback(() => {
+    setSidebarOpen(false);
+    setMusicOpen(false);
+  }, []);
   const showPeople = useCallback(() => {
     setSidebarTab("people");
     setSidebarOpen(true);
   }, []);
+  const toggleMusic = useCallback(() => setMusicOpen((open) => !open), []);
+  // The controller's half: it has to open the column too, or it would turn
+  // to a panel that is not on screen.
+  const showMusic = useCallback(() => {
+    setSidebarOpen(true);
+    setMusicOpen(true);
+  }, []);
+  const closeMusic = useCallback(() => setMusicOpen(false), []);
 
   // Only while it is a drawer over the office. Where it is a column beside
   // the office it covers nothing, and back should still mean back.
@@ -72,9 +92,9 @@ export default function Page() {
             {/* HUD overlay — floating UI over the office only */}
             <div className="app-hud">
               <GameHud
-                sidebarOpen={sidebarOpen}
-                onToggleSidebar={toggleSidebar}
                 onShowPeople={showPeople}
+                onShowMusic={showMusic}
+                onCloseMusic={closeMusic}
               />
             </div>
           </div>
@@ -86,6 +106,8 @@ export default function Page() {
             width={width ?? storedWidth}
             onWidthChange={setWidth}
             onClose={closeSidebar}
+            musicOpen={musicOpen}
+            onToggleMusic={toggleMusic}
           />
         </main>
       </StudioProvider>

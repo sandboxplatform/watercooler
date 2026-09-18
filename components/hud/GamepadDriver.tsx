@@ -46,7 +46,9 @@ export default function GamepadDriver() {
       );
     };
 
-    const flyout = () => document.querySelector<HTMLElement>(".hud-topright-flyout");
+    // The one flyout there is: the music, at the foot of the column. It used
+    // to drop out of the top-right corner, and the class went with it.
+    const flyout = () => document.querySelector<HTMLElement>(".hud-music-flyout");
 
     const unsubscribe = padMonitor.subscribe(({ button, phase }) => {
       if (button === talkButton()) {

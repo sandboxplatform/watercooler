@@ -292,6 +292,17 @@
   flex-shrink: 0;
 }
 
+/* A plate with nothing on it is not a plate.
+
+   Everything in here is conditional — the Character button is a visitor's,
+   the account picture is a signed-in person's — and with the music and the
+   door gone to the foot of the column there are people for whom it is all
+   of them. Its own padding, border and background then drew a small dark
+   chip in the corner of the office, over the room, with nothing in it. */
+.layout-topbar__tools:empty {
+  display: none;
+}
+
 .topbar-tool-btn {
   display: flex;
   align-items: center;
@@ -379,16 +390,6 @@
   pointer-events: auto;
 }
 
-/* --- Top-right flyout (drops below tool buttons) --- */
-
-.hud-topright-flyout {
-  position: absolute;
-  top: 52px;
-  right: 8px;
-  z-index: 30;
-  pointer-events: auto;
-}
-
 /* --- Bottom area layout --- */
 
 .layout-bottom {
@@ -417,53 +418,6 @@
   background: rgba(37, 34, 25, 0.88);
   backdrop-filter: blur(6px);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
-}
-
-/* --- Bottom-right chat dock --- */
-
-.hud-side-dock {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  pointer-events: auto;
-  flex-shrink: 0;
-}
-
-.hud-side-dock__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px 6px 8px;
-  border: 1px solid var(--pixel-border);
-  border-radius: var(--pixel-radius);
-  background: rgba(37, 34, 25, 0.92);
-  backdrop-filter: blur(6px);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
-  color: var(--pixel-text);
-  cursor: pointer;
-  font-family: var(--pixel-font);
-  font-size: var(--fs-sm);
-  image-rendering: pixelated;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
-  outline: none;
-}
-
-.hud-side-dock__btn:hover {
-  border-color: var(--pixel-border-light);
-  background: rgba(37, 34, 25, 1);
-}
-
-.hud-side-dock__btn--active {
-  border-color: var(--pixel-accent);
-  background: rgba(201, 162, 39, 0.15);
-}
-
-.hud-side-dock__label {
-  text-transform: uppercase;
-  letter-spacing: 1px;
 }
 
 .hud-music-bar {
@@ -1031,6 +985,31 @@
   background: transparent;
   width: 100%;
   max-height: none;
+}
+
+/* The foot of the column: the music, and the door out of the world.
+
+   Right-aligned, against the tabs at the other end — the two things in here
+   that are the app rather than the world, kept where they are only on screen
+   while the column is. The slider comes up over the list rather than pushing
+   it, because it is a moment's business and the list is the panel. */
+.app-sidebar__footer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 6px;
+  border-top: 2px solid var(--pixel-border, #2b3f4d);
+}
+
+.hud-music-flyout {
+  position: absolute;
+  right: 6px;
+  bottom: calc(100% + 4px);
+  z-index: 5;
+  pointer-events: auto;
 }
 
 /* On a phone there is no room beside the office, so the column becomes a

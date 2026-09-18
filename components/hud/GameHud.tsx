@@ -1,18 +1,15 @@
 "use client";
 
-import { Users } from "lucide-react";
 import { gameEvents } from "@/lib/events";
 import "./hud.css";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
-import { useBgm } from "@/lib/useBgm";
 import type { HudDockItem, HudPanelId } from "./HudDock";
 import TopBar from "./TopBar";
 import BottomBar from "./BottomBar";
 import SeatManagerModal from "./SeatManagerModal";
 import CharacterStudio from "./CharacterStudio";
-import MusicControls from "./MusicControls";
 import Welcome from "./Welcome";
 import AlreadyOnline from "./AlreadyOnline";
 import GamepadDriver from "./GamepadDriver";
@@ -34,22 +31,25 @@ import TouchControls from "./TouchControls";
 import { asset } from "@/lib/assets";
 
 interface GameHudProps {
-  sidebarOpen: boolean;
-  onToggleSidebar: () => void;
   /** Open the column on People — what the Online pill counts. */
   onShowPeople: () => void;
+  /**
+   * Put the music up, and the column with it — the slider lives at the foot
+   * of that column now, so a controller turning to it has to open the thing
+   * it is in. `onCloseMusic` is the other half: turning away, and View.
+   */
+  onShowMusic: () => void;
+  onCloseMusic: () => void;
 }
 
-export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: GameHudProps) {
+export default function GameHud({ onShowPeople, onShowMusic, onCloseMusic }: GameHudProps) {
   const { state } = useStudio();
-  const bgm = useBgm();
   // Somebody whose own code names their sheet wears that and nothing else,
   // so there is no character to choose and no button to choose it with.
   // Assumed locked until the answer comes: a picker that is briefly there
   // and then gone is worse than one that arrives a moment late.
   const me = useMe();
   const ownLookOnly = !me || !!me.access?.persona?.characterKey;
-  const [openPanel, setOpenPanel] = useState<HudPanelId | null>(null);
   const [seatManagerOpen, setSeatManagerOpen] = useState(false);
   const [studioOpen, setStudioOpen] = useState(false);
 
@@ -64,74 +64,65 @@ export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: 
     });
   }, []);
 
+  /**
+   * Where the shoulder buttons have turned to.
+   *
+   * A ref rather than state, because nothing here draws it any more: both
+   * panels it turns between are owned elsewhere now — the music at the foot
+   * of the column, the seats in a modal — so a cursor kept in state would
+   * be a render for nothing.
+   */
+  const padTurn = useRef(-1);
+
   // Gamepad shoulder buttons cycle the HUD panels; Back closes whatever is open
   useEffect(() => {
     const order: HudPanelId[] = ["music", "workers"];
 
     const unsubCycle = gameEvents.on("hud-cycle-panel", (direction) => {
-      setSeatManagerOpen(false);
-      setOpenPanel((prev) => {
-        const current = prev ? order.indexOf(prev) : -1;
-        const next = (current + direction + order.length) % order.length;
-        const id = order[next];
-        if (id === "workers") {
-          setSeatManagerOpen(true);
-          return null;
-        }
-        return id;
-      });
+      padTurn.current = (padTurn.current + direction + order.length) % order.length;
+      const id = order[padTurn.current];
+      setSeatManagerOpen(id === "workers");
+      if (id === "music") onShowMusic();
+      else onCloseMusic();
     });
 
     const unsubClose = gameEvents.on("hud-close-panel", () => {
-      setOpenPanel(null);
+      padTurn.current = -1;
       setSeatManagerOpen(false);
+      onCloseMusic();
     });
 
     return () => {
       unsubCycle();
       unsubClose();
     };
-  }, []);
+  }, [onShowMusic, onCloseMusic]);
 
-  // Top-right toolbar items
+  /**
+   * Top-right toolbar items: who you are in the world, and nothing else.
+   *
+   * The music was here, beside the door, and both are now at the foot of the
+   * column — so neither of them stands over the corner of the office for a
+   * whole session to be pressed once.
+   */
   const toolItems: HudDockItem[] = useMemo(
     () =>
-      [
-        {
-          id: "music" as const,
-          label: "Music",
-          icon: asset("/ui/icons/icon-music.png"),
-          iconActive: asset("/ui/icons/icon-music-active.png"),
-        },
-        // Who you are in the world: opens the character studio.
-        {
-          id: "workers" as const,
-          label: "Character",
-          icon: asset("/ui/icons/icon-workers.png"),
-          iconActive: asset("/ui/icons/icon-workers-active.png"),
-        },
-      ].filter((item) => item.id !== "workers" || !ownLookOnly),
+      ownLookOnly
+        ? []
+        : [
+            {
+              id: "workers" as const,
+              label: "Character",
+              icon: asset("/ui/icons/icon-workers.png"),
+              iconActive: asset("/ui/icons/icon-workers-active.png"),
+            },
+          ],
     [ownLookOnly],
   );
 
-  const togglePanel = useCallback(
-    (id: HudPanelId) => {
-      if (id === "workers") {
-        if (!ownLookOnly) setStudioOpen((prev) => !prev);
-        return;
-      }
-      setOpenPanel((current) => (current === id ? null : id));
-    },
-    [ownLookOnly],
-  );
-
-  const musicIconOverrides = useMemo(
-    () =>
-      bgm.volume <= 0 ? { music: asset("/ui/icons/icon-music-muted.png") as string } : undefined,
-    [bgm.volume],
-  );
-
-  const topRightPanelOpen = openPanel !== null;
+  const togglePanel = useCallback(() => {
+    if (!ownLookOnly) setStudioOpen((prev) => !prev);
+  }, [ownLookOnly]);
 
   return (
     <div className="hud-overlay">
@@ -154,41 +145,20 @@ export default function GameHud({ sidebarOpen, onToggleSidebar, onShowPeople }: 
       <TopBar
         seats={state.seats}
         toolItems={toolItems}
-        openPanel={openPanel}
+        openPanel={studioOpen ? "workers" : null}
         onToggle={togglePanel}
-        iconOverrides={musicIconOverrides}
       />
 
-      {/* Top-right flyout panels */}
-      {topRightPanelOpen && (
-        <div className="hud-topright-flyout">
-          {openPanel === "music" ? <MusicControls bgm={bgm} /> : null}
-        </div>
-      )}
+      {/*
+        Bottom area: the status pills.
 
-      {/* Bottom area: status pills (left) + the column's own button (right) */}
+        There was a People button in the other corner that opened the column,
+        and it was a second door onto one room — the Online pill already
+        counts exactly that list and opens it on exactly that tab. Of the two
+        the one to keep is the one that says something while it sits there.
+      */}
       <div className="layout-bottom">
         <BottomBar onShowPeople={onShowPeople} />
-
-        {/* Spacer pushes the column's button to the right */}
-        <div style={{ flex: "1 1 auto" }} />
-
-        {/*
-          The column beside the office — People, and the badges people have
-          earned. This hides it and shows it again on whichever tab it was
-          last left on; the Online pill opens it on People.
-        */}
-        <div className="hud-side-dock">
-          <button
-            type="button"
-            className={`hud-side-dock__btn ${sidebarOpen ? "hud-side-dock__btn--active" : ""}`}
-            onClick={onToggleSidebar}
-            title={sidebarOpen ? "Hide the panel" : "Show who is here"}
-          >
-            <Users size={20} />
-            <span className="hud-side-dock__label">People</span>
-          </button>
-        </div>
       </div>
 
       {/* Modals */}

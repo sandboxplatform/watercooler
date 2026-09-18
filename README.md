@@ -79,7 +79,8 @@ so a deployment tells you what it needs instead of failing as a bare 502.
 
 ### Signing out
 
-The button at the top right, beside the account picture, gives this browser's
+Open the People column — the Online pill in the bottom-left corner does it —
+and the button at the foot of it, beside the music, gives this browser's
 access back: the cookie is cleared and you land on `/unlock`, needing the code
 again to get in. It asks twice — one press arms it, the second leaves, and it
 gives up after a few seconds if you do not — because getting back in needs a
