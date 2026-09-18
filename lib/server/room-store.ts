@@ -240,6 +240,22 @@ function parseRows(rows: DataRow[]): unknown[] {
   return out;
 }
 
+/**
+ * What kind of speaker a stored message belongs to.
+ *
+ * There is only one kind now — a person, in a room — so an unmarked message
+ * is a person's. It used to fall back to `"system"`, which was right while
+ * agents wrote here and is wrong now for the opposite reason: the browser
+ * stopped sending a `role` at all when the agents went, so every remark
+ * anybody made through this path would have been filed as machinery, hidden
+ * from the room's own history and invisible to `hasSpoken`. The old values
+ * are still read back out of rows written before that, which is what
+ * `getSnapshot` filters on.
+ */
+function authorTypeOf(message: Record<string, unknown>): string {
+  return asString(message.role) ?? "player";
+}
+
 function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
@@ -620,10 +636,16 @@ export class RoomStore {
     this.ensureRoom(room);
 
     return {
+      // Only what a person said. A room that ran agents still holds their
+      // transcript — the task somebody typed, the reply, the tool calls, a
+      // provider's error — and none of it is a remark in a room: it carries
+      // no speaker this build understands, so every line of it came back
+      // labelled as the reader's own. The rows are left alone; they are
+      // simply not this table's job any more.
       messages: parseRows(
-        this.stmt("SELECT data FROM messages WHERE room = ? ORDER BY position").all(
-          room,
-        ) as DataRow[],
+        this.stmt(
+          "SELECT data FROM messages WHERE room = ? AND author_type = 'player' ORDER BY position",
+        ).all(room) as DataRow[],
       ),
       seats: parseRows(
         this.stmt("SELECT data FROM seats WHERE room = ? ORDER BY seat_id").all(room) as DataRow[],
@@ -659,18 +681,16 @@ export class RoomStore {
     this.transaction(() => {
       this.stmt("DELETE FROM messages WHERE room = ?").run(room);
       const insert = this.stmt(
-        `INSERT INTO messages (room, message_id, session_key, author_type, author, created_at, position, data)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO messages (room, message_id, author_type, author, created_at, position, data)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       );
       capped.forEach((message, index) => {
         const id = asString(message.id);
         if (!id) return;
-        // "role" today is assistant/user/system; players become a fourth author type
         insert.run(
           room,
           id,
-          asString(message.sessionKey),
-          asString(message.role) ?? "system",
+          authorTypeOf(message),
           asString(message.actorName),
           asString(message.timestamp) ?? new Date().toISOString(),
           index,
@@ -712,19 +732,19 @@ export class RoomStore {
 
     const position = existing?.position ?? this.nextTailPosition(room, "messages");
 
+    // `session_key` is left out rather than written null: the column is a
+    // leftover of the conversations agents held, and nothing reads it.
     this.stmt(
-      `INSERT INTO messages (room, message_id, session_key, author_type, author, created_at, position, data)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO messages (room, message_id, author_type, author, created_at, position, data)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (room, message_id) DO UPDATE SET
-           session_key = excluded.session_key,
            author_type = excluded.author_type,
            author = excluded.author,
            data = excluded.data`,
     ).run(
       room,
       id,
-      asString(message.sessionKey),
-      asString(message.role) ?? "system",
+      authorTypeOf(message),
       asString(message.actorName) ?? asString(message.author),
       asString(message.timestamp) ?? new Date().toISOString(),
       position,

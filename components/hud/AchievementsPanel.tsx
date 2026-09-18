@@ -76,7 +76,11 @@ export default function AchievementsPanel() {
     };
   }, []);
 
-  const wonCodes = new Set(earned.map((e) => e.code));
+  // Only badges this build still has. A room that ran agents earned some that
+  // have since been retired with them, and those rows are still in the store —
+  // they draw nothing (the row below returns null), but counted they made the
+  // wall read "7 of 4 earned in this room".
+  const wonCodes = new Set(earned.map((e) => e.code).filter((code) => achievementFor(code)));
   const remaining = ACHIEVEMENTS.filter((a) => !wonCodes.has(a.code));
 
   return (

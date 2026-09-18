@@ -145,24 +145,64 @@ describe("per-entity writes", () => {
     expect(store.hasSpoken(ROOM)).toBe(true);
   });
 
-  describe("people", () => {
-    it("remembers who calls a building home, in the order they arrived", () => {
-      const store = new RoomStore(":memory:");
-      store.upsertPerson({ id: "ab12cd34", name: "Robert", home: "castle-atlantic" });
-      store.upsertPerson({ id: "ef56gh78", name: "Alice", home: "castle-atlantic" });
-      store.upsertPerson({ id: "ij90kl12", name: "Sam", home: "sandbox-erp" });
-      expect(store.listPeople("castle-atlantic").map((p) => p.name)).toEqual(["Robert", "Alice"]);
-      expect(store.listPeople("sandbox-erp").map((p) => p.name)).toEqual(["Sam"]);
-    });
+  it("files a remark with no role as a person, because there is no other kind", () => {
+    // The browser stopped sending `role` when the agents went. Falling back to
+    // "system" would file every remark as machinery — hidden from the room's
+    // own history, and invisible to the badge above.
+    store.appendMessage(ROOM, { id: "m1", content: "morning", actorName: "Ann" });
+    expect(store.hasSpoken(ROOM)).toBe(true);
+    expect(store.getSnapshot(ROOM).messages).toHaveLength(1);
+  });
+});
 
-    it("moves a person who changes their name or home, keeping their place", () => {
-      const store = new RoomStore(":memory:");
-      store.upsertPerson({ id: "ab12cd34", name: "Robert", home: "castle-atlantic" });
-      store.upsertPerson({ id: "ef56gh78", name: "Alice", home: "castle-atlantic" });
-      store.upsertPerson({ id: "ab12cd34", name: "Bob", home: "castle-atlantic" });
-      expect(store.listPeople("castle-atlantic").map((p) => p.name)).toEqual(["Bob", "Alice"]);
-      store.upsertPerson({ id: "ab12cd34", name: "Bob", home: "sandbox-erp" });
-      expect(store.listPeople("castle-atlantic").map((p) => p.name)).toEqual(["Alice"]);
-    });
+describe("a room that used to run agents", () => {
+  /** Rows as the agent build left them, written straight in. */
+  function withTranscript() {
+    store.appendMessage(ROOM, { id: "said-1", role: "player", content: "morning" });
+    store.appendMessage(ROOM, { id: "c1", role: "user", content: "Reply with: pineapple" });
+    store.appendMessage(ROOM, { id: "c2", role: "assistant", content: "pineapple" });
+    store.appendMessage(ROOM, { id: "c3", role: "system", content: "Task failed" });
+    store.appendMessage(ROOM, { id: "c4", role: "tool", content: "{}" });
+  }
+
+  it("hands back what people said and nothing else", () => {
+    // The transcript carries no speaker this build understands, so every line
+    // of it came back labelled as the reader's own words.
+    withTranscript();
+    const ids = store.getSnapshot(ROOM).messages.map((m) => (m as { id: string }).id);
+    expect(ids).toEqual(["said-1"]);
+  });
+
+  it("keeps a remark that arrived among the transcript, wherever it sits", () => {
+    // The filter is on who spoke, not on where the row landed: a room that
+    // was talked in while agents ran has the two interleaved.
+    store.appendMessage(ROOM, { id: "c1", role: "assistant", content: "working" });
+    store.appendMessage(ROOM, { id: "said-1", role: "player", content: "morning" });
+    store.appendMessage(ROOM, { id: "c2", role: "tool", content: "{}" });
+    store.appendMessage(ROOM, { id: "said-2", role: "player", content: "afternoon" });
+
+    const ids = store.getSnapshot(ROOM).messages.map((m) => (m as { id: string }).id);
+    expect(ids).toEqual(["said-1", "said-2"]);
+  });
+});
+
+describe("people", () => {
+  it("remembers who calls a building home, in the order they arrived", () => {
+    const store = new RoomStore(":memory:");
+    store.upsertPerson({ id: "ab12cd34", name: "Robert", home: "castle-atlantic" });
+    store.upsertPerson({ id: "ef56gh78", name: "Alice", home: "castle-atlantic" });
+    store.upsertPerson({ id: "ij90kl12", name: "Sam", home: "sandbox-erp" });
+    expect(store.listPeople("castle-atlantic").map((p) => p.name)).toEqual(["Robert", "Alice"]);
+    expect(store.listPeople("sandbox-erp").map((p) => p.name)).toEqual(["Sam"]);
+  });
+
+  it("moves a person who changes their name or home, keeping their place", () => {
+    const store = new RoomStore(":memory:");
+    store.upsertPerson({ id: "ab12cd34", name: "Robert", home: "castle-atlantic" });
+    store.upsertPerson({ id: "ef56gh78", name: "Alice", home: "castle-atlantic" });
+    store.upsertPerson({ id: "ab12cd34", name: "Bob", home: "castle-atlantic" });
+    expect(store.listPeople("castle-atlantic").map((p) => p.name)).toEqual(["Bob", "Alice"]);
+    store.upsertPerson({ id: "ab12cd34", name: "Bob", home: "sandbox-erp" });
+    expect(store.listPeople("castle-atlantic").map((p) => p.name)).toEqual(["Alice"]);
   });
 });
