@@ -573,11 +573,12 @@ The game machines all use the same buttons, printed on each one:
 Pinball flips with the bumpers or the d-pad; ping pong moves the bat with
 the stick or the d-pad.
 
-The controller pill in the bottom bar reads "no pad" until the browser
-reports one, and opens the Controller check: what the browser sees, the
-last button pressed by name, and a way to choose a different talk button,
-since some pads report a bumper at the trigger's index. Browsers hide a
-controller until the page has been clicked and a button pressed.
+A controller pill appears in the bottom bar once the browser reports a
+pad, and opens the Controller check: what the browser sees, the last button
+pressed by name, and a way to choose a different talk button, since some
+pads report a bumper at the trigger's index. Browsers hide a controller
+until the page has been clicked and a button pressed, so the pill arrives a
+moment after plugging one in.
 
 ### Files with a task
 
@@ -590,14 +591,20 @@ them uploaded to the group and handed over with the message.
 
 ### Voice chat
 
-The microphone button in the bottom bar switches on voice chat, and there is
-one for the whole server: everyone with a microphone on is in the same
-conversation and hears everyone else in full, whichever building, floor or
-green they happen to be standing on. Audio goes browser to browser over
-WebRTC; the room socket carries only the handshake, and the server never
-hears anything. A small speaker mark appears above someone while their voice
-is coming through — where you can see them, which is the room you are both
-in.
+The microphone button in the bottom bar joins **Global Chat**, and there is
+one for the whole world: everyone in it hears everyone else in full,
+whichever building, floor or green they happen to be standing on. Audio goes
+browser to browser over WebRTC; the room socket carries only the handshake,
+and the server never hears anything.
+
+You are either in it or your microphone is off — there is nothing in
+between — so the button is the mic icon on its own while you are out, and
+turns green and reads `Global Chat (3)` while you are in, counting the
+people in it. Who they are is the People tab, where each carries a green
+`Global Chat` badge; and in the room you are both standing in, a small mic
+hangs over their head — grey while they are listening, green while their
+voice is coming through. Your own character wears one as well, so the map
+says where you stand in the conversation without looking down at the bar.
 
 It was proximity voice before, one conversation per room with each voice
 faded by distance. Distance stops meaning anything once the chat crosses

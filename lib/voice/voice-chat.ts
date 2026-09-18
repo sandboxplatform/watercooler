@@ -189,8 +189,17 @@ class VoiceChat {
   }
 
   private publish(patch: Partial<VoiceView>) {
+    const before = this.view;
     this.view = { ...this.view, ...patch };
     for (const listener of this.listeners) listener();
+    // The scene hangs a mark over this browser's own character and holds no
+    // React, so the bus is where the two layers meet. Only on a change: the
+    // level is polled several times a second and most polls say nothing new.
+    const was = before.status === "on";
+    const now = this.view.status === "on";
+    if (was !== now || before.speaking !== this.view.speaking) {
+      gameEvents.emit("voice-self", now, this.view.speaking);
+    }
   }
 
   // ── Lifecycle ──────────────────────────────────────────

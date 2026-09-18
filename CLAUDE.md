@@ -667,9 +667,72 @@ dropped without a word.
 ### Voice chat
 
 Audio goes browser to browser over WebRTC (`lib/voice/`). The room socket carries
-only the handshake; **the server never hears anything**. A speaker mark appears above
-someone while their voice is coming through — where you can see them, which is only
-in the room you are both in.
+only the handshake; **the server never hears anything**.
+
+**It is called Global Chat, and the words are the point.** There are two
+states and no third: a microphone is on, which is being in the chat, or it
+is off, which is not. So the pill in the bottom bar is the mic icon on its
+own while you are out of it, and `Global Chat (3)` in green while you are
+in — the name of the one conversation and how many people are in it.
+`2/5 on mic` was there before, which counted the same two numbers and
+named nothing, so the thing being joined had no name anywhere in the app.
+Everything underneath — peers connected, peers still negotiating, a
+network that needs a relay — stays in the tooltip, because a connection
+being made is not a third kind of membership.
+
+Being in it is said in three places, and they answer different questions:
+
+| Where                  | Says                                                                    |
+| ---------------------- | ----------------------------------------------------------------------- |
+| The pill (`BottomBar`) | Whether **you** are in it, and how many people are                      |
+| The People tab         | **Who** is in it — a green `Global Chat` badge beside each, and a count |
+| The mark over the head | That **this person here** is in it, in the room you are both in         |
+
+**The mark is up while their microphone is, not while they are talking.**
+It used to appear only mid-sentence, which showed talking and never showed
+membership — somebody standing in the chat saying nothing looked exactly
+like somebody not in it, and they are the person most worth knowing about,
+since they can hear you. It is grey for in the chat and green for speaking
+now, and it comes off the roster's `mic` flag rather than off the audio,
+so it is up the moment they join.
+
+Two things about it:
+
+- **Drawn rather than lettered** (`components/game/utils/voice-mark.ts`).
+  It was a `🔊`, and an emoji's colour belongs to the font — there is no
+  tinting one from grey to green. Eight pixels by twelve of rectangles is
+  the same picture and its colour is ours.
+- **Green needs your own microphone on.** Speaking is measured from the
+  audio, and there is no audio from anybody unless you are in the chat
+  yourself. Out of it, everyone in it is grey — which is honest, since
+  nothing on that screen has heard them.
+
+**Your own character carries one too, and it took an event to do it.**
+Everybody else's comes off the roster, and we are not in our own copy of
+it — `usePresence` filters us out — nor is our own level received over a
+connection, since it is measured here. So the one character this browser
+knows most about was the one with nothing over its head. `voice-self` on
+the bus (`lib/events.ts`) carries both halves, `Player.setVoice` draws it,
+and `attachPresence` takes an `ownVoice` exactly as it takes `ownSay` —
+everybody else is `RemotePlayerManager`'s, and ours is the one it does
+not own.
+
+Two things in it are load-bearing:
+
+- **The state is pushed in when a scene attaches, not only on a change.**
+  A door and a lift ride each build a new character, and a bus carries
+  only what happens next — so somebody walking into a room with their
+  microphone already on would arrive bare and stay that way until the next
+  time anybody spoke. `attachPresence` asks `voiceChat.snapshot()` for
+  what is true now.
+- **The mark's depth is read off the sprite rather than written down.** A
+  room puts the local character at a flat 5; outdoors gives it a depth off
+  its own feet, several hundred, so that it passes behind a building. A
+  constant right for one is a mark drawn through the scenery in the other.
+
+It follows the character from `Player.move`, which is where the keys, the
+pad and a tapped route all end up — a mark left behind by one of the three
+is a bug nobody would think to look for.
 
 **One conversation for the whole server.** Switching a microphone on joins it: you
 hear everyone else who has theirs on, at full volume, wherever in the world they are

@@ -3,6 +3,7 @@ import { RemotePlayerManager } from "./RemotePlayerManager";
 import { ensureSheet } from "../utils/sheets";
 import { sheetPathFor } from "@/lib/characters/library";
 import { gameEvents } from "@/lib/events";
+import { voiceChat } from "@/lib/voice/voice-chat";
 import { createLogger } from "@/lib/logger";
 import type { PresencePlayer } from "@/lib/presence-types";
 
@@ -39,6 +40,15 @@ export interface ScenePresence {
 export interface PresenceOptions {
   /** This browser's own remark, to show over our own character. */
   ownSay?: (text: string) => void;
+  /**
+   * This browser's own place in Global Chat, for the mark over our own head.
+   *
+   * The same shape as `ownSay` and for the same reason: everybody else is
+   * drawn by `RemotePlayerManager`, and the one character it does not own
+   * is ours. Without it the only person in the room with no mark would be
+   * the one who joined the chat.
+   */
+  ownVoice?: (inChat: boolean, speaking: boolean) => void;
   /**
    * How the other people are stacked, and the two schemes are not a matter
    * of taste.
@@ -110,7 +120,22 @@ export function attachPresence(
     gameEvents.on("player-said", (id, text) => live() && manager.say(id, text)),
     gameEvents.on("voice-speaking", (id, speaking) => live() && manager.setSpeaking(id, speaking)),
     ...(options.ownSay ? [gameEvents.on("self-said", options.ownSay)] : []),
+    ...(options.ownVoice ? [gameEvents.on("voice-self", options.ownVoice)] : []),
   ];
+
+  /**
+   * What the chat is doing *now*, not what it does next.
+   *
+   * A scene is built fresh on every door and every lift ride, and the bus
+   * only carries changes — so a character walking into a room with the
+   * microphone already on would arrive bare and stay that way until the
+   * next time somebody spoke. Asked of the chat directly, which is a lib
+   * singleton and no more React than the bus is.
+   */
+  if (options.ownVoice) {
+    const voice = voiceChat.snapshot();
+    options.ownVoice(voice.status === "on", voice.speaking);
+  }
 
   // Tell the socket where we stand, so it joins this place here and not
   // wherever the last scene left us.

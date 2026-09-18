@@ -30,6 +30,7 @@ export default function PeoplePanel() {
   const people = useOnline();
   const me = getSelfId();
   const room = currentRoom();
+  const inChat = people.filter((person) => person.mic).length;
 
   const groups = useMemo(() => {
     const byRoom = new Map<string, OnlinePerson[]>();
@@ -59,6 +60,18 @@ export default function PeoplePanel() {
             ? "1 person online"
             : `${people.length} people online`}
       </div>
+      {/*
+        Global Chat is one conversation for the whole world, so its membership
+        belongs at the top of the list rather than only beside the people in
+        it: "is anyone talking?" is a question about the world, and scanning
+        every place for a green badge is not an answer to it.
+      */}
+      {inChat > 0 && (
+        <div className="people__chat-count">
+          <Mic size={9} />
+          <span>{inChat === 1 ? "1 in Global Chat" : `${inChat} in Global Chat`}</span>
+        </div>
+      )}
       {groups.length === 0 ? (
         <div className="people__empty">
           When the room socket is up, everyone on the server is listed here with where they are.
@@ -83,9 +96,20 @@ export default function PeoplePanel() {
                 <div className="people__who">
                   <span className="people__name">{person.name}</span>
                   {person.id === me && <span className="people__me">you</span>}
+                  {/*
+                    Their microphone is on, which is the whole of being in
+                    Global Chat — there is no other state to be in. A bare
+                    mic glyph with the words in a tooltip said "microphone",
+                    which is a device; this says which conversation they are
+                    in, which is what somebody reading the list wants.
+                  */}
                   {person.mic && (
-                    <span className="people__mic" title="Microphone on">
+                    <span
+                      className="people__mic"
+                      title="In Global Chat — everyone in it hears them, wherever in the world they are standing"
+                    >
                       <Mic size={9} />
+                      Global Chat
                     </span>
                   )}
                 </div>

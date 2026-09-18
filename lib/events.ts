@@ -52,6 +52,16 @@ export interface GameEventMap {
   "presence-refused": [reason: "already-online"];
   /** Somebody on voice chat started or stopped talking; the scene marks them. */
   "voice-speaking": [id: string, speaking: boolean];
+  /**
+   * This browser's own place in Global Chat: whether it is in, and talking.
+   *
+   * Everyone else's mark comes off the roster's `mic` flag and
+   * `voice-speaking`, and our own character is in neither — the roster
+   * leaves us out of our own copy of it, and our own level is measured
+   * here rather than received over a connection. So the one character
+   * whose state this browser knows best is the one that needed telling.
+   */
+  "voice-self": [inChat: boolean, speaking: boolean];
   /** What the room has spent on agents, and the ceiling it stops at. */
   "budget-updated": [spentUsd: number, limitUsd: number, halted: boolean];
   /** A controller appeared or went away, with its layout for prompts. */

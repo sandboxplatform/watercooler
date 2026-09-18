@@ -53,7 +53,12 @@ export class RemotePlayerManager {
     this.players.get(id)?.say(text);
   }
 
-  /** Show or hide the voice mark above someone's head. */
+  /**
+   * Their voice is coming through, or has stopped.
+   *
+   * Whether the mark is up at all is the roster's business — a microphone
+   * that is on puts it there in `sync` — so this only moves its colour.
+   */
   setSpeaking(id: string, speaking: boolean) {
     this.players.get(id)?.setSpeaking(speaking);
   }

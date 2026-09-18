@@ -203,6 +203,7 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     this.presence?.detach();
     this.presence = attachPresence(this, place.spawn, {
       ownSay: (text) => this.player?.say(text),
+      ownVoice: (inChat, speaking) => this.player?.setVoice(inChat, speaking),
     });
     // A new look chosen out here is put on at once, as it is indoors.
     const unsubLook = gameEvents.on("player-sprite-chosen", (spriteKey, spritePath) => {

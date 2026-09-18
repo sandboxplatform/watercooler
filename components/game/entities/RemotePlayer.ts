@@ -3,6 +3,7 @@ import { SPRITE_KEY, FRAME_HEIGHT } from "../config/animations";
 import { ensureAnims } from "../utils/sheets";
 import { ChatBubble } from "./ChatBubble";
 import { keepLegible, legible } from "../systems/legible";
+import { MARK_ABOVE_HEAD, MIC_QUIET, MIC_SPEAKING, drawMic } from "../utils/voice-mark";
 import type { PresencePlayer } from "@/lib/presence-types";
 
 /**
@@ -39,8 +40,28 @@ export class RemotePlayer {
   /** "<sheet>:" when wearing something other than the default sheet. */
   private prefix = "";
   private bubble: ChatBubble;
-  /** Shown above the head while their voice is coming through. */
-  private voiceMark: Phaser.GameObjects.Text | null = null;
+  /**
+   * The mic above the head: they are in Global Chat.
+   *
+   * It used to go up only while their voice was actually coming through,
+   * which showed talking and never showed membership — a person standing
+   * in the chat saying nothing was indistinguishable from one not in it,
+   * and they are the person you would most like to know about, since they
+   * can hear you. The mark is up for as long as their microphone is, and
+   * the colour is what the talking moves.
+   */
+  private voiceMark: Phaser.GameObjects.Graphics | null = null;
+  /** Their microphone is on, as the server's roster says. */
+  private micOn = false;
+  /**
+   * Their voice is coming through *here*.
+   *
+   * Only ever known of somebody this browser holds a connection to, which
+   * means our own microphone has to be on: the audio is what the level is
+   * measured from. With it off, everyone in the chat is drawn grey — which
+   * is honest, because nothing on this screen has heard them.
+   */
+  private speaking = false;
   /** Outdoors, where trees and people sort by their feet. */
   private sortByY: boolean;
   /** In the lift, or through a door: nothing of them is drawn. */
@@ -75,7 +96,8 @@ export class RemotePlayer {
     this.bubble = new ChatBubble(scene);
     this.applyAnimation(player.facing, false);
     this.settle();
-    // Somebody already in the lift when we walked in.
+    // Already in Global Chat, and already in the lift, when we walked in.
+    this.setMic(player.mic === true);
     this.board(player.hidden === true);
   }
 
@@ -109,24 +131,49 @@ export class RemotePlayer {
     this.applyAnimation(this.facing, this.moving);
   }
 
-  /** Show what this person just said, above their head. */
-  /** Mark them as talking on voice chat, or stop. */
+  /** They joined Global Chat, or left it. */
+  setMic(on: boolean) {
+    if (on === this.micOn) return;
+    this.micOn = on;
+    this.markVoice();
+  }
+
+  /** Their voice is coming through, or has stopped. */
   setSpeaking(speaking: boolean) {
-    if (speaking && !this.voiceMark) {
-      this.voiceMark = this.sprite.scene.add
-        .text(this.sprite.x, this.sprite.y - FRAME_HEIGHT / 2 - 4, "🔊", { fontSize: "14px" })
-        .setOrigin(0.5, 1)
-        .setDepth(21)
-        .setResolution(2);
-      this.voiceMark.setVisible(!this.hidden);
-      keepLegible(this.sprite.scene, this.voiceMark);
-    } else if (!speaking && this.voiceMark) {
+    if (speaking === this.speaking) return;
+    this.speaking = speaking;
+    this.markVoice();
+  }
+
+  /**
+   * Put the mark up, take it down, or recolour it.
+   *
+   * Speaking counts as being in the chat in its own right: hearing somebody
+   * is proof their microphone is on, and the roster frame that says so may
+   * not have arrived yet. Without that, the first word of a new arrival is
+   * spoken over a head with nothing on it.
+   */
+  private markVoice() {
+    const wanted = this.micOn || this.speaking;
+    if (!wanted) {
+      if (!this.voiceMark) return;
       legible(this.sprite.scene).forget(this.voiceMark);
       this.voiceMark.destroy();
       this.voiceMark = null;
+      return;
     }
+    if (!this.voiceMark) {
+      this.voiceMark = this.sprite.scene.add
+        .graphics({ x: this.sprite.x, y: this.sprite.y - FRAME_HEIGHT / 2 + MARK_ABOVE_HEAD })
+        .setDepth(21);
+      this.voiceMark.setVisible(!this.hidden);
+      keepLegible(this.sprite.scene, this.voiceMark);
+      this.settle();
+    }
+    drawMic(this.voiceMark, this.speaking ? MIC_SPEAKING : MIC_QUIET);
   }
 
+  /** Show what this person just said, above their head. */
   say(text: string, ttl = 6000) {
     // Nothing of them is on screen, so there is no head to put it over.
     if (this.hidden) return;
@@ -144,6 +191,7 @@ export class RemotePlayer {
       this.nameTag.setText(player.name);
     }
     this.wear(player.spriteKey);
+    this.setMic(player.mic === true);
 
     this.applyAnimation(player.facing, player.moving);
     // Last, because `wear` and `applyAnimation` both start the cycle up.
@@ -162,7 +210,7 @@ export class RemotePlayer {
     }
 
     this.nameTag.setPosition(this.sprite.x, this.sprite.y + FRAME_HEIGHT / 2 + 2);
-    this.voiceMark?.setPosition(this.sprite.x, this.sprite.y - FRAME_HEIGHT / 2 - 4);
+    this.voiceMark?.setPosition(this.sprite.x, this.sprite.y - FRAME_HEIGHT / 2 + MARK_ABOVE_HEAD);
     this.bubble.updatePosition(this.sprite.x, this.sprite.y - FRAME_HEIGHT * 0.6);
     this.settle();
   }

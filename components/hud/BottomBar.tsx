@@ -56,6 +56,17 @@ export default function BottomBar({ connection, sessionMetrics, onShowPeople }: 
    */
   const meetings = useMeetings();
 
+  /**
+   * Global Chat: one conversation for the whole world.
+   *
+   * There is no half-way state to put on it. Switching a microphone on
+   * joins the chat and switching it off leaves it, so the pill has two
+   * faces — the icon on its own while the microphone is off, and the
+   * chat's name and the number of people in it, in green, while it is on.
+   * Everything about the connections underneath stays in the tooltip: a
+   * mesh peer still negotiating is not a third kind of membership, it is a
+   * connection being made, and `2/5 on mic` made the two look like several.
+   */
   const voice = useVoice();
   const micOn = voice.status === "on";
   const trouble =
@@ -63,18 +74,19 @@ export default function BottomBar({ connection, sessionMetrics, onShowPeople }: 
     (voice.failed
       ? ` ${voice.failed} could not be reached — those networks need a relay (TURN) to talk.`
       : "");
-  // Voice is one conversation for the whole server, so the count that
-  // matters is everybody on it rather than everybody in this room.
-  const here = `${voice.withMic} of ${voice.online} online have a microphone on.`;
+  const inChat =
+    voice.withMic === 1
+      ? "1 person is in Global Chat"
+      : `${voice.withMic} people are in Global Chat`;
   const micTitle =
     voice.status === "on"
-      ? voice.peers
-        ? `Microphone on — ${here} Talking to ${voice.peers}.${trouble} Click to switch off.`
-        : `Microphone on — ${here}${voice.withMic > 1 ? "" : " The others need to switch theirs on too."}${trouble} Click to switch off.`
+      ? `In Global Chat — ${inChat}, of ${voice.online} in the world. ${
+          voice.peers ? `Hearing ${voice.peers}.` : "Nobody else has a microphone on yet."
+        }${trouble} Click to leave.`
       : voice.status === "requesting"
         ? "Asking for the microphone…"
         : (voice.reason ??
-          `${voice.withMic > 0 ? `${here} ` : ""}Switch on voice chat: everyone on the server with a microphone on will hear you, wherever they are. On a controller, hold ${talk} to talk.`);
+          `${voice.withMic > 0 ? `${inChat}. ` : ""}Join Global Chat: everyone in it hears you, wherever in the world they are standing. On a controller, hold ${talk} to talk.`);
 
   return (
     <div className="layout-bottombar">
@@ -113,22 +125,19 @@ export default function BottomBar({ connection, sessionMetrics, onShowPeople }: 
       ) : null}
       <button
         type="button"
-        className={`hud-pill hud-pill--metric hud-pill--button hud-mic${micOn ? " hud-mic--on" : ""}${
-          voice.speaking ? " hud-mic--speaking" : ""
+        className={`hud-pill hud-pill--metric hud-pill--button hud-mic${
+          micOn ? " hud-mic--on" : " hud-mic--icon"
+        }${voice.speaking ? " hud-mic--speaking" : ""}${
+          voice.status === "requesting" ? " hud-pill--dim" : ""
         }${voice.status === "denied" || voice.status === "unsupported" ? " hud-mic--blocked" : ""}`}
         onClick={() => void voiceChat.toggle()}
         title={micTitle}
         aria-pressed={micOn}
-        aria-label={micOn ? "Switch voice chat off" : "Switch voice chat on"}
+        aria-label={micOn ? `Leave Global Chat — ${inChat}` : "Join Global Chat"}
       >
         {micOn ? <Mic size={10} /> : <MicOff size={10} />}
-        <span>
-          {voice.status === "requesting"
-            ? "mic…"
-            : voice.withMic > 0
-              ? `${voice.withMic}/${voice.online} on mic`
-              : "voice off"}
-        </span>
+        {/* Off, the icon is the whole pill; on, the chat is worth naming and counting. */}
+        {micOn && <span>Global Chat ({voice.withMic})</span>}
       </button>
       {meetings.length > 0 && (
         <div
@@ -145,21 +154,27 @@ export default function BottomBar({ connection, sessionMetrics, onShowPeople }: 
           </span>
         </div>
       )}
-      {/* Always there, so a controller that is not being seen has somewhere to say so */}
-      <button
-        type="button"
-        className={`hud-pill hud-pill--metric hud-pill--button${pad ? "" : " hud-pill--dim"}`}
-        onClick={() => setCheckOpen(true)}
-        title={
-          pad
-            ? `${pad.id}\nXbox layout: stick or d-pad walks · A talks to people and presses buttons · B backs out · LB RB turn the panels · View closes · hold ${talk} to talk\nClick for the controller check.`
-            : "No controller seen. Click for the controller check."
-        }
-        aria-label="Controller check"
-      >
-        <Gamepad2 size={10} />
-        <span>{pad ? `${pad.layout} · hold ${talk} to talk` : "no pad"}</span>
-      </button>
+      {/*
+        Only when there is a controller to talk about.
+
+        It hung there always, dimmed, reading `no pad` — which is the state
+        nearly everybody is in nearly all the time, so the bar carried a
+        permanent pill whose entire message was that a thing nobody had
+        plugged in was not plugged in. Plugging one in is the news, and it
+        is what puts the pill up; the controller check goes with it.
+      */}
+      {pad && (
+        <button
+          type="button"
+          className="hud-pill hud-pill--metric hud-pill--button"
+          onClick={() => setCheckOpen(true)}
+          title={`${pad.id}\nXbox layout: stick or d-pad walks · A talks to people and presses buttons · B backs out · LB RB turn the panels · View closes · hold ${talk} to talk\nClick for the controller check.`}
+          aria-label="Controller check"
+        >
+          <Gamepad2 size={10} />
+          <span>{`${pad.layout} · hold ${talk} to talk`}</span>
+        </button>
+      )}
       {checkOpen && <ControllerCheck onClose={() => setCheckOpen(false)} />}
     </div>
   );

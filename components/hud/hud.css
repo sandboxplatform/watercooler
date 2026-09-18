@@ -1959,9 +1959,31 @@
   color: var(--pixel-muted);
 }
 
+/* In Global Chat. The badge names the conversation: a lone mic glyph is a
+   device, and which conversation somebody is in is the thing being said. */
 .people__mic {
   display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  border: 1px solid var(--pixel-green);
+  border-radius: var(--pixel-radius-sm);
+  background: rgba(74, 222, 128, 0.12);
   color: var(--pixel-green);
+  font-size: var(--fs-3xs);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* How many of the people listed are in it, at the top where the world's own
+   counts are — the badges below answer "who", this answers "anyone?". */
+.people__chat-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px 6px;
+  color: var(--pixel-green);
+  font-size: var(--fs-2xs);
 }
 
 .badges {
@@ -2056,6 +2078,12 @@
 .hud-mic--on {
   color: var(--pixel-green);
   border-color: var(--pixel-green);
+}
+
+/* Out of Global Chat the pill is the icon and nothing else, so it wants
+   even padding rather than the room a label would have needed. */
+.hud-mic--icon {
+  padding: 3px 6px;
 }
 
 .hud-mic--speaking {

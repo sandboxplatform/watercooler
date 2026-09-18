@@ -15,6 +15,8 @@ import { gameEvents } from "@/lib/events";
 import { dialogOpen, typingInAField } from "@/lib/gamepad/dialogs";
 import { togglesSprint } from "@/lib/sprint";
 import { loadSprinting, saveSprinting } from "@/lib/persistence";
+import { keepLegible, legible } from "../systems/legible";
+import { MARK_ABOVE_HEAD, MIC_QUIET, MIC_SPEAKING, drawMic } from "../utils/voice-mark";
 
 type Direction = "down" | "up" | "left" | "right";
 
@@ -46,6 +48,21 @@ export class Player {
    * it is for: getting somewhere several rooms away.
    */
   private sprinting = loadSprinting();
+  /**
+   * The mic over our own head: this browser is in Global Chat.
+   *
+   * Everybody else's is `RemotePlayer`'s, off the roster's `mic` flag, and
+   * our own character is in no roster we are sent — so without this the one
+   * person in the room with no mark would be the one who joined the chat.
+   * The pill in the bottom bar says the same thing, and does not answer the
+   * question the mark does: a person looking at the map is looking at the
+   * map.
+   */
+  private voiceMark: Phaser.GameObjects.Graphics | null = null;
+  private inChat = false;
+  private speaking = false;
+  /** In the lift, or through a door: nothing of us is drawn, the mark included. */
+  private hidden = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, facing: Direction = "left") {
     this.facing = facing;
@@ -150,10 +167,61 @@ export class Player {
    * plain to everybody else.
    */
   board(inside: boolean) {
+    this.hidden = inside;
     this.sprite.setVisible(!inside);
+    this.voiceMark?.setVisible(!inside);
     if (inside) this.sprite.anims.stop();
     else this.sprite.anims.play(this.animKey("idle"));
     gameEvents.emit("player-boarded", inside);
+  }
+
+  /**
+   * This browser's own place in Global Chat, from `voice-self`.
+   *
+   * Both halves at once because they are one mark: in the chat puts it up,
+   * talking turns it green. It is pushed in when a scene attaches presence
+   * as well as on every change, since a room change builds a new character
+   * and a bus only carries what happens next.
+   */
+  setVoice(inChat: boolean, speaking: boolean) {
+    if (inChat === this.inChat && speaking === this.speaking) return;
+    this.inChat = inChat;
+    this.speaking = speaking;
+    this.markVoice();
+  }
+
+  /** Put the mark up, take it down, or recolour it. */
+  private markVoice() {
+    const scene = this.sprite.scene;
+    if (!this.inChat) {
+      if (!this.voiceMark) return;
+      legible(scene).forget(this.voiceMark);
+      this.voiceMark.destroy();
+      this.voiceMark = null;
+      return;
+    }
+    if (!this.voiceMark) {
+      this.voiceMark = scene.add.graphics();
+      this.voiceMark.setVisible(!this.hidden);
+      keepLegible(scene, this.voiceMark);
+      this.syncMark();
+    }
+    drawMic(this.voiceMark, this.speaking ? MIC_SPEAKING : MIC_QUIET);
+  }
+
+  /**
+   * Keep the mark over the head, and sorted as the character is.
+   *
+   * The depth is taken from the sprite rather than written down, because
+   * the two schemes disagree: a room puts the local character at a flat 5
+   * and outdoors gives it a depth off its own feet, several hundred, so
+   * that it passes behind a building. A constant right for one is a mark
+   * drawn through the scenery in the other.
+   */
+  private syncMark() {
+    if (!this.voiceMark) return;
+    this.voiceMark.setPosition(this.sprite.x, this.sprite.y - FRAME_HEIGHT / 2 + MARK_ABOVE_HEAD);
+    this.voiceMark.setDepth(this.sprite.depth + 1);
   }
 
   /** Show what this player just said, above their own head. */
@@ -250,6 +318,10 @@ export class Player {
   private move(vx: number, vy: number) {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(vx, vy);
+    // Here rather than in the scenes' `update`: the keys, the pad and a
+    // tapped route all come through this one call, and a mark left behind
+    // by one of the three is a bug nobody would think to look for.
+    this.syncMark();
 
     const moving = vx !== 0 || vy !== 0;
 
