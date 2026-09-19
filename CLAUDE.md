@@ -1739,6 +1739,21 @@ walked up. Three rules keep one word from becoming a stuck horn, all in
 | `GREET_CLEAR_PX` | Wider than `GREET_PX`, so somebody hovering on the boundary does not cross it twice a second    |
 | `GREET_QUIET_MS` | A floor under the gap between two of them, so a queue of arrivals is one cluck rather than five |
 
+**And then he bolts.** A cluck is a fright, so saying it sets `spookedUntil`
+five seconds ahead (`SPOOK_MS`) and off he goes at `SPOOK_SPEED_PX_S` —
+short dashes in random directions, one after another, until it wears off and
+his ordinary wander picks up where it left it. Only a cluck that is actually
+said spooks him: the quiet period above returns before the say, so a second
+person walking up inside it gets neither.
+
+Three things in it, and the first is the one that would go wrong quietly:
+
+| Rule                                      | Why                                                                                                                                         |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| A dash lands where he could have wandered | Nothing collides a resident. Outdoors that is `openGround` on the route planner's own grid; in a room it is the haunt's `wanderArea` bounds |
+| The pause between wanders is ignored      | `walk` lets a spooked resident aim again the moment a dash ends — standing about in the middle of a fright is not fleeing                   |
+| A walk to a door is not dropped           | `goIfAtTheDoor` reads an empty course as being at the door, so clearing one would put somebody through it from the middle of the room       |
+
 It asks the room's hub rather than the simulation, because only a **person**
 counts as somebody walking up: `personNear` skips the residents — who are
 sent to places nobody is standing in anyway — and skips anyone hidden in a

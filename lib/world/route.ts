@@ -77,6 +77,32 @@ function blockedCells(solids: readonly Rect[], cols: number, rows: number, cell:
 }
 
 /**
+ * Whether a point is on open ground, asked of the same grid a route is
+ * planned against.
+ *
+ * `routeAcross` already answers this — it returns null for a destination in a
+ * wall — and it answers it by flooding the map to get there. Somebody picking
+ * somewhere to bolt to tries several in a tick and throws most of them away,
+ * so the cheap half of the question is worth having on its own: one array
+ * read, against the grid the route would have used, so the two cannot
+ * disagree about what is open.
+ *
+ * Off the map is not open ground either, which saves every caller a clamp.
+ */
+export function openGround(
+  bounds: { width: number; height: number },
+  solids: readonly Rect[],
+  at: Point,
+  cell = ROUTE_CELL,
+): boolean {
+  if (at.x < 0 || at.y < 0 || at.x >= bounds.width || at.y >= bounds.height) return false;
+  const cols = Math.ceil(bounds.width / cell);
+  const rows = Math.ceil(bounds.height / cell);
+  const cells = blockedCells(solids, cols, rows, cell);
+  return cells[Math.floor(at.y / cell) * cols + Math.floor(at.x / cell)] !== 1;
+}
+
+/**
  * Corners of a walk from `from` to `to`, or null when there is no way through.
  *
  * Somebody standing inside a solid gets a first leg out of it and the route

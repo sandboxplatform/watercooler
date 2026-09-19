@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { routeAcross, ROUTE_CELL, type Point } from "./route";
+import { openGround, routeAcross, ROUTE_CELL, type Point } from "./route";
 import type { Rect } from "./tenants";
 
 const bounds = { width: 20 * ROUTE_CELL, height: 20 * ROUTE_CELL };
@@ -96,5 +96,32 @@ describe("planning a way across", () => {
       expect(leg.x).toBeLessThanOrEqual(bounds.width);
       expect(leg.y).toBeLessThanOrEqual(bounds.height);
     }
+  });
+});
+
+describe("open ground", () => {
+  const wall: Rect = { x: 5 * ROUTE_CELL, y: 0, width: ROUTE_CELL, height: 8 * ROUTE_CELL };
+
+  it("agrees with the route planner about what is open", () => {
+    for (const cx of [2, 4, 5, 6, 9]) {
+      for (const cy of [0, 3, 7, 9]) {
+        const at = middle(cx, cy);
+        const planned = routeAcross(bounds, [wall], middle(19, 19), at) !== null;
+        expect(openGround(bounds, [wall], at), `${cx},${cy}`).toBe(planned);
+      }
+    }
+  });
+
+  it("calls a solid closed and the grass open", () => {
+    expect(openGround(bounds, [wall], middle(5, 3))).toBe(false);
+    expect(openGround(bounds, [wall], middle(6, 3))).toBe(true);
+  });
+
+  /** So a caller picking somewhere at random need not clamp first. */
+  it("calls anywhere off the map closed", () => {
+    expect(openGround(bounds, [], { x: -1, y: 10 })).toBe(false);
+    expect(openGround(bounds, [], { x: 10, y: -1 })).toBe(false);
+    expect(openGround(bounds, [], { x: bounds.width, y: 10 })).toBe(false);
+    expect(openGround(bounds, [], { x: 10, y: bounds.height })).toBe(false);
   });
 });

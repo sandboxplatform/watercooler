@@ -5,6 +5,8 @@ import {
   GREET_PX,
   GREET_QUIET_MS,
   ResidentSimulation,
+  SPOOK_MS,
+  SPOOK_SPEED_PX_S,
   WANDER_SPEED_PX_S,
   presenceIdFor,
 } from "../residents";
@@ -521,10 +523,16 @@ describe("what a resident says when you walk up", () => {
     return heard;
   }
 
-  /** A simulation with Michael out on the map, and the map's hub to hand. */
-  function outside(clock: () => number) {
+  /**
+   * A simulation with Michael out on the map, and the map's hub to hand.
+   *
+   * The fixed roll suits everything about the greeting, which does not care
+   * where he walks; anything about the bolt wants a varied one, since a
+   * constant sends him the same way every time by construction.
+   */
+  function outside(clock: () => number, random: () => number = () => 0.5) {
     const { rooms, host } = world(clock);
-    const sim = new ResidentSimulation(host, { now: clock, random: () => 0.5 });
+    const sim = new ResidentSimulation(host, { now: clock, random });
     return { sim, hub: rooms.get(WORLD_ROOM_SLUG)!.hub };
   }
 
@@ -638,6 +646,104 @@ describe("what a resident says when you walk up", () => {
     setRoomBroadcast(null);
   });
 
+  /**
+   * The fright is the other half of the cluck: he is off, and he is quick
+   * about it. Measured over a stretch of the five seconds rather than one
+   * tick, since a dash that ends mid-tick is a short step.
+   */
+  it("bolts when he clucks", () => {
+    let clock = 0;
+    listening();
+    const { sim, hub } = outside(() => clock);
+    const start = whereIsHe(sim);
+    person(hub, start);
+    let furthest = 0;
+    while (clock < SPOOK_MS) {
+      clock += 120;
+      sim.tick(clock);
+      const now = whereIsHe(sim);
+      furthest = Math.max(furthest, Math.hypot(now.x - start.x, now.y - start.y));
+    }
+    // A stroll for the same five seconds could not have got him this far.
+    expect(furthest).toBeGreaterThan((WANDER_SPEED_PX_S * SPOOK_MS) / 1000);
+    setRoomBroadcast(null);
+  });
+
+  /** A fright is a dash, a turn and another dash — not a run to somewhere. */
+  it("runs in no particular direction", () => {
+    let clock = 0;
+    listening();
+    const { sim, hub } = outside(() => clock, rolls(5));
+    person(hub, whereIsHe(sim));
+    let last = whereIsHe(sim);
+    const ways = new Set<string>();
+    while (clock < SPOOK_MS) {
+      clock += 120;
+      sim.tick(clock);
+      const now = whereIsHe(sim);
+      const way = facingFor(now.x - last.x, now.y - last.y);
+      if (way) ways.add(way);
+      last = now;
+    }
+    expect(ways.size).toBeGreaterThan(1);
+    setRoomBroadcast(null);
+  });
+
+  /** Nothing collides a resident, so a panic is as able to cross a wall as a walk. */
+  it("keeps out of the buildings and the sea while he is at it", () => {
+    let clock = 0;
+    listening();
+    const { sim, hub } = outside(() => clock);
+    person(hub, whereIsHe(sim));
+    const solids = worldSolids();
+    while (clock < SPOOK_MS * 2) {
+      clock += 120;
+      sim.tick(clock);
+      const at = whereIsHe(sim);
+      const wall = solids.find(
+        (s) => at.x >= s.x && at.x <= s.x + s.width && at.y >= s.y && at.y <= s.y + s.height,
+      );
+      expect(wall, `${Math.round(at.x)},${Math.round(at.y)}`).toBeUndefined();
+      expect(at.x).toBeGreaterThanOrEqual(0);
+      expect(at.y).toBeGreaterThanOrEqual(0);
+      expect(at.x).toBeLessThanOrEqual(WORLD_WIDTH);
+      expect(at.y).toBeLessThanOrEqual(WORLD_HEIGHT);
+    }
+    setRoomBroadcast(null);
+  });
+
+  /** And then the day goes on: a stroll, at the speed of one. */
+  it("is back to a wander five seconds later", () => {
+    let clock = 0;
+    listening();
+    const { sim, hub } = outside(() => clock);
+    person(hub, whereIsHe(sim));
+    while (clock < SPOOK_MS) {
+      clock += 120;
+      sim.tick(clock);
+    }
+    // The bolt's own pace, for comparison: it is quicker than the walk that
+    // follows it, which is the whole of `spooked` being over.
+    expect(SPOOK_SPEED_PX_S).toBeGreaterThan(WANDER_SPEED_PX_S);
+    // And whoever gave him the fright goes away, or the quiet period runs
+    // out while he is being watched and he is off again — which is the rule
+    // above working rather than this one failing.
+    hub.leave("visitor");
+    let last = whereIsHe(sim);
+    let furthest = 0;
+    for (let i = 0; i < 200; i++) {
+      clock += 120;
+      sim.tick(clock);
+      const now = whereIsHe(sim);
+      furthest = Math.max(furthest, Math.hypot(now.x - last.x, now.y - last.y));
+      last = now;
+    }
+    const stroll = (WANDER_SPEED_PX_S * 120) / 1000;
+    expect(furthest).toBeLessThanOrEqual(stroll + 0.001);
+    expect(furthest).toBeGreaterThan(0);
+    setRoomBroadcast(null);
+  });
+
   /** The reach is a walk-up, and letting go of somebody is wider than taking hold. */
   it("hears people at arm's length and no further", () => {
     expect(GREET_PX).toBeLessThan(GREET_CLEAR_PX);
@@ -707,6 +813,9 @@ describe("keeping out of each other", () => {
    * covers in a tick, for as long as they stay in one place — the hub
    * clamps a *reported* move to walking speed, so this is asked of the
    * simulation's own idea of where everybody is, which nothing clamps.
+   *
+   * A bolt is quicker than a walk, and there is nobody in these rooms to
+   * set one off: a day with no people in it is walking pace throughout.
    */
   it("moves nobody further in a tick than a walk covers", () => {
     const stride = (WANDER_SPEED_PX_S * 120) / 1000;
