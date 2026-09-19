@@ -51,6 +51,15 @@ const P = {
   glass: [204, 230, 236, 255],
   glassLit: [240, 248, 250, 255],
   shadow: [40, 40, 60, 70],
+  // The basketball court: a green-slate sport surface out of the teal family,
+  // with its lines in the paving's own off-white so the painted markings read
+  // as paint rather than as a light.
+  court: [78, 116, 110, 255],
+  courtDark: [68, 104, 98, 255],
+  courtLine: [226, 232, 236, 255],
+  rim: [214, 122, 62, 255],
+  ball: [206, 116, 58, 255],
+  ballLit: [228, 148, 88, 255],
 };
 
 function canvas(w, h) {
@@ -164,6 +173,75 @@ function asphalt() {
   return c;
 }
 
+/**
+ * The basketball court's surface: plain, because the lines go over it.
+ *
+ * A tile cannot carry the markings — a centre circle and two keys are one
+ * picture nine tiles wide — so the court is laid as ground the way the car
+ * park's asphalt is, and `courtLines` below is painted on top of it in one
+ * piece. Which is also why this has no line of its own anywhere: the seam
+ * between two tiles is the one thing a repeated pattern would give away.
+ */
+function court() {
+  const c = canvas(48, 48);
+  c.rect(0, 0, 48, 48, P.court);
+  for (let y = 0; y < 48; y++)
+    for (let x = 0; x < 48; x++) if (hash(x + 5, y + 17) < 0.07) c.set(x, y, P.courtDark);
+  return c;
+}
+
+/**
+ * The markings, as one transparent picture the size of the whole court.
+ *
+ * Nine tiles by six, matching COURT in lib/world/basketball.ts. The boundary
+ * is inset a little from the tarmac's edge, the way a real one is, so the
+ * court reads as a surface with a court painted on it rather than as a
+ * rectangle of a different colour.
+ */
+function courtLines() {
+  const W = 9 * 48;
+  const H = 6 * 48;
+  const c = canvas(W, H);
+  const line = P.courtLine;
+  const band = (cx, cy, r, from, to) => {
+    for (let a = from; a <= to; a += 0.004) {
+      for (const rr of [r, r + 1]) {
+        c.set(Math.round(cx + Math.cos(a) * rr), Math.round(cy + Math.sin(a) * rr), line);
+      }
+    }
+  };
+  // The boundary, two pixels thick.
+  for (const i of [0, 1]) c.outline(6 + i, 6 + i, W - 6 - i, H - 6 - i, line);
+  // The half-way line and the centre circle.
+  c.rect(W / 2 - 1, 6, W / 2 + 1, H - 6, line);
+  band(W / 2, H / 2, 44, 0, Math.PI * 2);
+  // A key at each end, and the arc over it, struck from the rim.
+  for (const dir of [1, -1]) {
+    const end = dir > 0 ? 6 : W - 6;
+    const key = end + 96 * dir;
+    c.rect(Math.min(end, key), H / 2 - 56, Math.max(end, key), H / 2 - 54, line);
+    c.rect(Math.min(end, key), H / 2 + 54, Math.max(end, key), H / 2 + 56, line);
+    c.rect(
+      Math.min(key, key - 2 * dir),
+      H / 2 - 56,
+      Math.max(key, key - 2 * dir),
+      H / 2 + 56,
+      line,
+    );
+    // Struck from the rim, which is 50px in from the end line — the same
+    // point lib/world/basketball.ts drops the ball through.
+    const rim = dir > 0 ? 50 : W - 50;
+    band(
+      rim,
+      H / 2,
+      104,
+      dir > 0 ? -Math.PI / 2 : Math.PI / 2,
+      dir > 0 ? Math.PI / 2 : (Math.PI * 3) / 2,
+    );
+  }
+  return c;
+}
+
 /** A pond: water with ripples, a stone rim, and reeds at the edge. */
 function pond() {
   const c = canvas(288, 192);
@@ -209,7 +287,7 @@ function pond() {
 }
 
 // ── Props: one sheet, each prop in a named rectangle ──
-const props = canvas(1024, 128);
+const props = canvas(1536, 128);
 const frames = {};
 let cursor = 0;
 function slot(name, w, h, draw) {
@@ -384,6 +462,107 @@ slot("board", 144, 88, (set, d) => {
     [132, 46],
   ])
     set(nx, ny, P.ink2);
+});
+/**
+ * A basketball hoop, seen from the side so its rim points into the court.
+ *
+ * `dir` is which way that is: +1 for the west end, whose rim reaches east,
+ * −1 for the east end. Both are the same drawing about the pole, which is
+ * what keeps the two ends of the court identical furniture rather than two
+ * pictures that have to be kept in step.
+ *
+ * The numbers are the ones in lib/world/basketball.ts and have to stay
+ * them: the pole stands at the middle of the frame, on the bottom row, and
+ * the rim sits RIM_REACH across and RIM_Z up from it — which is where a
+ * falling ball is judged to have gone in. A rim drawn anywhere else is a
+ * hoop the ball passes through beside.
+ */
+function hoop(dir) {
+  const POST = 56;
+  const BASE = 128;
+  const RIM_X = POST + 30 * dir;
+  const RIM_Y = BASE - 64;
+  return (set, d) => {
+    // An elliptical ring, for the rim: the disc helpers fill, and a filled
+    // rim is a plate. Drawn as a band of the normalised radius.
+    const rimRing = (cx, cy, rx, ry, c) => {
+      for (let y = -ry - 1; y <= ry + 1; y++) {
+        for (let x = -rx - 1; x <= rx + 1; x++) {
+          const n = (x * x) / (rx * rx) + (y * y) / (ry * ry);
+          if (n <= 1 && n > 0.5) set(cx + x, cy + y, c);
+        }
+      }
+    };
+    d.ellipse(POST, BASE - 4, 13, 3, P.shadow);
+    // The pole, and the plate it is bolted down with.
+    d.rect(POST - 4, 26, POST + 5, BASE - 3, P.steelDark);
+    d.rect(POST - 3, 26, POST, BASE - 3, P.steel);
+    d.outline(POST - 5, 26, POST + 6, BASE - 2);
+    d.rect(POST - 11, BASE - 11, POST + 12, BASE - 3, P.stoneDark);
+    d.outline(POST - 12, BASE - 12, POST + 13, BASE - 2);
+    // The board, at three quarters: a column at a time, each one a little
+    // lower than the last, so the face turns towards the court. Drawn flat
+    // on it read as a white slab on a stick and nothing like a backboard.
+    const BACK = 10;
+    const WIDE = 28;
+    const SKEW = 9;
+    const TALL = 40;
+    for (let i = 0; i <= WIDE; i++) {
+      const x = POST + (BACK * -dir + i * dir);
+      const top = 6 + Math.round((i / WIDE) * SKEW);
+      const edge = i === 0 || i === WIDE;
+      for (let y = top; y <= top + TALL; y++) {
+        const rim = edge || y === top || y === top + TALL;
+        set(x, y, rim ? P.ink : i > WIDE - 7 ? P.slabLit : i < 6 ? P.stoneDark : P.slab);
+      }
+      // The square painted on the face, over the rim.
+      if (i > WIDE - 20 && i < WIDE - 2) {
+        const sq = top + TALL - 20;
+        for (let y = sq; y <= sq + 16; y++) {
+          const onIt = i === WIDE - 19 || i === WIDE - 3 || y === sq || y === sq + 16;
+          if (onIt) set(x, y, P.ink2);
+        }
+      }
+    }
+    // The bracket from the board's lower front corner across to the rim.
+    // Struck as a short diagonal rather than a bar, or it lands behind the
+    // rim and the hoop reads as hanging in the air beside the board.
+    for (let t = 0; t <= 20; t++) {
+      const k = t / 20;
+      const x = Math.round(POST + 16 * dir + (RIM_X - 14 * dir - (POST + 16 * dir)) * k);
+      const y = Math.round(56 + (RIM_Y - 56) * k);
+      for (let dy = 0; dy < 3; dy++) set(x, y + dy, dy === 0 ? P.steel : P.ink2);
+    }
+    rimRing(RIM_X, RIM_Y, 17, 5, P.ink);
+    rimRing(RIM_X, RIM_Y, 16, 4, P.rim);
+    // The net: strands from the rim, gathered underneath it.
+    for (let i = 0; i <= 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const sx = RIM_X + Math.round(Math.cos(a) * 15);
+      const sy = RIM_Y + Math.round(Math.sin(a) * 4);
+      for (let t = 1; t <= 16; t++) {
+        const k = t / 16;
+        set(Math.round(sx + (RIM_X - sx) * k * 0.8), sy + t, k > 0.6 ? P.slab : P.slabLit);
+      }
+    }
+  };
+}
+slot("hoopWest", 112, 128, hoop(1));
+slot("hoopEast", 112, 128, hoop(-1));
+slot("ball", 20, 20, (set, d) => {
+  d.disc(10, 10, 9, P.ink);
+  d.disc(10, 10, 8, P.ball);
+  d.disc(7, 7, 4, P.ballLit);
+  // Seams: the meridian, the equator, and the two curves either side.
+  for (let i = -8; i <= 8; i++) {
+    set(10 + i, 10, P.ink2);
+    set(10, 10 + i, P.ink2);
+  }
+  for (const s of [-1, 1]) {
+    for (let y = -7; y <= 7; y++) {
+      set(10 + s * Math.round(5 + Math.sqrt(Math.max(0, 49 - y * y)) * 0.42), 10 + y, P.ink2);
+    }
+  }
 });
 frames.fountain.animateWith = "fountain2";
 
@@ -1328,6 +1507,8 @@ save("site_office_finance.png", siteOfficeFinance());
 save("site_office_operations.png", siteOfficeOperations());
 save("van_96x144.png", van());
 save("asphalt_48.png", asphalt());
+save("court_48.png", court());
+save("court_lines_432x288.png", courtLines());
 save("pond_288x192.png", pond());
 save("site_office_sales_2x.png", doubled(siteOfficeSales()));
 save("site_office_finance_2x.png", doubled(siteOfficeFinance()));

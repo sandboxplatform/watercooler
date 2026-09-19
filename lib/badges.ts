@@ -132,6 +132,13 @@ export const BADGES: readonly Badge[] = [
     description: "Played a game of ping pong against somebody",
     icon: "🏓",
   },
+  {
+    code: "swish",
+    group: "playing",
+    title: "Swish",
+    description: "Sank a basket on the court in the park",
+    icon: "🏀",
+  },
 
   // ── Together ────────────────────────────────────────────
   {

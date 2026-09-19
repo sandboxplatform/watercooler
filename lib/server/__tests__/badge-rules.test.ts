@@ -111,6 +111,11 @@ describe("playing", () => {
     expect(codes(rules.onScore(guest, "pinball", false))).toEqual(["insert-coin"]);
   });
 
+  it("gives Swish for a basket, once, however many go in", () => {
+    expect(rules.onBasket(coop).map((b) => b.code)).toEqual(["swish"]);
+    expect(rules.onBasket(coop)).toEqual([]);
+  });
+
   it("gives Played the Lot for every machine that is actually in a lobby", () => {
     const machines = rules.SCORED_MACHINES;
     expect(machines.length).toBeGreaterThan(1);
@@ -213,6 +218,7 @@ describe("the catalogue", () => {
     take(rules.onMeetingJoined(someone));
     take(rules.onWhiteboard(someone));
     take(rules.onPingPong([someone]));
+    take(rules.onBasket(someone));
     for (const machine of rules.SCORED_MACHINES) take(rules.onScore(someone, machine, true));
     for (const resident of CAST_RESIDENTS) take(rules.onMingle(someone, resident.id));
 

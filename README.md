@@ -163,6 +163,7 @@ For that, configure sign-in (below) — it layers on top.
 - **Global Chat:** Switch your microphone on and you are in one conversation with everyone in the world, wherever they are standing. Browser to browser; the server never hears it.
 - **Nothing reloads:** Front doors, campus gates and lifts all move you inside the page. You stay online, mid-sentence on Global Chat, from the plaza to the third floor and back.
 - **Things to walk up to:** Boards, a support queue, an arcade cabinet, a pinball table, a ping pong table, a boardroom table you can call a meeting at.
+- **One basketball:** There is a court in the park with a ball on it, and it is the same ball for everybody. Pick it up and the world watches you carry it; sink one and the world is told.
 - **Workers at their desks:** Idle workers roam the office — whiteboards, printers, sofas, bookshelves — and the seat manager sets their names, roles and sprites.
 
 ## How it works
@@ -235,6 +236,31 @@ the songs, one switch for all of them, remembered in the browser; every game's
 sound effects are synthesised and play regardless. Each machine keeps its own
 high score table for the room, and a score goes in the room's activity. Keys,
 a pad or a touch screen all work; Escape (or B) leaves.
+
+### The basketball court in the park
+
+Between the trees and the east avenue, south of the car park, with the south
+road along the bottom of it: a tarmac court with a hoop at each end and a ball
+on the centre spot.
+
+**There is one ball, and it is everybody's.** Not one each — the same ball,
+held by the server, so whoever else is out on the map sees you pick it up,
+watches it arc when you throw, and can walk over and take it once it lands.
+
+Walk onto it and press E to pick it up. A meter starts swinging above your
+head; press E again to throw, and it goes the way you are facing, as far as
+the meter was full. One button either way, so it works the same with a
+keyboard, a controller or the action button on a phone.
+
+The skill is the range. The fuller the meter the further the ball carries, so
+scoring means lining up on the court's centre line, judging how far you are
+from the rim, and catching the meter at the right moment. A throw that arcs
+down through a hoop is a basket, and everyone on the map sees it called over
+that hoop. Sink your first and you have earned **Swish**.
+
+Overcook it and the ball sails off the court and over the avenue; go and fetch
+it, or leave it a minute and a half and it makes its own way back to the
+centre spot.
 
 ### The project board on Sandbox ERP's third floor
 

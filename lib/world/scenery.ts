@@ -26,8 +26,9 @@ import {
   WORLD_WIDTH,
   type Rect,
 } from "./tenants";
+import { COURT, HOOPS, hoopProp } from "./basketball";
 
-export type Ground = "grass" | "paving" | "kerb" | "asphalt" | "water" | "dock";
+export type Ground = "grass" | "paving" | "kerb" | "asphalt" | "water" | "dock" | "court";
 
 const CENTRE = CENTRE_X / TILE;
 
@@ -72,6 +73,18 @@ export const PAVED: readonly Rect[] = [
 /** Asphalt, in tiles: the car park by the campus, off the east avenue. */
 export const ASPHALT: readonly Rect[] = [{ x: CENTRE + 30 + 9, y: 22, width: 6, height: 5 }];
 
+/**
+ * The basketball court's surface, in tiles.
+ *
+ * Its own ground rather than a picture laid over the grass, for the reason
+ * the car park is: what the court is made of is a fact about the map, and
+ * the one list that answers "what is underfoot here" should answer it for
+ * the court too. The lines painted on it are a separate picture — nine
+ * tiles of centre circle and keys is not something a repeating tile can
+ * carry — and the scene lays that over the top.
+ */
+export const COURTS: readonly Rect[] = [COURT];
+
 /** The sea, in tiles: the whole bottom of the map, past the bushes on the shore. */
 export const WATER: readonly Rect[] = [
   { x: 0, y: SHORE_ROW, width: WORLD_COLUMNS, height: WORLD_ROWS - SHORE_ROW },
@@ -106,8 +119,10 @@ export const tilesOf = (r: Rect): Rect => ({
 /**
  * The ground tile at every cell. Paving gets a kerb along any edge that
  * meets grass above it — but not where it meets a building, since a path
- * runs straight up to the door. Dock planking lies over the water, so it
- * is decided first.
+ * runs straight up to the door, and not where it meets the basketball
+ * court, which is a hard surface running into the road: a kerb there is a
+ * stone lip drawn across the middle of two stretches of tarmac. Dock
+ * planking lies over the water, so it is decided first.
  */
 export function groundGrid(
   columns: number,
@@ -117,6 +132,7 @@ export function groundGrid(
   asphalt: readonly Rect[] = [],
   water: readonly Rect[] = [],
   dock: readonly Rect[] = [],
+  court: readonly Rect[] = [],
 ): Ground[][] {
   const isPaved = (x: number, y: number) => paved.some((r) => inRect(r, x, y));
   const grid: Ground[][] = [];
@@ -125,9 +141,15 @@ export function groundGrid(
     for (let x = 0; x < columns; x++) {
       if (dock.some((r) => inRect(r, x, y))) row.push("dock");
       else if (water.some((r) => inRect(r, x, y))) row.push("water");
+      else if (court.some((r) => inRect(r, x, y))) row.push("court");
       else if (asphalt.some((r) => inRect(r, x, y))) row.push("asphalt");
       else if (!isPaved(x, y)) row.push("grass");
-      else if (y > 0 && !isPaved(x, y - 1) && !built.some((b) => inRect(b, x, y - 1)))
+      else if (
+        y > 0 &&
+        !isPaved(x, y - 1) &&
+        !built.some((b) => inRect(b, x, y - 1)) &&
+        !court.some((r) => inRect(r, x, y - 1))
+      )
         row.push("kerb");
       else row.push("paving");
     }
@@ -145,6 +167,7 @@ export function groundTiles(): Ground[][] {
     ASPHALT,
     WATER,
     DOCKS,
+    COURTS,
   );
 }
 
@@ -212,6 +235,12 @@ export const PROPS = {
   van: { texture: "van", width: 96, height: 144, footprint: { width: 88, height: 130 } },
   sheep: { width: 48, height: 40, footprint: { width: 30, height: 10 } },
   board: { width: 144, height: 88, footprint: { width: 112, height: 10 } },
+  // The two ends of the basketball court, mirrored. Only the pole is solid:
+  // the board is over your head and the rim is out over the court, so
+  // walling off the whole picture would take a tile and a half of the end
+  // line out of play for the sake of something nobody can walk into.
+  hoopWest: { width: 112, height: 128, footprint: { width: 16, height: 12 } },
+  hoopEast: { width: 112, height: 128, footprint: { width: 16, height: 12 } },
 } as const satisfies Record<string, PropSpec>;
 
 export type PropKind = keyof typeof PROPS;
@@ -319,6 +348,12 @@ export const SCENERY: readonly PlacedProp[] = [
   { kind: "tree", x: EAST_X + 700, y: 1000 },
   { kind: "lamp", x: EAST_X + 260, y: 1000 },
   { kind: "lamp", x: EAST_X + 400, y: 1000 },
+
+  // The basketball court's two hoops, standing on their own end lines. Read
+  // off `HOOPS` rather than written out, because the ball is judged against
+  // those same two points — a post placed by hand is a rim the ball falls
+  // through somewhere the picture is not.
+  ...HOOPS.map((h): PlacedProp => ({ kind: hoopProp(h), x: h.post.x, y: h.post.y })),
 
   // East: the campus gate, with a formal approach.
   ...[

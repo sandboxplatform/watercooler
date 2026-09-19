@@ -15,7 +15,16 @@ import {
 } from "@/lib/world/tenants";
 import { SCENERY, WORLD_SIGNS, groundTiles, worldSolids } from "@/lib/world/scenery";
 import { asset } from "@/lib/assets";
-import { addSolid, layGround, placeBuilding, placeProp, placeSign } from "./outdoors";
+import { COURT_PX } from "@/lib/world/basketball";
+import { BasketballCourt } from "../systems/BasketballCourt";
+import {
+  addSolid,
+  layGround,
+  placeBuilding,
+  placeCourtLines,
+  placeProp,
+  placeSign,
+} from "./outdoors";
 
 /**
  * Where each building's name goes: the blank sign the picture leaves, from
@@ -79,6 +88,9 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
 
   protected layOut(data: WorldSceneData, walls: Phaser.Physics.Arcade.StaticGroup): OutdoorPlace {
     layGround(this, groundTiles());
+    // The court's tarmac is ground, laid with everything else above; its
+    // markings are one picture nine tiles wide, which no tile can carry.
+    placeCourtLines(this, COURT_PX);
     const doors = BUILDINGS.map((b) => this.putUp(b, walls));
     for (const prop of SCENERY) placeProp(this, prop, walls);
     for (const sign of WORLD_SIGNS) placeSign(this, sign, walls);
@@ -105,6 +117,9 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
       entrances: BUILDINGS,
       solids,
       label: "World map",
+      // The one ball, on the court in the park. It is the server's — this
+      // draws it, offers the `Press E` and swings the meter.
+      extra: new BasketballCourt(this),
       camera: {
         coverMap: true,
         // The map opens where it was left. Every building is a page of its

@@ -605,7 +605,7 @@ dropped without a word.
 
 ### Badges
 
-Twenty-one of them (`lib/badges.ts`), in five groups — Getting about,
+Twenty-two of them (`lib/badges.ts`), in five groups — Getting about,
 Playing, Together, The locals, Curios. Three rules run through the
 catalogue, and the last two are what the one before it got wrong.
 
@@ -651,6 +651,7 @@ Where each rule is called from:
 | `onWhiteboard`, `onPingPong`    | A finished stroke, a relayed rally        | `presence-socket`    |
 | `onMingle`                      | Somebody coming to stand beside a local   | `ResidentSimulation` |
 | `onScore`                       | The two high score routes                 | `machine-badges.ts`  |
+| `onBasket`                      | A thrown ball falling through a rim       | `stepBasketball`     |
 
 Four of those would otherwise write to the database far too often — a
 rally sends a message a frame, and the online list refreshes on a timer —
@@ -1577,6 +1578,101 @@ be a function of the room's slug, and `FixtureManager.place(pois, room)`
 resolves it. Written down once it would read ARCADE over a cabinet whose
 sign should say BREAKOUT, and nothing but looking at it would tell you.
 
+### The basketball court
+
+Out of doors, in the park between the trees and the east avenue, with its
+south side on the kerb of the south road. Nine tiles by six of tarmac, a
+hoop at each end, and **one ball for the whole world**: pick it up, and
+whoever else is out there sees you carrying it.
+
+**The ball is the server's.** Where it is, where a throw takes it and
+whether it went in are all decided in `lib/server/basketball.ts`, and the
+browser is told. A person's whole say in it is one number — the power the
+meter was on — clamped on arrival; where they are standing and which way
+they are facing come off the room's own record of them, so a throw cannot
+be aimed from somewhere nobody is. That is what makes the basket worth a
+badge: nobody can claim one, they can only sink one.
+
+Three files, and the split is the usual one:
+
+| Where                        | What                                                                  |
+| ---------------------------- | --------------------------------------------------------------------- |
+| `lib/world/basketball.ts`    | The court, the hoops, and the arithmetic of a throw. Pure, shared     |
+| `lib/server/basketball.ts`   | Who has it, who may take it, and letting go of it when they walk away |
+| `systems/BasketballCourt.ts` | The drawing of it, the `Press E`, and the meter                       |
+
+**Height is the third number and it is the point.** A ball that only slid
+about the ground could be thrown at a hoop and never through one, so `z` is
+how far it is off the tarmac: a throw leaves the hand at `HAND_Z`, arcs
+under gravity, and is a basket only where it crosses a rim's height **on
+the way down**. Up through a rim is the ball hitting the underside of the
+net, which is not a point — and the crossing is asked of the height the
+ball _passed through_ during a tick rather than the height it is at, since
+a fast ball drops from above the rim to below it inside one tick and
+neither frame on its own has anything in it to say so.
+
+Three things about the height fell out of getting it wrong:
+
+- **A person's `y` and a ball's `y` are different lines.** A person's is
+  the middle of their 96px frame; a ball's is the patch of ground it is
+  lying on. `groundUnder` is the one place the two meet, and forgetting it
+  put a carried ball forty pixels over its carrier's head.
+- **A bounce needs the ball to have been above the ground at the start of
+  the step**, not merely to be heading down at the end of one. A ball lying
+  on the tarmac picks up a whole tick of gravity every tick, and reading
+  that as an impact gave it a bounce it could never lose — a ball that
+  never comes to rest is a ball the room broadcasts for as long as the
+  server runs.
+- **Solids are consulted only while the ball is low.** A throw arcs over a
+  bench; a roll stops against it. One height rather than a height on every
+  prop: what stands out here is a tree, a bench and a lamp, and none of
+  them is a thing a basketball has any business knocking about.
+
+**One button, pressed twice.** Press E over the ball to pick it up and a
+meter starts swinging over your head; press E again to throw at whatever it
+is on. A held-key charge would have been a keyboard's game and nobody
+else's — this works the same on a pad and on the HUD's own action button,
+which is why `OutdoorScene` now reads E, the pad and `interact-pressed`
+together and hands the press to whatever the place put in `extra`.
+
+The meter is a **triangle** rather than a sawtooth: it has to be possible
+to aim for the middle of it as well as the top, and a bar that jumps back
+to nothing gives you one approach to every value instead of two. The power
+is the distance — `throwReach` is that relation written down — so lining
+up on the centre line at the right range is the whole of the skill.
+
+**The court is ground, the lines are a picture.** `COURTS` in
+`lib/world/scenery.ts` is its tarmac, laid the way the car park's asphalt
+is, because what is underfoot is a fact about the map. A centre circle and
+two keys are nine tiles wide and no repeating tile can carry them, so the
+markings are one transparent image at depth 1 — over the ground, under
+everything standing on it. Paving that meets the court gets **no kerb**:
+between two hard surfaces a kerb is a stone lip drawn across the middle of
+the tarmac.
+
+**The hoops are read off `HOOPS` rather than placed by hand**, because the
+ball is judged against those same two points — a post put down separately
+is a rim the ball falls through somewhere the picture is not. Only the pole
+is solid; the board is over your head and the rim is out over the court.
+
+**A ball left off the court finds its own way back.** A throw at full
+stretch carries it clean over the end line and the avenue beyond, and there
+it stays: the court is then a court with no ball on it, and the only remedy
+is somebody happening to walk past wherever it stopped. So after
+`ABANDONED_MS` lying still off the tarmac it returns to the centre spot —
+not quickly, because somebody who saw where it went and is walking over to
+fetch it should get there first. A ball lying **on** the court is left
+alone: that is where whoever last played put it, and tidying it away is
+moving somebody's things.
+
+**On the wire it is the world map's and nobody else's.** The `basketball`
+broadcast goes to that room only — a floor of Sandbox ERP has no use for a
+ball's coordinates twenty times a second — and it is sent on every tick
+while the ball is doing something, once more when it settles, and once to
+anybody walking onto the map. That last one matters: a still ball is
+published once and then not again, so without it an arrival would see an
+empty court until somebody touched it.
+
 ### Fixtures
 
 The things in a room you walk up to and press E at — the boards, the games,
@@ -1725,6 +1821,7 @@ lib/
   server/badge-rules.ts            when a badge is earned — server-observed, never claimed
   map/ world/                      map generation and world layout
   world/cast.ts                    who the world is of: roles, concept art, backstories
+  world/basketball.ts              the court in the park, and the flight of the one ball
   arcade/ pinball/ pong/           the games (Oak Island, Flappy, Snake, Breakout, Solitaire)
   pixel/ characters/               sheet validation, PNG codec, palettes, recolouring
   voice/                           WebRTC voice, one conversation server-wide

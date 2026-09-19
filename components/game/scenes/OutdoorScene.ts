@@ -82,6 +82,27 @@ export interface OutdoorPlace {
   label: string;
   /** Camera behaviour beyond the standard fit-and-follow. */
   camera?: { coverMap?: boolean; remembersZoom?: boolean };
+  /**
+   * Something this place runs each frame beyond walking about in it: the
+   * world map's basketball, and whatever comes after it.
+   *
+   * A field on the place rather than a method on the scene, because a place
+   * already says everything else about itself here — its ground, its
+   * buildings, where you start — and this is the same kind of fact. The
+   * scene gathers the input and takes it down on shutdown; what it does
+   * with a frame is the place's own business.
+   */
+  extra?: OutdoorExtra | null;
+}
+
+/** Whatever a place runs each frame of its own, and how to take it down. */
+export interface OutdoorExtra {
+  update(
+    deltaMs: number,
+    at: { x: number; y: number; facing: Direction },
+    interactPressed: boolean,
+  ): void;
+  destroy(): void;
 }
 
 export abstract class OutdoorScene<Data> extends Phaser.Scene {
@@ -99,6 +120,19 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
   /** The other people out here, from the room socket. */
   protected presence: ScenePresence | null = null;
   protected cameraController!: CameraController;
+  /** Whatever this place runs each frame of its own; see `OutdoorExtra`. */
+  private extra: OutdoorExtra | null = null;
+  /**
+   * E, for walking up to something out here and using it.
+   *
+   * Indoors this is the fixture registry's; out of doors there are no
+   * panels to open, so the key is read here and handed to whatever the
+   * place put in `extra`. Null where the browser gives the scene no
+   * keyboard at all, which is what the guard in `create` is about.
+   */
+  private eKey: Phaser.Input.Keyboard.Key | null = null;
+  /** Set for one frame by the HUD's own action button, which has no key. */
+  private virtualInteract = false;
 
   /** Named for the console, so a scene's lines say which place they are from. */
   protected abstract readonly log: Logger;
@@ -192,6 +226,8 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
 
     this.gamepad = new GamepadInput(this);
     this.initTapToWalk();
+    this.eKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E, false) ?? null;
+    this.extra = place.extra ?? null;
     gameEvents.emit("place-changed", place.label);
 
     // Everyone else out here, and the socket told we are out here now.
@@ -207,10 +243,19 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
         if (ok && this.scene.isActive()) this.player.wearSprite(this, spriteKey);
       });
     });
+    // A phone has no keyboard, and walking up to something is only half of
+    // using it. The HUD's action button stands in for E out here as it does
+    // in a room.
+    const unsubInteract = gameEvents.on("interact-pressed", () => {
+      this.virtualInteract = true;
+    });
     // Stopped for another scene, or taken down with the game: either way the
     // listeners go, or a dead scene keeps trying to draw people.
     const letGo = () => {
       unsubLook();
+      unsubInteract();
+      this.extra?.destroy();
+      this.extra = null;
       this.presence?.detach();
       this.presence = null;
     };
@@ -273,6 +318,29 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     return dialogOpen() ? { vx: 0, vy: 0 } : this.gamepad.velocity(this.player.speed);
   }
 
+  /**
+   * E on the keyboard, confirm on the pad, or the HUD's own button.
+   *
+   * Taken once a frame and spent, so two things cannot both act on one
+   * press. The virtual one is cleared on reading it for the same reason it
+   * is set at all: it is a single press with no key to be held down.
+   */
+  private takeInteract(): boolean {
+    const virtual = this.virtualInteract;
+    this.virtualInteract = false;
+    const key = this.eKey !== null && Phaser.Input.Keyboard.JustDown(this.eKey);
+    return key || this.gamepad.justPressed("interact") || virtual;
+  }
+
+  /** Whatever this place runs of its own, given the frame and the press. */
+  private runExtra(delta: number, pressed: boolean) {
+    this.extra?.update(
+      delta,
+      { x: this.player.sprite.x, y: this.player.sprite.y, facing: this.player.direction },
+      pressed,
+    );
+  }
+
   /** Sort against the props by where the feet are. */
   private sortByFeet() {
     this.player.sprite.setDepth((this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom);
@@ -299,6 +367,10 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
       }
       this.sortByFeet();
       this.reportPosition();
+      // Still drawn while the arrival walk has the keys — the ball is on
+      // the court whether or not anybody can steer yet — but no press is
+      // taken, since the keys are not theirs to press with.
+      this.runExtra(delta, false);
       return;
     }
 
@@ -317,6 +389,7 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     this.player.update(steering ?? padVelocity);
     this.sortByFeet();
     this.reportPosition();
+    this.runExtra(delta, this.takeInteract());
     // Walking after a look around brings the camera back to you.
     if (!this.cameraController.cameraFollowing && this.player.isMoving()) {
       this.cameraController.resumeCameraFollow();

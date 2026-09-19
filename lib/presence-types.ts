@@ -176,6 +176,22 @@ export interface BoardMessage {
   done?: boolean;
 }
 
+/**
+ * A hand on the basketball: picking it up, or letting it go.
+ *
+ * The browser says which of the three and, for a throw, how hard — the
+ * meter over the thrower's head. It deliberately says nothing else: where
+ * they are standing and which way they face are the room's own record of
+ * them, so a throw cannot be aimed from somewhere nobody is, and the flight
+ * and the basket are the server's alone.
+ */
+export interface BasketballMessage {
+  type: "basketball";
+  action: "take" | "throw" | "drop";
+  /** 0 to 1, for a throw. Clamped server-side; anything else is zero. */
+  power?: number;
+}
+
 /** A move in a game of ping pong, on its way to the other player. */
 export interface PongRelayMessage {
   type: "pong";
@@ -254,6 +270,7 @@ export type ClientMessage =
   | VoiceRelayMessage
   | MicMessage
   | BoardedMessage
+  | BasketballMessage
   | MeetingMessage;
 
 // ── Server → client ────────────────────────────────────
@@ -349,6 +366,32 @@ export interface BadgeMessage {
   at: string;
 }
 
+/**
+ * Where the basketball is, to everyone standing on the world map.
+ *
+ * Sent on every tick while the ball is doing something — carried, in the
+ * air, rolling — and once more when it settles, so a browser that arrives
+ * to a ball lying still is still told where it is lying. Only the world
+ * map gets it: it is the one room with a court in it, and a floor of
+ * Sandbox ERP has no use for a ball's coordinates twenty times a second.
+ *
+ * `scored` is the moment, not a tally: which rim it fell through and who
+ * threw it, so every screen can mark the same basket at the same hoop. The
+ * count of them is nobody's — a badge is earned for sinking one, and that
+ * is the whole of what is kept.
+ */
+export interface BasketballBroadcast {
+  type: "basketball";
+  ball: {
+    x: number;
+    y: number;
+    z: number;
+    /** The connection carrying it, or null for a ball nobody has. */
+    heldBy: string | null;
+  };
+  scored?: { side: "west" | "east"; by: string };
+}
+
 /** The same, arriving at the other end, stamped with who sent it. */
 export interface PongBroadcast {
   type: "pong";
@@ -437,6 +480,7 @@ export type ServerMessage =
   | BoardBroadcast
   | VoiceBroadcast
   | OnlineMessage
+  | BasketballBroadcast
   | MeetingsMessage;
 
 export function isClientMessage(value: unknown): value is ClientMessage {
@@ -451,6 +495,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     type === "voice" ||
     type === "mic" ||
     type === "boarded" ||
+    type === "basketball" ||
     type === "meeting"
   );
 }

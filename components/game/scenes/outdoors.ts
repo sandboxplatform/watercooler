@@ -31,7 +31,11 @@ const GROUND: Record<Exclude<Ground, "water">, string> = {
   kerb: "world-kerb",
   asphalt: "world-asphalt",
   dock: "world-dock",
+  court: "world-court",
 };
+
+/** The lines painted on the basketball court, laid over its surface. */
+export const COURT_LINES_KEY = "world-court-lines";
 
 export function preloadOutdoors(scene: Phaser.Scene) {
   scene.load.image(GROUND.grass, asset("/sprites/world/grass_48.png"));
@@ -39,6 +43,8 @@ export function preloadOutdoors(scene: Phaser.Scene) {
   scene.load.image(GROUND.kerb, asset("/sprites/world/kerb_48.png"));
   scene.load.image(GROUND.asphalt, asset("/sprites/world/asphalt_48.png"));
   scene.load.image(GROUND.dock, asset("/sprites/world/dock_48.png"));
+  scene.load.image(GROUND.court, asset("/sprites/world/court_48.png"));
+  scene.load.image(COURT_LINES_KEY, asset("/sprites/world/court_lines_432x288.png"));
   scene.load.image(WATER_KEY, asset("/sprites/world/water_48.png"));
   scene.load.image(WATER2_KEY, asset("/sprites/world/water2_48.png"));
   scene.load.image(FOAM_KEY, asset("/sprites/world/foam_48.png"));
@@ -107,6 +113,17 @@ export function layGround(scene: Phaser.Scene, grid: Ground[][]) {
       }
     }),
   );
+}
+
+/**
+ * The court's markings, in one piece over the tarmac.
+ *
+ * At depth 1, which is where the water's foam goes: over the ground and
+ * under everything that stands on it, so a player dribbling across the
+ * centre circle is drawn on top of it rather than under the paint.
+ */
+export function placeCourtLines(scene: Phaser.Scene, at: { x: number; y: number }) {
+  scene.add.image(at.x, at.y, COURT_LINES_KEY).setOrigin(0, 0).setDepth(1);
 }
 
 /** An invisible wall the size of a rectangle. */

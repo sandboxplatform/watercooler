@@ -18,14 +18,16 @@ import { getRoomStore } from "./room-store";
 import { identityOf, isAuthorized, personaFor, type AccessIdentity } from "./access";
 import { mayWear } from "../characters/library";
 import { BOSS_SPRITE_KEY } from "../characters/sprites";
-import { normaliseRoomSlug } from "../rooms";
+import { normaliseRoomSlug, WORLD_ROOM_SLUG } from "../rooms";
 import { describeRoom, hasBoardroom, mayEnterRoom } from "../world/floors";
 import { badgeFor, badgeHolder, type EarnedBadge } from "../badges";
 import { isPongPayload } from "../pong/protocol";
 import { SHARED_BOARD, isStroke, sanitiseStroke } from "../whiteboard";
+import { Basketball } from "./basketball";
 import {
   onArrival,
   onAlone,
+  onBasket,
   onMeetingCalled,
   onMeetingJoined,
   onMicOn,
@@ -182,6 +184,27 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
    * carries on without them, exactly as a meeting does.
    */
   const meetings = new Map<string, { host: string; since: string }>();
+
+  /**
+   * The one basketball, on the court on the world map.
+   *
+   * One for the server rather than one per room, because there is one
+   * court: a ball in a lobby would be a second ball, and the thing that
+   * makes this worth having at all is that it is the same ball everybody
+   * is looking at. Held in memory beside the meetings and for the same
+   * reason — where a ball is lying is something happening rather than
+   * something kept, and a server that restarts has tidied it away.
+   */
+  const basketball = new Basketball();
+  /**
+   * Whether the ball was doing something last tick.
+   *
+   * A ball lying still is broadcast once and then not again, which is what
+   * keeps an empty court off the wire twenty times a second. This is what
+   * makes sure of the *once*: the tick it settles on is still published, so
+   * nobody is left drawing it mid-roll for ever.
+   */
+  let ballWasLive = false;
 
   setRoomBroadcast((slug, message) => broadcast(slug, message));
   setWorldBroadcast((message) => broadcastAll(message));
@@ -573,6 +596,13 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     const slug = roomOf.get(id);
     roomOf.delete(id);
     owesPong.delete(id);
+    // A carried ball goes down where its carrier was last seen. Only the
+    // person holding it can let go of it, so a ball still in the hands of a
+    // closed tab would hang over the court and never be reachable again.
+    if (basketball.heldBy(id)) {
+      basketball.drop(id);
+      ballWasLive = true;
+    }
     if (!moving) sessionByConnection.delete(id);
     if (!slug) return;
 
@@ -591,6 +621,64 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     if (player && !moving) broadcastOnline();
     // Whoever has just gone may have been the last of the meeting.
     if (endMeetingIfEmpty(slug, room.hub)) tellEveryoneMeetings();
+  };
+
+  // ── The basketball ────────────────────────────────────
+
+  /** Where somebody is standing, as the world map's own record has them. */
+  const carrierOf = (id: string) => {
+    const player = rooms.get(WORLD_ROOM_SLUG)?.hub.get(id);
+    return player ? { x: player.x, y: player.y, facing: player.facing } : null;
+  };
+
+  /** The ball, as the wire carries it: whole pixels are plenty for a ball. */
+  const ballMessage = (scored?: { side: "west" | "east"; by: string }): ServerMessage => {
+    const ball = basketball.state;
+    return {
+      type: "basketball",
+      ball: {
+        x: Math.round(ball.x),
+        y: Math.round(ball.y),
+        z: Math.round(ball.z),
+        heldBy: ball.heldBy,
+      },
+      ...(scored ? { scored } : {}),
+    };
+  };
+
+  /**
+   * Tell the world map where the ball is.
+   *
+   * That room only. It is the one with a court in it, and a floor of
+   * Sandbox ERP has no use for a ball's coordinates twenty times a second.
+   */
+  const publishBall = (scored?: { side: "west" | "east"; by: string }) => {
+    broadcast(WORLD_ROOM_SLUG, ballMessage(scored));
+  };
+
+  /**
+   * Move the ball on, and mark a basket.
+   *
+   * Run off the presence ticker rather than a timer of its own: the ball is
+   * one more thing the world map is doing, and the two want the same rate
+   * for the same reason — it is what the scene is drawing towards.
+   */
+  const stepBasketball = () => {
+    const room = rooms.get(WORLD_ROOM_SLUG);
+    if (!room) return;
+    const { scored, live } = basketball.step(TICK_MS, carrierOf);
+    if (scored) {
+      const player = room.hub.get(scored.by);
+      publishBall({ side: scored.hoop.side, by: player?.name ?? "Someone" });
+      ballWasLive = true;
+      const holder = holderOf(scored.by);
+      if (holder) announce(WORLD_ROOM_SLUG, onBasket(holder));
+      return;
+    }
+    // A ball nobody has touched is published once and then left alone.
+    if (!live && !ballWasLive) return;
+    ballWasLive = live;
+    publishBall();
   };
 
   /**
@@ -658,6 +746,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
       if (room.hub.count === 0) continue;
       broadcast(slug, { type: "presence", players: room.hub.snapshot() });
     }
+    stepBasketball();
   }, TICK_MS);
   ticker.unref?.();
 
@@ -795,6 +884,11 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         // What is being held, of what they may know about: a meeting is
         // most useful to somebody who is not in the room yet.
         tellMeetings(id, ws);
+        // And where the ball is lying, for somebody walking onto the map.
+        // A still ball is published once and then not again, so without
+        // this an arrival would see an empty court until somebody touched
+        // it — including somebody who has walked out to play with it.
+        if (slug === WORLD_ROOM_SLUG) send(ws, ballMessage());
 
         // Badges, after the room has been told they are here: everything
         // below reads the hub, and a `holderOf` before the join would have
@@ -1009,6 +1103,30 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           // is a fresh join, and `place` clears it for a re-join to this
           // one, so nobody can arrive somewhere invisible.
           room.hub.setHidden(id, parsed.inside === true);
+          return;
+        }
+
+        if (parsed.type === "basketball") {
+          // The court is on the world map and nowhere else, so a hand on
+          // the ball from any other room is a browser asking for something
+          // that does not exist where it is standing.
+          if (slug !== WORLD_ROOM_SLUG) return;
+          const player = room.hub.get(id);
+          if (!player) return;
+          const at = { x: player.x, y: player.y, facing: player.facing };
+          const acted =
+            parsed.action === "take"
+              ? basketball.take(id, at)
+              : parsed.action === "throw"
+                ? basketball.release(id, at, coerceNumber(parsed.power))
+                : (basketball.drop(id, at), true);
+          // Published at once rather than on the next tick: picking a ball
+          // up and throwing it are the two moments somebody is watching for,
+          // and a frame of nothing happening after pressing E reads as the
+          // press not having landed.
+          if (!acted) return;
+          ballWasLive = true;
+          publishBall();
           return;
         }
 

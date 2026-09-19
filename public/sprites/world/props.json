@@ -59,5 +59,23 @@
     "y": 0,
     "width": 144,
     "height": 88
+  },
+  "hoopWest": {
+    "x": 960,
+    "y": 0,
+    "width": 112,
+    "height": 128
+  },
+  "hoopEast": {
+    "x": 1080,
+    "y": 0,
+    "width": 112,
+    "height": 128
+  },
+  "ball": {
+    "x": 1200,
+    "y": 0,
+    "width": 20,
+    "height": 20
   }
 }

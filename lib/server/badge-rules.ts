@@ -202,6 +202,20 @@ export function onPingPong(holders: readonly Holder[]): EarnedBadge[] {
 }
 
 /**
+ * A throw went through a hoop on the court in the park.
+ *
+ * The server watched it happen: it holds the ball, it ran the flight, and
+ * it is the one that saw the ball cross the rim on the way down. There is
+ * deliberately no count kept — one basket is the badge, and a hundred is
+ * the same badge, which is the catalogue's own rule.
+ */
+export function onBasket(holder: Holder): EarnedBadge[] {
+  const earned: EarnedBadge[] = [];
+  grant(holder, "swish", earned);
+  return earned;
+}
+
+/**
  * A score went on a machine's board.
  *
  * `machine` is the game, which is also the building — no two lobbies hold
