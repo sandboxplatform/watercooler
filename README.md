@@ -380,11 +380,32 @@ both places see you go and arrive. What is in a room is shared too: a line
 one person draws on the whiteboard appears on everyone else's, and a meeting
 called at the boardroom table is a pill in everyone's bottom bar.
 
-The panel beside the office has two tabs. **People** lists everyone on the
-server and where they are — by lobby, floor, campus, island or the world
-map — with the place you are in first, and it is what the Online pill in the
-bottom bar counts and opens. **Badges** is the second: what you have earned
-for turning up and for being here when a room filled.
+The panel beside the office has two tabs. **People** lists everyone in the
+world, not only whoever has a tab open: first the people online and where
+they are — by lobby, floor, campus, island or the world map — with the place
+you are in first, then everybody who is _not here_, then **the locals**, the
+characters the server walks about, each with the room they are standing in
+right now. It is what the Online pill in the bottom bar counts and opens.
+
+Press any name and you get their **profile**: the full concept art they were
+drawn from, what they do, a short and largely unreliable account of who they
+are, and their badges.
+
+**Badges** is the second tab — twenty-one of them, in five groups, and the
+whole catalogue is listed whether or not anybody has one, because half the
+point of a badge is knowing it is there to be had. They are for going
+places (every organisation in the world; the ferry across to the island; an
+Operations floor), for playing what is standing in the lobbies (a score on
+every machine; first place on a board; a game of ping pong), for being here
+with other people (Global Chat with three others; a room that filled up; a
+meeting called at the boardroom table), for the locals (standing close
+enough to Michael to startle him; finding Doc; meeting every resident
+there is), and for a few odd ones — drawing on a whiteboard, being here in
+the small hours, being the only person in the whole world.
+
+Nothing is earned by doing anything for the hundredth time, and nothing is
+earned on your browser's say-so: every badge fires off something the server
+watched happen.
 
 There is no text chat. There was a Chat tab ahead of both, with a box to
 type a remark into and a log of everything anybody had said, and it is

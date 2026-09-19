@@ -37,7 +37,11 @@ export function describeRoom(slug: string): Place {
   if (floor) {
     const tenant = tenantFor(floor[1]);
     const level = Number(floor[2]);
-    if (tenant && (level === 1 || level === 2)) {
+    // Three, because an Operations floor is a floor: it was left out, so a
+    // meeting there and a resident standing in Support both read as the raw
+    // slug in the People panel — "sandbox-erp-floor-3", where every other
+    // place in the list is said the way a person would say it.
+    if (tenant && (level === 1 || level === 2 || level === 3)) {
       return {
         label: `${tenantTitle(tenant)} · ${floorTitle({ kind: "floor", level })}`,
         kind: "floor",

@@ -120,18 +120,26 @@ export interface GameEventMap {
   "open-whiteboard": [];
   /** The board was closed, so the office takes input again. */
   "whiteboard-closed": [];
-  /** A badge was just earned, by a person or an agent. */
-  "achievement-earned": [
-    achievement: {
+  /** Somebody just earned a badge, somewhere in the world. */
+  "badge-earned": [
+    badge: {
       code: string;
-      subjectType: "agent" | "human";
-      subjectId: string;
-      subjectName: string;
-      title: string;
-      description: string;
-      icon: string;
+      /** The holder id — a persona's identity, or `guest:<name>`. */
+      person: string;
+      name: string;
+      /** Where they were standing, so a toast can be narrower than the news. */
+      room: string;
     },
   ];
+  /**
+   * Show somebody's profile: their concept art, who they are, their badges.
+   *
+   * Carried on the bus rather than held by the column, because the two ends
+   * are in different trees — the People panel is in the column beside the
+   * office and the window is over the office, and neither is the other's
+   * parent. `null` closes it.
+   */
+  "open-profile": [person: string | null];
   /** Someone said something out loud: show it over their character. */
   /**
    * The player walked into a doorway. `target` names the room it leads to;

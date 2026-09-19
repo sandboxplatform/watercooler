@@ -452,20 +452,19 @@ export class OfficeScene extends Phaser.Scene {
       this.player?.board(false);
     });
 
-    const unsubBadge = gameEvents.on("achievement-earned", (achievement) => {
-      // Agents celebrate at their desk; people celebrate wherever they stand
-      if (achievement.subjectType === "agent") {
-        const worker = this.workerManager.findBySeatId(achievement.subjectId);
-        worker?.showBubble(`${achievement.icon} ${achievement.title}`, 5000);
-        return;
-      }
-      this.presence?.say(achievement.subjectId, `${achievement.icon} ${achievement.title}`);
-    });
+    // A badge used to be drawn over somebody's head from here, off the bus.
+    // It cannot be: the badge names its *holder* — a code's identity, or a
+    // guest's name — and `presence.say` addresses a connection, so the
+    // lookup was a name being passed where a uuid was wanted and the bubble
+    // never appeared for anybody. It is the server's now, which is the only
+    // side that holds both halves: `announce` in `presence-socket` sends an
+    // ordinary `said` over the earner's head, and the room draws it the way
+    // it draws a resident's remark. What the browser shows for its own
+    // badge is the toast.
     this.cleanupPresence = () => {
       stopPulse?.();
       stopWeek?.();
       stopFlow?.();
-      unsubBadge();
       unsubSprite();
       unsubDoor();
       unsubFixtures();

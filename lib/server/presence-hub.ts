@@ -44,6 +44,9 @@ export interface HubOptions {
   now?: () => number;
 }
 
+/** The answer to "who is standing here?" when nobody is, shared rather than made. */
+const NOBODY: readonly string[] = [];
+
 /** Trim a name to something that fits over a character's head. */
 export function sanitiseName(raw: string): string {
   const cleaned = raw.replace(/\s+/g, " ").trim().slice(0, 16);
@@ -194,6 +197,28 @@ export class PresenceHub {
       if (dx * dx + dy * dy <= limit) return true;
     }
     return false;
+  }
+
+  /**
+   * Which people are standing within `range` of a point, by connection.
+   *
+   * `personNear` answers whether anybody is, which is all a resident needs
+   * to decide whether to speak. This answers who, which is what a badge for
+   * having stood beside somebody needs — and it is the one caller, so it
+   * hands back the shared empty array rather than a fresh one whenever the
+   * answer is nobody, which in a world of mostly empty rooms is nearly
+   * always.
+   */
+  peopleNear(at: { x: number; y: number }, range: number): readonly string[] {
+    const limit = range * range;
+    let near: string[] | null = null;
+    for (const player of this.players.values()) {
+      if (player.resident || player.hidden) continue;
+      const dx = player.x - at.x;
+      const dy = player.y - at.y;
+      if (dx * dx + dy * dy <= limit) (near ??= []).push(player.id);
+    }
+    return near ?? NOBODY;
   }
 
   /**

@@ -20,10 +20,21 @@ import { mayWear } from "../characters/library";
 import { BOSS_SPRITE_KEY } from "../characters/sprites";
 import { normaliseRoomSlug } from "../rooms";
 import { describeRoom, hasBoardroom, mayEnterRoom } from "../world/floors";
-import { achievementFor, type EarnedAchievement } from "../achievements";
+import { badgeFor, badgeHolder, type EarnedBadge } from "../badges";
 import { isPongPayload } from "../pong/protocol";
 import { SHARED_BOARD, isStroke, sanitiseStroke } from "../whiteboard";
-import { onPlayerJoined, onRoomFull } from "./achievement-rules";
+import {
+  onArrival,
+  onAlone,
+  onMeetingCalled,
+  onMeetingJoined,
+  onMicOn,
+  onMingle,
+  onPingPong,
+  onRoomFull,
+  onWhiteboard,
+  type Holder,
+} from "./badge-rules";
 import { createLogger } from "../logger";
 import {
   CLAIM_GRACE_MS,
@@ -42,7 +53,7 @@ import {
 } from "../presence-types";
 
 import { ResidentSimulation } from "./residents";
-import { setRoomBroadcast } from "./room-broadcast";
+import { setRoomBroadcast, setWorldBroadcast } from "./room-broadcast";
 
 const log = createLogger("Presence");
 
@@ -173,6 +184,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   const meetings = new Map<string, { host: string; since: string }>();
 
   setRoomBroadcast((slug, message) => broadcast(slug, message));
+  setWorldBroadcast((message) => broadcastAll(message));
 
   const roomFor = (slug: string): Room => {
     let room = rooms.get(slug);
@@ -292,24 +304,177 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     for (const slug of rooms.keys()) broadcast(slug, message, exceptId);
   };
 
-  /** Everyone on the server, with where they are — the People panel's list. */
+  /**
+   * Everyone on the server, with where they are — the People panel's list.
+   *
+   * The residents come back in a list of their own rather than mixed in or
+   * left out. Out of the count, because the count is a count of people and
+   * always has been; in the message, because the panel lists the cast
+   * whether or not they are online and "Doc is in Support right now" is the
+   * one thing about him a browser cannot work out for itself.
+   */
   const onlineList = () => {
     const people: OnlineMessage["people"] = [];
+    const locals: OnlineMessage["locals"] = [];
     for (const [slug, room] of rooms) {
       for (const player of room.hub.snapshot()) {
-        if (player.resident) continue;
-        people.push({
+        const entry = {
           id: player.id,
           name: player.name,
           spriteKey: player.spriteKey,
           room: slug,
           ...(player.mic ? { mic: true } : {}),
+        };
+        if (player.resident) {
+          // `resident:<id>` on the wire; the cast is keyed by the id alone.
+          locals.push({ ...entry, person: player.id.replace(/^resident:/, "") });
+          continue;
+        }
+        people.push({
+          ...entry,
+          person: badgeHolder(identityByConnection.get(player.id) ?? "visitor", player.name),
         });
       }
     }
-    return people;
+    return { people, locals };
   };
-  const broadcastOnline = () => broadcastAll({ type: "online", people: onlineList() });
+  const broadcastOnline = () => {
+    const { people, locals } = onlineList();
+    broadcastAll({ type: "online", people, locals });
+    // The one moment Holding the Fort can become true, and the only list
+    // that knows: one person in every room the server has open.
+    if (people.length === 1) {
+      const alone = people[0];
+      if (once(alone.person, "holding-the-fort")) {
+        announce(alone.room, onAlone({ person: alone.person, name: alone.name }));
+      }
+    }
+  };
+
+  // ── Badges ────────────────────────────────────────────
+
+  /**
+   * A badge already settled this run, so the chatty rules ask the database
+   * once rather than once a frame.
+   *
+   * Volley fires on every relayed paddle position and Holding the Fort on
+   * every refresh of the online list; `awardBadge` would answer false to
+   * all of them, but answering costs a write. Keyed by holder rather than
+   * by connection so it survives a reload, and never cleared — it is
+   * bounded by the cast times the catalogue.
+   */
+  const settled = new Set<string>();
+  const once = (person: string, code: string): boolean => {
+    const key = `${person}:${code}`;
+    if (settled.has(key)) return false;
+    settled.add(key);
+    return true;
+  };
+
+  /**
+   * Whose badge shelf a connection writes to.
+   *
+   * The identity from the cookie, which is the person; the name from the
+   * room, which is what they are called today. Null before they have
+   * joined anywhere, since there is nothing to call them yet.
+   */
+  const holderOf = (id: string): Holder | null => {
+    const slug = roomOf.get(id);
+    const player = slug ? rooms.get(slug)?.hub.get(id) : null;
+    if (!player) return null;
+    return {
+      person: badgeHolder(identityByConnection.get(id) ?? "visitor", player.name),
+      name: player.name,
+    };
+  };
+
+  /**
+   * Everybody in Global Chat, wherever they are standing.
+   *
+   * The whole server, because Global Chat is one conversation for the whole
+   * server: four people on mic are in it together whether they are in one
+   * lobby or three buildings apart.
+   */
+  const onMicNow = (): Holder[] => {
+    const holders: Holder[] = [];
+    for (const room of rooms.values()) {
+      for (const id of room.sockets.keys()) {
+        if (!micOf.get(id)) continue;
+        const holder = holderOf(id);
+        if (holder) holders.push(holder);
+      }
+    }
+    return holders;
+  };
+
+  /** Everybody standing in a room, as badge holders. */
+  const holdersIn = (slug: string): Holder[] => {
+    const room = rooms.get(slug);
+    if (!room) return [];
+    const holders: Holder[] = [];
+    for (const id of room.sockets.keys()) {
+      const holder = holderOf(id);
+      if (holder) holders.push(holder);
+    }
+    return holders;
+  };
+
+  /**
+   * Tell the world about badges just earned.
+   *
+   * Everyone rather than the room, because a badge is the person's and the
+   * panel that lists them lists the world — a list that only updates for
+   * whoever happened to be standing there is a list that is wrong
+   * everywhere else until a reload. The room travels with the message so
+   * the toast can be the narrower thing the broadcast is not.
+   */
+  const announce = (slug: string, earned: readonly EarnedBadge[]) => {
+    for (const item of earned) {
+      broadcastAll({
+        type: "badge",
+        code: item.code,
+        person: item.person,
+        name: item.name,
+        room: slug,
+        at: item.earnedAt,
+      });
+      celebrate(slug, item);
+    }
+  };
+
+  /**
+   * Put the badge over the earner's head, where they are standing.
+   *
+   * An ordinary `said`, so the room draws it the way it draws a resident's
+   * remark and nothing in the scene has to know a badge from a hello. It is
+   * the server's job rather than the scene's for the reason everything else
+   * about a badge is: only this side holds both halves of it — the holder,
+   * which is a code's identity, and the connection, which is a uuid. The
+   * scene used to try, off a name, and the bubble never once appeared.
+   *
+   * Their own browser does not draw it — a room's bubbles are everybody
+   * else's — which is right: they have the toast, and the people around
+   * them have the moment.
+   */
+  const celebrate = (slug: string, item: EarnedBadge) => {
+    const badge = badgeFor(item.code);
+    const room = rooms.get(slug);
+    if (!badge || !room) return;
+    for (const id of room.sockets.keys()) {
+      const player = room.hub.get(id);
+      if (!player) continue;
+      if (badgeHolder(identityByConnection.get(id) ?? "visitor", player.name) !== item.person)
+        continue;
+      broadcast(slug, {
+        type: "said",
+        id: `badge:${item.code}:${item.earnedAt}`,
+        from: { id, name: player.name },
+        text: `${badge.icon} ${badge.title}`,
+        at: item.earnedAt,
+      });
+      return;
+    }
+  };
 
   /**
    * The meetings a given identity is allowed to know about.
@@ -370,25 +535,6 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     meetings.delete(slug);
     log.info(`the meeting in "${slug}" ended: the room is empty`);
     return true;
-  };
-
-  /** Tell the room about badges just earned, so it is a shared moment. */
-  const announce = (slug: string, earned: EarnedAchievement[]) => {
-    for (const item of earned) {
-      const definition = achievementFor(item.code);
-      if (!definition) continue;
-      broadcast(slug, {
-        type: "achievement",
-        code: item.code,
-        subjectType: item.subjectType,
-        subjectId: item.subjectId,
-        subjectName: item.subjectName,
-        title: definition.title,
-        description: definition.description,
-        icon: definition.icon,
-        at: item.earnedAt,
-      });
-    }
   };
 
   /**
@@ -579,7 +725,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
               players: room.hub.snapshot(),
               capacity: room.hub.capacity,
             });
-            send(ws, { type: "online", people: onlineList() });
+            send(ws, { type: "online", ...onlineList() });
             tellMeetings(id, ws);
             return;
           }
@@ -624,15 +770,21 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         // What is being held, of what they may know about: a meeting is
         // most useful to somebody who is not in the room yet.
         tellMeetings(id, ws);
-        announce(slug, onPlayerJoined(slug, result.player.name));
-        if (room.hub.count >= room.hub.capacity) {
-          announce(
-            slug,
-            onRoomFull(
-              slug,
-              room.hub.snapshot().map((p) => p.name),
-            ),
-          );
+
+        // Badges, after the room has been told they are here: everything
+        // below reads the hub, and a `holderOf` before the join would have
+        // nobody to name.
+        const holder = holderOf(id);
+        if (holder) {
+          announce(slug, onArrival(holder, slug));
+          // A meeting already under way is one they have walked into —
+          // unless it is theirs, which it is when they called it and rode
+          // away and came back.
+          const running = meetings.get(slug);
+          if (running && running.host !== holder.name) {
+            announce(slug, onMeetingJoined(holder));
+          }
+          if (room.hub.count >= room.hub.capacity) announce(slug, onRoomFull(holdersIn(slug)));
         }
       };
 
@@ -787,6 +939,14 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             { type: "board", action: "draw", stroke, done: parsed.done === true, by: player?.name },
             id,
           );
+          // Only when the pen comes up: a stroke arrives in pieces while it
+          // is still being drawn, and one of those is not a drawing yet.
+          if (parsed.done === true) {
+            const holder = holderOf(id);
+            if (holder && once(holder.person, "left-a-mark")) {
+              announce(slug, onWhiteboard(holder));
+            }
+          }
           return;
         }
 
@@ -809,6 +969,11 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
               payload: parsed.payload,
             }),
           );
+          // Both ends of the table. Guarded by `once`, because this fires
+          // on every paddle position of a rally.
+          const players = [holderOf(id), holderOf(to)].filter((h): h is Holder => h !== null);
+          const fresh = players.filter((h) => once(h.person, "volley"));
+          if (fresh.length) announce(slug, onPingPong(fresh));
           return;
         }
 
@@ -839,6 +1004,18 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             const since = new Date().toISOString();
             meetings.set(slug, { host: player?.name ?? "Someone", since });
             log.info(`${player?.name ?? "someone"} called a meeting in "${slug}"`);
+            // Whoever called it, and everybody already at the table, who
+            // are sitting in on it from the moment it starts.
+            const host = holderOf(id);
+            if (host) {
+              announce(
+                slug,
+                onMeetingCalled(
+                  host,
+                  holdersIn(slug).filter((h) => h.person !== host.person),
+                ),
+              );
+            }
           } else {
             if (!running) return;
             meetings.delete(slug);
@@ -854,6 +1031,15 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           micOf.set(id, parsed.on === true);
           room.hub.setMic(id, parsed.on === true);
           broadcastOnline();
+          // Switching a microphone on *is* joining Global Chat — there is
+          // no other state to be in — and who else is in it is the whole
+          // server's list rather than this room's.
+          if (parsed.on === true) {
+            const holder = holderOf(id);
+            if (holder && once(holder.person, "on-mic")) {
+              announce(slug, onMicOn(holder, onMicNow()));
+            }
+          }
           return;
         }
 
@@ -927,7 +1113,26 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   // The residents walk about the same rooms, and leave when the server does.
   // RESIDENT_DWELL_SCALE=0.02 makes a day of theirs pass in a minute, for watching.
   const dwellScale = Number(process.env.RESIDENT_DWELL_SCALE) || 1;
-  const stopResidents = new ResidentSimulation({ roomFor }, { dwellScale }).start();
+  const stopResidents = new ResidentSimulation(
+    {
+      roomFor,
+      /**
+       * Somebody came to stand beside one of the locals.
+       *
+       * Reported on the edge by the simulation, so this runs when they
+       * arrive rather than for as long as they linger. Which resident it
+       * was matters — Michael's cluck and finding Doc are each their own
+       * badge, and standing beside all seven is a third.
+       */
+      met: (residentId, connectionIds) => {
+        for (const id of connectionIds) {
+          const holder = holderOf(id);
+          if (holder) announce(roomOf.get(id) ?? "", onMingle(holder, residentId));
+        }
+      },
+    },
+    { dwellScale },
+  ).start();
 
   server.on("close", () => {
     clearInterval(ticker);

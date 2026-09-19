@@ -71,7 +71,7 @@ describe("the meetings the HUD is told about", () => {
   it("ignores everything else the room socket carries", async () => {
     const hook = renderHook(useMeetings);
     await settle(() => say({ type: "meetings", meetings: [notice("sandbox-erp-floor-3")] }));
-    await settle(() => say({ type: "online", people: [] }));
+    await settle(() => say({ type: "online", people: [], locals: [] }));
     expect(hook.current).toHaveLength(1);
     hook.unmount();
   });

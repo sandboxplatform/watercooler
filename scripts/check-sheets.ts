@@ -49,8 +49,14 @@ const DIR = join(process.cwd(), "public/characters");
  */
 const STANDARD = { top: 28, bottom: 91, height: 64 };
 
-/** Characters that are deliberately not people, and so not held to it. */
-const SHAPES = new Set(["Bud", "Michael", "Andrew"]);
+/** Characters that are deliberately not people, and so not held to it.
+ *
+ * Andrew was here — he was a fish finger in a bow tie — and came off when he
+ * was redrawn as a man in a suit. The list is for a figure no height rule
+ * could sensibly describe, not for anyone whose sheet happens to differ from
+ * the standard: he is 60px like Doc, Mark, Nathan and Yash, which the report
+ * is right to say out loud. */
+const SHAPES = new Set(["Bud", "Michael"]);
 
 /** Not cast at all: the blank grid an artist starts from. */
 const NOT_CAST = new Set(["Character_Template"]);

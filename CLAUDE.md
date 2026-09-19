@@ -573,6 +573,138 @@ Both halves are held down by `lib/server/__tests__/lift-visibility.test.ts`,
 over real sockets, because a message type the socket does not recognise is
 dropped without a word.
 
+### Badges
+
+Twenty-one of them (`lib/badges.ts`), in five groups — Getting about,
+Playing, Together, The locals, Curios. Three rules run through the
+catalogue, and the last two are what the one before it got wrong.
+
+**A badge is a place you went or a thing you did, never a tally.** Nothing
+here is earned by doing anything a hundredth time. Each keys on a moment,
+or on a **set** of distinct moments — every organisation, every machine,
+every resident — which is a map of the world rather than a grind through
+it. `badge-rules.test.ts` holds the catalogue to it.
+
+**A badge belongs to the person, not the room.** The old ones were filed
+under a room slug, so walking one floor up meant earning Walked In again in
+the new place, and the wall read "7 of 4 earned in this room" because it
+was also counting badges a retired agent had won. They hang on a profile
+now, and a profile is one person wherever they are standing.
+
+| Holder    | Keyed on                  | Because                                                              |
+| --------- | ------------------------- | -------------------------------------------------------------------- |
+| A persona | Their `AccessIdentity`    | The code names exactly one person, so it follows them to any browser |
+| A visitor | `guest:<lowercased name>` | The shared code names nobody; their name is the only handle there is |
+| A local   | — they hold none          | A resident is how a badge is _got_, not somebody who gets one        |
+
+The guest case is weak on purpose and marked as weak: two people who both
+call themselves Guest share a shelf, and the panel prints `guest` beside
+such a name. Sign-in is the finer-grained answer, exactly as it is for the
+door.
+
+**Nothing is granted on a browser's word.** Every rule in
+`lib/server/badge-rules.ts` fires off something the server saw for itself —
+a room joined, a microphone on, a stroke finished, a score recorded, a
+resident with somebody standing next to them. Walking up to the project
+board and pressing E is a fine thing to do in this world and there is
+deliberately **no badge for it**: the only way to know would be to let the
+page say so, and a badge a client can claim is worth nothing.
+
+Where each rule is called from:
+
+| Rule                            | Fired by                                  | In                   |
+| ------------------------------- | ----------------------------------------- | -------------------- |
+| `onArrival`                     | Every `join`                              | `presence-socket`    |
+| `onAlone`                       | The online list coming down to one person | `broadcastOnline`    |
+| `onRoomFull`, `onMeetingJoined` | A join that fills a room / walks into one | `presence-socket`    |
+| `onMicOn`, `onMeetingCalled`    | `mic` and `meeting` messages              | `presence-socket`    |
+| `onWhiteboard`, `onPingPong`    | A finished stroke, a relayed rally        | `presence-socket`    |
+| `onMingle`                      | Somebody coming to stand beside a local   | `ResidentSimulation` |
+| `onScore`                       | The two high score routes                 | `machine-badges.ts`  |
+
+Four of those would otherwise write to the database far too often — a
+rally sends a message a frame, and the online list refreshes on a timer —
+so `once(person, code)` in the socket settles each one per run before the
+store is asked at all.
+
+**`mark` is the set behind the counting badges.** `badge_marks` holds one
+row per distinct thing done — `org:mettara`, `machine:pinball`,
+`met:michael`, `kind:warehouse` — and the badge is granted when the count
+under a prefix reaches the target. A set rather than a counter because
+every one of these asks "have they done each of these", so two visits to
+the same lobby must count once.
+
+Three of the targets are **read off the world rather than written down**,
+which is what keeps them true when the world changes:
+
+- **Grand Tour** counts `ORGANISATIONS`, so a new company moves the target.
+- **Knows Everybody** counts `RESIDENT_COUNT`, off the cast.
+- **Played the Lot** counts `SCORED_MACHINES`, which is read off `TENANTS`
+  rather than off the arcade's catalogue — and that is the whole point.
+  Three of the five arcade games stand in no building at all, so a badge
+  for "every arcade game" would be one nobody could finish. Ping pong is
+  left out as well: it keeps no score and takes two people, which is its
+  own badge.
+
+**A badge is announced to everybody and toasted to almost nobody.** The
+`badge` message goes to every connection, because the panel that lists them
+lists the world and a list that only updates for whoever was in the room is
+a list that is wrong everywhere else. `BadgeToast` then shows only what
+happened in the room you are standing in — which always includes your own,
+since the room on the message is the room you were in. Everybody _else_ in
+that room sees it over the earner's head instead: `announce` sends an
+ordinary `said`, so the room draws it the way it draws a resident's remark.
+Your own browser does not, because a room's bubbles are everybody else's —
+which is the right way round, since you have the toast and the people
+around you have the moment.
+
+### The cast, and profiles
+
+`lib/world/cast.ts` is everybody the world knows by name: the eight who
+hold a code and the seven residents, with a role, an organisation, a sprite
+key, the concept sheet they were drawn from, and a short and largely
+unreliable account of who they are.
+
+It exists because two things were invisible. **Offline is a state.** The
+People panel listed whoever had a tab open, so Hunter being out and Hunter
+not existing looked identical — the column said nothing about who this
+world is _of_. It now lists Online first, grouped by place as before, then
+**Not here** — the rest of the cast — then **The locals**, who are always
+somewhere and so are never news. The residents come down the socket in a
+field of their own (`locals` on `OnlineMessage`), out of the Online count,
+which counts people, and in the panel with where each is standing, because
+"Doc is in Support right now" is the one thing about Doc a browser cannot
+work out for itself.
+
+And **the concept sheets were in the repository and nowhere else.** Every
+character was drawn as a 1536x1024 two-panel picture — the 8-bit sprite
+beside a painted portrait — and the app only ever showed the 48x48 cut out
+of the other file. `components/hud/Profile.tsx` leads with it: it is the
+one image in this app that is a person rather than a tile. Pressing any row
+in the People panel, or any holder's name in Badges, opens it.
+
+Two things about the window:
+
+- **It is mounted in `app/page.tsx`, not in `GameHud`.** Everything in the
+  HUD is over the office and nothing else — `.app-hud` sits at z-index 20
+  and the column at 30, so a window mounted in there is behind the column
+  whatever z-index it asks for. Right for the lift and the whiteboard,
+  which are about the room you are standing in; wrong for this, which is
+  opened _from_ the column. It travels on the bus (`open-profile`) for the
+  same reason: the two ends are in different trees and neither is the
+  other's parent.
+- **Somebody with no cast entry still gets one.** A visitor is a name, a
+  look and whatever they have earned, which is a real profile. What they do
+  not get is a backstory and a picture, and the card says so rather than
+  showing a broken image.
+
+**It is a fourth place to edit when somebody joins the world**, after the
+three under the access table above, and `cast.test.ts` is what makes that
+survivable: every entry has to name a real persona or resident, agree with
+them about name, organisation and sprite, wear a sheet in `WORKER_SPRITES`,
+and name a concept sheet that is actually on disk. A missing entry is a
+failing test rather than a blank card.
+
 ### Voice chat
 
 Audio goes browser to browser over WebRTC (`lib/voice/`). The room socket carries
@@ -1262,7 +1394,11 @@ one. Every bubble in a room is now somebody else's, which is what
 `RemotePlayerManager` already draws.
 
 The handle's `say(id, text)` is for a scene with something of its own to
-put over somebody — the office announcing an achievement. If you touch
+put over somebody. Nothing uses it today: the office used to announce a
+badge with it and could not — the badge names its _holder_ and `say`
+addresses a _connection_, so a name was being handed where a uuid was
+wanted and the bubble never once appeared. The server does it now, which is
+the only side holding both halves (`announce` in `presence-socket`). If you touch
 preloading, check that people still look like themselves: a room that
 renders is not proof that it is right, so stand two of Sandbox ERP's own
 in one room — Bud is a resident and Sara walks in on her own code, in
@@ -1405,7 +1541,7 @@ asked for, and a prompt that opens an empty menu is worse than no prompt.
 Two SQLite databases (`node:sqlite`), deliberately separate:
 
 - **Room store** (`lib/server/room-store.ts`) — app state: seats, accounts,
-  presence, scores, achievements.
+  presence, scores, badges.
 - **ERP** (`lib/erp/`, `ERP_DB_PATH`, default `.data/erp.sqlite`) — the fictional
   company's data, seeded idempotently on first boot. It can be wiped and
   regenerated without touching anyone's room.
@@ -1418,6 +1554,15 @@ them, remarks typed into a window beside the office, and nothing reads
 either. `rooms` keeps `active_session_key` and `spend_usd` rather than being
 rebuilt — SQLite drops a column by copying the table, and an unused column
 costs a room nothing.
+
+Migration 5 is the odd one, because it **drops a table and keeps nothing**.
+`achievements` went and `badges` and `badge_marks` came in, with no
+backfill between them: the old rows were filed under a _room_, half of them
+were an agent's from when the world ran agents, and of the two codes left
+only one survives by name. There was nothing to carry over, and a badge
+half-carried is worse than a shelf that starts empty — everybody begins with
+none, which is the honest state for a catalogue nobody has yet had a chance
+at. See **Badges** for the shape that replaced it.
 
 **The room store's shape is versioned.** `MIGRATIONS` in
 `lib/server/room-store.ts` is every change to it in order, the index being
@@ -1478,12 +1623,15 @@ components/
   hud/                  every React panel, plus hud.css (the pixel HUD)
 lib/
   events.ts store.ts reducer.ts    the state + event spine
+  badges.ts                        the catalogue, and who a badge belongs to
   camera.ts legible.ts            how far out the camera stands, and how big lettering is drawn
   fixtures.ts                      what you walk up to and press E at, read by both layers
   room-travel.ts                   every room change, none of them a page load
   server/                          server-only: room store, presence hub/socket, residents, access
   server/room-broadcast.ts         the way anything server-side speaks into a room
+  server/badge-rules.ts            when a badge is earned — server-observed, never claimed
   map/ world/                      map generation and world layout
+  world/cast.ts                    who the world is of: roles, concept art, backstories
   arcade/ pinball/ pong/           the games (Oak Island, Flappy, Snake, Breakout, Solitaire)
   pixel/ characters/               sheet validation, PNG codec, palettes, recolouring
   voice/                           WebRTC voice, one conversation server-wide
@@ -1867,14 +2015,20 @@ late to be told.
 
 **They report; they do not refuse, and that should stay that way.** Which
 proportions the cast has is the artist's call, and the cast does not in fact
-agree: four sheets are 64px (Rob, Sara, Steve, Yoshi), four are 60px (Doc,
-Mark, Nathan, Yash), Hunter and Campbell are 58px, and Coop and Nick are 68px
-with their feet on row 89. Bud, Michael and Andrew — an egg, a chicken and a
-fish finger in spectacles — are exempt outright, which is `SHAPES` in
-`scripts/check-sheets.ts`. A height rule in `sheetFaults` would refuse those
-three and the artist's judgement along with them; the exemption list belongs
-beside the report, which is where it is, and somebody who is not a person
-goes on it as they are installed.
+agree: four sheets are 64px (Rob, Sara, Steve, Yoshi), five are 60px (Andrew,
+Doc, Mark, Nathan, Yash), Hunter and Campbell are 58px, and Coop and Nick are
+68px with their feet on row 89. Bud and Michael — a potato and a chicken — are
+exempt outright, which is `SHAPES` in `scripts/check-sheets.ts`. A height rule
+in `sheetFaults` would refuse those two and the artist's judgement along with
+them; the exemption list belongs beside the report, which is where it is, and
+somebody who is not a person goes on it as they are installed.
+
+**And comes off it when they stop being one.** Andrew was on that list — he
+was a fish finger in a bow tie — and was redrawn as a man in a suit, at which
+point the exemption was hiding a real measurement rather than excusing an
+unmeasurable one. The list is for a figure no height rule could sensibly
+describe, not for anybody whose sheet happens to differ from the standard:
+he is 60px like four others, which the report is right to say out loud.
 
 What the report must **not** do is measure something that fires on
 everything. `check:delivery` briefly held the feet band, rows 72-91, to the

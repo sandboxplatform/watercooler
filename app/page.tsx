@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GameErrorBoundary } from "@/components/game/GameErrorBoundary";
 import GameHud from "@/components/hud/GameHud";
 import Sidebar, { type SidebarTab } from "@/components/hud/Sidebar";
+import Profile from "@/components/hud/Profile";
 import { loadSidebarWidth } from "@/lib/persistence";
 import { useBackToClose } from "@/lib/hooks/useBackToClose";
 import { SIDEBAR_DEFAULT_WIDTH } from "@/lib/constants";
@@ -123,6 +124,19 @@ export default function Page() {
             musicOpen={musicOpen}
             onToggleMusic={toggleMusic}
           />
+
+          {/*
+            A profile is over the *whole* app, column included, which is why
+            it is here and not in the HUD with the other windows.
+
+            Everything in `GameHud` is over the office and nothing else —
+            `.app-hud` sits at z-index 20 and the column at 30, so a window
+            mounted in there is behind the column whatever z-index it asks
+            for. Right for the lift and the whiteboard, which are about the
+            room you are standing in; wrong for this, which is opened *from*
+            the column and leads with a picture too big to read behind one.
+          */}
+          <Profile />
         </main>
       </StudioProvider>
     </ErrorBoundary>

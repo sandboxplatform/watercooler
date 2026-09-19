@@ -20,7 +20,11 @@ import type { ServerMessage } from "../presence-types";
 
 export type RoomBroadcast = (slug: string, message: ServerMessage) => void;
 
+/** The same, to every connection on the server rather than to one room. */
+export type WorldBroadcastFn = (message: ServerMessage) => void;
+
 const KEY = Symbol.for("watercooler.presence.broadcast");
+const WORLD_KEY = Symbol.for("watercooler.presence.broadcast.world");
 
 export function setRoomBroadcast(fn: RoomBroadcast | null): void {
   (globalThis as Record<symbol, unknown>)[KEY] = fn;
@@ -28,4 +32,21 @@ export function setRoomBroadcast(fn: RoomBroadcast | null): void {
 
 export function currentBroadcast(): RoomBroadcast | null {
   return ((globalThis as Record<symbol, unknown>)[KEY] as RoomBroadcast | null) ?? null;
+}
+
+/**
+ * The other reach, for the things that are not a room's.
+ *
+ * A badge is the person's, and the panel that lists them lists the world —
+ * so a badge earned on the third floor has to reach somebody standing on
+ * the plaza, or their list is stale until they reload. The score routes
+ * need it for a second reason: an API route has no socket of its own and no
+ * idea which room the browser is looking at.
+ */
+export function setWorldBroadcast(fn: WorldBroadcastFn | null): void {
+  (globalThis as Record<symbol, unknown>)[WORLD_KEY] = fn;
+}
+
+export function currentWorldBroadcast(): WorldBroadcastFn | null {
+  return ((globalThis as Record<symbol, unknown>)[WORLD_KEY] as WorldBroadcastFn | null) ?? null;
 }

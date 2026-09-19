@@ -272,16 +272,33 @@ export interface OnlinePerson {
   spriteKey: string;
   room: string;
   mic?: boolean;
+  /**
+   * Who they are across sessions: their `AccessIdentity` if they hold a
+   * code of their own, else `guest:<name>`. `id` is this connection and
+   * changes every time they open a tab; this is the handle their badges
+   * and their profile hang on, so the People panel keys on it.
+   *
+   * It is no more than their name already says out loud — the panel has
+   * always shown that — and the codes themselves never leave the server.
+   */
+  person: string;
 }
 
 /**
  * Everyone on the server, wherever they are. Sent to every connection
  * when someone arrives, leaves or walks somewhere else, and now and then
  * regardless, so nobody's list drifts.
+ *
+ * `locals` is the residents, in a field of their own rather than mixed in:
+ * they are always somewhere, so they are never news, and the Online count
+ * is a count of people. But where Doc is standing right now is exactly
+ * what somebody looking for Doc wants, and the server is the only thing
+ * that knows.
  */
 export interface OnlineMessage {
   type: "online";
   people: OnlinePerson[];
+  locals: OnlinePerson[];
 }
 
 export interface RejectedMessage {
@@ -312,16 +329,23 @@ export interface PlayerLeftMessage {
   name: string;
 }
 
-/** Somebody — or some agent — just earned a badge. */
-export interface AchievementMessage {
-  type: "achievement";
+/**
+ * Somebody just earned a badge.
+ *
+ * Sent to **everybody**, not to the room it happened in, because a badge is
+ * the person's rather than the place's and the panel that lists them lists
+ * the world. `room` is what lets the toast be narrower than the message:
+ * everyone's list stays current, and only the room it happened in — and the
+ * person it happened to — is interrupted about it.
+ */
+export interface BadgeMessage {
+  type: "badge";
   code: string;
-  subjectType: "agent" | "human";
-  subjectId: string;
-  subjectName: string;
-  title: string;
-  description: string;
-  icon: string;
+  /** The holder id: a persona's identity, or `guest:<name>`. */
+  person: string;
+  name: string;
+  /** Where they were standing when they earned it. */
+  room: string;
   at: string;
 }
 
@@ -408,7 +432,7 @@ export type ServerMessage =
   | PlayerLeftMessage
   | WorldBroadcast
   | SaidMessage
-  | AchievementMessage
+  | BadgeMessage
   | PongBroadcast
   | BoardBroadcast
   | VoiceBroadcast

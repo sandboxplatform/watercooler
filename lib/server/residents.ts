@@ -120,6 +120,19 @@ const ASIDE = [1, -1, 2, -2, 3, -3];
 export interface ResidentHost {
   /** The room's hub, opening the room if it is not. */
   roomFor(slug: string): { hub: PresenceHub };
+  /**
+   * Somebody has just come to stand beside this resident, by connection.
+   *
+   * Edge-triggered — reported the tick they arrive within `GREET_PX` and
+   * not again until they have gone and come back — because the alternative
+   * is a badge check twenty times a second for as long as anybody leans on
+   * a counter. Whether it means anything is the host's business; the
+   * simulation's business is noticing.
+   *
+   * Optional: nothing in the world stops working without it, and the sims
+   * in the tests do not care who walked up.
+   */
+  met?(residentId: string, connectionIds: readonly string[]): void;
 }
 
 export interface ResidentOptions {
@@ -172,6 +185,15 @@ interface State {
   greetedAt: number;
   /** While they are bolting from whoever walked up to them; 0 when they are not. */
   spookedUntil: number;
+  /**
+   * Who is standing beside them right now, by connection.
+   *
+   * Kept so that `mingle` can report the arrivals rather than the crowd:
+   * the same two people standing at a counter are one piece of news, not
+   * one per tick. Cleared whenever the room empties, which is nearly
+   * always, so it costs an empty Set and nothing else.
+   */
+  beside: Set<string>;
 }
 
 function firstHaunt(resident: Resident, kind?: PlaceKind): Haunt {
@@ -216,6 +238,7 @@ export class ResidentSimulation {
         greeted: false,
         greetedAt: 0,
         spookedUntil: 0,
+        beside: new Set<string>(),
       };
       this.states.set(resident.id, state);
       this.arrive(state, haunt, at);
@@ -258,6 +281,7 @@ export class ResidentSimulation {
       else if (now >= state.until) this.moveOn(state, now);
       this.walk(state, now);
       this.greet(state, now);
+      this.mingle(state);
       state.lastTick = now;
     }
   }
@@ -398,6 +422,36 @@ export class ResidentSimulation {
     state.greetedAt = now;
     this.say(state, greeting);
     this.spook(state, now);
+  }
+
+  /**
+   * Notice who has come to stand beside them.
+   *
+   * The plainer half of `greet`: that one is about what a resident does
+   * about company, and this is only about there being some. Every resident
+   * has it, not just the ones with anything to say — a badge for having met
+   * everybody has to count the quiet ones too.
+   *
+   * At the same reach a greeting carries, `GREET_PX`, so "close enough to
+   * be clucked at" and "close enough to have met" are one distance rather
+   * than two numbers to keep in step. Reported on the edge and only on it:
+   * standing there is not news a second time.
+   */
+  private mingle(state: State) {
+    const met = this.host.met;
+    if (!met || !state.room) return;
+    const { hub } = this.host.roomFor(state.room);
+    // The common case, and the one worth being free: an empty room.
+    if (hub.count === 0) {
+      if (state.beside.size) state.beside.clear();
+      return;
+    }
+    const near = hub.peopleNear({ x: state.x, y: state.y }, GREET_PX);
+    let arrived: string[] | null = null;
+    for (const id of near) if (!state.beside.has(id)) (arrived ??= []).push(id);
+    state.beside.clear();
+    for (const id of near) state.beside.add(id);
+    if (arrived) met.call(this.host, state.resident.id, arrived);
   }
 
   /**

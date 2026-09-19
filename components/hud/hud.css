@@ -1755,7 +1755,7 @@
   color: var(--pixel-text);
 }
 
-/* ── People: everyone online, by place ── */
+/* ── People: everyone in the world, online first ── */
 .people {
   padding: 10px 12px;
   font-size: var(--fs-sm);
@@ -1787,6 +1787,13 @@
   font-size: var(--fs-sm);
 }
 
+/* Not a place: "Not here" and "The locals", which head the two sections
+   that are about the world rather than about who is in it right now. */
+.people__place-name--away {
+  color: var(--pixel-muted);
+  letter-spacing: 0.06em;
+}
+
 .people__here {
   font-size: var(--fs-2xs);
   color: var(--pixel-green);
@@ -1795,16 +1802,39 @@
   padding: 1px 4px;
 }
 
+/* A row is a button now: every name opens a profile. Stripped back to
+   looking like the row it replaced — a button that announces itself in a
+   list of fifteen names is fifteen buttons shouting. */
 .people__row {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   padding: 3px 4px;
+  border: 0;
   border-radius: var(--pixel-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.people__row:hover,
+.people__row:focus-visible {
+  background: rgba(201, 162, 39, 0.12);
+  outline: none;
 }
 
 .people__row--me {
   background: rgba(255, 233, 168, 0.08);
+}
+
+/* Offline, and shown anyway: who the world is *of* is a different fact
+   from who has a tab open, and only one of them used to be visible. Dimmed
+   rather than hidden, and not far — the point is that they can be read. */
+.people__row--away {
+  opacity: 0.72;
 }
 
 .people__who {
@@ -1812,6 +1842,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex: 1;
 }
 
 .people__name {
@@ -1823,6 +1854,30 @@
 .people__me {
   font-size: var(--fs-2xs);
   color: var(--pixel-muted);
+}
+
+/* What they do, or where they are standing — for the rows that are not
+   already under a place heading. */
+.people__where {
+  font-size: var(--fs-2xs);
+  color: var(--pixel-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* How many badges they hold. A number rather than the badges themselves:
+   the profile is where a shelf belongs, and this is the thing that says
+   there is one worth opening. */
+.people__badges {
+  flex: 0 0 auto;
+  min-width: 16px;
+  padding: 1px 5px;
+  border: 1px solid var(--pixel-accent);
+  border-radius: var(--pixel-radius-sm);
+  color: var(--pixel-accent);
+  font-size: var(--fs-2xs);
+  text-align: center;
 }
 
 /* In Global Chat. The badge names the conversation: a lone mic glyph is a
@@ -1852,24 +1907,33 @@
   font-size: var(--fs-2xs);
 }
 
+/* ── Badges: the whole catalogue, and who holds each one ── */
 .badges {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
+  padding: 10px 12px;
   color: var(--pixel-text);
 }
 
 .badges__count {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-md);
   color: var(--pixel-accent);
   letter-spacing: 0.05em;
+  margin-bottom: 6px;
 }
 
-.badges__count--locked {
+.badges__group {
+  margin-bottom: 10px;
+}
+
+.badges__group-name {
+  padding: 4px 0;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--pixel-border);
   color: var(--pixel-muted);
-  margin-top: 8px;
-  padding-top: 10px;
-  border-top: 1px solid var(--pixel-border);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.06em;
 }
 
 .badges__empty,
@@ -1881,13 +1945,18 @@
 
 .badges__row {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
+  grid-template-columns: 22px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
+  padding: 4px 0;
   font-size: var(--fs-xs);
 }
 
-/* Not yet won: shown, but plainly not theirs.
+.badges__body {
+  min-width: 0;
+}
+
+/* Nobody has it yet: shown, and plainly nobody's.
 
    It was 0.45, which took the muted detail text to about 2:1 against the
    panel behind it — the row was not dim, it was gone. Half the point of
@@ -1902,18 +1971,337 @@
 }
 
 .badges__title {
-  font-size: var(--fs-xs);
-  line-height: 1.7;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
 }
 
-.badges__who {
+/* Who holds it, as names you can press into a profile. */
+.badges__holders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.badges__holder {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 5px;
+  border: 1px solid var(--pixel-border-light);
+  border-radius: var(--pixel-radius-sm);
+  background: transparent;
+  color: var(--pixel-accent);
+  font: inherit;
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+}
+
+.badges__holder:hover,
+.badges__holder:focus-visible {
+  border-color: var(--pixel-accent);
+  background: rgba(201, 162, 39, 0.12);
+  outline: none;
+}
+
+/* A name somebody typed rather than somebody the world knows — and two
+   guests may well be the same name. */
+.badges__guest {
+  color: var(--pixel-muted);
+  font-size: var(--fs-3xs);
+}
+
+/* ── A badge, announced ───────────────────────────────── */
+.badge-toasts {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 6px;
+  z-index: 35;
+  pointer-events: none;
+}
+
+.badge-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  min-width: 260px;
+  border-color: var(--pixel-accent);
+}
+
+.badge-toast__icon {
+  font-size: 18px;
+}
+
+.badge-toast__title {
+  display: block;
+  font-size: var(--fs-sm);
+}
+
+.badge-toast__detail {
+  font-size: var(--fs-xs);
+  color: var(--pixel-muted);
+}
+
+/* ── A profile ────────────────────────────────────────────
+
+   Over the whole app rather than inside the column that opens it: the card
+   leads with a 3:2 concept sheet, which is the one image in this app that
+   is a person rather than a tile, and a column dragged to 300px is no place
+   to look at one. */
+.profile {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  pointer-events: auto;
+}
+
+.profile__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 9, 7, 0.78);
+}
+
+.profile__card {
+  /* The reading sizes of the column, for the same reason: this is the one
+     other surface in the app that is read rather than glanced at. */
+  --fs-3xs: 9px;
+  --fs-2xs: 10px;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+
+  position: relative;
+  width: min(560px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 0 0 16px;
+  color: var(--pixel-text);
+}
+
+.profile__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  padding: 4px;
+  border: 1px solid var(--pixel-border-light);
+  border-radius: var(--pixel-radius-sm);
+  background: rgba(26, 24, 20, 0.8);
+  color: var(--pixel-text);
+  cursor: pointer;
+}
+
+.profile__close:hover {
+  border-color: var(--pixel-accent);
   color: var(--pixel-accent);
 }
 
-.badges__when {
-  font-size: var(--fs-xs);
+/* Full bleed across the top: the sheet is drawn on black and the panel is
+   dark, so the picture is the header and needs no frame around it. */
+.profile__art {
+  border-bottom: 2px solid var(--pixel-border);
+  background: #000;
+  line-height: 0;
+}
+
+/* Capped, and letterboxed rather than cropped.
+
+   The sheets are 3:2, so on a short window an uncapped one takes the whole
+   card and the name is below the fold — the picture is the header, not the
+   page. `contain` because both halves of a sheet matter, the sprite as much
+   as the portrait, and the bars it leaves are invisible: every sheet is
+   drawn on black and so is the band behind it. */
+.profile__art img {
+  width: 100%;
+  max-height: 42vh;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.profile__art--none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  line-height: 1.6;
   color: var(--pixel-muted);
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+
+.profile__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px 0;
+}
+
+.profile__who {
+  min-width: 0;
+  flex: 1;
+}
+
+.profile__name {
+  font-size: var(--fs-xl);
+  color: var(--pixel-accent);
+  line-height: 1.5;
+}
+
+.profile__role {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+}
+
+.profile__org {
+  color: var(--pixel-muted);
+  font-size: var(--fs-xs);
+}
+
+.profile__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.profile__chip {
+  padding: 2px 6px;
+  border: 1px solid var(--pixel-border-light);
+  border-radius: var(--pixel-radius-sm);
+  color: var(--pixel-muted);
+  font-size: var(--fs-3xs);
+  line-height: 1.6;
   white-space: nowrap;
+}
+
+.profile__chip--here {
+  border-color: var(--pixel-accent);
+  color: var(--pixel-accent);
+}
+
+.profile__chip--mic {
+  border-color: var(--pixel-green);
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--pixel-green);
+}
+
+.profile__chip--local {
+  border-color: var(--pixel-border-light);
+  color: var(--pixel-text);
+}
+
+.profile__story {
+  margin: 12px 16px 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--pixel-accent);
+  background: var(--pixel-panel-fill);
+  font-size: var(--fs-xs);
+  line-height: 1.9;
+  color: var(--pixel-text);
+}
+
+.profile__shelf {
+  margin: 14px 16px 0;
+}
+
+.profile__shelf-name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--pixel-border);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.06em;
+}
+
+.profile__tally {
+  color: var(--pixel-accent);
+  font-size: var(--fs-xs);
+}
+
+.profile__none {
+  margin: 8px 0 0;
+  font-size: var(--fs-xs);
+  line-height: 1.9;
+  color: var(--pixel-muted);
+}
+
+.profile__group {
+  margin-top: 10px;
+}
+
+.profile__group-name {
+  color: var(--pixel-muted);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+.profile__group-name--locked {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--pixel-border);
+}
+
+.profile__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* A badge as a tile rather than a row: a shelf is meant to be looked at,
+   and the line of prose that explains one belongs in the tooltip and in
+   the catalogue panel next door. */
+.profile__badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--pixel-accent);
+  border-radius: var(--pixel-radius-sm);
+  background: rgba(201, 162, 39, 0.1);
+  font-size: var(--fs-2xs);
+}
+
+.profile__badge--locked {
+  border-color: var(--pixel-border);
+  background: transparent;
+  color: var(--pixel-muted);
+  opacity: 0.75;
+}
+
+.profile__badge-icon {
+  font-size: var(--fs-lg);
+  line-height: 1;
+}
+
+/* A locked badge is a silhouette of itself: the icon is what makes a shelf
+   readable at a glance, and a greyed-out one still says which. */
+.profile__badge--locked .profile__badge-icon {
+  filter: grayscale(1);
+}
+
+@media (max-width: 760px) {
+  .profile {
+    padding: 12px 8px;
+  }
 }
 
 /* ── Choosing what the agents run on ─────────────────── */

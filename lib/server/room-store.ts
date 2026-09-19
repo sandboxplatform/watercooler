@@ -68,14 +68,19 @@ CREATE TABLE IF NOT EXISTS seats (
   PRIMARY KEY (room, seat_id)
 );
 
-CREATE TABLE IF NOT EXISTS achievements (
-  room         TEXT NOT NULL,
-  subject_type TEXT NOT NULL,
-  subject_id   TEXT NOT NULL,
-  code         TEXT NOT NULL,
-  subject_name TEXT NOT NULL,
-  earned_at    TEXT NOT NULL,
-  PRIMARY KEY (room, subject_type, subject_id, code)
+CREATE TABLE IF NOT EXISTS badges (
+  person    TEXT NOT NULL,
+  code      TEXT NOT NULL,
+  name      TEXT NOT NULL,
+  earned_at TEXT NOT NULL,
+  PRIMARY KEY (person, code)
+);
+CREATE INDEX IF NOT EXISTS badges_by_time ON badges (earned_at);
+
+CREATE TABLE IF NOT EXISTS badge_marks (
+  person TEXT NOT NULL,
+  mark   TEXT NOT NULL,
+  PRIMARY KEY (person, mark)
 );
 
 CREATE TABLE IF NOT EXISTS board_strokes (
@@ -197,6 +202,35 @@ const MIGRATIONS: readonly Migration[] = [
       // latterly remarks typed into a window beside the office.
       db.exec("DROP INDEX IF EXISTS messages_by_room");
       db.exec("DROP TABLE IF EXISTS messages");
+    },
+  },
+  {
+    name: "rebuild the badges",
+    up: (db) => {
+      // The old catalogue is gone and nothing here is worth carrying over.
+      // Its rows were filed under a *room* — so the same person earned
+      // Walked In again on every floor they rode to — and half of them were
+      // an agent's, from back when the world ran agents. There is nothing to
+      // migrate: a badge names a deed, and neither the deeds nor the shape
+      // survived. Everyone starts with an empty shelf, which is the honest
+      // state for a set of badges nobody has yet had the chance to earn.
+      db.exec("DROP TABLE IF EXISTS achievements");
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS badges (
+          person    TEXT NOT NULL,
+          code      TEXT NOT NULL,
+          name      TEXT NOT NULL,
+          earned_at TEXT NOT NULL,
+          PRIMARY KEY (person, code)
+        );
+        CREATE INDEX IF NOT EXISTS badges_by_time ON badges (earned_at);
+
+        CREATE TABLE IF NOT EXISTS badge_marks (
+          person TEXT NOT NULL,
+          mark   TEXT NOT NULL,
+          PRIMARY KEY (person, mark)
+        );
+      `);
     },
   },
 ];
@@ -563,39 +597,58 @@ export class RoomStore {
     ).all(room, game, limit) as unknown as PinballScore[];
   }
 
-  // ── Achievements ──────────────────────────────────────
+  // ── Badges ────────────────────────────────────────────
 
   /**
-   * Record an achievement. Returns true only the first time, so callers can
-   * treat a true result as "announce this" without tracking state themselves.
+   * Hang a badge on somebody. Returns true only the first time, so a caller
+   * can treat a true result as "announce this" without tracking state.
+   *
+   * No room: a badge is the person's and follows them through every door.
+   * The name is kept alongside so a row reads on its own — the roster knows
+   * what Coop is called, but a visitor is only ever what they typed.
    */
-  award(
-    room: string,
-    subjectType: string,
-    subjectId: string,
-    code: string,
-    subjectName: string,
-  ): boolean {
-    this.ensureRoom(room);
+  awardBadge(person: string, code: string, name: string): boolean {
     const result = this.stmt(
-      `INSERT OR IGNORE INTO achievements
-           (room, subject_type, subject_id, code, subject_name, earned_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(room, subjectType, subjectId, code, subjectName, new Date().toISOString());
-    return result.changes > 0;
+      `INSERT OR IGNORE INTO badges (person, code, name, earned_at) VALUES (?, ?, ?, ?)`,
+    ).run(person, code, name.slice(0, 32), new Date().toISOString());
+    // Somebody who changed their name after earning it should read as who
+    // they are now; the insert above does nothing on a badge already held.
+    if (result.changes === 0) return false;
+    return true;
   }
 
-  listAchievements(room: string) {
-    this.ensureRoom(room);
+  /**
+   * Note that somebody has done one distinct thing — been in one building,
+   * played one game, stood beside one resident.
+   *
+   * The set, not the count: every badge built on more than one moment asks
+   * "have they done each of these", so two visits to the same lobby must
+   * count once. Returns true when the mark is new, which is the only moment
+   * worth re-checking a badge on.
+   */
+  mark(person: string, mark: string): boolean {
+    return (
+      this.stmt("INSERT OR IGNORE INTO badge_marks (person, mark) VALUES (?, ?)").run(person, mark)
+        .changes > 0
+    );
+  }
+
+  /** How many distinct marks somebody holds under a prefix — "org:", "game:". */
+  countMarks(person: string, prefix: string): number {
+    const row = this.stmt(
+      "SELECT COUNT(*) AS n FROM badge_marks WHERE person = ? AND mark LIKE ? ESCAPE '\\'",
+    ).get(person, `${prefix.replace(/[%_\\]/g, "\\$&")}%`) as { n: number };
+    return row.n;
+  }
+
+  /** Every badge anybody holds, newest last. The whole world's, and a small table. */
+  listBadges(): Array<{ person: string; name: string; code: string; earnedAt: string }> {
     return this.stmt(
-      `SELECT subject_type AS subjectType, subject_id AS subjectId, code,
-                subject_name AS subjectName, earned_at AS earnedAt
-         FROM achievements WHERE room = ? ORDER BY earned_at`,
-    ).all(room) as Array<{
-      subjectType: string;
-      subjectId: string;
+      `SELECT person, name, code, earned_at AS earnedAt FROM badges ORDER BY earned_at`,
+    ).all() as unknown as Array<{
+      person: string;
+      name: string;
       code: string;
-      subjectName: string;
       earnedAt: string;
     }>;
   }

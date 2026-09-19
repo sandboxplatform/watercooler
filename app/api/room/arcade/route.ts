@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { DEFAULT_ROOM, getRoomStore } from "@/lib/server/room-store";
 import { normaliseRoomSlug } from "@/lib/rooms";
 import { isArcadeGameId } from "@/lib/arcade";
+import { awardMachineScore } from "@/lib/server/machine-badges";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("ArcadeAPI");
@@ -42,7 +43,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "A score has to be a number" }, { status: 400 });
     }
     const room = roomOf(request);
-    const scores = getRoomStore().recordArcadeScore(room, body.game, player || "Guest", score);
+    const who = player || "Guest";
+    const scores = getRoomStore().recordArcadeScore(room, body.game, who, score);
+    awardMachineScore({
+      cookie: request.headers.get("cookie") ?? undefined,
+      machine: body.game,
+      player: who,
+      score,
+      table: scores,
+      room,
+    });
     return NextResponse.json({ scores });
   } catch (err) {
     log.error("could not record the score:", (err as Error).message);

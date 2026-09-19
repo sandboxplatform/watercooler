@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { PanelRightClose } from "lucide-react";
 import { SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "@/lib/constants";
 import { saveSidebarWidth } from "@/lib/persistence";
-import AchievementsPanel from "./AchievementsPanel";
+import BadgesPanel from "./BadgesPanel";
 import PeoplePanel from "./PeoplePanel";
 import SidebarFooter from "./SidebarFooter";
 import { useOnline } from "@/lib/presence-online";
@@ -163,7 +163,7 @@ export default function Sidebar({
         </div>
 
         <div className="app-sidebar__content">
-          {tab === "people" ? <PeoplePanel /> : <AchievementsPanel />}
+          {tab === "people" ? <PeoplePanel /> : <BadgesPanel />}
         </div>
 
         {/* The music and the way out, at the foot of the column that holds them */}

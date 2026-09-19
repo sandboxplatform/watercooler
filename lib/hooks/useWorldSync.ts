@@ -27,15 +27,15 @@ export function useWorldSync(refs: WorldSyncRefs) {
     const release = acquireRoomSocket();
 
     const unsubscribe = onRoomMessage((message) => {
-      if (message.type === "achievement") {
-        gameEvents.emit("achievement-earned", {
+      if (message.type === "badge") {
+        // Everything a badge is — its title, what it is for, its icon — is
+        // in the catalogue on both sides, so the wire carries only who,
+        // which, where and when. The HUD looks the rest up.
+        gameEvents.emit("badge-earned", {
           code: message.code,
-          subjectType: message.subjectType,
-          subjectId: message.subjectId,
-          subjectName: message.subjectName,
-          title: message.title,
-          description: message.description,
-          icon: message.icon,
+          person: message.person,
+          name: message.name,
+          room: message.room,
         });
         return;
       }

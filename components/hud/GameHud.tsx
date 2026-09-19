@@ -18,7 +18,7 @@ import { profileSnapshot, subscribeToProfile } from "@/lib/profile";
 import { registerProfile } from "@/lib/people-client";
 import { pushProfileToAccount, useMe } from "@/lib/account-client";
 import ElevatorModal from "./ElevatorModal";
-import AchievementToast from "./AchievementToast";
+import BadgeToast from "./BadgeToast";
 import Whiteboard from "./Whiteboard";
 import Pinball from "./Pinball";
 import ProjectBoard from "./ProjectBoard";
@@ -139,7 +139,7 @@ export default function GameHud({
       <Arrival />
       <AlreadyOnline />
       <ElevatorModal />
-      <AchievementToast />
+      <BadgeToast />
       <Whiteboard />
       <Pinball />
       <ProjectBoard />

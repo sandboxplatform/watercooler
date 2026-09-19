@@ -8,6 +8,7 @@
 import { NextResponse } from "next/server";
 import { DEFAULT_ROOM, getRoomStore } from "@/lib/server/room-store";
 import { normaliseRoomSlug } from "@/lib/rooms";
+import { awardMachineScore } from "@/lib/server/machine-badges";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("PinballAPI");
@@ -40,7 +41,16 @@ export async function POST(request: Request) {
     }
 
     const room = roomOf(request);
-    const scores = getRoomStore().recordPinballScore(room, player || "Guest", score);
+    const who = player || "Guest";
+    const scores = getRoomStore().recordPinballScore(room, who, score);
+    awardMachineScore({
+      cookie: request.headers.get("cookie") ?? undefined,
+      machine: "pinball",
+      player: who,
+      score,
+      table: scores,
+      room,
+    });
 
     return NextResponse.json({ scores });
   } catch (err) {
