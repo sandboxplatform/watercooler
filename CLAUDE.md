@@ -530,6 +530,36 @@ they hold a personal code, so two tabs on one Google account are two
 visitors. Giving accounts the same rule means carrying the session through
 the upgrade, which is a different change.
 
+**A move is not a departure, and `drop` has to be told which it is.**
+Walking through a door is a `join` on the connection already in the world,
+so the server takes it out of the old room before putting it into the new
+one — through the same `drop` a closed tab goes through. Two things in
+there are wrong for somebody three steps away, and `moving: true` is what
+turns them off:
+
+- **The world's list must not lose them.** A `broadcastOnline` on the way
+  out and another on the way in published, in between, a world with the
+  mover missing from it. That is the Online count flickering down and back
+  up — which the page-load fix below was supposed to have ended and had
+  not — and it is worse than cosmetic, because **the voice chat reads that
+  list to decide who is still in Global Chat**. Every other browser tore
+  the audio down on the gap: two people could hear each other until one of
+  them walked upstairs, with every indicator in the app still saying they
+  were in the same conversation. The join broadcasts; the drop holds its
+  tongue, except where the join is then refused for a full room, which is
+  the one move that ends nowhere.
+- **Their tab is still their tab.** `session` is what tells one person
+  coming back from two people arriving, so forgetting it here left anybody
+  who had changed room once to be challenged on their next reload —
+  pinged, answered by their own ghost, and turned away from their own
+  world. One door was enough to arm it.
+
+The client has the other half of the first, in `GONE_GRACE_MS`
+(`lib/voice/voice-chat.ts`): gone from the list is the only way a browser
+learns that somebody has left, and a single list without them in it is not
+that. A reconnected socket is the next gap of this shape, and there is no
+reason to let it cost a conversation either.
+
 **A dead socket is noticed.** The heartbeat pings every `HEARTBEAT_MS` and
 now reads the pongs; a connection that misses one is terminated. It used to
 ping and ignore the replies, so an abandoned socket counted as present until
@@ -721,6 +751,20 @@ Everything underneath — peers connected, peers still negotiating, a
 network that needs a relay — stays in the tooltip, because a connection
 being made is not a third kind of membership.
 
+**But the number is who you are in it _with_, not how many microphones are
+on.** Those are the same number whenever the app is working, and the
+difference between them is the only thing worth saying when it is not. The
+pill counted `withMic`, straight off the server's list, so it reported a
+conversation the server believed in rather than one this browser was
+having: two people could hear each other until one of them walked
+upstairs, and the pill, the People panel's green badges and the marks over
+both their heads went on agreeing with each other about something none of
+them had checked. So `failed` and `silent` come off it — the two states
+nothing is going to mend on its own — and the tooltip says which. Not
+`peers`, which would count up through every handshake and dip for a second
+on every arrival: a connection being made is still not a third kind of
+membership.
+
 Being in it is said in three places, and they answer different questions:
 
 | Where                  | Says                                                                    |
@@ -787,7 +831,11 @@ standing. Two things follow, and both were the other way round before:
 A `left` on the room socket is no longer the end of somebody's voice, either: it
 means they walked into the next room, on the same connection, and dropping them
 there would cut a conversation off at every lift ride with nothing to mend it. Who
-has actually gone is the server's own list.
+has actually gone is the server's own list — **once they have been gone from it
+for `GONE_GRACE_MS`**, which is the same argument one level up: the list is a
+snapshot taken between two things happening, and a person walking through a door
+is out of one room before they are into the next. See **Presence** for the server
+side, which no longer publishes that particular gap at all.
 
 "On the same connection" is now true of **every** door rather than only the
 lift's — see **Rooms and places**. It had to become true for any of this to
@@ -829,6 +877,51 @@ Three things follow, all in `lib/voice/voice-chat.ts`:
 | `sweep`     | The retry, on a timer. Anyone on mic without a settled connection is greeted again, backing off from 5s to a minute. There was none before — `greeted` was a set, so a gate       |
 | `negotiate` | One step at a time per connection. Two crossing greetings meant two negotiations on one `RTCPeerConnection`: the second throws into a promise nobody holds and wedges it for good |
 | `settled`   | `disconnected` counts as still connecting for `NEGOTIATE_GRACE_MS` — WebRTC passes through it on a hiccup and usually comes back on its own                                       |
+
+**What goes wrong after the connection is made is a different repair.**
+The three rules above are about a handshake that never took. A
+conversation that was working and stopped has almost always lost its
+_route_ rather than its connection — a wifi handover, a NAT rebinding, a
+relay that dropped the pair — and `restartIce` is what that is for: fresh
+candidates, everything else kept, audio back in about the time one
+exchange takes instead of the time a whole handshake takes.
+
+| Rule                          | Why                                                                                                                                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A `failed` connection is kept | It used to be closed on the spot, which left the sweep nothing to mend and a whole handshake to run in its place. Closing it is the sweep's to do, once mending is ruled out              |
+| Mend only what worked         | `everConnected`. A handshake that never completed is more likely wedged than misrouted, and no amount of fresh candidates mends a connection whose description went wrong                 |
+| One mend, then rebuild        | `restartedAt`, cleared when it connects. A second restart that fails the same way is a minute of silence spent on the wrong remedy                                                        |
+| Only the offering side        | A restart _is_ an offer, so two of them crossing is the thing `offers` exists to prevent. The other side needs no new code: a restart arrives as an ordinary offer and is answered as one |
+
+**And two ways of being in the chat, connected, and silent.** Neither
+touches the connection, which is why nothing about the connection would
+ever have caught them:
+
+- **The microphone is taken away.** A device can be given and then
+  reclaimed — the OS hands it to another app, somebody unplugs it — and
+  `track.onended` is the only warning a browser gives. Without it the pill
+  stays green, every peer stays up and the person goes on believing they
+  are in the conversation while sending silence at it. It leaves the chat
+  and says why, and deliberately does **not** remember the microphone as
+  on: coming back on the next page with the same dead device is somebody
+  told twice that they are in a conversation they cannot speak into.
+- **The browser will not start playback.** `play()` on a fresh `Audio` can
+  be refused, and that was a line in the console. It is `silent` on the
+  view now, off the pill's count and named in the tooltip, and the sweep
+  asks again every few seconds — which is what a context that has since
+  been woken needs to hear.
+
+`failed` is a **set, counted now** (`unreachable`) rather than the running
+total it was. The total only ever went up, so a pair that failed once and
+connected on the retry went on being reported as unreachable for the rest
+of the session; a number that cannot come down is not a report of
+anything.
+
+**None of it invents a route that is not there.** Two browsers with no
+path between them — a symmetric NAT on either side and STUN alone — never
+connect however well any of this behaves, and the answer is the TURN relay
+above, at **build** time. Everything here is about making sure that is the
+only reason left.
 
 `lib/voice/__tests__/handshake.test.ts` pins all of it against a stub
 `RTCPeerConnection`: which messages go out and when, not WebRTC.

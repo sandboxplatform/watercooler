@@ -548,12 +548,32 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
    * timed-out person got no "left" line in the room's log (a person who
    * closed their tab did) and the room they had been alone in was never
    * forgotten from the map.
+   *
+   * `moving` is the other kind of leaving: out of one room and into the next
+   * on the same connection, which is every door in the world now that a room
+   * change is not a page load. The room being left is still told — somebody
+   * did walk out of it — but two things that are true of a person who has
+   * gone are not true of one who is three steps away:
+   *
+   * - **The server's list must not lose them.** A `broadcastOnline` here and
+   *   another from the join a moment later published a world with the mover
+   *   missing from it. That is the Online count flickering down and back up,
+   *   and it is worse than cosmetic: every other browser's voice chat reads
+   *   that list to decide who is still in Global Chat, and tore the audio
+   *   connection down on the gap. The join broadcasts; this one is the
+   *   flicker, and nothing but the audio going quiet was ever going to
+   *   notice it.
+   * - **Their tab is still their tab.** `session` is what tells one person
+   *   coming back from two people arriving, so forgetting it here left
+   *   anybody who had changed room once to be challenged on their next
+   *   reload — pinged, answered by their own ghost, and turned away from
+   *   their own world with `already-online`.
    */
-  const drop = (id: string, departed?: PresencePlayer) => {
+  const drop = (id: string, departed?: PresencePlayer, { moving = false } = {}) => {
     const slug = roomOf.get(id);
     roomOf.delete(id);
     owesPong.delete(id);
-    sessionByConnection.delete(id);
+    if (!moving) sessionByConnection.delete(id);
     if (!slug) return;
 
     const room = rooms.get(slug);
@@ -568,7 +588,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
 
     // An empty room costs nothing to forget; its contents live in the store
     if (room.sockets.size === 0 && room.hub.count === 0) rooms.delete(slug);
-    if (player) broadcastOnline();
+    if (player && !moving) broadcastOnline();
     // Whoever has just gone may have been the last of the meeting.
     if (endMeetingIfEmpty(slug, room.hub)) tellEveryoneMeetings();
   };
@@ -730,7 +750,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             return;
           }
         }
-        if (previous) drop(id);
+        if (previous) drop(id, undefined, { moving: true });
         const room = roomFor(slug);
 
         const result = room.hub.join(id, {
@@ -750,6 +770,11 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         if (!result.ok) {
           log.info(`refused a join to "${slug}": full (${room.hub.capacity} humans)`);
           send(ws, { type: "rejected", reason: "full", capacity: result.capacity });
+          // The one way a move ends in no join at all: the room being walked
+          // into is full, so they are nowhere now and the world has to be
+          // told — the drop above having held its tongue on the promise of a
+          // join that is not going to happen.
+          broadcastOnline();
           ws.close();
           return;
         }

@@ -45,6 +45,8 @@ interface Person {
   id: string;
   /** Voice signals that arrived, with who sent them. */
   voice: { from: string; kind: string }[];
+  /** Every version of the server's list this connection was sent, by name. */
+  online: string[][];
 }
 
 /** Open a connection as a visitor and walk into a room. */
@@ -52,17 +54,21 @@ async function walkIn(name: string, room: string): Promise<Person> {
   const socket = new WebSocket(`ws://127.0.0.1:${port}/api/room/socket`, {
     headers: { cookie: cookie(), origin: `http://127.0.0.1:${port}` },
   });
-  const person: Person = { socket, id: "", voice: [] };
+  const person: Person = { socket, id: "", voice: [], online: [] };
   socket.on("message", (raw) => {
     const message = JSON.parse(raw.toString()) as {
       type: string;
       you?: string;
       from?: { name: string };
       signal?: { kind: string };
+      people?: { name: string }[];
     };
     if (message.type === "welcome" && message.you) person.id = message.you;
     if (message.type === "voice" && message.from && message.signal) {
       person.voice.push({ from: message.from.name, kind: message.signal.kind });
+    }
+    if (message.type === "online" && message.people) {
+      person.online.push(message.people.map((p) => p.name).sort());
     }
   });
   await new Promise<void>((done) =>
@@ -150,6 +156,51 @@ describe("the voice handshake", () => {
     speaker.socket.close();
     listener.socket.close();
     bystander.socket.close();
+    await settle();
+  });
+
+  /**
+   * Walking through a door does not take you out of Global Chat.
+   *
+   * A room change is a join on the connection that is already in the world,
+   * so the server takes it out of one room before putting it into the next
+   * — and it used to publish the world in between, with the mover missing
+   * from it. Nothing on the server minded. Every other browser did: the
+   * voice chat reads that list to know who is still in the conversation,
+   * and a person absent from it is a person whose audio is torn down. Two
+   * people could hear each other perfectly until one of them walked
+   * upstairs, and then nothing, with every indicator in the app still
+   * saying they were both in the same chat.
+   *
+   * So the list is asserted rather than the audio: the audio is between the
+   * two browsers and the list is the only part of it the server holds.
+   */
+  it("never publishes a world with a room-changer missing from it", async () => {
+    const stays = await walkIn("Stays", "voice-door");
+    const walks = await walkIn("Walks", "voice-door");
+    await until(() => stays.online.length > 0);
+    stays.online.length = 0;
+
+    walks.socket.send(
+      JSON.stringify({
+        type: "join",
+        room: "voice-door-floor-1",
+        name: "Walks",
+        spriteKey: "player",
+        x: 100,
+        y: 100,
+        facing: "down",
+      }),
+    );
+    await until(() => stays.online.length > 0);
+    // Long enough that a second list, had there been one, had time to come.
+    await settle(300);
+
+    expect(stays.online.length).toBeGreaterThan(0);
+    for (const list of stays.online) expect(list).toEqual(["Stays", "Walks"]);
+
+    stays.socket.close();
+    walks.socket.close();
     await settle();
   });
 

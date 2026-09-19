@@ -326,4 +326,41 @@ describe("one person, one session", () => {
     coop.socket.close();
     await settle();
   });
+
+  /**
+   * And is still the same tab afterwards.
+   *
+   * Leaving a room is how a connection is taken out of the world, and a
+   * room change goes through it — so it forgot the session of anybody who
+   * had walked through a door, and their next reload was challenged like a
+   * stranger's. Behind a proxy that challenge is one they lose: the socket
+   * the leaving page left behind answers the ping, and they are shown
+   * the already-online refusal on their own world. One door was enough.
+   */
+  it("remembers the tab of somebody who has changed rooms", async () => {
+    const coop = await walkIn("coop", "Coop", "world", "tab-one");
+    coop.socket.send(
+      JSON.stringify({
+        type: "join",
+        room: "castle-atlantic",
+        name: "Coop",
+        spriteKey: "player",
+        x: 400,
+        y: 400,
+        facing: "down",
+      }),
+    );
+    await settle();
+
+    // The same tab, coming back. The connection it is contesting is wide
+    // awake and would answer a ping, so being let in is the session.
+    const again = await walkIn("coop", "Coop", "castle-atlantic", "tab-one");
+
+    expect(again.heard).toEqual(["welcome"]);
+    expect(await census("castle-atlantic")).toEqual(["Coop"]);
+
+    coop.socket.close();
+    again.socket.close();
+    await settle();
+  });
 });

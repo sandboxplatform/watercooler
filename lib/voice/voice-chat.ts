@@ -37,6 +37,9 @@ import { rememberVoice, voiceWasOn } from "./remember";
 
 const log = createLogger("Voice");
 
+/** For a retry whose failure the counts already report. */
+const noted = () => {};
+
 export type VoiceStatus = "off" | "requesting" | "on" | "denied" | "unsupported";
 
 /** What the HUD shows. */
@@ -50,8 +53,10 @@ export interface VoiceView {
   online: number;
   /** People still being connected to. */
   connecting: number;
-  /** People the connection could not be made to at all — usually a network that needs a relay. */
+  /** People in the chat this browser has given up reaching, as things stand. */
   failed: number;
+  /** People connected whose audio this browser is not actually playing. */
+  silent: number;
   /** Whether this browser's own microphone is picking up speech. */
   speaking: boolean;
   /** Why the microphone could not be used, when it could not. */
@@ -101,6 +106,24 @@ const GREET_MAX_MS = 60_000;
 const SWEEP_MS = 4_000;
 
 /**
+ * How long somebody may be missing from the server's list before their voice
+ * is let go of.
+ *
+ * Gone from the list is the only way this browser learns that somebody has
+ * left, and it used to be acted on the instant it happened — which is right
+ * for a closed tab and wrong for every gap that is not one. A list is a
+ * snapshot taken between two things happening, and a person walking through
+ * a door is out of one room before they are into the next.
+ *
+ * The server no longer publishes that particular gap, and this is the other
+ * half of the same argument: a reconnected socket, a dropped frame or any
+ * later gap nobody has thought of yet must not cost a working conversation
+ * either. Long enough that no blink reaches the audio, short enough that
+ * somebody who has really gone stops being counted as connected.
+ */
+const GONE_GRACE_MS = 10_000;
+
+/**
  * How long to leave it before saying hello again, after so many tries.
  *
  * Two people whose networks have no route between them — no relay, and a
@@ -126,6 +149,26 @@ interface Peer {
   work: Promise<void>;
   /** When the connection last changed state, for telling stalled from slow. */
   changedAt: number;
+  /**
+   * When ICE was last restarted on this connection, 0 for never.
+   *
+   * One restart per connection, cleared when it connects. Mending is worth
+   * trying before rebuilding and is not worth trying twice: a second one
+   * that fails the same way is a minute of silence spent on the wrong
+   * remedy, and starting again from hello is the remedy that is left.
+   */
+  restartedAt: number;
+  /**
+   * Whether this connection has ever been up.
+   *
+   * What separates the two remedies. A route that was working and stopped
+   * is worth asking to be found again; a handshake that never completed is
+   * more likely wedged than misrouted, and no amount of fresh candidates
+   * mends a connection whose description went wrong. That one is rebuilt.
+   */
+  everConnected: boolean;
+  /** Whether their audio is actually coming out of this browser. */
+  playing: boolean;
 }
 
 /** When somebody was last said hello to, and how many times running. */
@@ -142,6 +185,7 @@ class VoiceChat {
     online: 1,
     connecting: 0,
     failed: 0,
+    silent: 0,
     speaking: false,
     reason: null,
   };
@@ -153,8 +197,15 @@ class VoiceChat {
   private unsubs: (() => void)[] = [];
   private attached = 0;
   private levelTimer: ReturnType<typeof setInterval> | null = null;
-  /** Connections that failed outright since the microphone came on. */
-  private failedPeers = 0;
+  /**
+   * People whose connection has failed and has not since been mended.
+   *
+   * A set rather than the running total it was: the total only ever went
+   * up, so a pair that failed once and connected on the retry went on
+   * being reported as unreachable for the rest of the session. A number
+   * that cannot come down is not a report of anything.
+   */
+  private unreachable = new Set<string>();
   /**
    * Whom this browser has said hello to, when, and how often running.
    *
@@ -165,6 +216,13 @@ class VoiceChat {
   private greetedAt = new Map<string, Greeting>();
   /** Looks the connections over while the microphone is on. */
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * When somebody first went missing from the server's list.
+   *
+   * Only for people this browser holds something for. Cleared the moment
+   * they are back, which for a room change is the very next list.
+   */
+  private missingSince = new Map<string, number>();
   private levels = new Float32Array(1024);
   /**
    * Which switching-on this is, so one that was called off can tell.
@@ -298,6 +356,15 @@ class VoiceChat {
       return;
     }
     this.local = stream;
+    // A device can be taken away after it is given: the OS hands it to
+    // another app, or somebody unplugs it. Nothing downstream would ever
+    // notice — the pill stays green, every connection stays up, and the
+    // person goes on believing they are in the conversation while sending
+    // silence at it. This is the only warning a browser gives.
+    for (const track of stream.getTracks()) {
+      track.onended = () =>
+        this.lost("The microphone stopped — another app may have taken it, or it was unplugged.");
+    }
 
     // A click got us here, so the context may start; if it was made
     // earlier and suspended, wake it.
@@ -307,7 +374,7 @@ class VoiceChat {
     this.localAnalyser.fftSize = 1024;
     this.context.createMediaStreamSource(this.local).connect(this.localAnalyser);
     this.levelTimer = setInterval(() => this.pollLevels(), LEVEL_POLL_MS);
-    this.failedPeers = 0;
+    this.unreachable.clear();
     this.publish({ status: "on" });
     if (remember) rememberVoice(true);
     log.info("microphone on");
@@ -344,15 +411,31 @@ class VoiceChat {
     this.localAnalyser = null;
     sendRoom({ type: "mic", on: false });
     this.greetedAt.clear();
+    this.missingSince.clear();
+    this.unreachable.clear();
     this.publish({
       status: "off",
       peers: 0,
       connecting: 0,
       failed: 0,
+      silent: 0,
       speaking: false,
     });
     this.census();
     log.info("microphone off");
+  }
+
+  /**
+   * The microphone has gone out from under us. Leave, and say why.
+   *
+   * Not remembered, unlike an ordinary switch-off, because coming back on
+   * the next page with the same dead device is a person told twice that
+   * they are in a conversation they cannot speak into.
+   */
+  private lost(reason: string) {
+    if (this.view.status !== "on" && this.view.status !== "requesting") return;
+    log.warn(reason);
+    void this.disable().then(() => this.publish({ status: "denied", reason }));
   }
 
   // ── The handshake ──────────────────────────────────────
@@ -501,6 +584,9 @@ class VoiceChat {
       speaking: false,
       work: Promise.resolve(),
       changedAt: Date.now(),
+      restartedAt: 0,
+      everConnected: false,
+      playing: true,
     };
     this.peers.set(id, peer);
     for (const track of this.local?.getTracks() ?? []) pc.addTrack(track, this.local!);
@@ -513,22 +599,62 @@ class VoiceChat {
     pc.onconnectionstatechange = () => {
       peer.changedAt = Date.now();
       if (pc.connectionState === "failed") {
-        // No route between the two networks *this time*: the HUD says so,
-        // since the fix — a TURN relay — is not something a person can do
-        // mid-chat. The sweep tries again, more slowly each time.
-        this.failedPeers += 1;
-        log.warn(`voice could not connect to ${id}; a relay (TURN) may be needed`);
-        this.drop(id);
+        // Kept rather than closed, which is the whole of the change: a
+        // failed connection is exactly what `restartIce` is for, and
+        // throwing it away left the sweep nothing to mend and a whole
+        // handshake to run in its place — over a socket, through the other
+        // browser, and only if that browser agrees. The route is what went;
+        // the connection is still good for asking for another one.
+        this.unreachable.add(id);
+        log.warn(`voice lost the route to ${id}; the sweep will try to mend it`);
       } else if (pc.connectionState === "closed") this.drop(id);
       else if (pc.connectionState === "connected") {
-        // It worked, so the next thing to go wrong is worth trying hard at.
+        // It worked, so the next thing to go wrong is worth trying hard at,
+        // and worth trying to mend before it is rebuilt.
         const greeting = this.greetedAt.get(id);
         if (greeting) greeting.tries = 0;
+        peer.restartedAt = 0;
+        peer.everConnected = true;
+        this.unreachable.delete(id);
         log.info(`voice connected to ${id}`);
       }
       this.count();
     };
     return peer;
+  }
+
+  /**
+   * Ask for a fresh route without taking the connection down.
+   *
+   * What fails mid-conversation is almost never the connection: it is the
+   * path through the network — a wifi handover, a NAT rebinding, a relay
+   * that dropped the pair. `restartIce` gathers candidates again and keeps
+   * everything else, so nothing is renegotiated but the route, and the
+   * audio is back in about the time one exchange takes rather than the
+   * time a whole handshake takes.
+   *
+   * Only the side that opens the line may do it, because a restart is an
+   * offer and two crossing offers are the thing `offers` exists to
+   * prevent. The other side needs no new code at all: a restart arrives as
+   * an ordinary offer and is answered as one.
+   */
+  private restart(id: string, peer: Peer): Promise<void> {
+    return this.negotiate(id, peer, async () => {
+      peer.pc.restartIce();
+      const offer = await peer.pc.createOffer();
+      await peer.pc.setLocalDescription(offer);
+      this.send(id, { kind: "offer", sdp: offer.sdp ?? "" });
+    });
+  }
+
+  /** Whether there is a connection here worth mending, and a mend left to try. */
+  private mendable(peer: Peer | undefined): peer is Peer {
+    return (
+      !!peer &&
+      peer.everConnected &&
+      peer.restartedAt === 0 &&
+      typeof peer.pc.restartIce === "function"
+    );
   }
 
   /** Their voice arrives: play it. */
@@ -545,8 +671,19 @@ class VoiceChat {
     sink.srcObject = stream;
     sink.autoplay = true;
     sink.volume = 1;
-    void sink.play().catch((err: Error) => log.warn(`could not play ${id}:`, err.message));
     peer.sink = sink;
+    peer.playing = true;
+    void sink.play().catch((err: Error) => {
+      // Connected, and not a sound. A browser that will not start playback
+      // is the one failure on this side of the connection that looks
+      // exactly like success from every angle the app had: the peer is up,
+      // the mark over their head goes green as they talk, and nothing
+      // comes out. The sweep asks again; the pill stops counting them in
+      // the meantime, because they are not in this conversation.
+      peer.playing = false;
+      this.count();
+      log.warn(`could not play ${id}:`, err.message);
+    });
     if (this.context) {
       if (this.context.state === "suspended") void this.context.resume();
       peer.source = this.context.createMediaStreamSource(stream);
@@ -584,20 +721,62 @@ class VoiceChat {
   private sweep() {
     this.census();
     if (this.view.status !== "on") return;
+    const now = Date.now();
     const others = this.everyoneElse();
     const online = new Set(others.map((p) => p.id));
-    for (const id of [...this.peers.keys()]) if (!online.has(id)) this.drop(id);
-    for (const id of [...this.greetedAt.keys()]) if (!online.has(id)) this.greetedAt.delete(id);
+    // Gone, and gone for long enough to be believed — see GONE_GRACE_MS.
+    // Anyone back before then keeps the connection they already had, which
+    // is the whole point: walking through a door is not leaving.
+    for (const id of new Set([...this.peers.keys(), ...this.greetedAt.keys()])) {
+      if (online.has(id)) {
+        this.missingSince.delete(id);
+        continue;
+      }
+      const since = this.missingSince.get(id) ?? now;
+      this.missingSince.set(id, since);
+      if (now - since < GONE_GRACE_MS) continue;
+      this.drop(id);
+      this.greetedAt.delete(id);
+      this.missingSince.delete(id);
+      this.unreachable.delete(id);
+    }
+    // A sink that never started playing. Asking again costs nothing and is
+    // what a context that has since been woken needs to hear.
+    for (const [id, peer] of this.peers) {
+      if (peer.playing || !peer.sink) continue;
+      if (this.context?.state === "suspended") void this.context.resume();
+      void peer.sink.play().then(() => {
+        peer.playing = true;
+        log.info(`hearing ${id} after all`);
+        this.count();
+      }, noted);
+    }
 
-    const now = Date.now();
+    const me = getSelfId();
     for (const person of others) {
       // Somebody with their microphone off has nothing to answer with, and
-      // when they switch it on theirs is the hello that starts this.
-      if (!person.mic) continue;
-      if (this.settled(this.peers.get(person.id), now)) continue;
+      // when they switch it on theirs is the hello that starts this. They
+      // are also nobody to report as unreachable: they are not in the chat.
+      if (!person.mic) {
+        this.unreachable.delete(person.id);
+        continue;
+      }
+      const peer = this.peers.get(person.id);
+      if (this.settled(peer, now)) continue;
       const greeting = this.greetedAt.get(person.id) ?? { at: 0, tries: 0 };
       if (now - greeting.at < backoff(greeting.tries)) continue;
       this.greetedAt.set(person.id, { at: now, tries: greeting.tries + 1 });
+      // Mend what is there before building another one: an ICE restart
+      // keeps the connection, its tracks and its DTLS and asks only for a
+      // fresh route, which is the thing that actually goes. One try, and
+      // then the handshake below, which is what a connection beyond
+      // mending needs.
+      if (me && offers(me, person.id) && this.mendable(peer)) {
+        peer.restartedAt = now;
+        log.info(`asking for a new route to ${person.id}`);
+        void this.restart(person.id, peer);
+        continue;
+      }
       // A hello tells them to throw away what they hold for us; ours has to
       // go the same way, or their offer arrives at a connection that has
       // already moved on and is refused by its own state.
@@ -645,12 +824,16 @@ class VoiceChat {
       connecting: all.filter((p) =>
         ["new", "connecting", "disconnected"].includes(p.pc.connectionState),
       ).length,
-      failed: this.failedPeers,
+      failed: this.unreachable.size,
+      // Connected and inaudible, which is not being in the conversation
+      // however good the connection looks from here.
+      silent: connected.filter((p) => !p.playing).length,
     };
     if (
       patch.peers !== this.view.peers ||
       patch.connecting !== this.view.connecting ||
-      patch.failed !== this.view.failed
+      patch.failed !== this.view.failed ||
+      patch.silent !== this.view.silent
     ) {
       this.publish(patch);
     }

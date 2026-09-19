@@ -10,6 +10,7 @@ const OFF: VoiceView = {
   online: 1,
   connecting: 0,
   failed: 0,
+  silent: 0,
   speaking: false,
   reason: null,
 };

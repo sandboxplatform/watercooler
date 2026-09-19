@@ -58,6 +58,8 @@ class FakePC {
   ontrack: ((event: unknown) => void) | null = null;
   onconnectionstatechange: (() => void) | null = null;
   closed = false;
+  /** How many times a fresh route has been asked for on this connection. */
+  restarts = 0;
 
   constructor() {
     FakePC.made.push(this);
@@ -78,6 +80,9 @@ class FakePC {
     this.signalingState = description.type === "offer" ? "have-remote-offer" : "stable";
   }
   async addIceCandidate() {}
+  restartIce() {
+    this.restarts += 1;
+  }
   close() {
     this.closed = true;
   }
@@ -116,6 +121,11 @@ const signals = () =>
     .filter((m) => m.type === "voice")
     .map((m) => ({ to: m.to as string, kind: (m.signal as { kind: string }).kind }));
 
+/** The one local track, so a test can end it the way an OS does. */
+let track: { stop: () => void; kind: string; onended: (() => void) | null };
+/** Whether the browser will start playback, which it does not always. */
+let plays = true;
+
 beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
@@ -125,13 +135,16 @@ beforeEach(() => {
   bus.onlineListeners.length = 0;
   FakePC.made.length = 0;
   vi.stubGlobal("RTCPeerConnection", FakePC);
+  plays = true;
   vi.stubGlobal(
     "Audio",
     class {
       srcObject: unknown = null;
       autoplay = false;
       volume = 1;
-      async play() {}
+      async play() {
+        if (!plays) throw new Error("play() failed because the user didn't interact first");
+      }
     },
   );
   vi.stubGlobal(
@@ -147,10 +160,9 @@ beforeEach(() => {
       }
     },
   );
+  track = { stop() {}, kind: "audio", onended: null };
   vi.stubGlobal("navigator", {
-    mediaDevices: {
-      getUserMedia: async () => ({ getTracks: () => [{ stop() {}, kind: "audio" }] }),
-    },
+    mediaDevices: { getUserMedia: async () => ({ getTracks: () => [track] }) },
   });
 });
 
@@ -224,6 +236,49 @@ describe("saying hello", () => {
   });
 });
 
+describe("somebody missing from the server's list", () => {
+  it("keeps their voice through a blink, which is what a door looks like", async () => {
+    const voice = await withPeer("zz");
+    FakePC.made[0].settle("connected");
+    await flush();
+    expect(voice.snapshot().peers).toBe(1);
+
+    // Out of one room and not yet into the next. The server no longer
+    // publishes that gap; this is the other half of the same argument,
+    // for every gap nobody has thought of yet.
+    bus.sent.length = 0;
+    bus.people.length = 0;
+    for (const listener of bus.onlineListeners) listener();
+    await flush();
+
+    expect(FakePC.made[0].closed).toBe(false);
+    expect(voice.snapshot().peers).toBe(1);
+
+    // And back, on the very next list: nothing was said and nothing rebuilt.
+    bus.people.push(personOnMic("zz"));
+    for (const listener of bus.onlineListeners) listener();
+    await flush();
+
+    expect(signals()).toEqual([]);
+    expect(FakePC.made).toHaveLength(1);
+  });
+
+  it("lets them go once they have really gone", async () => {
+    const voice = await withPeer("zz");
+    FakePC.made[0].settle("connected");
+    await flush();
+
+    bus.people.length = 0;
+    for (const listener of bus.onlineListeners) listener();
+    await flush();
+    // Past the grace, with the sweep's own timer to notice it.
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(FakePC.made[0].closed).toBe(true);
+    expect(voice.snapshot().peers).toBe(0);
+  });
+});
+
 describe("a handshake that did not take", () => {
   it("is tried again, and the connection rebuilt", async () => {
     await withPeer("zz");
@@ -233,13 +288,19 @@ describe("a handshake that did not take", () => {
     // only this side can do anything about it.
     first.settle("failed");
     await flush();
-    expect(first.closed).toBe(true);
 
     bus.sent.length = 0;
     // Past the first backoff: the sweep runs on its own timer.
     await vi.advanceTimersByTimeAsync(13_000);
     await flush();
 
+    // Rebuilt rather than mended, and no new route asked for: this one
+    // never connected, so there is nothing to say a fresh set of
+    // candidates would have made any difference. The sweep is also what
+    // closes it now — a connection that has failed is kept until then, so
+    // that a mend has something to work with where a mend is the answer.
+    expect(first.restarts).toBe(0);
+    expect(first.closed).toBe(true);
     expect(signals().filter((s) => s.kind === "hello")).toEqual([{ to: "zz", kind: "hello" }]);
   });
 
@@ -287,6 +348,105 @@ describe("a handshake that did not take", () => {
   });
 });
 
+/**
+ * Being in Global Chat is a promise that you can speak to the people in it,
+ * and everything here is a way of quietly not keeping it. They share a
+ * shape with the bugs above: the app went on saying the conversation was
+ * fine because nothing in it had asked.
+ */
+describe("a conversation that stops working", () => {
+  it("asks for a new route before it builds another connection", async () => {
+    const voice = await withPeer("zz");
+    const pc = FakePC.made[0];
+    pc.settle("connected");
+    await flush();
+
+    // The route went, not the connection: a wifi handover, a NAT that
+    // rebound, a relay that dropped the pair.
+    bus.sent.length = 0;
+    pc.settle("failed");
+    await flush();
+    expect(pc.closed).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(9_000);
+
+    expect(pc.restarts).toBe(1);
+    expect(signals()).toEqual([{ to: "zz", kind: "offer" }]);
+    // Mended rather than rebuilt: the same connection throughout.
+    expect(FakePC.made).toHaveLength(1);
+    expect(voice.snapshot().failed).toBe(1);
+  });
+
+  it("starts again from hello when the new route does not help either", async () => {
+    await withPeer("zz");
+    const pc = FakePC.made[0];
+    pc.settle("connected");
+    await flush();
+    pc.settle("failed");
+    await flush();
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(pc.restarts).toBe(1);
+
+    // One mend to a connection. A second that fails the same way is a
+    // minute of silence spent on the wrong remedy.
+    bus.sent.length = 0;
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(pc.restarts).toBe(1);
+    expect(pc.closed).toBe(true);
+    expect(signals()).toContainEqual({ to: "zz", kind: "hello" });
+  });
+
+  it("stops reporting somebody as unreachable once they are reached", async () => {
+    const voice = await withPeer("zz");
+    const pc = FakePC.made[0];
+    pc.settle("failed");
+    await flush();
+    expect(voice.snapshot().failed).toBe(1);
+
+    pc.settle("connected");
+    await flush();
+
+    // It used to be a running total, so a pair that failed once and
+    // connected on the retry was reported unreachable for the session.
+    expect(voice.snapshot().failed).toBe(0);
+  });
+
+  it("does not count somebody whose audio the browser will not play", async () => {
+    plays = false;
+    const voice = await withPeer("zz");
+    const pc = FakePC.made[0];
+    pc.settle("connected");
+    pc.ontrack?.({ streams: [{}] });
+    await flush();
+
+    // Connected, and not a sound: the one failure on this side of the
+    // connection that looks exactly like success.
+    expect(voice.snapshot().peers).toBe(1);
+    expect(voice.snapshot().silent).toBe(1);
+
+    // The sweep asks again, and a browser that has since been unblocked says yes.
+    plays = true;
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(voice.snapshot().silent).toBe(0);
+  });
+
+  it("leaves the chat when the microphone is taken away", async () => {
+    const voice = await switchedOn();
+    expect(voice.snapshot().status).toBe("on");
+
+    // The OS handing the device to another app, or somebody unplugging it.
+    track.onended?.();
+    await flush();
+
+    expect(voice.snapshot().status).toBe("denied");
+    expect(voice.snapshot().reason).toMatch(/microphone stopped/i);
+    // And not remembered, or the next page brings them back on a dead device.
+    const { rememberVoice } = await import("../remember");
+    expect(rememberVoice).toHaveBeenLastCalledWith(false);
+  });
+});
+
 describe("the connection itself", () => {
   it("does not wedge when two negotiations cross", async () => {
     await switchedOn(["aa"]);
@@ -301,16 +461,5 @@ describe("the connection itself", () => {
 
     expect(pc.remoteDescription?.sdp).toBe("AGAIN");
     expect(signals().filter((s) => s.kind === "answer")).toHaveLength(2);
-  });
-
-  it("forgets anyone who has left the server", async () => {
-    await withPeer("zz");
-    const pc = FakePC.made[0];
-
-    bus.people.length = 0;
-    for (const listener of bus.onlineListeners) listener();
-    await flush();
-
-    expect(pc.closed).toBe(true);
   });
 });

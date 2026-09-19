@@ -7,6 +7,7 @@ import { useOnline } from "@/lib/presence-online";
 import { useVoice } from "@/lib/hooks/useVoice";
 import { meetingFor, useMeetings } from "@/lib/meeting";
 import { voiceChat } from "@/lib/voice/voice-chat";
+import { TURN_URL } from "@/lib/voice/ice";
 import ControllerCheck from "./ControllerCheck";
 import { buttonLabel } from "@/lib/gamepad/buttons";
 import { subscribeTalkButton, talkButton } from "@/lib/gamepad/bindings";
@@ -70,8 +71,38 @@ export default function BottomBar({ peopleOpen, onTogglePeople }: BottomBarProps
   const trouble =
     (voice.connecting ? ` ${voice.connecting} still connecting.` : "") +
     (voice.failed
-      ? ` ${voice.failed} could not be reached — those networks need a relay (TURN) to talk.`
-      : "");
+      ? ` ${voice.failed} cannot be reached${
+          // Which of the two it is, rather than the guess this always made.
+          // "Those networks need a relay" is the right answer with no relay
+          // configured and a misleading one with a relay that is not working,
+          // and they want opposite things done about them. NEXT_PUBLIC_ is
+          // inlined at build, so this is the relay the running bundle has —
+          // which is the question, a relay set on a live service being one
+          // that was never compiled in.
+          TURN_URL
+            ? " — even over the relay (TURN) this build carries."
+            : " — those networks need a relay (TURN), and this build has none."
+        }`
+      : "") +
+    (voice.silent ? ` ${voice.silent} connected, but this browser is not playing them.` : "");
+  /**
+   * How many people this browser is actually in the conversation with.
+   *
+   * `withMic` is how many microphones the server says are on. That is the
+   * number the pill showed, and it is not quite the promise the pill makes:
+   * somebody whose connection has failed, or whose audio this browser will
+   * not play, is in Global Chat without being in it with you. Two people
+   * could hear each other until one of them walked upstairs, and this read
+   * `Global Chat (2)` throughout — every indicator in the app agreeing with
+   * every other one about something none of them had checked.
+   *
+   * Deliberately not `peers`, which would count up through every handshake:
+   * a connection being made is still not a third kind of membership, and a
+   * number that dips for a second on every arrival is one nobody reads.
+   * Only the two states that nothing is going to mend on its own come off
+   * it, and the tooltip says which.
+   */
+  const reached = Math.max(1, voice.withMic - voice.failed - voice.silent);
   const inChat =
     voice.withMic === 1
       ? "1 person is in Global Chat"
@@ -128,7 +159,7 @@ export default function BottomBar({ peopleOpen, onTogglePeople }: BottomBarProps
       >
         {micOn ? <Mic size={10} /> : <MicOff size={10} />}
         {/* Off, the icon is the whole pill; on, the chat is worth naming and counting. */}
-        {micOn && <span>Global Chat ({voice.withMic})</span>}
+        {micOn && <span>Global Chat ({reached})</span>}
       </button>
       {meetings.length > 0 && (
         <div
