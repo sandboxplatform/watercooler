@@ -1945,6 +1945,14 @@
   border-color: var(--pixel-border-light);
 }
 
+/* A pill that opened something and would close it again if pressed. Not the
+   mic's green: the green on this pill is the dot, which means people are
+   about rather than that the list is up. */
+.hud-pill--on {
+  border-color: var(--pixel-border-light);
+  background: rgba(0, 0, 0, 0.6);
+}
+
 .hud-mic--on {
   color: var(--pixel-green);
   border-color: var(--pixel-green);

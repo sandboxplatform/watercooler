@@ -62,10 +62,23 @@ export default function Page() {
     setSidebarOpen(false);
     setMusicOpen(false);
   }, []);
-  const showPeople = useCallback(() => {
+  /**
+   * The Online pill is a door that shuts as well as opens: pressing it while
+   * People is up puts the column away again. The button at the head of the
+   * column was the only way back, which is the opposite corner of the screen
+   * from the one just pressed.
+   *
+   * Showing another tab counts as closed — the pill counts People, so it has
+   * to land there rather than shut a column somebody is reading Badges in.
+   */
+  const togglePeople = useCallback(() => {
+    if (sidebarOpen && sidebarTab === "people") {
+      closeSidebar();
+      return;
+    }
     setSidebarTab("people");
     setSidebarOpen(true);
-  }, []);
+  }, [sidebarOpen, sidebarTab, closeSidebar]);
   const toggleMusic = useCallback(() => setMusicOpen((open) => !open), []);
   // The controller's half: it has to open the column too, or it would turn
   // to a panel that is not on screen.
@@ -92,7 +105,8 @@ export default function Page() {
             {/* HUD overlay — floating UI over the office only */}
             <div className="app-hud">
               <GameHud
-                onShowPeople={showPeople}
+                peopleOpen={sidebarOpen && sidebarTab === "people"}
+                onTogglePeople={togglePeople}
                 onShowMusic={showMusic}
                 onCloseMusic={closeMusic}
               />

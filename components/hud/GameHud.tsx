@@ -32,8 +32,10 @@ import TouchControls from "./TouchControls";
 import { asset } from "@/lib/assets";
 
 interface GameHudProps {
-  /** Open the column on People — what the Online pill counts. */
-  onShowPeople: () => void;
+  /** Whether the column is up on People, so the pill can say so. */
+  peopleOpen: boolean;
+  /** Open the column on People — what the Online pill counts — or shut it. */
+  onTogglePeople: () => void;
   /**
    * Put the music up, and the column with it — the slider lives at the foot
    * of that column now, so a controller turning to it has to open the thing
@@ -43,7 +45,12 @@ interface GameHudProps {
   onCloseMusic: () => void;
 }
 
-export default function GameHud({ onShowPeople, onShowMusic, onCloseMusic }: GameHudProps) {
+export default function GameHud({
+  peopleOpen,
+  onTogglePeople,
+  onShowMusic,
+  onCloseMusic,
+}: GameHudProps) {
   const { state } = useStudio();
   // Somebody whose own code names their sheet wears that and nothing else,
   // so there is no character to choose and no button to choose it with.
@@ -160,7 +167,7 @@ export default function GameHud({ onShowPeople, onShowMusic, onCloseMusic }: Gam
         the one to keep is the one that says something while it sits there.
       */}
       <div className="layout-bottom">
-        <BottomBar onShowPeople={onShowPeople} />
+        <BottomBar peopleOpen={peopleOpen} onTogglePeople={onTogglePeople} />
       </div>
 
       {/* Modals */}

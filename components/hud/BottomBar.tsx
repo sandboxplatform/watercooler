@@ -12,11 +12,13 @@ import { buttonLabel } from "@/lib/gamepad/buttons";
 import { subscribeTalkButton, talkButton } from "@/lib/gamepad/bindings";
 
 interface BottomBarProps {
-  /** Show the People panel — the list this pill is counting. */
-  onShowPeople: () => void;
+  /** Whether the People panel is up, so the pill reads as pressed. */
+  peopleOpen: boolean;
+  /** Show the People panel — the list this pill is counting — or put it away. */
+  onTogglePeople: () => void;
 }
 
-export default function BottomBar({ onShowPeople }: BottomBarProps) {
+export default function BottomBar({ peopleOpen, onTogglePeople }: BottomBarProps) {
   /**
    * Everybody logged into the world, not everybody in this room.
    *
@@ -86,18 +88,27 @@ export default function BottomBar({ onShowPeople }: BottomBarProps) {
 
   return (
     <div className="layout-bottombar">
-      {/* The count is a door: it opens the list it is counting. */}
+      {/*
+        The count is a door, and it shuts as well as opens: pressing it again
+        puts the column away. The button at the head of the column was the
+        only way back from a list opened down here.
+      */}
       <button
         type="button"
-        className="hud-pill hud-pill--connection hud-pill--button"
-        onClick={onShowPeople}
+        className={`hud-pill hud-pill--connection hud-pill--button${
+          peopleOpen ? " hud-pill--on" : ""
+        }`}
+        onClick={onTogglePeople}
         title={
-          online.length > 0
-            ? `${
-                online.length === 1 ? "1 person is" : `${online.length} people are`
-              } in the world. Click to see who, and where.`
-            : "Click to see who is in the world, and where."
+          peopleOpen
+            ? "Click to put the list away."
+            : online.length > 0
+              ? `${
+                  online.length === 1 ? "1 person is" : `${online.length} people are`
+                } in the world. Click to see who, and where.`
+              : "Click to see who is in the world, and where."
         }
+        aria-expanded={peopleOpen}
         aria-label="Who is in the world"
       >
         <span className={`pixel-dot pixel-dot--${online.length > 0 ? "green" : "gray"}`} />
