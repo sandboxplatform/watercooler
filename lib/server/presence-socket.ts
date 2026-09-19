@@ -137,6 +137,17 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
    */
   const identityByConnection = new Map<string, AccessIdentity>();
   /**
+   * Which browser tab each connection came from, when it says.
+   *
+   * The one thing that tells a person coming back from a second person
+   * arriving. See `session` on `JoinMessage`: the ping that decides a
+   * contested claim cannot do it, because a pong comes from the browser's
+   * network stack and a page being torn down answers one just as a live
+   * page does — which is how a reload came to be refused as a ghost of
+   * itself.
+   */
+  const sessionByConnection = new Map<string, string>();
+  /**
    * Connections that have been pinged and have not answered.
    *
    * The server pinged before and never read the replies, so a socket the
@@ -396,6 +407,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     const slug = roomOf.get(id);
     roomOf.delete(id);
     owesPong.delete(id);
+    sessionByConnection.delete(id);
     if (!slug) return;
 
     const room = rooms.get(slug);
@@ -625,6 +637,44 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
       };
 
       /**
+       * Take the world away from a connection that has been replaced.
+       *
+       * Usually nobody sees it: the connection being superseded is the one
+       * a reloading page left behind, and its browser stopped reading long
+       * ago. Where somebody is looking at it — two tabs that ended up
+       * sharing a session, which is what duplicating a tab does — they are
+       * told rather than simply going quiet, for the reason every other
+       * refusal is: a world with nobody in it and no explanation reads as
+       * the app being broken.
+       */
+      const supersede = (held: string) => {
+        const stale = socketFor(held);
+        drop(held);
+        if (!stale) return;
+        if (stale.readyState !== WebSocket.OPEN) {
+          stale.terminate();
+          return;
+        }
+        // Say why, then hang up whether or not it went. Terminated rather
+        // than closed politely: a connection taken out of its room is swept
+        // by nothing afterwards — the heartbeat walks the rooms — so one
+        // left waiting on a closing handshake nobody is there to finish
+        // would sit open for as long as the server runs.
+        const hangUp = () => stale.terminate();
+        const giveUp = setTimeout(hangUp, CLAIM_GRACE_MS);
+        giveUp.unref?.();
+        try {
+          stale.send(JSON.stringify({ type: "rejected", reason: "already-online" }), () => {
+            clearTimeout(giveUp);
+            hangUp();
+          });
+        } catch {
+          clearTimeout(giveUp);
+          hangUp();
+        }
+      };
+
+      /**
        * Somebody is already in the world on this code. Decide which of the
        * two connections is real, and let exactly one of them stand.
        *
@@ -633,6 +683,9 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
        * does not, it was a page that has gone — a reload, a door, a closed
        * tab whose socket a proxy is still holding open — and this
        * connection takes over from it.
+       *
+       * Asked at all only when the tab is no help: the same tab coming back
+       * needs no deciding, and is admitted above without a ping.
        */
       const claim = async (join: JoinMessage, contested: string) => {
         if (claiming.has(identity)) {
@@ -657,9 +710,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         }
 
         log.info(`${identity}'s earlier connection is gone; letting this one in`);
-        const stale = socketFor(contested);
-        drop(contested);
-        stale?.terminate();
+        supersede(contested);
 
         // The newcomer may itself have gone while we waited.
         if (ws.readyState !== WebSocket.OPEN) return;
@@ -689,8 +740,21 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           //
           // Only for a personal identity: the shared code is many people,
           // so two visitors are two visitors and both belong here.
+          if (typeof parsed.session === "string") sessionByConnection.set(id, parsed.session);
           const contested = identity !== "visitor" ? heldBy(identity, id) : null;
           if (contested) {
+            // The same tab coming back: a reload, or a browser that was
+            // shut and reopened onto the same session. There is nothing to
+            // decide — it is one person at one screen, and the place is
+            // already theirs. Challenging it is what used to shut somebody
+            // out of their own world with their own ghost, since the socket
+            // the leaving page left behind answers a ping.
+            if (parsed.session && sessionByConnection.get(contested) === parsed.session) {
+              log.info(`${identity} is back on the same tab; taking their place over`);
+              supersede(contested);
+              admit(parsed);
+              return;
+            }
             void claim(parsed, contested);
             return;
           }

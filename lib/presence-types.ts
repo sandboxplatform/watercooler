@@ -122,6 +122,24 @@ export interface JoinMessage {
   type: "join";
   /** Which room to walk into; absent means the default one. */
   room?: string;
+  /**
+   * Which browser tab this is, kept in `sessionStorage` so it survives a
+   * reload and no other tab has it.
+   *
+   * One person holds one session, and the awkward case has always been the
+   * same person coming back: a reload is a new connection, and behind a
+   * proxy the one the old page left behind is not closed at the server for
+   * some seconds yet. The server pings it to find out whether anyone is
+   * still there — and gets an answer, because a pong is written by the
+   * browser's network stack rather than by the page's script, so a socket
+   * whose page is being torn down answers exactly like a live one. That is
+   * how somebody came to be shut out of their own world by their own ghost.
+   *
+   * This settles it without guessing: the same tab is the same person at
+   * the same screen, so it takes its own place back and nothing is pinged.
+   * A connection with no session, or another tab's, is challenged as before.
+   */
+  session?: string;
   name: string;
   spriteKey: string;
   x: number;

@@ -68,6 +68,7 @@ async function walkIn(
   identity: "visitor" | "coop" | "rob",
   name: string,
   room = "world",
+  session?: string,
 ): Promise<Connection> {
   const socket = new WebSocket(`ws://127.0.0.1:${port}/api/room/socket`, {
     headers: { cookie: cookieFor(identity), origin: `http://127.0.0.1:${port}` },
@@ -96,6 +97,7 @@ async function walkIn(
           type: "join",
           room,
           name,
+          ...(session ? { session } : {}),
           spriteKey: "player",
           x: 400,
           y: 400,
@@ -229,6 +231,49 @@ describe("one person, one session", () => {
     await settle();
   });
 
+  /**
+   * The case the ping cannot decide, and the one people actually hit.
+   *
+   * A reload is a new connection, and the socket the leaving page left
+   * behind is often still open at the server — behind a proxy, for whole
+   * seconds. Pinging it does not tell you anything, because a pong is
+   * written by the browser's network stack rather than by the page's
+   * script: a page being torn down answers exactly like a live one. So the
+   * incumbent here is left wide awake, which is what made the real bug —
+   * walk into a building, get shown the door by your own ghost.
+   *
+   * The tab says so instead. Same tab, same person, same screen: it takes
+   * its own place back and nothing is pinged at all.
+   */
+  it("lets the same tab take its own place back, without challenging it", async () => {
+    const before = await walkIn("coop", "Coop", "world", "tab-one");
+    const after = await walkIn("coop", "Coop", "world", "tab-one");
+    await settle();
+
+    expect(after.heard).toEqual(["welcome"]);
+    expect(await census()).toEqual(["Coop"]);
+    // And the one it replaced is told, rather than simply going quiet.
+    expect(before.heard).toContain("rejected:already-online");
+
+    before.socket.terminate();
+    after.socket.close();
+    await settle();
+  });
+
+  /** Another tab is another window, and the rule is unchanged for it. */
+  it("still refuses a second tab", async () => {
+    const first = await walkIn("coop", "Coop", "world", "tab-one");
+    const second = await walkIn("coop", "Coop", "world", "tab-two");
+    await settle();
+
+    expect(first.heard).toEqual(["welcome"]);
+    expect(second.heard).toContain("rejected:already-online");
+    expect(await census()).toEqual(["Coop"]);
+
+    first.socket.close();
+    second.socket.close();
+    await settle();
+  });
   /**
    * The shared code is many people. Two visitors are two visitors, and the
    * identity says nothing about which of them is which.

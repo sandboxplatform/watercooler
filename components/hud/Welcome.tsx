@@ -3,7 +3,7 @@
 import "./character-studio.css";
 import "./world-ui.css";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { DoorOpen, LogIn, UserRound } from "lucide-react";
 import { signIn } from "next-auth/react";
@@ -21,7 +21,8 @@ import {
 import { registerProfile } from "@/lib/people-client";
 import { addressFromLocation } from "@/lib/world/floors";
 import { ORGANISATIONS } from "@/lib/world/tenants";
-import { WORLD_PATH, isOutdoorPath } from "@/lib/world/paths";
+import { isOutdoorPath } from "@/lib/world/paths";
+import { gameEvents } from "@/lib/events";
 
 const PORTRAIT_SCALE = 1.5;
 const NO_NAME = "Guest";
@@ -74,6 +75,8 @@ export default function Welcome() {
   // effect below writes straight in without asking.
   const { wearable: characters, error } = useCharacterRoster();
 
+  /** Said once. An arrival that announces itself twice restarts its own card. */
+  const announced = useRef(false);
   const [typedName, setTypedName] = useState<string | null>(null);
   const [pickedHome, setPickedHome] = useState<string | null>(null);
   const [pickedCharacter, setPickedCharacter] = useState<RosterCharacter | null>(null);
@@ -85,12 +88,25 @@ export default function Welcome() {
     if (account) adoptAccount(account);
   }, [account]);
 
+  /**
+   * The bare app is not a place, so somebody who has already chosen is
+   * walked out onto the world map.
+   *
+   * This is how a personal code arrives: it says who its holder is, so
+   * there is nothing to ask and the screen above is never drawn — which
+   * used to mean the one person the app knows by name got no arrival at
+   * all, just a page load and then the map. They go through the same door
+   * everybody else does now; `Arrival` covers it and does the travelling.
+   */
   useEffect(() => {
-    if (!done) return;
-    if (!addressFromLocation(window.location) && !isOutdoorPath(window.location.pathname)) {
-      window.location.replace(WORLD_PATH);
-    }
-  }, [done]);
+    if (!done || !profile || announced.current) return;
+    if (addressFromLocation(window.location) || isOutdoorPath(window.location.pathname)) return;
+    announced.current = true;
+    gameEvents.emit("walking-in", {
+      name: profile.name,
+      spritePath: profile.character?.path ?? null,
+    });
+  }, [done, profile]);
 
   /**
    * Someone who came in on their own code is asked nothing: the code says who
@@ -163,7 +179,12 @@ export default function Welcome() {
     // Put a desk with this name on the building's floor, then walk in: the
     // game begins on the world map, by the fountain.
     await registerProfile(profileSnapshot());
-    window.location.assign(WORLD_PATH);
+    // The arrival takes it from here: it covers the screen and then travels,
+    // so the world map builds behind a card with this person on it rather
+    // than behind nothing. Saying who has arrived is the last thing this
+    // screen does, and the effect above takes it down on the next render.
+    announced.current = true;
+    gameEvents.emit("walking-in", { name: trimmed, spritePath: character.sheetUrl });
   };
 
   const signInWith = (provider: string) => {

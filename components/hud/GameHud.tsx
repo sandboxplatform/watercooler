@@ -12,6 +12,7 @@ import SeatManagerModal from "./SeatManagerModal";
 import CharacterStudio from "./CharacterStudio";
 import Welcome from "./Welcome";
 import AlreadyOnline from "./AlreadyOnline";
+import Arrival from "./Arrival";
 import GamepadDriver from "./GamepadDriver";
 import { profileSnapshot, subscribeToProfile } from "@/lib/profile";
 import { registerProfile } from "@/lib/people-client";
@@ -128,6 +129,7 @@ export default function GameHud({ onShowPeople, onShowMusic, onCloseMusic }: Gam
     <div className="hud-overlay">
       <GamepadDriver />
       <Welcome />
+      <Arrival />
       <AlreadyOnline />
       <ElevatorModal />
       <AchievementToast />

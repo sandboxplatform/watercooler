@@ -12,10 +12,11 @@ import {
 import { currentRoom } from "../room-client";
 import { createLogger } from "../logger";
 import { loadPlayerName } from "../persistence";
+import { subscribeToProfile } from "../profile";
 import { rememberCharacter, rememberedCharacter } from "../characters/choice";
 import { sheetPathFor } from "../characters/library";
 import { SPRITE_KEY } from "@/components/game/config/animations";
-import { rememberSelfId } from "../presence-self";
+import { rememberSelfId, tabSession } from "../presence-self";
 import { rememberPlayers } from "../presence-roster";
 import { MOVE_SEND_MS, type Facing, type PresencePlayer } from "../presence-types";
 
@@ -62,6 +63,9 @@ export function usePresence() {
       sendRoom({
         type: "join",
         room: currentRoom(),
+        // Which tab this is, so coming back after a reload is not mistaken
+        // for a second window onto the same person.
+        session: tabSession(),
         name: loadPlayerName(),
         spriteKey,
         x: spawn.x,
@@ -188,6 +192,27 @@ export function usePresence() {
       if (joinedRef.current) sendRoom({ type: "boarded", inside });
     });
 
+    /**
+     * A name chosen while the socket is already in a room.
+     *
+     * The welcome screen is the one place a name is set, and it used to end
+     * in a page load — so the name it wrote was read by a socket that had
+     * not opened yet, and there was nothing to keep in step. It walks in in
+     * the page now, and without this everybody in the world goes on seeing
+     * the name we arrived under, which for a visitor is `Guest`.
+     *
+     * A re-join is the whole of it, as it is for a new look: the server
+     * takes a join naming the room we are already in as a change of what we
+     * look like and are called, rather than as a second arrival.
+     */
+    let called = loadPlayerName();
+    const unsubProfile = subscribeToProfile(() => {
+      const now = loadPlayerName();
+      if (now === called) return;
+      called = now;
+      if (joinedRef.current && latestRef.current) join(latestRef.current);
+    });
+
     // A new look goes out with a fresh join, so everyone sees it at once
     // rather than on the next walk through a door.
     // The event carries the key: the choice is remembered a moment later.
@@ -197,6 +222,7 @@ export function usePresence() {
 
     return () => {
       unsubOpen();
+      unsubProfile();
       unsubBoarded();
       unsubLook();
       unsubPlace();

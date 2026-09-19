@@ -2,10 +2,10 @@
  * The addresses of the world, shared by the HUD and the scenes. Nothing here
  * touches Phaser, so the server can render a page that knows about them.
  *
- * Rooms have their own pages, /r/<slug>. The world map and a campus are
- * reached in-page from a lobby, so their scenes write their address into the
- * bar themselves; that way a reload, a bookmark or a shared link lands where
- * the person actually was.
+ * Rooms have their own pages, /r/<slug>, and so do the world map and the
+ * campuses — but nothing loads one. Every move between them is a `travelTo`,
+ * which pushes the address and lets the scene router draw the place; a
+ * reload, a bookmark or a shared link then lands where the person was.
  */
 
 /** The world map's address. */
@@ -32,13 +32,4 @@ export function campusFromPath(pathname: string): string | null {
 /** Whether an address is somewhere out of doors — the world map or a campus — rather than a room. */
 export function isOutdoorPath(pathname: string): boolean {
   return isWorldPath(pathname) || campusFromPath(pathname) !== null;
-}
-
-/**
- * Put an address in the bar without loading anything, keeping any query.
- * For a scene that was started in-page, so a reload comes back to it.
- */
-export function showAddress(pathname: string, history: History = window.history): void {
-  if (window.location.pathname === pathname) return;
-  history.replaceState(history.state, "", pathname);
 }

@@ -248,3 +248,114 @@
 .welcome__link:hover {
   color: var(--pixel-accent-hover);
 }
+
+/* --- Arrival (walking into the world) --- */
+
+/*
+ * Darker than the welcome it replaces, and it fades rather than cutting:
+ * what is behind it is the world map building itself, and a cover that
+ * snaps off shows the last frame of that.
+ */
+.arrival {
+  background: rgba(8, 8, 16, 0.94);
+  transition: opacity 600ms ease;
+  opacity: 1;
+}
+
+.arrival--going {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.arrival__card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px 32px;
+  background: var(--pixel-panel);
+  border: 1px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-lg);
+  box-shadow: 4px 4px 24px rgba(0, 0, 0, 0.5);
+  color: var(--pixel-text);
+  text-align: center;
+}
+
+.arrival__where {
+  margin: 0;
+  font-size: var(--fs-sm);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pixel-muted);
+}
+
+/* The figure bobs, so the card is somebody arriving rather than a photograph. */
+.arrival__figure {
+  image-rendering: pixelated;
+  animation: arrival-bob 900ms steps(2, end) infinite;
+}
+
+.arrival__name {
+  margin: 0;
+  font-size: var(--fs-xl);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pixel-accent);
+}
+
+.arrival__lead {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--pixel-muted);
+}
+
+/*
+ * A pixel bar, not a spinner: it is the one shape in this HUD that says
+ * "wait" without a curve in it. It says nothing about how far along the
+ * loading is, because nothing here knows — it runs while the cover is up
+ * and the cover comes off when the map says it is there.
+ */
+.arrival__bar {
+  width: 168px;
+  height: 8px;
+  overflow: hidden;
+  background: var(--pixel-panel-2, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--pixel-border);
+}
+
+.arrival__bar span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--pixel-accent);
+  animation: arrival-sweep 1100ms steps(8, end) infinite;
+}
+
+@keyframes arrival-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes arrival-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/* Somebody who would rather nothing moved gets a still card. */
+@media (prefers-reduced-motion: reduce) {
+  .arrival__figure,
+  .arrival__bar span {
+    animation: none;
+  }
+  .arrival__bar span {
+    width: 100%;
+  }
+}

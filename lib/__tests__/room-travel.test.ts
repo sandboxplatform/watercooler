@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { gameEvents } from "../events";
-import { resetRoomTravel, travelTo, watchRoomHistory } from "../room-travel";
+import { arriveAt, redirectTo, resetRoomTravel, travelTo, watchRoomHistory } from "../room-travel";
 
 /**
  * Riding the lift without reloading the page.
@@ -18,7 +18,10 @@ import { resetRoomTravel, travelTo, watchRoomHistory } from "../room-travel";
 
 interface FakeWindow {
   location: { pathname: string; search: string };
-  history: { pushState: (state: unknown, title: string, url: string) => void };
+  history: {
+    pushState: (state: unknown, title: string, url: string) => void;
+    replaceState: (state: unknown, title: string, url: string) => void;
+  };
   addEventListener: (type: string, fn: () => void) => void;
   removeEventListener: (type: string, fn: () => void) => void;
 }
@@ -39,13 +42,27 @@ function popstate() {
 
 describe("travelling between rooms in the page", () => {
   let heard: string[];
+  let arrivals: (string | null | undefined)[];
+  let pushed: string[];
+  let replaced: string[];
   let unsub: () => void;
 
   beforeEach(() => {
+    pushed = [];
+    replaced = [];
     listeners = new Set();
     fake = {
       location: { pathname: "/r/sandbox-erp/floor/3", search: "" },
-      history: { pushState: (_state, _title, url) => goTo(url) },
+      history: {
+        pushState: (_state, _title, url) => {
+          pushed.push(url);
+          goTo(url);
+        },
+        replaceState: (_state, _title, url) => {
+          replaced.push(url);
+          goTo(url);
+        },
+      },
       addEventListener: (type, fn) => {
         if (type === "popstate") listeners.add(fn);
       },
@@ -56,7 +73,11 @@ describe("travelling between rooms in the page", () => {
     (globalThis as unknown as { window: FakeWindow }).window = fake;
     resetRoomTravel();
     heard = [];
-    unsub = gameEvents.on("room-changed", (room) => heard.push(room));
+    arrivals = [];
+    unsub = gameEvents.on("room-changed", (room, arrival) => {
+      heard.push(room);
+      arrivals.push(arrival.from);
+    });
   });
 
   afterEach(() => {
@@ -111,10 +132,59 @@ describe("travelling between rooms in the page", () => {
     expect(listeners.size).toBe(0);
   });
 
+  /**
+   * What the address bar cannot carry. Out of doors the building somebody
+   * came out of is what puts them on its own path rather than on the road,
+   * and it is the same connection walking out, so nothing reloads to tell
+   * the next scene about it.
+   */
+  it("carries the place just left", () => {
+    travelTo("/world", { from: "sandbox-erp" });
+    expect(heard).toEqual(["world"]);
+    expect(arrivals).toEqual(["sandbox-erp"]);
+  });
+
+  /**
+   * The bare app forwards to the world map, and forwarding must not leave
+   * a step behind: the back button would land on the address that forwards,
+   * which forwards again — a door that opens onto itself.
+   */
+  it("replaces rather than pushes where it is a forward", () => {
+    redirectTo("/world");
+    expect(replaced).toEqual(["/world"]);
+    expect(pushed).toEqual([]);
+    expect(heard).toEqual(["world"]);
+  });
+
+  /**
+   * Walking into the world is an arrival rather than a journey, and the
+   * commonest way to make one is from the world map itself: a visitor is
+   * put out there before they have said who they are. Travelling to the
+   * address you are already at does nothing, which left the arrival card
+   * waiting on a scene that was never going to be built.
+   */
+  it("announces an arrival at the address it is already at", () => {
+    fake.location.pathname = "/world";
+    resetRoomTravel();
+    arriveAt("/world", { walkIn: true });
+    expect(heard).toEqual(["world"]);
+    expect(replaced).toEqual(["/world"]);
+    expect(pushed).toEqual([]);
+  });
+
+  /** And it is still one announcement, not one per call. */
+  it("announces a journey to the same room only once", () => {
+    travelTo("/r/sandbox-erp");
+    travelTo("/r/sandbox-erp");
+    expect(heard).toEqual(["sandbox-erp"]);
+  });
+
   it("does nothing where there is no window at all", () => {
     delete (globalThis as unknown as { window?: FakeWindow }).window;
     resetRoomTravel();
     expect(() => travelTo("/r/sandbox-erp/floor/1")).not.toThrow();
+    expect(() => redirectTo("/world")).not.toThrow();
+    expect(() => arriveAt("/world")).not.toThrow();
     expect(() => watchRoomHistory()()).not.toThrow();
     expect(heard).toEqual([]);
   });

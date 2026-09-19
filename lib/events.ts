@@ -5,6 +5,27 @@ import { createLogger } from "./logger";
 
 const log = createLogger("GameEventBus");
 
+/**
+ * What a room change carries that the address bar cannot.
+ *
+ * A URL says which place; it does not say which door you came out of, and
+ * out of doors that is the difference between standing on your own
+ * building path and being put down on the road like a stranger.
+ */
+export interface RoomArrival {
+  /** The tenant or campus just left, if any. */
+  from?: string | null;
+  /**
+   * Take a few steps on arriving even though no door was come out of.
+   *
+   * Out of a door it is forced: the key held through the doorway would
+   * otherwise walk you straight back in. This is the other reason to walk —
+   * a first arrival in the world, where somebody appearing fully formed on
+   * the plaza is a worse entrance than somebody walking onto it.
+   */
+  walkIn?: boolean;
+}
+
 export interface GameEventMap {
   "seats-discovered": [seats: SeatDef[]];
   "seat-configs-updated": [seats: SeatState[]];
@@ -124,12 +145,25 @@ export interface GameEventMap {
   /**
    * The address bar names a different room, and no page was loaded.
    *
-   * Emitted by `lib/room-travel.ts` for a move the running scene can make
-   * itself — riding the lift — and by the back and forward buttons. The
-   * scene swaps its map, the store refetches the room, and presence rejoins
-   * on the socket it already has. See that file for why.
+   * Emitted by `lib/room-travel.ts`, which is now the only way a room
+   * changes at all — the lift, a front door, a campus gate, the back and
+   * forward buttons. `components/game/systems/scene-router.ts` puts up the
+   * scene the new address names, the store refetches the room, and presence
+   * rejoins on the socket it already has. See `room-travel.ts` for why none
+   * of it is a page load any more.
    */
-  "room-changed": [room: string];
+  "room-changed": [room: string, arrival: RoomArrival];
+  /**
+   * Somebody has just said who they are and is being let into the world.
+   *
+   * The welcome screen steps aside and the world map comes up in the same
+   * page, which takes a moment: a tilemap, the buildings, the sheet they
+   * chose. Without a word said that moment is a blank canvas, and the
+   * character then simply exists on the plaza. So the arrival covers it —
+   * their own face and name, and then their character walking in — and
+   * lifts when the map says it is up. See `components/hud/Arrival.tsx`.
+   */
+  "walking-in": [who: { name: string; spritePath: string | null }];
   /**
    * Where the player is, when it is not the room in the URL: a campus, the
    * world map. Null means the room.

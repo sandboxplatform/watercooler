@@ -15,8 +15,8 @@ import { ArrivalWalk, type Direction } from "@/lib/arrival";
 import { rememberedCharacter } from "@/lib/characters/choice";
 import type { Rect } from "@/lib/world/tenants";
 import { enterableAt, walkInTo, type Enterable } from "@/lib/world/entrances";
-import { showAddress } from "@/lib/world/paths";
 import { gameEvents } from "@/lib/events";
+import { travelTo } from "@/lib/room-travel";
 import { asset } from "@/lib/assets";
 import type { Logger } from "@/lib/logger";
 import { cutOutdoorFrames, preloadOutdoors } from "./outdoors";
@@ -80,8 +80,6 @@ export interface OutdoorPlace {
   solids: Rect[];
   /** What this place is called, for whatever shows where somebody is. */
   label: string;
-  /** The path to put in the address bar, so a reload comes back here. */
-  path: string;
   /** Camera behaviour beyond the standard fit-and-follow. */
   camera?: { coverMap?: boolean; remembersZoom?: boolean };
 }
@@ -121,8 +119,10 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
   ): OutdoorPlace | null;
 
   /**
-   * A doorway this place opens itself, by starting another scene. True when
-   * it has been dealt with; false to load the zone's target as a page.
+   * A doorway this place has an address of its own for — the campus gate,
+   * the road back to the map — which it travels to itself. True when it has
+   * been dealt with; false to travel to the zone target as it stands, which
+   * is what a lobby door is.
    */
   protected abstract goThrough(zone: DoorZone): boolean;
 
@@ -145,9 +145,6 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     const place = this.layOut(data, walls);
     if (!place) return;
 
-    // Reached in-page from a lobby or another scene: say so in the bar, so a
-    // reload comes back here.
-    showAddress(place.path);
     this.zones = place.doors;
     this.entrances = place.entrances;
     this.pathfinder = new Pathfinder(place.width, place.height, place.solids, PF_PADDING);
@@ -360,6 +357,6 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     this.player.board(true);
     this.log.info(`entering ${zone.name}`);
     if (this.goThrough(zone)) return;
-    window.location.assign(zone.target);
+    travelTo(zone.target);
   }
 }

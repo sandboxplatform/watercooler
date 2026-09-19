@@ -3,7 +3,8 @@ import { OutdoorScene, type OutdoorPlace } from "./OutdoorScene";
 import type { DoorZone } from "@/lib/doors";
 import { LOBBY, floorUrl } from "@/lib/world/floors";
 import { createLogger } from "@/lib/logger";
-import { WORLD_PATH } from "@/lib/world/paths";
+import { campusPath } from "@/lib/world/paths";
+import { travelTo } from "@/lib/room-travel";
 import {
   BUILDINGS,
   WORLD_HEIGHT,
@@ -40,6 +41,8 @@ const CAMPUS_TARGET = "campus:";
 export interface WorldSceneData {
   /** The tenant or campus whose building the person just walked out of, if any. */
   from?: string | null;
+  /** Walk in anyway, having come out of no door: a first arrival in the world. */
+  walkIn?: boolean;
 }
 
 /**
@@ -93,15 +96,15 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
       height: WORLD_HEIGHT,
       // Off a building's path, or up the dock away from the ferry's gangway.
       spawn: { x: at.x, y: at.y, facing: left?.arrive ?? "down" },
-      // Only out of a door: arriving by the road, the keys are yours at once.
-      walkIn: Boolean(left),
+      // Out of a door, or walking into the world for the first time.
+      // Arriving by the road otherwise, the keys are yours at once.
+      walkIn: Boolean(left) || data?.walkIn === true,
       doors,
       // Every building on the map, the ferry among them: a tap on any of
       // their pictures walks to that front door and goes in.
       entrances: BUILDINGS,
       solids,
       label: "World map",
-      path: WORLD_PATH,
       camera: {
         coverMap: true,
         // The map opens where it was left. Every building is a page of its
@@ -132,7 +135,9 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
 
   protected goThrough(zone: DoorZone): boolean {
     if (!zone.target.startsWith(CAMPUS_TARGET)) return false;
-    this.scene.start("CampusScene", { campus: zone.target.slice(CAMPUS_TARGET.length) });
+    // A campus is an address of its own, so it travels like any other room —
+    // the router puts the scene up and the socket never notices.
+    travelTo(campusPath(zone.target.slice(CAMPUS_TARGET.length)));
     return true;
   }
 }

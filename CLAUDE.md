@@ -425,6 +425,41 @@ This is also why `server.ts` passes `port` to `next()` — Next builds each requ
 absolute URL from what it is told there, not from the socket, so without it sign-in
 callbacks point at 3000 whatever port the server is actually on.
 
+### Walking in
+
+**The way in is a door, not a page load.** The welcome screen asks who you
+are, and the moment it has an answer the world map comes up — in the same
+page now, which is a blank canvas for as long as a tilemap, six buildings
+and a character sheet take, and then somebody who is suddenly there.
+`components/hud/Arrival.tsx` covers that moment: their own face and name on
+a card while the map builds, and then it lifts onto their character taking
+the first steps onto the plaza.
+
+Four decisions in it:
+
+- **The welcome screen no longer navigates; it says who arrived.** Both ways
+  through it end in a `walking-in` on the bus — the button somebody presses,
+  and the effect that walks a personal code straight through without asking
+  it anything. A personal code was the one arrival with nothing to look at,
+  which is backwards: it is the only person the app knows by name.
+- **The card does the travelling.** That looks out of place for a panel and
+  is the whole point: it has to be on screen before the canvas goes blank,
+  and the only way to be sure of that is for the thing covering the screen
+  to be what starts the move. Hence `arriveAt` above.
+- **It lifts on the map saying it is up**, not on a timer — with a floor
+  under it so it is a moment rather than a flicker, and a ceiling over it so
+  a place that never says anything cannot strand anybody behind it.
+- **The steps are the ordinary arrival walk.** `walkIn` on the `RoomArrival`
+  is the same walk everybody takes out of a door; it is a separate flag
+  because out of a door the walk is forced — a key held through the doorway
+  would otherwise walk you straight back in — and this one is for effect.
+
+A name chosen there reaches the room by **re-joining**, which is what a new
+look already did. It had no need to before: the welcome ended in a page
+load, so the name it wrote was read by a socket that had not opened yet.
+Without it everybody in the world goes on seeing the name you arrived under,
+which for a visitor is `Guest`.
+
 ### Presence
 
 A room's people live in a `PresenceHub`, keyed by connection rather than by
@@ -455,6 +490,26 @@ answer: a browser that is really there replies in tens of milliseconds and
 the newcomer is turned away; a ghost never replies and the newcomer takes
 over from it. A second's pause on a reload is what that costs, and it is
 only ever paid by somebody whose predecessor is already dead.
+
+**A reload is not a claim, and the tab says so.** The ping above is the
+right answer to two people and the wrong answer to one person coming back,
+for the reason in **Rooms and places**: a browser answers a ping from its
+network stack, so the socket a reloading page left behind swears it is
+alive. `session` on the join is a per-tab id kept in `sessionStorage` —
+surviving a reload, shared with no other tab, gone when the tab is. A join
+contesting an identity held by a connection with the same session is not
+contesting anything: it is one person at one screen, so it takes its own
+place back and nothing is pinged. Anything else is challenged as before, and
+a browser that cannot keep a session token is challenged like any other
+newcomer.
+
+`supersede` is what the two paths share: the connection being replaced is
+told rather than left to go quiet, and then terminated rather than closed
+politely — a connection taken out of its room is swept by nothing afterwards,
+since the heartbeat walks the rooms, so one left waiting on a closing
+handshake nobody is there to finish would sit open for as long as the server
+runs. Usually nobody sees the message; where somebody does, it is two tabs
+that ended up sharing a session, which is what duplicating a tab does.
 
 `claiming` is the other half of it. The challenge takes a moment, and a
 third connection arriving inside that moment would find the incumbent still
@@ -602,6 +657,12 @@ means they walked into the next room, on the same connection, and dropping them
 there would cut a conversation off at every lift ride with nothing to mend it. Who
 has actually gone is the server's own list.
 
+"On the same connection" is now true of **every** door rather than only the
+lift's — see **Rooms and places**. It had to become true for any of this to
+work: a front door was a page load, which takes the peer connections down with
+the page, so a conversation survived a floor and not a building. Nothing here
+changed to fix that; the navigation did.
+
 It used to be proximity voice, per room, each voice faded by distance — full within
 three tiles, silent past nine, linear between. Distance is the wrong measure once
 the chat spans rooms: a floor above has coordinates of its own, so the same numbers
@@ -676,32 +737,67 @@ excludes separators and traversal outright rather than trusting callers: it is
 the one place that parses them, and a slug that cannot be a path is a slug
 nobody has to think about again.
 
-**Changing room is a page load, except in a lift.** A room is a URL, so
-moving between them was `location.assign` and the whole client came up
-again. Measured on a warm cache in production that was about 1.2s to ride
-one floor: 232ms to first paint, then half a second of Phaser parsing and
-booting before the new map was so much as asked for, 47 requests, and 7KB
-actually off the network. Nothing was being fetched — the app was being
-rebuilt around a room next door.
+**No room change is a page load.** A room is a URL, so moving between them
+used to be `location.assign` and the whole client came up again. Measured on
+a warm cache in production that was about 1.2s to ride one floor: 232ms to
+first paint, then half a second of Phaser parsing and booting before the new
+map was so much as asked for, 47 requests, and 7KB actually off the network.
+Nothing was being fetched — the app was being rebuilt around a room next
+door. Same journey now: 2 requests, 1KB, done at 428ms, and that is the
+room-state round trip rather than rebuilding anything. Both tilesets are
+9.4MB of decoded RGBA, decoded once a session instead of once a floor.
 
-`lib/room-travel.ts` is the one place that does it in the page: push the
-URL, then say so with `room-changed`. Three things listen.
+**The dear half of the cost was never the milliseconds.** A page load is a
+new WebSocket, a new set of peer connections and a new person as far as the
+server can tell. So walking through a front door dropped you out of Global
+Chat mid-sentence; the Online count flickered down and back up for everybody
+in the world, which is not what a count of who is here should ever do; and
+the arriving page raced its own ghost for its own code and lost — refused
+`already-online` on the doorstep of a building, by itself. The ping that
+decides a contested claim cannot tell those two apart, because **a pong is
+written by the browser's network stack rather than by the page's script**: a
+page being torn down answers one exactly as a live page does.
 
-| Who            | Does                                                                                                                                 |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `OfficeScene`  | Drops the cached tilemap and restarts, so `preload` reads the URL just pushed and everything already in the texture cache is skipped |
-| `lib/store.ts` | Refetches the room, since `room-client` reads the slug off the URL at call time and only the store held the floor below's world      |
-| presence       | Nothing. The socket carries no room in its URL, and `create` already ends with `place-entered`, which rejoins                        |
+`lib/room-travel.ts` is the one place a room changes. It pushes the URL and
+says so with `room-changed`; three things listen.
 
-Same journey after: no page load, 2 requests, 1KB, done at 428ms — and that
-is the room-state round trip, not rebuilding anything. Both tilesets are
-9.4MB of decoded RGBA, now decoded once a session instead of once a floor.
+| Who                                       | Does                                                                                                                         |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `components/game/systems/scene-router.ts` | Puts up the scene the new address names, clearing the cached tilemap first when that scene is the office                     |
+| `lib/store.ts`                            | Refetches the room, since `room-client` reads the slug off the URL at call time and only the store held the old room's world |
+| presence                                  | Nothing. The socket carries no room in its URL, and every scene's `create` ends with `place-entered`, which rejoins          |
 
-**Only the lift.** Its stops are all in one building and all drawn by
-`OfficeScene`, which is what makes swapping the map sound; the front door
-and the campus gates open a different scene and still navigate. Back and
-forward are handled too (`watchRoomHistory`), or the address bar would name
-one floor while the game drew another.
+Three ways of meaning it, one mover underneath:
+
+| Function     | For                                | Pushes or replaces | Announces             |
+| ------------ | ---------------------------------- | ------------------ | --------------------- |
+| `travelTo`   | A move through the world           | Pushes             | When the room changed |
+| `redirectTo` | An address that forwards           | Replaces           | When the room changed |
+| `arriveAt`   | Walking into the world, first time | Replaces           | Always                |
+
+`arriveAt` is the odd one and it earns it: somebody finishing the welcome
+screen may already be standing on the world map, since a visitor is put out
+there before they have said who they are. Travelling to the address you are
+already at does nothing at all, which left the arrival card waiting on a
+scene that was never going to be built. Everywhere else the guard is right —
+a query parameter is not a move, and everything downstream reacts by throwing
+a scene away and refetching the room.
+
+**The router is the only reading of the address bar in the game layer.**
+`destinationFor` names the scene and what to tell it; `EntryScene` is the
+scene Phaser boots, and its whole job is now to hold the router and stay
+alive for the next move. It used to read the address once and hand over, the
+office restarted itself on `room-changed` so the lift could work, and every
+other move was a navigation — three answers to one question, two of which
+were wrong. Swapping is done through the SceneManager rather than a scene's
+own `scene.start`, which shuts down the scene it is called on: right for one
+place handing over to another, wrong for a router.
+
+**A `RoomArrival` carries what the URL cannot**: the building or campus just
+left, so the map stands you on your own path rather than putting you down on
+the road like a stranger, and `walkIn` for a first arrival. Back and forward
+are handled too (`watchRoomHistory`), or the address bar would name one floor
+while the game drew another.
 
 ### Floors
 
@@ -1375,16 +1471,16 @@ app/                    App Router pages + API routes (room, characters, people,
 components/
   game/
     PhaserGame.tsx      dynamic import, ssr:false; creates the Game in useEffect, destroys on return
-    scenes/             OfficeScene, EntryScene, and OutdoorScene → WorldScene, CampusScene
+    scenes/             OfficeScene, EntryScene (which holds the router), and OutdoorScene → WorldScene, CampusScene
     entities/           Player, RemotePlayer, Worker (split under worker/), ChatBubble
-    systems/            camera, doors, gamepad, pathfinding bridge, presence, fixtures
+    systems/            camera, doors, gamepad, pathfinding bridge, presence, fixtures, scene router
     config/             animations, emotes — frame counts and timings live here, not inline
   hud/                  every React panel, plus hud.css (the pixel HUD)
 lib/
   events.ts store.ts reducer.ts    the state + event spine
   camera.ts legible.ts            how far out the camera stands, and how big lettering is drawn
   fixtures.ts                      what you walk up to and press E at, read by both layers
-  room-travel.ts                   moving between rooms without a page load
+  room-travel.ts                   every room change, none of them a page load
   server/                          server-only: room store, presence hub/socket, residents, access
   server/room-broadcast.ts         the way anything server-side speaks into a room
   map/ world/                      map generation and world layout
@@ -1937,8 +2033,9 @@ React will not hand one its dispatcher outside a renderer.
 
 - No `dangerouslySetInnerHTML`. A CSP is set in `next.config.ts` — new outbound
   connections need `CSP_CONNECT_SRC`, not a loosened policy.
-- Cache headers live beside it. A room change is a page load — except between
-  floors of one building, which `lib/room-travel.ts` does in the page — and
+- Cache headers live beside it. A room change is no longer a page load at all
+  (`lib/room-travel.ts`), but a reload, a bookmark and a shared link all land
+  cold, and
   `public/` is served `max-age=0` by default, so it used to revalidate around fifty assets
   and re-fetch three and a half megabytes of music every time. `/audio/` is
   immutable for a year — change the music by pointing at a different file, not

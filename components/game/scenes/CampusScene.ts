@@ -3,7 +3,8 @@ import { OutdoorScene, type OutdoorPlace } from "./OutdoorScene";
 import type { DoorZone } from "@/lib/doors";
 import { LOBBY, floorUrl } from "@/lib/world/floors";
 import { createLogger } from "@/lib/logger";
-import { campusPath } from "@/lib/world/paths";
+import { WORLD_PATH } from "@/lib/world/paths";
+import { travelTo } from "@/lib/room-travel";
 import { TILE, organisationFor } from "@/lib/world/tenants";
 import { campusFor, campusSpawnFor, type Campus, type CampusBuilding } from "@/lib/world/campus";
 import { groundGrid, propBody, signBody, tilesOf, waterBodies } from "@/lib/world/scenery";
@@ -70,7 +71,7 @@ export class CampusScene extends OutdoorScene<CampusSceneData> {
     const campus = campusFor(data?.campus);
     if (!campus) {
       this.log.error(`no campus "${data?.campus}"; back to the world`);
-      this.scene.start("WorldScene", {});
+      travelTo(WORLD_PATH);
       return null;
     }
     this.campus = campus;
@@ -153,7 +154,6 @@ export class CampusScene extends OutdoorScene<CampusSceneData> {
         ...water,
       ],
       label: `${company?.name ?? campus.slug} · ${campus.place ?? "Campus"}`,
-      path: campusPath(campus.slug),
     };
   }
 
@@ -176,7 +176,9 @@ export class CampusScene extends OutdoorScene<CampusSceneData> {
 
   protected goThrough(zone: DoorZone): boolean {
     if (zone.target !== EXIT_TARGET) return false;
-    this.scene.start("WorldScene", { from: this.campus.slug });
+    // Out by the road, or the ferry: the map is a room like any other, and
+    // it needs telling which yard to stand us outside of.
+    travelTo(WORLD_PATH, { from: this.campus.slug });
     return true;
   }
 }

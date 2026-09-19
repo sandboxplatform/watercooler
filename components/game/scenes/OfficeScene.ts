@@ -14,6 +14,8 @@ import {
   type AnimatedProp,
 } from "../utils/MapHelpers";
 import { gameEvents } from "@/lib/events";
+import { travelTo } from "@/lib/room-travel";
+import { WORLD_PATH, campusPath } from "@/lib/world/paths";
 import { rememberCharacter, rememberedCharacter } from "@/lib/characters/choice";
 import { roomFromLocation } from "@/lib/rooms";
 import {
@@ -402,12 +404,24 @@ export class OfficeScene extends Phaser.Scene {
     });
 
     // Out through the door is the world map; the lift offers the floors.
+    //
+    // Every one of them travels rather than navigating: the router puts up
+    // whatever the new address names, and the room socket, the voice chat
+    // and the HUD carry straight on. Walking out of a building used to be a
+    // page load, which is what made a front door cost a reconnection.
     const unsubDoor = gameEvents.on("transition-entered", (name, target) => {
-      // A door into the room next door: its page, arriving at the matching door there.
+      // They have gone through, so stop drawing them here — on everyone's
+      // screen, not only ours. The next place has to build its map before
+      // it joins, and until it does the room being left still has us
+      // standing in its doorway with a name tag over it.
+      const gone = () => this.player?.board(true);
+
+      // A door into the room next door: arriving at the matching door there.
       if (target.startsWith("room:")) {
         const [, slug, door] = target.split(":");
         log.info(`through the ${name} to ${slug}`);
-        window.location.assign(`/r/${slug}?via=${door}`);
+        gone();
+        travelTo(`/r/${slug}?via=${door}`);
         return;
       }
       if (target === "elevator") {
@@ -422,11 +436,9 @@ export class OfficeScene extends Phaser.Scene {
       log.info(`leaving ${from} by the ${name}`);
       // A store's or campus's lobby opens onto its yard; a head office onto the world.
       const tenant = tenantFor(from);
-      if (tenant && hasCampus(tenant.org)) {
-        this.scene.start("CampusScene", { campus: tenant.org, from });
-      } else {
-        this.scene.start("WorldScene", { from });
-      }
+      const out = tenant && hasCampus(tenant.org) ? campusPath(tenant.org) : WORLD_PATH;
+      gone();
+      travelTo(out, { from });
     });
 
     // Put on whatever was chosen last time, so a look survives a reload.
@@ -440,26 +452,6 @@ export class OfficeScene extends Phaser.Scene {
       this.player?.board(false);
     });
 
-    /**
-     * Another floor of this building, without a page load.
-     *
-     * Restarting is the whole move: Phaser runs `preload` and `create`
-     * again, `mapFileFor` reads the URL that has just been pushed, and
-     * everything already in the texture cache — both tilesets, every
-     * character sheet — is skipped rather than fetched and decoded a
-     * second time. The tilemap is the one thing that must go, because
-     * every floor is cached under the same key and a stale one would be
-     * reused in silence.
-     *
-     * SHUTDOWN fires on the way, so `cleanup` unhooks all of this; the new
-     * `create` subscribes again. Presence needs nothing here — `create`
-     * ends with `place-entered`, which is what rejoins the room, on the
-     * socket that was never closed.
-     */
-    const unsubRoom = gameEvents.on("room-changed", () => {
-      this.cache.tilemap.remove("office");
-      this.scene.restart();
-    });
     const unsubBadge = gameEvents.on("achievement-earned", (achievement) => {
       // Agents celebrate at their desk; people celebrate wherever they stand
       if (achievement.subjectType === "agent") {
@@ -478,7 +470,6 @@ export class OfficeScene extends Phaser.Scene {
       unsubDoor();
       unsubFixtures();
       unsubElevatorClosed();
-      unsubRoom();
       unsubInteract();
     };
     this.initInteraction();

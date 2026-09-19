@@ -161,6 +161,7 @@ For that, configure sign-in (below) — it layers on top.
 
 - **One world, shared:** Everyone on the server is in the same places. Walk into a lobby and you see who else is standing in it, and where they are looking.
 - **Global Chat:** Switch your microphone on and you are in one conversation with everyone in the world, wherever they are standing. Browser to browser; the server never hears it.
+- **Nothing reloads:** Front doors, campus gates and lifts all move you inside the page. You stay online, mid-sentence on Global Chat, from the plaza to the third floor and back.
 - **Things to walk up to:** Boards, a support queue, an arcade cabinet, a pinball table, a ping pong table, a boardroom table you can call a meeting at.
 - **Workers at their desks:** Idle workers roam the office — whiteboards, printers, sofas, bookshelves — and the seat manager sets their names, roles and sprites.
 
@@ -169,9 +170,15 @@ For that, configure sign-in (below) — it layers on top.
 ```
 You open the link  ->  the door checks your access code
   ->  you pick a name, a home and a look
+  ->  your character walks out onto the world map
   ->  you walk into a lobby, and everyone already there sees you arrive
   ->  press E at anything with a prompt over it
 ```
+
+You are online from that first step until you close the tab. Walking through
+a door does not sign you out and back in again: it is one connection for the
+whole session, so the Online count stays still, a conversation carries from
+one building to the next, and you never meet your own ghost at a front door.
 
 ## Tech stack
 
