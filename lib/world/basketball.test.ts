@@ -174,6 +174,58 @@ describe("a throw", () => {
     expect(ball.y).toBeLessThanOrEqual(WORLD_HEIGHT - BALL_RADIUS);
   });
 
+  /**
+   * Every throw the meter offers, from all over the court, comes to rest.
+   *
+   * The sweep is the point: the ball used to end almost every throw in a
+   * two-tick cycle a quarter of a pixel off the tarmac — bouncing off a
+   * speed that had a whole tick of gravity in it, so each bounce put back
+   * more than it took out — and it settled there from any throw, which is
+   * why one throw at one power is not a test of this. What it costs is in
+   * `Basketball.step`: a ball that is never still is broadcast to the room
+   * on every tick for as long as the server runs, and never accrues the
+   * idle time that would send it back to the centre spot.
+   */
+  it("comes to rest from every power, all over the court", () => {
+    const blocked = worldSolids();
+    let slowest = 0;
+    for (let px = 0; px <= 8; px++) {
+      for (let py = 0; py <= 4; py++) {
+        const from = standingOn({
+          x: COURT_PX.x + (COURT_PX.width * px) / 8,
+          y: COURT_PX.y + (COURT_PX.height * py) / 4,
+        });
+        for (let p = 0; p <= 20; p++) {
+          for (const facing of ["left", "right"] as const) {
+            const { ball, ticks } = settle(thrown(from, facing, p / 20), blocked);
+            const where = `from (${from.x}, ${from.y}) ${facing} at ${p / 20}`;
+            // Well inside the cap rather than merely inside it: a throw that
+            // takes a minute of ticks to stop has not stopped.
+            expect(ticks, where).toBeLessThan(300);
+            expect(ball.z, where).toBe(0);
+            expect(ball.vz, where).toBe(0);
+            expect(ball.vx, where).toBe(0);
+            expect(ball.vy, where).toBe(0);
+            slowest = Math.max(slowest, ticks);
+          }
+        }
+      }
+    }
+    // And the slowest of them is seconds rather than minutes.
+    expect(slowest).toBeLessThan(200);
+  });
+
+  it("stops rather than hopping, once a bounce is too small to see", () => {
+    // The state the old arithmetic settled in: a quarter of a pixel up,
+    // coming down at 17px/s. A bounce off that is 12px/s, which lifts it a
+    // tenth of a pixel and is over before the tick is.
+    const hopping: BallState = { ...ballAtRest(), z: 0.2716, vz: -17.07 };
+    const { ball, ticks } = settle(hopping);
+    expect(ticks).toBeLessThan(5);
+    expect(ball.z).toBe(0);
+    expect(ball.vz).toBe(0);
+  });
+
   it("stays inside the world however hard it is thrown at the edge", () => {
     for (const facing of ["left", "right"] as const) {
       const { ball } = settle(thrown({ x: 40, y: 40 }, facing, 1));

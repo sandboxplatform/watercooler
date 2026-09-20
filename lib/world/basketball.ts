@@ -470,10 +470,29 @@ export function stepBall(ball: BallState, dtMs: number, blocked: readonly Rect[]
   // forty-five px/s of it — so reading that as an impact gave it a bounce
   // it could never lose, and a ball that never comes to rest is a ball the
   // room goes on broadcasting for as long as the server runs.
+  //
+  // Which is why the impact is the speed the ball crosses the ground at
+  // rather than the speed it ends the step with. The two differ by a whole
+  // tick of gravity — gravity the ball never had before it hit — so
+  // bouncing off the second puts *in* more than `BOUNCE` takes out, and the
+  // arithmetic settles into a cycle it cannot leave: a rebound of
+  // `2·g·dt·BOUNCE / (1 + BOUNCE)`, which at 50ms ticks is 27.9px/s, lifts
+  // the ball a quarter of a pixel and comes back down to be bounced again,
+  // for as long as the server runs. Nothing about the throw is in that
+  // number, which is how nearly every throw on the court ended in it.
+  // `vz² + 2·g·z` is what the parabola above conserves exactly at every step
+  // boundary, so the speed at the ground is to be had without solving for
+  // where in the tick the crossing fell.
+  //
+  // And a floor on the rebound as well as on the impact: a bounce too slow
+  // to lift the ball off the tarmac is a ball that has stopped, and saying
+  // so here is what ends the run rather than leaving it to a last few
+  // sub-pixel hops.
   if (next.z <= 0) {
-    const landed = wasZ > 0 && next.vz < -REST_SPEED;
+    const rebound = Math.sqrt(ball.vz * ball.vz + 2 * GRAVITY_PX_S2 * wasZ) * BOUNCE;
+    const landed = wasZ > 0 && rebound > REST_SPEED;
     next.z = 0;
-    next.vz = landed ? -next.vz * BOUNCE : 0;
+    next.vz = landed ? rebound : 0;
     const decay = Math.pow(ROLL_DECAY_PER_S, dt);
     next.vx *= decay;
     next.vy *= decay;
