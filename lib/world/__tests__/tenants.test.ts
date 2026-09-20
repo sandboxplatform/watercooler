@@ -28,6 +28,10 @@ describe("organisations and their lobbies", () => {
       "Sandbox ERP",
       "Chester",
       "Blockhouse",
+      "Targetts",
+      "Masstown",
+      "MacCallum",
+      "Happy Harrys",
       "Homestar",
       "Mettara",
       "Apeiron Media",
@@ -49,6 +53,19 @@ describe("organisations and their lobbies", () => {
       "Store",
       "Field Crew",
     ]);
+    // The four newer ones are a store and a warehouse and nothing else.
+    // **No field crew**, which is what tells them from Blockhouse, and what
+    // `buildStoreSpec` reads to decide whether the shop gets a side door.
+    for (const shop of ["targetts", "masstown", "maccallum", "happy-harrys"]) {
+      expect(
+        tenantsOf(shop).map((t) => t.location),
+        shop,
+      ).toEqual(["Warehouse", "Store"]);
+      expect(
+        tenantsOf(shop).some((t) => t.kind === "garage"),
+        shop,
+      ).toBe(false);
+    }
     expect(tenantsOf("homestar").map((t) => t.location)).toEqual([
       "Sales",
       "Finance",

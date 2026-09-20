@@ -125,5 +125,41 @@
     "y": 0,
     "width": 16,
     "height": 28
+  },
+  "car-red-north": {
+    "x": 1516,
+    "y": 0,
+    "width": 44,
+    "height": 88
+  },
+  "car-red-south": {
+    "x": 1568,
+    "y": 0,
+    "width": 44,
+    "height": 88
+  },
+  "car-blue-north": {
+    "x": 1620,
+    "y": 0,
+    "width": 44,
+    "height": 88
+  },
+  "car-blue-south": {
+    "x": 1672,
+    "y": 0,
+    "width": 44,
+    "height": 88
+  },
+  "car-pale-north": {
+    "x": 1724,
+    "y": 0,
+    "width": 44,
+    "height": 88
+  },
+  "car-pale-south": {
+    "x": 1776,
+    "y": 0,
+    "width": 44,
+    "height": 88
   }
 }

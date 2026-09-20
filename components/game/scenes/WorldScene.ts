@@ -14,18 +14,24 @@ import {
   type Building,
 } from "@/lib/world/tenants";
 import { SCENERY, WORLD_SIGNS, groundTiles, worldSolids } from "@/lib/world/scenery";
+import { HIGHWAY_PX } from "@/lib/world/wilderness";
 import { asset } from "@/lib/assets";
 import { COURT_PX } from "@/lib/world/basketball";
 import { BasketballCourt } from "../systems/BasketballCourt";
 import { EggPatch } from "../systems/EggPatch";
+import { Highway } from "../systems/Highway";
 import {
   addSolid,
   layGround,
   placeBuilding,
   placeCourtLines,
+  placeHighwayMarks,
   placeProp,
   placeSign,
 } from "./outdoors";
+
+/** The four shopfronts, which are one picture painted four ways. */
+const SHOPS = ["targetts", "masstown", "maccallum", "happy-harrys"];
 
 /**
  * Where each building's name goes: the blank sign the picture leaves, from
@@ -44,7 +50,13 @@ const SIGN_Y: Record<string, number> = {
   "world-blocks": 169,
   "world-campus": 199,
   "world-lab": 159,
+  // The four shops along the west road are one drawing with four sets of
+  // colours in it (`shop()` in `scripts/make-world-art.mjs`), so the board
+  // is at the same height on every one of them — which is the argument for
+  // drawing them once rather than four times, seen from this end.
+  ...Object.fromEntries(SHOPS.map((slug) => [`world-${slug}`, 112])),
 };
+
 /** A door zone target that starts a scene rather than loading a page. */
 const CAMPUS_TARGET = "campus:";
 
@@ -85,6 +97,9 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
     this.load.image("world-blocks", asset("/sprites/world/building_blocks.png"));
     this.load.image("world-campus", asset("/sprites/world/building_campus.png"));
     this.load.image("world-lab", asset("/sprites/world/building_lab.png"));
+    for (const slug of SHOPS) {
+      this.load.image(`world-${slug}`, asset(`/sprites/world/building_${slug}.png`));
+    }
   }
 
   protected layOut(data: WorldSceneData, walls: Phaser.Physics.Arcade.StaticGroup): OutdoorPlace {
@@ -92,6 +107,9 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
     // The court's tarmac is ground, laid with everything else above; its
     // markings are one picture nine tiles wide, which no tile can carry.
     placeCourtLines(this, COURT_PX);
+    // And the road's markings, likewise: the tarmac is ground, the paint is
+    // a picture over it.
+    placeHighwayMarks(this, HIGHWAY_PX);
     const doors = BUILDINGS.map((b) => this.putUp(b, walls));
     for (const prop of SCENERY) placeProp(this, prop, walls);
     for (const sign of WORLD_SIGNS) placeSign(this, sign, walls);
@@ -118,10 +136,11 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
       entrances: BUILDINGS,
       solids,
       label: "World map",
-      // The two things on this map that are not scenery, both of them
-      // the server's: this side draws them, offers the Press E and — for
-      // the ball — swings the meter.
-      extras: [new BasketballCourt(this), new EggPatch(this)],
+      // The three things on this map that are not scenery, all of them the
+      // server's: this side draws them, offers the Press E and — for the
+      // ball — swings the meter. The traffic is the one with nothing to
+      // press at: a car is a thing that goes past.
+      extras: [new BasketballCourt(this), new EggPatch(this), new Highway(this)],
       camera: {
         coverMap: true,
         // The map opens where it was left. Every building is a page of its

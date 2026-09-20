@@ -30,20 +30,37 @@ const GROUND: Record<Exclude<Ground, "water">, string> = {
   paving: "world-paving",
   kerb: "world-kerb",
   asphalt: "world-asphalt",
+  highway: "world-highway",
   dock: "world-dock",
   court: "world-court",
   trail: "world-trail",
   shingle: "world-shingle",
 };
 
+/**
+ * The grass, eight tiles square, which is what the map is carpeted with.
+ *
+ * The 48px tile above is still loaded and still used — a campus lays its
+ * ground a tile at a time, and both keys name the same green — but the world
+ * map does not lay grass tile by tile any more. See `layGround`.
+ */
+const GRASS_BLOCK_KEY = "world-grass-block";
+/** How many tiles across one block of the carpet is. */
+const GRASS_BLOCK = 8;
+
 /** The lines painted on the basketball court, laid over its surface. */
 export const COURT_LINES_KEY = "world-court-lines";
+/** The markings painted down the highway, four tiles across and one deep. */
+export const HIGHWAY_MARKS_KEY = "world-highway-marks";
 
 export function preloadOutdoors(scene: Phaser.Scene) {
   scene.load.image(GROUND.grass, asset("/sprites/world/grass_48.png"));
   scene.load.image(GROUND.paving, asset("/sprites/world/paving_48.png"));
   scene.load.image(GROUND.kerb, asset("/sprites/world/kerb_48.png"));
   scene.load.image(GROUND.asphalt, asset("/sprites/world/asphalt_48.png"));
+  scene.load.image(GROUND.highway, asset("/sprites/world/highway_48.png"));
+  scene.load.image(GRASS_BLOCK_KEY, asset("/sprites/world/grass_384.png"));
+  scene.load.image(HIGHWAY_MARKS_KEY, asset("/sprites/world/highway_marks_192x48.png"));
   scene.load.image(GROUND.dock, asset("/sprites/world/dock_48.png"));
   scene.load.image(GROUND.court, asset("/sprites/world/court_48.png"));
   scene.load.image(GROUND.trail, asset("/sprites/world/trail_48.png"));
@@ -86,15 +103,36 @@ export function cutOutdoorFrames(scene: Phaser.Scene) {
 }
 
 /**
- * Lay the ground tile by tile. Water moves, and gets a line of foam along
- * any edge that meets land; the dock lies over it and is walked like paving.
+ * Lay the ground: a carpet of grass, and then every cell that is not grass
+ * over the top of it. Water moves, and gets a line of foam along any edge
+ * that meets land; the dock lies over it and is walked like paving.
+ *
+ * **The carpet is why this is not simply a tile per cell.** It was, and on
+ * the town-sized map that was four thousand pictures on the display list
+ * before anything was standing on them. The map is three times as wide now
+ * and four cells in five of it are grass: thirteen thousand, of which ten
+ * thousand would have been the same green square. Phaser walks the whole
+ * display list every frame whether a thing is on camera or not, so that is
+ * paid sixty times a second for the life of the scene.
+ *
+ * Eight tiles to a block and the blocks laid under everything at depth -1,
+ * which takes it back to about what the town cost. The overhang past the
+ * last whole block is left alone: it is grass, the camera is clamped to the
+ * map, and cutting it would mean a second, part-width picture per edge.
  */
 export function layGround(scene: Phaser.Scene, grid: Ground[][]) {
   const isWater = (tx: number, ty: number) => grid[ty]?.[tx] === "water";
+  const columns = grid[0]?.length ?? 0;
+  const block = GRASS_BLOCK * TILE;
+  for (let y = 0; y < grid.length * TILE; y += block)
+    for (let x = 0; x < columns * TILE; x += block)
+      scene.add.image(x, y, GRASS_BLOCK_KEY).setOrigin(0, 0).setDepth(-1);
   grid.forEach((row, ty) =>
     row.forEach((ground, tx) => {
       const x = tx * TILE;
       const y = ty * TILE;
+      // The carpet is already grass; anything else is laid over it.
+      if (ground === "grass") return;
       if (ground !== "water") {
         scene.add.image(x, y, GROUND[ground]).setOrigin(0, 0).setDepth(0);
         return;
@@ -128,6 +166,22 @@ export function layGround(scene: Phaser.Scene, grid: Ground[][]) {
  */
 export function placeCourtLines(scene: Phaser.Scene, at: { x: number; y: number }) {
   scene.add.image(at.x, at.y, COURT_LINES_KEY).setOrigin(0, 0).setDepth(1);
+}
+
+/**
+ * The highway's markings, a row at a time down the road.
+ *
+ * At depth 1 with the court's lines and the water's foam: over the tarmac,
+ * under everybody and everything standing on it. One strip per row rather
+ * than one picture for the whole road, because the road is the height of the
+ * map — sixty-nine rows of it is nothing to lay, and a single picture would
+ * be a 192 by 3312 texture held for the life of the scene to draw four
+ * straight lines and a dash.
+ */
+export function placeHighwayMarks(scene: Phaser.Scene, road: Rect) {
+  for (let y = road.y; y < road.y + road.height; y += TILE) {
+    scene.add.image(road.x, y, HIGHWAY_MARKS_KEY).setOrigin(0, 0).setDepth(1);
+  }
 }
 
 /** An invisible wall the size of a rectangle. */

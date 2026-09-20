@@ -19,7 +19,15 @@
 import { isArcadeGameId, type ArcadeGameId } from "../arcade/types";
 import type { Game, OfficeOptions } from "../map/office";
 
-export type OrgStyle = "castle" | "office" | "supply" | "blocks" | "campus" | "lab" | "irish";
+export type OrgStyle =
+  | "castle"
+  | "office"
+  | "supply"
+  | "blocks"
+  | "shop"
+  | "campus"
+  | "lab"
+  | "irish";
 
 export interface Organisation {
   slug: string;
@@ -35,6 +43,13 @@ export const ORGANISATIONS: readonly Organisation[] = [
   { slug: "sandbox-erp", name: "Sandbox ERP", tagline: "Operations", style: "office" },
   { slug: "chester", name: "Chester", tagline: "Building Supply", style: "supply" },
   { slug: "blockhouse", name: "Blockhouse", tagline: "Building Supply", style: "blocks" },
+  // The four along the west road, which is where the map grew. Each is a
+  // shop you walk into with its own warehouse out the back, and none of
+  // them runs a field crew — see `westStore`.
+  { slug: "targetts", name: "Targetts", tagline: "Building Supply", style: "shop" },
+  { slug: "masstown", name: "Masstown", tagline: "Building Supply", style: "shop" },
+  { slug: "maccallum", name: "MacCallum", tagline: "Building Supply", style: "shop" },
+  { slug: "happy-harrys", name: "Happy Harrys", tagline: "Building Supply", style: "shop" },
   { slug: "homestar", name: "Homestar", tagline: "Business Campus", style: "campus", campus: true },
   // Out of the way, past the trees at the far end of the south road: the
   // science lab that makes the whole world possible.
@@ -136,6 +151,27 @@ function lobby(slug: string, orgSlug: string, extra: Partial<Tenant> = {}): Tena
   return { slug, org: orgSlug, name: org(orgSlug).name, ...extra };
 }
 
+/**
+ * A store with its warehouse behind it, and nothing else.
+ *
+ * The four newer businesses along the west road are all this shape, so it
+ * is written once rather than four times: **none of them has a field
+ * crew**, which is the one way they differ from Blockhouse, and a garage
+ * added to one of them by hand would be a side door `buildStoreSpec` puts
+ * through to a room nobody generated. Chester is already in this shape, so
+ * nothing had to be taught it.
+ *
+ * The order is the order the two stand in: `tenantsOf` is what
+ * `build:map` asks a store for its siblings, and what the People panel
+ * lists a business by.
+ */
+function westStore(orgSlug: string): Tenant[] {
+  return [
+    lobby(`${orgSlug}-warehouse`, orgSlug, { location: "Warehouse", kind: "warehouse" }),
+    lobby(`${orgSlug}-store`, orgSlug, { location: "Store", kind: "store" }),
+  ];
+}
+
 export const TENANTS: readonly Tenant[] = [
   lobby("castle-atlantic", "castle-atlantic", {
     game: "pong",
@@ -159,6 +195,11 @@ export const TENANTS: readonly Tenant[] = [
   lobby("blockhouse-warehouse", "blockhouse", { location: "Warehouse", kind: "warehouse" }),
   lobby("blockhouse-store", "blockhouse", { location: "Store", kind: "store" }),
   lobby("blockhouse-field-crew", "blockhouse", { location: "Field Crew", kind: "garage" }),
+  // The four west of Blockhouse, each a store with its warehouse behind it.
+  ...westStore("targetts"),
+  ...westStore("masstown"),
+  ...westStore("maccallum"),
+  ...westStore("happy-harrys"),
   lobby("homestar-sales", "homestar", { location: "Sales", kind: "office" }),
   lobby("homestar-finance", "homestar", { location: "Finance", kind: "office" }),
   lobby("homestar-operations", "homestar", { location: "Operations", kind: "office" }),
@@ -317,8 +358,34 @@ export function storeOf(orgSlug: string): Tenant | null {
 // ── The map ─────────────────────────────────────────────
 
 export const TILE = 48;
-/** The stores to the west, the plaza in the middle, the campus to the east: each a short walk. */
-export const WORLD_COLUMNS = 62;
+/**
+ * The town: the two stores to the west, the plaza and the head offices in
+ * the middle, the campus gate to the east — each a short walk.
+ *
+ * This is the whole map as it first stood, and every coordinate in it is
+ * still written in the town's own columns. It moved east rather than being
+ * rewritten when the map grew west — see `TOWN_LEFT`.
+ */
+export const TOWN_COLUMNS = 62;
+/**
+ * The stretch west of the town: four more stores along the same two roads.
+ *
+ * Wide enough that they stand apart rather than in a terrace — a shop every
+ * thirteen columns, in two staggered ranks like Blockhouse and Chester —
+ * and the wood carries on above them as it does over the town.
+ */
+export const WEST_COLUMNS = 58;
+/**
+ * The stretch east of the campus: wilderness, and the highway down the far
+ * side of it.
+ *
+ * Nothing is built out here. It is meadow and scattered trees with the Gold
+ * River turning north through the top of it, and a road running the whole
+ * height of the map four columns in from the east edge — see
+ * `lib/world/wilderness.ts`.
+ */
+export const EAST_COLUMNS = 66;
+export const WORLD_COLUMNS = WEST_COLUMNS + TOWN_COLUMNS + EAST_COLUMNS;
 /**
  * How deep the wood along the top of the map is, in tiles, and the same in
  * pixels — which is how far down the town begins.
@@ -343,13 +410,33 @@ export const WORLD_COLUMNS = 62;
  */
 export const WOOD_ROWS = 30;
 export const TOWN_TOP = WOOD_ROWS * TILE;
+/**
+ * How far in from the west edge the town begins, in pixels — the same trick
+ * `TOWN_TOP` plays with rows, one axis over.
+ *
+ * The town was laid out from column 0 east and the new stores went in
+ * **west** of it, so rather than every coordinate in the town being
+ * rewritten by hand, the town moved east by this much. It is added in the
+ * few places a column of the town is written down as a number: `CENTRE_X`
+ * below, from which `EAST_X` and the dock already follow; the three
+ * buildings in the town's own west; the two roads; and the town's own props,
+ * which go through `townWest()` in `scenery.ts` the way the middle stretch
+ * already goes through `centre()`.
+ *
+ * So a column in the town's own layout still reads as it always did, and
+ * anything laid out west of it — or east, in the wilderness — is in world
+ * columns from 0.
+ */
+export const TOWN_LEFT = WEST_COLUMNS * TILE;
+/** Where the town stops and the wilderness begins, in pixels. */
+export const TOWN_RIGHT = TOWN_LEFT + TOWN_COLUMNS * TILE;
 /** Two rows of buildings deep: the businesses along the north road, plots for more along the south — and then the sea. */
 export const TOWN_ROWS = 39;
 export const WORLD_ROWS = WOOD_ROWS + TOWN_ROWS;
 export const WORLD_WIDTH = WORLD_COLUMNS * TILE;
 export const WORLD_HEIGHT = WORLD_ROWS * TILE;
 /** Where the middle stretch — the plaza between the two head offices — begins. */
-export const CENTRE_X = 16 * TILE;
+export const CENTRE_X = TOWN_LEFT + 16 * TILE;
 /** Where the east stretch — the campus gate — begins. */
 export const EAST_X = CENTRE_X + 30 * TILE;
 
@@ -417,6 +504,27 @@ function placeBuilding(
 const intoLobby = (slug: string): Entrance => ({ kind: "lobby", tenant: tenantFor(slug)! });
 const ontoCampus = (slug: string): Entrance => ({ kind: "campus", campus: slug });
 
+/**
+ * The four shops along the west road: which column each stands at, and
+ * which of the two ranks it stands in.
+ *
+ * A list rather than four `placeBuilding` calls, because the only thing
+ * that differs between them is those two numbers and the name over the
+ * door. The ranks alternate — the near one at row 8, the far one at row 2 —
+ * which is what Blockhouse and Chester already do and what keeps a row of
+ * six shops from reading as a terrace.
+ *
+ * `rank` is in the town's own rows, since that is what `placeBuilding`
+ * takes; `column` is a world column, because out here there is no town to
+ * be relative to.
+ */
+const WEST_SHOPS: readonly { org: string; column: number; rank: number }[] = [
+  { org: "targetts", column: 4, rank: 2 },
+  { org: "masstown", column: 17, rank: 8 },
+  { org: "maccallum", column: 30, rank: 2 },
+  { org: "happy-harrys", column: 43, rank: 8 },
+];
+
 export const BUILDINGS: readonly Building[] = [
   placeBuilding(
     "castle-atlantic",
@@ -440,7 +548,7 @@ export const BUILDINGS: readonly Building[] = [
   // Chester below it. Their doors open straight into the shop.
   placeBuilding(
     "blockhouse",
-    TILE * 4,
+    TOWN_LEFT + TILE * 4,
     TILE * 2,
     6 * TILE,
     TILE * 1.5,
@@ -449,7 +557,7 @@ export const BUILDINGS: readonly Building[] = [
   ),
   placeBuilding(
     "chester",
-    TILE * 11,
+    TOWN_LEFT + TILE * 11,
     TILE * 8,
     6 * TILE,
     TILE * 1.5,
@@ -457,7 +565,15 @@ export const BUILDINGS: readonly Building[] = [
     "world-supply",
   ),
   // South-west, off the south road behind the trees: the lab.
-  placeBuilding("mettara", TILE * 1, TILE * 21, 6 * TILE, TILE, intoLobby("mettara"), "world-lab"),
+  placeBuilding(
+    "mettara",
+    TOWN_LEFT + TILE * 1,
+    TILE * 21,
+    6 * TILE,
+    TILE,
+    intoLobby("mettara"),
+    "world-lab",
+  ),
   // East: the Homestar campus gate.
   placeBuilding(
     "homestar",
@@ -467,6 +583,22 @@ export const BUILDINGS: readonly Building[] = [
     TILE * 2,
     ontoCampus("homestar"),
     "world-campus",
+  ),
+  // Further west again: the four newer stores, in the same two staggered
+  // ranks Blockhouse and Chester stand in, so the whole west road reads as
+  // one row of shops rather than as two maps joined. Their columns are
+  // world columns rather than the town's — this is the stretch the town
+  // moved east to make room for, so there is nothing to add.
+  ...WEST_SHOPS.map((shop) =>
+    placeBuilding(
+      shop.org,
+      shop.column * TILE,
+      shop.rank * TILE,
+      6 * TILE,
+      TILE * 1.5,
+      intoLobby(`${shop.org}-store`),
+      `world-${shop.org}`,
+    ),
   ),
   // South: the ferry, moored on the east side of the dock's end. Walking
   // onto the end of the dock boards it, and it sails to the island.

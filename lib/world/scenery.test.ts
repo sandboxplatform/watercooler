@@ -26,6 +26,7 @@ import {
   WORLD_WIDTH,
   buildingFrom,
 } from "./tenants";
+import { HIGHWAY, shoreAt } from "./wilderness";
 
 const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
   a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -79,15 +80,26 @@ describe("ground", () => {
 
 describe("props", () => {
   it("stand inside the map", () => {
-    for (const p of SCENERY) {
+    const off = SCENERY.filter((p) => {
       const r = propBounds(p);
-      expect(r.x).toBeGreaterThanOrEqual(-TILE);
-      expect(r.y).toBeGreaterThanOrEqual(-TILE);
-      expect(r.x + r.width).toBeLessThanOrEqual(WORLD_WIDTH + TILE);
-      expect(r.y + r.height).toBeLessThanOrEqual(WORLD_HEIGHT + TILE);
-    }
+      return (
+        r.x < -TILE ||
+        r.y < -TILE ||
+        r.x + r.width > WORLD_WIDTH + TILE ||
+        r.y + r.height > WORLD_HEIGHT + TILE
+      );
+    });
+    expect(off.map((p) => `${p.kind} at ${p.x},${p.y}`)).toEqual([]);
   });
 
+  /**
+   * The two sweeps below collect what is wrong and assert once, rather than
+   * asserting per prop per zone. There are a couple of thousand props on the
+   * map now and a few dozen zones apiece, and an `expect` inside that is
+   * eighty thousand assertions built to say nothing — which is seconds, and
+   * which timed out under the suite's own load while passing on its own.
+   * What they check has not changed; the report is the same list it was.
+   */
   it("keep their feet off the doors, the spawn points and the buildings", () => {
     const keepClear = [
       ...BUILDINGS.map((b) => b.door),
@@ -100,12 +112,15 @@ describe("props", () => {
       })),
       { x: WORLD_SPAWN.x - 24, y: WORLD_SPAWN.y - 48, width: 48, height: 60 },
     ];
+    const inTheWay: string[] = [];
     for (const p of SCENERY) {
       const body = propBody(p);
       if (!body) continue;
-      for (const zone of keepClear)
-        expect(overlaps(body, zone), `${p.kind} at ${p.x},${p.y}`).toBe(false);
+      if (keepClear.some((zone) => overlaps(body, zone))) {
+        inTheWay.push(`${p.kind} at ${p.x},${p.y}`);
+      }
     }
+    expect(inTheWay).toEqual([]);
   });
 
   it("stay off the walkways, apart from the benches and the fountain", () => {
@@ -115,14 +130,16 @@ describe("props", () => {
       width: r.width * TILE,
       height: r.height * TILE,
     }));
+    const onTheSlabs: string[] = [];
     for (const p of SCENERY) {
       if (p.kind === "bench" || p.kind === "fountain") continue;
       const body = propBody(p);
       if (!body) continue;
-      for (const tile of paving) {
-        expect(overlaps(body, tile), `${p.kind} at ${p.x},${p.y} on the walkway`).toBe(false);
+      if (paving.some((tile) => overlaps(body, tile))) {
+        onTheSlabs.push(`${p.kind} at ${p.x},${p.y}`);
       }
     }
+    expect(onTheSlabs).toEqual([]);
   });
 
   // Pictures rather than bodies, unlike the walkways above. A trunk beside a
@@ -194,13 +211,33 @@ describe("the shore", () => {
   const tiles = groundTiles();
   const ferry = buildingFrom("apeiron-media")!;
 
-  it("is sea from the shore row down, except for the dock", () => {
-    for (let y = SHORE_ROW; y < WORLD_ROWS; y++)
-      for (let x = 0; x < WORLD_COLUMNS; x++) {
+  /**
+   * **The coast is a shape now, not a row.** It was the same straight line
+   * the whole width of the map, which was true enough while the map was the
+   * town; carried east it would have run the beach out past the wilderness
+   * and drowned the foot of the highway — a road that stops at a beach, with
+   * the cars on it having nowhere to go. It steps south twice instead and
+   * leaves the map before the road does, which is what this asks.
+   */
+  it("is sea from the coast down, except for the dock", () => {
+    for (let x = 0; x < WORLD_COLUMNS; x++) {
+      const shore = shoreAt(x);
+      for (let y = SHORE_ROW; y < WORLD_ROWS; y++) {
         const onDock = x >= DOCK.x && x < DOCK.x + DOCK.width && y < DOCK.y + DOCK.height;
-        expect(tiles[y][x], `${x},${y}`).toBe(onDock ? "dock" : "water");
+        if (onDock) {
+          expect(tiles[y][x], `${x},${y}`).toBe("dock");
+          continue;
+        }
+        expect(tiles[y][x] === "water", `${x},${y}`).toBe(shore !== null && y >= shore);
       }
-    for (let x = 0; x < WORLD_COLUMNS; x++) expect(tiles[SHORE_ROW - 1][x]).not.toBe("water");
+      // The land runs right down to the water's edge, wherever that is.
+      if (shore !== null) expect(tiles[shore - 1][x], `${x},${shore - 1}`).not.toBe("water");
+    }
+  });
+
+  it("turns away before the highway, so the road runs off the bottom edge", () => {
+    expect(shoreAt(HIGHWAY.x)).toBeNull();
+    expect(tiles[WORLD_ROWS - 1][HIGHWAY.x]).toBe("highway");
   });
 
   it("runs the dock from the south road out over the water", () => {

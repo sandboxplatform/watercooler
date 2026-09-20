@@ -16,6 +16,7 @@ import type { Facing } from "../presence-types";
 import { campusRoomSlug, floorRoomSlug, WORLD_ROOM_SLUG } from "../rooms";
 import {
   BUILDINGS,
+  TOWN_LEFT,
   TOWN_TOP,
   WORLD_SPAWN,
   WORLD_WIDTH,
@@ -32,10 +33,12 @@ import {
   EAST_AVENUE,
   NORTH_ROAD,
   SCENERY,
+  SHOP_AVENUES,
   SOUTH_ROAD,
   WEST_AVENUE,
   clearToStand,
 } from "./scenery";
+import { WILD_POND } from "./wilderness";
 import { TILE, WIDTH as LOBBY_COLS } from "../map/office";
 import { opsSupportPost } from "../map/floor";
 import { standingSpot } from "./desks";
@@ -409,6 +412,10 @@ const front = (org: string) => BUILDINGS.find((b) => b.org.slug === org)?.outsid
  */
 export const WORLD_WANDER_SPOTS: readonly { x: number; y: number }[] = [
   // The doorsteps, west to east.
+  front("targetts"),
+  front("masstown"),
+  front("maccallum"),
+  front("happy-harrys"),
   front("blockhouse"),
   front("chester"),
   front("castle-atlantic"),
@@ -419,24 +426,39 @@ export const WORLD_WANDER_SPOTS: readonly { x: number; y: number }[] = [
   OUTSIDE_SPOT,
   // Along the north promenade: the ends, the three avenue junctions, and the
   // stretches between.
-  { x: 144, y: onRoad(NORTH_ROAD) },
+  // The stretches written as an x are in the town's own columns, so east
+  // past the shops — see `TOWN_LEFT`. The named avenues already carry it.
+  { x: TOWN_LEFT + 144, y: onRoad(NORTH_ROAD) },
   { x: onAvenue(WEST_AVENUE), y: onRoad(NORTH_ROAD) },
-  { x: 960, y: onRoad(NORTH_ROAD) },
+  { x: TOWN_LEFT + 960, y: onRoad(NORTH_ROAD) },
   { x: onAvenue(CENTRE_AVENUE), y: onRoad(NORTH_ROAD) },
-  { x: 2064, y: onRoad(NORTH_ROAD) },
-  { x: 2880, y: onRoad(NORTH_ROAD) },
+  { x: TOWN_LEFT + 2064, y: onRoad(NORTH_ROAD) },
+  { x: TOWN_LEFT + 2880, y: onRoad(NORTH_ROAD) },
+  // And along the shops' end of it, at its two crossings and its west end.
+  { x: 144, y: onRoad(NORTH_ROAD) },
+  ...SHOP_AVENUES.map((avenue) => ({ x: onAvenue(avenue), y: onRoad(NORTH_ROAD) })),
   // Half way down the outer avenues, between the two promenades.
   { x: onAvenue(WEST_AVENUE), y: TOWN_TOP + 1152 },
   { x: onAvenue(EAST_AVENUE), y: TOWN_TOP + 1152 },
   // The car park by the campus, in front of the vans.
-  { x: 2760, y: TOWN_TOP + 1080 },
+  { x: TOWN_LEFT + 2760, y: TOWN_TOP + 1080 },
   // The south promenade.
+  { x: onAvenue(SHOP_AVENUES[0]), y: onRoad(SOUTH_ROAD) },
+  { x: onAvenue(SHOP_AVENUES[1]), y: onRoad(SOUTH_ROAD) },
   { x: onAvenue(WEST_AVENUE), y: onRoad(SOUTH_ROAD) },
   { x: onAvenue(CENTRE_AVENUE), y: onRoad(SOUTH_ROAD) },
   { x: onAvenue(EAST_AVENUE), y: onRoad(SOUTH_ROAD) },
   // The shore end of the dock — near the water, and well short of the
   // gangway, so a wanderer never boards the ferry.
   { x: onAvenue(CENTRE_AVENUE), y: TOWN_TOP + 1560 },
+  // Out in the wilderness: the pond in the meadow, and a spot well east of
+  // it. Nothing is laid out there, so these are the map's own open ground
+  // rather than somewhere it means people to stand — which is what
+  // `residents.test.ts` is for. Deliberately short of the highway: a car
+  // goes through anybody standing in the road, and a chicken pacing the
+  // centre line would be the one place this world looks like a bug.
+  { x: WILD_POND.x - 180, y: WILD_POND.y + 40 },
+  { x: 150 * WORLD_TILE, y: TOWN_TOP + 1080 },
   // And up in the wood, on the trails and the footbridge.
   ...WOOD_WANDER_SPOTS,
 ];

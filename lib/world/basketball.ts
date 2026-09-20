@@ -20,8 +20,9 @@
  * of the meter from a miss into a chance.
  */
 
-import { TILE, WOOD_ROWS, WORLD_HEIGHT, WORLD_WIDTH, type Rect } from "./tenants";
+import { TILE, TOWN_LEFT, WOOD_ROWS, WORLD_HEIGHT, WORLD_WIDTH, type Rect } from "./tenants";
 import type { Facing } from "../presence-types";
+import { coversPoint } from "./route";
 
 // ── The court ───────────────────────────────────────────
 
@@ -41,8 +42,14 @@ import type { Facing } from "../presence-types";
  * Two to one is also about the shape of the real thing — 28 metres by 15 —
  * where nine by six was half as wide again as it should have been, and the
  * markings in `scripts/make-world-art.mjs` are struck off those metres.
+ *
+ * Both of its numbers are the town's own and are carried into world
+ * coordinates here, which is what `TOWN_LEFT` and `WOOD_ROWS` are doing on
+ * this line. The row already worked that way; the column did not, and the
+ * first thing the map's growing west did was stand the court in the middle
+ * of the new shops' park, straddling one of their avenues.
  */
-export const COURT: Rect = { x: 34, y: WOOD_ROWS + 20, width: 16, height: 8 };
+export const COURT: Rect = { x: TOWN_LEFT / TILE + 34, y: WOOD_ROWS + 20, width: 16, height: 8 };
 
 /** The same in world pixels, which is what everything else here is in. */
 export const COURT_PX: Rect = {
@@ -355,8 +362,15 @@ function bankOff(ball: BallState, dt: number): Bank | null {
 }
 
 /** Whether a point lies in any of the rectangles. */
-const inside = (rects: readonly Rect[], x: number, y: number) =>
-  rects.some((r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height);
+/**
+ * Whether a point is inside any of them.
+ *
+ * Through `coversPoint`, which buckets the list once rather than walking it:
+ * this is asked twice a tick of every solid on the map, and the map is three
+ * times the width it was laid out at. The answers are the same ones —
+ * exactly the same rectangle test, against a twentieth of the rectangles.
+ */
+const inside = (rects: readonly Rect[], x: number, y: number) => coversPoint(rects, x, y);
 
 /** What one step of the ball came to. */
 export interface BallStep {

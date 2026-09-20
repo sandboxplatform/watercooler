@@ -122,7 +122,7 @@ describe("wandering mode", () => {
   // wood has five rather than eight because the far bank of the river has
   // no crossing, so there is nowhere over there to be sent.
   it("has a place in every part of the map", () => {
-    expect(WORLD_WANDER_SPOTS).toHaveLength(25);
+    expect(WORLD_WANDER_SPOTS).toHaveLength(36);
   });
 
   it("spreads them over the whole map rather than one corner of it", () => {
@@ -156,18 +156,27 @@ describe("wandering mode", () => {
     }
   });
 
-  /** And a spot nothing can reach is one a wanderer would never get to. */
+  /**
+   * And a spot nothing can reach is one a wanderer would never get to.
+   *
+   * **A chain rather than every pair**, which says the same thing: a route
+   * is planned over a grid, so reaching is symmetric and passes along — if
+   * each spot joins the next, any of them reaches any other through the
+   * ones between. Every pair was thirty-six squared routes over a map three
+   * times its old width, and the flood behind each of them walks fifty
+   * thousand cells; it ran out of the suite's five seconds, which is a test
+   * failing for arithmetic rather than for the map.
+   */
   it("can walk from any one of them to any other", () => {
     const bounds = { width: WORLD_WIDTH, height: WORLD_HEIGHT };
     const solids = worldSolids();
-    for (const from of WORLD_WANDER_SPOTS) {
-      for (const to of WORLD_WANDER_SPOTS) {
-        if (from === to) continue;
-        expect(
-          routeAcross(bounds, solids, from, to),
-          `${from.x},${from.y} to ${to.x},${to.y}`,
-        ).not.toBeNull();
-      }
+    for (let i = 1; i < WORLD_WANDER_SPOTS.length; i++) {
+      const from = WORLD_WANDER_SPOTS[i - 1];
+      const to = WORLD_WANDER_SPOTS[i];
+      expect(
+        routeAcross(bounds, solids, from, to),
+        `${from.x},${from.y} to ${to.x},${to.y}`,
+      ).not.toBeNull();
     }
   });
 

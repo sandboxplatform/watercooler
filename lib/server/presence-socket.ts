@@ -25,6 +25,7 @@ import { isPongPayload } from "../pong/protocol";
 import { SHARED_BOARD, isStroke, sanitiseStroke } from "../whiteboard";
 import { Basketball } from "./basketball";
 import { Nest } from "./eggs";
+import { Traffic } from "./traffic";
 import { eggSpot, type EggTier } from "../world/eggs";
 import {
   onArrival,
@@ -220,6 +221,15 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
    * and outlives any server.
    */
   const nest = new Nest();
+
+  /**
+   * The cars on the highway at the east edge of the world map.
+   *
+   * Stepped off the same ticker the ball is, and for the same reason — it is
+   * one more thing that map is doing — but it speaks only when the road
+   * changes. See `TrafficBroadcast`.
+   */
+  const traffic = new Traffic();
 
   setRoomBroadcast((slug, message) => broadcast(slug, message));
   setWorldBroadcast((message) => broadcastAll(message));
@@ -696,6 +706,22 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     publishBall();
   };
 
+  // ── The highway ───────────────────────────────────────
+
+  /**
+   * Move the traffic on, and say so when the road has changed.
+   *
+   * Only while somebody is out there: the rooms map forgets a room the
+   * moment it empties, so an empty world map is a road nobody is looking
+   * at, and driving cars down it would be a timer's worth of work an
+   * instant before the first arrival makes it visible anyway.
+   */
+  const stepTraffic = () => {
+    if (!rooms.has(WORLD_ROOM_SLUG)) return;
+    if (!traffic.step(TICK_MS, Date.now())) return;
+    broadcast(WORLD_ROOM_SLUG, { type: "traffic", cars: traffic.onTheRoad });
+  };
+
   // ── The eggs ──────────────────────────────────────────
 
   /**
@@ -796,6 +822,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     // Eggs nobody came for. Free unless one has actually gone: the field
     // is kept in the order it was laid, so this is one comparison.
     if (nest.spoil(Date.now())) publishEggs();
+    stepTraffic();
   }, TICK_MS);
   ticker.unref?.();
 
@@ -939,9 +966,13 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         // it — including somebody who has walked out to play with it.
         // And what is lying in the grass, for the same reason: the field
         // is published when it changes, which may have been an hour ago.
+        // And what is on the highway, which is published only when a car
+        // sets off or leaves — so an arrival between two of those would
+        // otherwise be looking at an empty road with cars on it.
         if (slug === WORLD_ROOM_SLUG) {
           send(ws, ballMessage());
           send(ws, { type: "eggs", eggs: nest.lying });
+          send(ws, { type: "traffic", cars: traffic.onTheRoad });
         }
 
         // Badges, after the room has been told they are here: everything

@@ -16,6 +16,8 @@ import { SCENERY, allReachable, propBody, propPicture, worldSolids } from "./sce
 import { openGround, ROUTE_CELL } from "./route";
 import {
   TILE,
+  TOWN_COLUMNS,
+  TOWN_LEFT,
   WOOD_ROWS,
   WORLD_COLUMNS,
   WORLD_HEIGHT,
@@ -23,6 +25,18 @@ import {
   WORLD_WIDTH,
   type Rect,
 } from "./tenants";
+import { HIGHWAY } from "./wilderness";
+
+/**
+ * The town's first column.
+ *
+ * Every column in here is written in the town's own, because the river is:
+ * the drawing it was traced off is fitted across the town and nothing else,
+ * so a shape asserted in world columns would be an assertion about where the
+ * shops happen to stand. See `TOWN` in wood.ts, which is the same number for
+ * the same reason.
+ */
+const TOWN = TOWN_LEFT / TILE;
 
 const overlaps = (a: Rect, b: Rect) =>
   a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -48,17 +62,32 @@ function rowAt(column: number): number {
 /** How fast the centreline falls between two columns, in rows per column. */
 const slope = (from: number, to: number) => (rowAt(to) - rowAt(from)) / (to - from);
 
+/**
+ * The bends over the town: the stretch the drawing traced, which is what
+ * "the shape" below means.
+ *
+ * The tail east of the town climbs back to the top edge, so it puts points
+ * high up the map that are nothing to do with the limb coming down — and
+ * two of the shape's assertions work by taking the highest or the furthest
+ * east of the bends above a given row. Left in, the tail wins both.
+ */
+const TRACED_BENDS = RIVER.filter((b) => b.x < TOWN + TOWN_COLUMNS);
+
 describe("the Gold River", () => {
-  it("comes in off the top edge and runs the whole width of the map", () => {
+  it("comes in off the top edge and runs the town's whole width", () => {
     const bed = riverBed();
+    const wetAt = (column: number) => bed.filter((r) => r.x <= column && r.x + r.width > column);
     expect(bed.some((r) => r.y === 0)).toBe(true);
-    for (let column = 0; column < WORLD_COLUMNS; column++) {
-      const wet = bed.filter((r) => r.x <= column && r.x + r.width > column);
+    for (let column = TOWN + 10; column < TOWN + TOWN_COLUMNS; column++) {
       // West of where it comes down there is no river, which is the corner
-      // of the map the wood is thickest in.
-      if (column < 10) continue;
-      expect(wet.length, `column ${column}`).toBeGreaterThan(0);
+      // of the town the wood is thickest in.
+      expect(wetAt(column).length, `column ${column}`).toBeGreaterThan(0);
     }
+    // And **west of the town there is none at all.** The limb comes down out
+    // of the north of the town, so the shops' stretch is wood with no water
+    // in it — which is what the fit says, and the thing that would quietly
+    // stop being true if the river were ever stretched across the map again.
+    expect(wetAt(TOWN - 4)).toHaveLength(0);
   });
 
   /**
@@ -70,13 +99,12 @@ describe("the Gold River", () => {
    */
   describe("keeps its shape", () => {
     it("leans east as it falls, and then turns back west", () => {
-      const falling = RIVER.filter((b) => b.y < WOOD_ROWS / 2);
+      const falling = TRACED_BENDS.filter((b) => b.y < WOOD_ROWS / 2);
       const bulge = falling.reduce((a, b) => (a.x > b.x ? a : b));
       const turn = falling.slice(falling.indexOf(bulge)).reduce((a, b) => (a.x < b.x ? a : b));
       expect(bulge.x).toBeGreaterThan(RIVER[1].x + 4);
       expect(turn.x).toBeLessThan(bulge.x - 2);
       expect(turn.y).toBeGreaterThan(bulge.y + 4);
-      expect(RIVER[RIVER.length - 1].x).toBeGreaterThan(WORLD_COLUMNS);
     });
 
     it("elbows east about halfway down the wood", () => {
@@ -86,15 +114,37 @@ describe("the Gold River", () => {
     });
 
     it("runs shallow, then drops steeply, then flattens out", () => {
-      const shallow = slope(20, 28);
-      const steep = slope(32, 38);
-      const flat = slope(44, 54);
+      const shallow = slope(TOWN + 20, TOWN + 28);
+      const steep = slope(TOWN + 32, TOWN + 38);
+      const flat = slope(TOWN + 44, TOWN + 54);
       expect(steep).toBeGreaterThan(shallow * 4);
       expect(flat).toBeLessThan(shallow * 2);
     });
 
-    it("dips once more on the way off the map", () => {
-      expect(rowAt(WORLD_COLUMNS - 1)).toBeGreaterThan(rowAt(WORLD_COLUMNS - 8) + 0.5);
+    it("dips once more on the way out of the town", () => {
+      expect(rowAt(TOWN + TOWN_COLUMNS - 1)).toBeGreaterThan(rowAt(TOWN + TOWN_COLUMNS - 8) + 0.5);
+    });
+
+    /**
+     * **And then it turns north, which is what keeps the far bank the far
+     * bank.** The highway runs the height of the map four columns in from the
+     * east edge; a river carried on east would have to be crossed, and a
+     * crossing is a way onto the north side of the water — where the cabin
+     * and the marked boulder stand precisely because there is not one. So the
+     * water leaves by the edge it came in at, well short of the road.
+     */
+    it("turns north out of the wilderness and leaves clear of the highway", () => {
+      const out = riverBed().filter((r) => r.y === 0);
+      // Two runs on the top row: the limb coming down in the north-west of
+      // the town, and the tail going back up out in the wilderness.
+      expect(out).toHaveLength(2);
+      const east = out.reduce((a, b) => (a.x > b.x ? a : b));
+      expect(east.x).toBeGreaterThan(TOWN + TOWN_COLUMNS);
+      expect(east.x + east.width).toBeLessThan(HIGHWAY.x);
+      // Off the map rather than at the edge of it: a river that ends on the
+      // last row ends with a blunt end, which is why the first traced point
+      // is off the top too.
+      expect(RIVER[RIVER.length - 1].y).toBeLessThan(0);
     });
   });
 
@@ -114,21 +164,21 @@ describe("the Gold River", () => {
     };
 
     it("under the elbow, where the limb gives way to the run east", () => {
-      const limb = RIVER.filter((b) => b.y > WOOD_ROWS / 4 && b.y < WOOD_ROWS / 2);
+      const limb = TRACED_BENDS.filter((b) => b.y > WOOD_ROWS / 4 && b.y < WOOD_ROWS / 2);
       const down = Math.atan2(
         limb[limb.length - 1].y - limb[0].y,
         limb[limb.length - 1].x - limb[0].x,
       );
-      const east = Math.atan2(slope(16, 26), 1);
+      const east = Math.atan2(slope(TOWN + 16, TOWN + 26), 1);
       expect(Math.abs((down - east) * (180 / Math.PI))).toBeGreaterThan(45);
     });
 
     it("at the head of the drop, where the wood pokes north-east into it", () => {
-      expect(turn([20, 28], [32, 37])).toBeGreaterThan(20);
+      expect(turn([TOWN + 20, TOWN + 28], [TOWN + 32, TOWN + 37])).toBeGreaterThan(20);
     });
 
     it("at the foot of the drop, where it pokes back south-west", () => {
-      expect(turn([32, 37], [42, 54])).toBeGreaterThan(20);
+      expect(turn([TOWN + 32, TOWN + 37], [TOWN + 42, TOWN + 54])).toBeGreaterThan(20);
     });
 
     /**

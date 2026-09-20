@@ -78,15 +78,12 @@ export class CampusScene extends OutdoorScene<CampusSceneData> {
 
     const width = campus.columns * TILE;
     const height = campus.rows * TILE;
-    const ground = groundGrid(
-      campus.columns,
-      campus.rows,
-      campus.paved,
-      campus.buildings.map((b) => tilesOf(b.frame)),
-      [],
-      campus.water ?? [],
-      campus.dock ?? [],
-    );
+    const ground = groundGrid(campus.columns, campus.rows, {
+      paved: campus.paved,
+      built: campus.buildings.map((b) => tilesOf(b.frame)),
+      water: campus.water ?? [],
+      dock: campus.dock ?? [],
+    });
     layGround(this, ground);
 
     const doors = campus.buildings.map((b) => this.putUp(b, walls));

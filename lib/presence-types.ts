@@ -436,6 +436,30 @@ export interface EggsBroadcast {
 }
 
 /**
+ * What is on the highway, to everyone standing on the world map.
+ *
+ * The whole road every time, like `eggs` and `meetings` and for the same
+ * reason — but sent a great deal less often than either, because it is sent
+ * only when the road **changes**: a car setting off, a car leaving. In
+ * between there is nothing to say. A car travels in a straight line at a
+ * speed written down in `lib/world/traffic.ts`, so every browser advances
+ * the ones it already has against its own clock and arrives at the same
+ * place the server has them.
+ *
+ * Which is the opposite of the ball beside it, published twenty times a
+ * second, and the difference is worth keeping in mind: a ball is somebody's
+ * throw and nobody can say where it goes next, while a car is a car on a
+ * road.
+ *
+ * The world map only, as the ball and the field are: a floor of Sandbox ERP
+ * has no use for the traffic out at the edge of the world.
+ */
+export interface TrafficBroadcast {
+  type: "traffic";
+  cars: import("./world/traffic").Car[];
+}
+
+/**
  * Somebody's basket gained an egg — to **everybody**, wherever they are.
  *
  * The same split the badges are under, and for the same reason: the field
@@ -543,6 +567,7 @@ export type ServerMessage =
   | OnlineMessage
   | BasketballBroadcast
   | EggsBroadcast
+  | TrafficBroadcast
   | EggFoundMessage
   | MeetingsMessage;
 

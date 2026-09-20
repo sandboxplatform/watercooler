@@ -29,6 +29,10 @@ The office is one building in a larger world: a world map with campuses, buildin
 with lobbies and floors, an arcade, a ferry to an island. One server is one world —
 everyone who opens the site walks into the same places and sees each other there.
 
+The map is three screens wide in thirds — the **shops** in the west, the
+**town** in the middle, the **wilderness** in the east — with thirty rows of
+wood and a river along the top of the lot. See **The three stretches**.
+
 ## Commands
 
 ```bash
@@ -36,7 +40,7 @@ pnpm install
 pnpm dev            # custom server (tsx server.ts) on :3000 — use this, not `next dev`
 pnpm build          # next build (plain .next; the standalone tree is a publish thing)
 pnpm start          # production, same custom server
-pnpm test           # vitest, fast project only (~27s)
+pnpm test           # vitest, fast project only (~35s)
 pnpm test:all       # every test, including the slow project — run before pushing
 pnpm test:changed   # only tests whose imports reach what you changed (~7s)
 pnpm typecheck      # tsc --noEmit
@@ -1514,6 +1518,18 @@ it: the bytes were already local, the decode is the cost. `tilesetsUsedBy` in
 alone, since a tile is found by the greatest `firstgid` at or below it and gaps
 are fine, whereas renumbering would mean rewriting every tile id in every layer.
 
+**Out of doors the grass is a carpet, not a tile at a time.** `layGround`
+lays one 384px picture per eight tiles under everything at depth -1 and then
+draws only what is _not_ grass over it. It used to be a picture per cell,
+which on the town-sized map was four thousand of them before anything was
+standing on them; the map is three times as wide now and four cells in five
+of it are grass, so it would have been thirteen thousand, ten of which were
+the same green square. Phaser walks the whole display list every frame
+whether a thing is on camera or not, so that is paid sixty times a second
+for the life of the scene. It also stops the grass reading as a tile: the
+tufts repeated every 48 pixels were a pattern anybody could see once the map
+had a meadow in it, and the period is eight times longer now.
+
 Maps are **generated, not hand-drawn**. `pnpm build:map` reads `public/maps/office2.json`
 as a tile source and writes lobbies, floors, stores, warehouses and garages from specs
 in `lib/map/` (`office.ts`, `floor.ts`, `premises.ts`, `generate.ts`) plus the tenant
@@ -2005,11 +2021,14 @@ lib/
   server/                          server-only: room store, presence hub/socket, residents, access
   server/room-broadcast.ts         the way anything server-side speaks into a room
   server/badge-rules.ts            when a badge is earned — server-observed, never claimed
+  server/traffic.ts                which cars are on the highway, and when one sets off
   map/ world/                      map generation and world layout
   world/cast.ts                    who the world is of: roles, concept art, backstories
   world/basketball.ts              the court in the park, and the flight of the one ball
   world/eggs.ts                    the ladder of eggs Michael leaves behind, and how rare each is
   world/wood.ts                    the wood north of the town: the Gold River and its trails
+  world/wilderness.ts              the meadow east of the town, the coast, and the highway
+  world/traffic.ts                 what a car is, how fast, and which lane — shared by all three layers
   arcade/ pinball/ pong/           the games (Oak Island, Flappy, Snake, Breakout, Solitaire)
   pixel/ characters/               sheet validation, PNG codec, palettes, recolouring
   voice/                           WebRTC voice, one conversation server-wide
@@ -2020,12 +2039,150 @@ scripts/                build-map, seed-erp, sprite and world-art generators
 types/game.ts           shared game types
 ```
 
+### The three stretches
+
+The world map is the town it began as with a stretch added either side, and
+it is laid out that way rather than renumbered:
+
+| Stretch        | Columns | What is in it                                                      |
+| -------------- | ------- | ------------------------------------------------------------------ |
+| The shops      | 58      | Four stores along the two roads, and the wood above them           |
+| The town       | 62      | Everything there was: the head offices, the plaza, the campus gate |
+| The wilderness | 66      | Meadow, the river turning north through it, and the highway        |
+
+**The town moved east; nothing in it was rewritten.** `TOWN_LEFT` in
+`lib/world/tenants.ts` is the same trick `TOWN_TOP` already played with rows,
+one axis over: the town was laid out from column 0 and the shops went in west
+of it, so rather than every coordinate in the town being rewritten by hand,
+the town moved east by `WEST_COLUMNS`. It is added in the few places a column
+of the town is written down as a number — `CENTRE_X`, from which `EAST_X` and
+the dock already follow; the three buildings in the town's own west; the two
+roads; the basketball court; and the town's own props, which go through
+`townWest()` in `scenery.ts` the way the middle stretch already goes through
+`centre()`.
+
+The thing that bites is a coordinate that is **already** a world column:
+`centre()` and everything written off `EAST_X` carry the shift already, so
+sending one of those through `townWest()` as well moves it east twice. That
+is not hypothetical — `COURT` was written in the town's columns and was not
+carried over, and the first thing the map's growing west did was stand the
+basketball court in the middle of the new shops' park, straddling one of
+their avenues. It is the same mistake the court's own hoops were caught by on
+the other axis, which is why they sit outside the `town()` block.
+
+**Four more stores, and none of them has a field crew.** Targetts, Masstown,
+MacCallum and Happy Harrys, in the two staggered ranks Blockhouse and Chester
+already stand in. Each is a store you walk into with its warehouse behind it
+and nothing else — `westStore()` in `tenants.ts` is the shape, written once
+rather than four times, because a garage added to one of them by hand is a
+side door `buildStoreSpec` puts through to a room nobody generated. Two more
+avenues join the roads out there (`SHOP_AVENUES`), so no doorstep is more
+than a few shops from a way down to the promenade.
+
+Their fronts are **one drawing with four sets of colours** — `shop()` in
+`scripts/make-world-art.mjs`, varying the walls, the roof, whether there is
+an awning and what is stacked outside. Which is also why there is one
+`SIGN_Y` for all four in `WorldScene`: the board is at the same height on
+every one of them because it is the same line of that function. Four separate
+drawings would have drifted apart in the part that is supposed to be the
+same, and the sign band is the one that would have hurt, since it is where
+the scene letters the name.
+
+**The wilderness is wilderness**, which means nothing has been laid through
+it: the two promenades stop at the town's own east edge, and what follows is
+sixty-odd columns of meadow and scattered trees with a pond in the middle of
+it. `lib/world/wilderness.ts` is the whole of it — a thinner scatter than the
+wood's, about one cell in six against two in five and more bushes than trees,
+so walking east out of the car park reads as leaving the town rather than as
+entering another wood.
+
+**And the coast turns away.** The sea used to be one rectangle the whole
+width of the map, which was true enough while the map was the town; carried
+east it would have run the beach out past the meadow and drowned the foot of
+the highway — a road that stops at a beach, with the cars on it having
+nowhere to go. `SEA` steps south twice as it runs east and leaves the map
+before the road does, so the road runs off the bottom edge the way it runs
+off the top one.
+
+### The highway, and the cars on it
+
+Four columns of tarmac running the whole height of the map, four columns in
+from the east edge — near enough the far side to be the edge of the world,
+with a verge on both sides, because the camera is clamped to the map and a
+road drawn against the edge is a road with one shoulder on screen.
+
+It is **its own ground**, not the car park's asphalt: that tile carries a bay
+line down its left edge, which is what makes a field of them read as parking
+bays and what would put a stripe across both lanes every forty-eight pixels.
+What makes this one a road is painted over it — `highway_marks_192x48.png`,
+laid a row at a time by `placeHighwayMarks`, the way the basketball court's
+lines are laid over its tarmac.
+
+**Nothing crosses the Gold River, so the road never meets it.** The river
+turns north out of the wilderness and leaves by the top edge well west of the
+tarmac, and that is the whole reason its tail is drawn rather than carried on
+east: a road over the water is a bridge, a bridge is a way onto the far bank,
+and the far bank is the one part of this world you can see and not reach —
+the cabin stands on it and the marked boulder stands in the water off it, and
+`wood.test.ts` says in as many words that neither can be walked to.
+`wilderness.test.ts` holds the road to never touching `riverBed()`, which is
+what would fail the day somebody moves either.
+
+**A car or two, from time to time, and they are the server's.** Which cars
+are on the road is decided in `lib/server/traffic.ts`, for the reason the
+basketball's flight and the chicken's wandering are: everybody standing on
+the map is looking at the same road, and a road each browser invented for
+itself would have two people beside each other watching different traffic. At
+most three at once, nine to forty-five seconds apart.
+
+**It is published when the road changes, not on every tick**, and that is the
+one thing worth knowing about it:
+
+|      | The ball                                                      | The traffic                                                                    |
+| ---- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Sent | Twenty times a second while it is live                        | When a car sets off, and when one leaves                                       |
+| Why  | It is somebody's throw, and nobody can say where it goes next | It is a car on a road: a straight line at a speed both sides have written down |
+
+`drive()` in `lib/world/traffic.ts` is that line, shared by the server and by
+`components/game/systems/Highway.ts`, which runs it once a frame against the
+browser's own clock. A browser arriving between two of those messages is sent
+the road on joining, as it is sent the ball and the field of eggs, or it would
+be looking at an empty road with cars on it.
+
+Two smaller decisions. **Drive on the right**, so the northbound lane is the
+eastern one — two cars passing on the wrong sides of each other is the one
+thing about a road anybody would notice from the far side of a meadow. And
+**nothing collides with a car**: you can stand in the road and one goes
+through you. That is deliberate rather than unfinished — the alternative is a
+lane somebody can be pinned in by scenery they have no way of hearing coming,
+at the far edge of a map with nothing on the other side of it. The traffic is
+the view, not the hazard, and the wanderer's spots out there are deliberately
+short of the tarmac for the same reason.
+
 ### The wood, and the Gold River
 
 North of the town, above the buildings, are thirty rows of trees with a
-river through them: `lib/world/wood.ts`. The Gold River comes down out of
-the north-west, bends east and runs the whole width of the map, with a walk
-along the near bank of it.
+river through them: `lib/world/wood.ts`. The wood runs the map's whole
+width, the shops' stretch and the wilderness with it. The Gold River comes
+down out of the north-west **of the town**, bends east, runs the town's
+whole width and then turns north out of the wilderness and off the top
+edge, with a walk along the near bank of it.
+
+**The river is fitted to the town, not to the map.** It is traced off a
+drawing and the drawing is already flattened twice over by the fit —
+stretched across a map three times as wide, what came out was a band of
+water with a kink in it. So `TOWN` in `wood.ts` is `TOWN_LEFT` in columns
+and everything measured off the picture carries it: the fit, the walk along
+the bank, the two beaches, the cabin's column. Three things follow, and each
+is a fact about the map rather than an accident:
+
+- **West of the town there is no river at all.** The limb comes down out of
+  the north of the _town_, so the shops' stretch is wood with no water in
+  it — which is the honest answer, since the drawing never covered it.
+- **East of the town the line is ours**, as it already was east of the drop.
+  See the tail below.
+- **The pocket on the far bank is closed at both ends now.** It used to run
+  off the side of the map; the northward limb shuts it.
 
 **Nothing crosses the water, on purpose.** The river is solid like the sea,
 so the north-east of the wood is somewhere to look at rather than somewhere
@@ -2110,10 +2267,11 @@ step of the walk is the spur now.
 the blue read out of it, the middle taken row by row down the north-south
 limb and column by column along the eastward run, thinned to the points
 where it actually turns. It is kept in the **drawing's own pixels**, and
-`RIVER` fits it across the map's whole width and down until its lowest
+`RIVER` fits it across the **town's** width and down until its lowest
 point sits `BANK_ROOM` rows off the wood's foot. So the shape is one list
 and the fit is one pair of numbers, rather than twenty pairs to redo by
-hand every time the wood changes depth.
+hand every time the wood changes depth — or every time the map grows
+sideways, which is what the fit being the town's is about.
 
 **It is a soft W and that is the thing to keep.** It comes in off the top
 edge and leans **east** as it falls, turns back west a fifth of the way
@@ -2137,12 +2295,20 @@ river that still read as one smooth bank.
 **So east of the drop the line is ours rather than the drawing's.** The
 drawing runs near enough flat from there to the edge, and flat water crops
 nothing. The tail is a **valley** at the foot of the drop, a **hump**
-halfway along and a **second valley** as it leaves the east edge — which
-puts a tongue of wood into each valley from the north and one into the hump
-from the south. Three outcrops, and the first of them is the one with the
-cabin on it. The drawing's own flat stretch is still in there as the shallow
-top of the hump; what changed is that it now has something either side.
+halfway along and a **second valley** as it leaves the town — which puts a
+tongue of wood into each valley from the north and one into the hump from
+the south. Three outcrops, and the first of them is the one with the cabin
+on it. The drawing's own flat stretch is still in there as the shallow top
+of the hump; what changed is that it now has something either side.
 Everything down to the head of the drop is the trace, untouched.
+
+**And past the town it turns north and leaves by the top edge** (`TAIL` in
+`wood.ts`): out into the wilderness, down into the second valley — the
+lowest the water gets anywhere — and then up and off the map, well west of
+the highway. It climbs faster than a row a column, which the eastward run
+may not do; there is no walk up there to fall through, because the
+wilderness has no paths. Why it turns at all is the highway: see **The
+highway, and the cars on it**.
 
 `wood.test.ts` holds each of the turns to an **angle** rather than a slope,
 since an angle is exactly what the squash takes away, and it counts the
@@ -2483,6 +2649,24 @@ not load and a lift that will not move. The solids are painted into a
 `Uint8Array` once instead, kept against the list they were drawn from — which
 is why `worldSolids()` hands back the same array every time rather than
 rebuilding it, and why `scenery.test.ts` says so.
+
+**The ball asks a different question of the same list, and it is bucketed
+rather than painted.** `coversPoint` is the index: a route wants to know
+whether a _cell_ is blocked, which a coarse painted grid answers; the
+basketball wants to know whether a _point_ is inside anything, and it has to
+be exact, because what comes of a yes is a bounce off that rectangle's own
+edge. So each solid is filed under every 96-pixel square it touches and a
+point tests only its own square's. `stepBall` asks it twice a tick while the
+ball is low, against every solid on the map — fifty milliseconds a throw
+before, two after.
+
+`allReachable` in `scenery.ts` now asks `blockedCells` the same question
+rather than keeping its own per-cell sweep. It was the last place still
+doing it the slow way, which cost little while the map was the town and a
+hundred-odd rectangles; the map is three times as wide and the scatter plants
+a couple of thousand trees across it, so the sweep went up by both at once —
+fifty thousand cells against better than a thousand rectangles, a second or
+so a call, in tests that call it several times over.
 
 **The camera.** Every place opens at the zoom that fits the lobby, so people
 and signs are the same size out of doors as in, and the wheel goes further out

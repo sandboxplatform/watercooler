@@ -149,6 +149,87 @@ function grass() {
   }
   return c;
 }
+/**
+ * The same grass, eight tiles square.
+ *
+ * Not a different picture — the same noise, the same tufts, drawn over a
+ * bigger square — and it exists for one reason: the world map is 186
+ * columns by 69, and laying grass a tile at a time is ten thousand
+ * pictures on the display list before anything is standing on them. At
+ * eight tiles a block it is a hundred and sixty, and `layGround` lays the
+ * carpet first and then draws only what is not grass on top.
+ *
+ * It also makes the grass look like grass rather than like a tile: the
+ * tufts repeated every 48 pixels were a pattern anybody could see once the
+ * map had a meadow in it, and the period is eight times longer here.
+ */
+function grassBlock() {
+  const size = 48 * 8;
+  const c = canvas(size, size);
+  c.rect(0, 0, size, size, P.grass);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) if (hash(x, y) < 0.05) c.set(x, y, P.grassDark);
+  for (let i = 0; i < 7 * 64; i++) {
+    const x = Math.floor(hash(i, 11) * (size - 6)) + 2,
+      y = Math.floor(hash(i, 23) * (size - 6)) + 3;
+    c.set(x, y, P.grassLit);
+    c.set(x - 1, y + 1, P.grassLit);
+    c.set(x + 1, y + 1, P.grassLit);
+    c.set(x, y + 1, P.grassDark);
+  }
+  return c;
+}
+
+/**
+ * The highway's tarmac: the car park's asphalt without the bay line.
+ *
+ * A separate tile rather than the same one, and that line is the whole
+ * reason. It is drawn down the left edge of `asphalt()` on purpose — tiled,
+ * it reads as a row of parking bays — and a road paved out of it would have
+ * a white line across every lane every forty-eight pixels. What makes this
+ * one a road is painted over it in one piece; see `highwayMarks`.
+ */
+function highway() {
+  const c = canvas(48, 48);
+  c.rect(0, 0, 48, 48, [80, 83, 108, 255]);
+  for (let y = 0; y < 48; y++)
+    for (let x = 0; x < 48; x++) {
+      const n = hash(x + 11, y + 5);
+      if (n < 0.06) c.set(x, y, [72, 74, 98, 255]);
+      else if (n > 0.975) c.set(x, y, [92, 95, 120, 255]);
+    }
+  return c;
+}
+
+/**
+ * The markings, four tiles across and one deep: transparent but for the
+ * paint.
+ *
+ * One strip laid per row down the road rather than baked into the tarmac,
+ * for the reason the basketball court's lines are a picture: the paint runs
+ * across the road and the tiles run down it, so a tile that carried its own
+ * share of the markings would be four different tiles and a rule about which
+ * column each one goes in.
+ *
+ * The dash is half on and half off over the strip's own height, so the
+ * broken line comes out evenly broken however long the road is.
+ */
+function highwayMarks() {
+  const c = canvas(192, 48);
+  const paint = [226, 232, 236, 255];
+  const centre = [224, 184, 112, 255];
+  // The solid edge lines, a little in from the tarmac's own edges.
+  c.rect(7, 0, 10, 48, paint);
+  c.rect(182, 0, 185, 48, paint);
+  // And the broken line down the middle. **One stroke, not two.** Two dashed
+  // strokes side by side is not a marking any road carries — a double centre
+  // line is solid, which says the opposite of what this road is — and at the
+  // zoom the map opens at the pair read as a single fat dash with a crack
+  // down it.
+  c.rect(93, 6, 97, 30, centre);
+  return c;
+}
+
 function paving() {
   // 2x2 slabs per tile with grout, a lit top-left corner each
   const c = canvas(48, 48);
@@ -436,7 +517,7 @@ function pond() {
 }
 
 // ── Props: one sheet, each prop in a named rectangle ──
-const props = canvas(1792, 128);
+const props = canvas(2304, 128);
 const frames = {};
 let cursor = 0;
 function slot(name, w, h, draw) {
@@ -1008,6 +1089,64 @@ for (const egg of EGGS) {
   });
 }
 
+/**
+ * A car on the highway, seen from above and a little behind — the same
+ * angle everything else out of doors is drawn at.
+ *
+ * Drawn once with the front at the bottom and flipped for the lane going
+ * the other way, rather than drawn twice: a car going north is the same car
+ * going south turned round, and two drawings of it is two chances for the
+ * headlights to end up at different ends.
+ *
+ * Three colours, because one is a car that passes again and again and
+ * three is traffic.
+ */
+function car(body, dark, facing) {
+  const H = 88;
+  // Front at the bottom in these coordinates; north flips them over.
+  const fy = (y) => (facing === "south" ? y : H - y);
+  const band = (y0, y1, colour, d) =>
+    d.rect(6, Math.min(fy(y0), fy(y1)), 38, Math.max(fy(y0), fy(y1)), colour);
+  return (set, d) => {
+    d.ellipse(22, H - 3, 17, 4, P.shadow);
+    // The wheels, showing either side of the body.
+    for (const [a, b] of [
+      [16, 30],
+      [56, 70],
+    ]) {
+      d.rect(1, fy(b), 7, fy(a), P.ink);
+      d.rect(37, fy(b), 43, fy(a), P.ink);
+    }
+    // The body, with its own outline: a car with no edge reads as a smudge
+    // at the size it is seen from.
+    d.rect(4, 4, 40, H - 4, P.ink);
+    d.rect(5, 5, 39, H - 5, body);
+    // The roof and the glass. The windscreen is the wide one and it is at
+    // the front, which is the whole of what says which way the car is going.
+    band(30, 50, dark, d);
+    d.rect(9, Math.min(fy(50), fy(62)), 35, Math.max(fy(50), fy(62)), P.ink);
+    d.rect(10, Math.min(fy(51), fy(61)), 34, Math.max(fy(51), fy(61)), P.glass);
+    d.rect(10, Math.min(fy(51), fy(55)), 20, Math.max(fy(51), fy(55)), P.glassLit);
+    d.rect(11, Math.min(fy(22), fy(30)), 33, Math.max(fy(22), fy(30)), P.ink);
+    d.rect(12, Math.min(fy(23), fy(29)), 32, Math.max(fy(23), fy(29)), P.glass);
+    // Lights: pale at the front, red at the back.
+    for (const x of [8, 28]) {
+      d.rect(x, Math.min(fy(78), fy(83)), x + 8, Math.max(fy(78), fy(83)), [240, 232, 190, 255]);
+      d.rect(x, Math.min(fy(6), fy(10)), x + 8, Math.max(fy(6), fy(10)), P.red);
+    }
+    d.outline(4, 4, 40, H - 4);
+  };
+}
+
+for (const [name, body, dark] of [
+  ["red", P.red, [148, 76, 50, 255]],
+  ["blue", P.blue, [58, 106, 164, 255]],
+  ["pale", [214, 210, 222, 255], [176, 172, 190, 255]],
+]) {
+  slot(`car-${name}-north`, 44, 88, car(body, dark, "north"));
+  slot(`car-${name}-south`, 44, 88, car(body, dark, "south"));
+}
+
 frames.fountain.animateWith = "fountain2";
 
 /** Open water: two frames, the glints shifting between them so it moves. */
@@ -1488,6 +1627,185 @@ function blocks() {
 }
 
 /**
+ * A shopfront on the west road: fascia, sign board, awning, two windows and
+ * a door in the middle, with the business's stock stacked outside it.
+ *
+ * **One drawing with four sets of numbers, rather than four drawings.** The
+ * four newer stores are the same kind of building — a shop you walk into
+ * with a warehouse out the back — and what tells them apart on the map is
+ * their colour, what their walls are made of and what is stacked at the
+ * door. Drawn four times over they would have drifted apart in the parts
+ * that are supposed to be the same, and the sign band is the one that would
+ * have hurt: it is where the scene letters the name, so one of them landing
+ * six pixels lower is a name sitting off its own board.
+ *
+ * Which is also why there is one `SIGN_Y` for all four in `WorldScene`: the
+ * board is at the same height on every one of them because it is the same
+ * line of this function.
+ */
+function shop({ wall, wallDark, wallLit, roof, roofDark, awning, cladding, yard }) {
+  const c = canvas(W, H);
+  c.rect(0, 252, W, 268, P.shadow);
+
+  // The fascia across the top, and the wall under it.
+  c.rect(16, 56, 272, 84, roof);
+  c.rect(16, 56, 272, 62, roofDark);
+  c.rect(16, 78, 272, 84, roofDark);
+  c.outline(16, 56, 272, 85);
+  c.rect(24, 84, 264, 258, wall);
+
+  if (cladding === "clapboard") {
+    for (let y = 90; y < 258; y += 9) c.rect(24, y, 264, y + 1, wallDark);
+    c.rect(24, 84, 264, 87, wallLit);
+  } else if (cladding === "brick") {
+    for (let y = 88; y < 258; y += 9)
+      for (let x = 24 + ((y / 9) % 2 < 1 ? 0 : 9); x < 264; x += 18) {
+        c.rect(x + 1, y, Math.min(x + 17, 264), y + 7, wallLit);
+      }
+  } else {
+    // Board and batten: uprights rather than courses.
+    for (let x = 30; x < 264; x += 12) c.rect(x, 84, x + 3, 258, wallDark);
+  }
+
+  // The sign board. Blank: the scene letters it with the business's name.
+  c.rect(72, 96, 216, 128, P.yellow);
+  c.rect(72, 96, 216, 100, P.slabLit);
+  c.outline(71, 95, 217, 129);
+
+  // The awning over the front, striped in the shop's own colour.
+  if (awning) {
+    for (let x = 36; x < 252; x += 14) {
+      c.rect(x, 142, x + 7, 164, roof);
+      c.rect(x + 7, 142, x + 14, 164, P.slabLit);
+    }
+    c.rect(36, 138, 252, 142, roofDark);
+    c.outline(36, 138, 252, 165);
+  }
+
+  // Two windows with the shop's stock behind them, and the door between.
+  for (const wx of [40, 188]) {
+    c.rect(wx, 172, wx + 60, 232, P.ink);
+    c.rect(wx + 3, 175, wx + 57, 229, P.glass);
+    c.rect(wx + 3, 175, wx + 24, 190, P.glassLit);
+    c.rect(wx + 29, 175, wx + 31, 229, P.ink);
+    c.rect(wx + 3, 200, wx + 57, 202, P.ink);
+    c.rect(wx - 2, 232, wx + 62, 236, P.slabLit);
+    c.outline(wx - 3, 231, wx + 63, 237);
+  }
+  const dx = (W - 72) / 2;
+  c.rect(dx - 4, 186, dx + 76, 258, P.ink);
+  c.rect(dx, 190, dx + 72, 258, roofDark);
+  c.rect(dx + 4, 196, dx + 32, 222, P.glass);
+  c.rect(dx + 40, 196, dx + 68, 222, P.glass);
+  c.rect(dx + 4, 196, dx + 14, 204, P.glassLit);
+  c.rect(dx + 34, 190, dx + 38, 258, P.ink);
+  c.set(dx + 30, 236, P.yellow);
+  c.set(dx + 42, 236, P.yellow);
+  c.rect(dx - 10, 258, dx + 82, 266, P.slab);
+  c.rect(dx - 10, 258, dx + 82, 260, P.slabLit);
+  c.outline(dx - 10, 257, dx + 82, 267);
+
+  // And what the business sells, stacked at the end of the front.
+  stock(c, yard);
+  c.outline(24, 84, 264, 259);
+  return c;
+}
+
+/** The stock stacked outside a shop: what it sells, in a pile by the wall. */
+function stock(c, kind) {
+  if (kind === "timber") {
+    for (let row = 0; row < 4; row++)
+      for (let k = 0; k < 3; k++) {
+        const x = 2 + k * 8 + (row % 2) * 4,
+          y = 232 - row * 8;
+        c.rect(x, y, x + 8, y + 8, wood);
+        c.rect(x + 1, y + 1, x + 7, y + 3, woodLit);
+        c.outline(x, y, x + 8, y + 8);
+      }
+    return;
+  }
+  if (kind === "blocks") {
+    for (let row = 0; row < 3; row++)
+      for (let k = 0; k < 2; k++) {
+        const x = 4 + k * 12 + (row % 2) * 6,
+          y = 238 - row * 10;
+        c.rect(x, y, x + 12, y + 10, P.stone);
+        c.rect(x + 1, y + 1, x + 11, y + 3, [190, 176, 175, 255]);
+        c.outline(x, y, x + 12, y + 10);
+      }
+    return;
+  }
+  if (kind === "drums") {
+    for (const [x, y] of [
+      [6, 226],
+      [24, 232],
+      [14, 240],
+    ]) {
+      c.rect(x, y, x + 14, y + 22, P.red);
+      c.rect(x, y, x + 14, y + 4, [216, 128, 92, 255]);
+      c.rect(x, y + 9, x + 14, y + 12, [148, 76, 50, 255]);
+      c.outline(x, y, x + 14, y + 22);
+    }
+    return;
+  }
+  // Pallets, stacked flat.
+  for (let row = 0; row < 5; row++) {
+    const y = 244 - row * 6;
+    c.rect(4, y, 34, y + 5, wood);
+    c.rect(4, y, 34, y + 1, woodLit);
+    for (let x = 6; x < 34; x += 7) c.rect(x, y + 1, x + 2, y + 5, woodDark);
+    c.outline(4, y, 34, y + 6);
+  }
+}
+
+/**
+ * The four of them, west to east along the road. Colours far enough apart
+ * that which shop you are walking up to is answered from across the map,
+ * before the name over the door is big enough to read.
+ */
+const SHOPS = {
+  targetts: {
+    wall: [166, 96, 84, 255],
+    wallDark: [136, 76, 68, 255],
+    wallLit: [190, 118, 104, 255],
+    roof: [90, 62, 76, 255],
+    roofDark: [68, 48, 60, 255],
+    awning: true,
+    cladding: "brick",
+    yard: "timber",
+  },
+  masstown: {
+    wall: [226, 222, 214, 255],
+    wallDark: [192, 188, 184, 255],
+    wallLit: [242, 240, 234, 255],
+    roof: [62, 112, 88, 255],
+    roofDark: [44, 88, 68, 255],
+    awning: true,
+    cladding: "clapboard",
+    yard: "pallets",
+  },
+  maccallum: {
+    wall: [126, 140, 168, 255],
+    wallDark: [100, 114, 142, 255],
+    wallLit: [150, 164, 190, 255],
+    roof: [72, 74, 98, 255],
+    roofDark: [56, 58, 80, 255],
+    awning: false,
+    cladding: "board",
+    yard: "blocks",
+  },
+  "happy-harrys": {
+    wall: [214, 176, 104, 255],
+    wallDark: [184, 146, 80, 255],
+    wallLit: [234, 202, 138, 255],
+    roof: [168, 84, 62, 255],
+    roofDark: [138, 64, 48, 255],
+    awning: true,
+    cladding: "clapboard",
+    yard: "drums",
+  },
+};
+
 /**
  * The campus gate: three of the organisation's buildings standing back from
  * the road, behind a low wall with a gateway through it.
@@ -1977,6 +2295,10 @@ function save(name, c) {
   console.log(`wrote ${name} ${c.w}x${c.h}`);
 }
 save("grass_48.png", grass());
+save("grass_384.png", grassBlock());
+save("highway_48.png", highway());
+save("highway_marks_192x48.png", highwayMarks());
+for (const [slug, spec] of Object.entries(SHOPS)) save(`building_${slug}.png`, shop(spec));
 save("paving_48.png", paving());
 save("kerb_48.png", kerb());
 save("props.png", props);

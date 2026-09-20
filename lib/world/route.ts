@@ -52,10 +52,21 @@ export const ROUTE_CELL = 24;
  * ten-thousandth of the work — each solid touches a handful of cells, and
  * every question afterwards is one array read. The grid is kept against the
  * list it was drawn from, which never changes while the server runs.
+ *
+ * Exported for `allReachable`, which asks the same question of the same
+ * list and was the last place still asking it the slow way. That mattered
+ * little while the map was the town and the solids a hundred-odd
+ * rectangles; the map is three times as wide now and the wood alone plants
+ * several hundred trees across it, so the sweep went up by both at once.
  */
 const grids = new WeakMap<readonly Rect[], Map<string, Uint8Array>>();
 
-function blockedCells(solids: readonly Rect[], cols: number, rows: number, cell: number) {
+export function blockedCells(
+  solids: readonly Rect[],
+  cols: number,
+  rows: number,
+  cell: number,
+): Uint8Array {
   let shapes = grids.get(solids);
   if (!shapes) grids.set(solids, (shapes = new Map()));
   const shape = `${cols}x${rows}@${cell}`;
@@ -74,6 +85,58 @@ function blockedCells(solids: readonly Rect[], cols: number, rows: number, cell:
   }
   shapes.set(shape, grid);
   return grid;
+}
+
+/**
+ * Which rectangles of a list could cover a point, bucketed once and kept.
+ *
+ * The grid above answers "is this *cell* blocked", which is a route's
+ * question and a coarse one. This answers "is this *point* inside anything",
+ * which is the basketball's — it asks it of every solid on the map twice a
+ * tick while the ball is low — and it has to be exact, because what comes of
+ * a yes is a bounce off that rectangle's own edge rather than off a cell.
+ *
+ * So it is a bucket index rather than a painted grid: each rectangle is
+ * filed under every 96-pixel square it touches, and a point tests only what
+ * is filed under its own. Same answers, a fiftieth of the work. It mattered
+ * little while "everything solid out of doors" was seven hundred rectangles;
+ * the map is three times as wide and the wood and the meadow between them
+ * scatter a couple of thousand trees across it.
+ *
+ * Kept against the list it was built from, like the grid, which is why
+ * `worldSolids()` handing back the same array every time is load-bearing
+ * twice over.
+ */
+const BUCKET = 96;
+const buckets = new WeakMap<readonly Rect[], Map<number, Rect[]>>();
+
+function bucketed(solids: readonly Rect[]): Map<number, Rect[]> {
+  let index = buckets.get(solids);
+  if (index) return index;
+  index = new Map();
+  for (const r of solids) {
+    // Inclusive at both ends, which is the test below: a point exactly on a
+    // rectangle's far edge is inside it, so that edge's bucket has to hold it.
+    const x1 = Math.floor((r.x + r.width) / BUCKET);
+    const y1 = Math.floor((r.y + r.height) / BUCKET);
+    for (let by = Math.floor(r.y / BUCKET); by <= y1; by++) {
+      for (let bx = Math.floor(r.x / BUCKET); bx <= x1; bx++) {
+        const key = by * 100_000 + bx;
+        const here = index.get(key);
+        if (here) here.push(r);
+        else index.set(key, [r]);
+      }
+    }
+  }
+  buckets.set(solids, index);
+  return index;
+}
+
+/** Whether a point is inside any of them. Edges count as inside. */
+export function coversPoint(solids: readonly Rect[], x: number, y: number): boolean {
+  const here = bucketed(solids).get(Math.floor(y / BUCKET) * 100_000 + Math.floor(x / BUCKET));
+  if (!here) return false;
+  return here.some((r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height);
 }
 
 /**

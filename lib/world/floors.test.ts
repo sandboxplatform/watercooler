@@ -33,6 +33,7 @@ import {
   operationsBoards,
   operationsRoomCount,
   projectFlow,
+  tenantFor,
 } from "./tenants";
 import { roomFromLocation } from "../rooms";
 import type { AccessIdentity } from "../identity";
@@ -104,13 +105,15 @@ describe("the lift", () => {
   });
 
   it("draws each room from the right map: a game lobby its own, premises their own, the rest shared", () => {
-    expect(mapFileFor({ tenant: TENANTS[0], floor: { kind: "lobby" } })).toBe(
-      "/maps/lobby-castle-atlantic.json",
-    );
-    expect(mapFileFor({ tenant: TENANTS[2], floor: { kind: "lobby" } })).toBe(
-      "/maps/room-chester-warehouse.json",
-    );
-    expect(mapFileFor({ tenant: TENANTS[7], floor: { kind: "lobby" } })).toBe("/maps/lobby.json");
+    // By slug rather than by index. It was by index, and the four shops that
+    // went in west of Blockhouse moved the one that stood for "a lobby with
+    // nothing in it" out from under it — so the assertion was suddenly about
+    // Targetts' warehouse and said only that it was not `lobby.json`.
+    const room = (slug: string) => mapFileFor({ tenant: tenantFor(slug)!, floor: LOBBY });
+    expect(room("castle-atlantic")).toBe("/maps/lobby-castle-atlantic.json");
+    expect(room("chester-warehouse")).toBe("/maps/room-chester-warehouse.json");
+    expect(room("targetts-store")).toBe("/maps/room-targetts-store.json");
+    expect(room("homestar-sales")).toBe("/maps/lobby.json");
   });
 
   it("knows which floor you are on", () => {

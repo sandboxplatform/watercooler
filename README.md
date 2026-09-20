@@ -164,6 +164,7 @@ For that, configure sign-in (below) — it layers on top.
 - **Nothing reloads:** Front doors, campus gates and lifts all move you inside the page. You stay online, mid-sentence on Global Chat, from the plaza to the third floor and back.
 - **Things to walk up to:** Boards, a support queue, an arcade cabinet, a pinball table, a ping pong table, a boardroom table you can call a meeting at.
 - **One basketball:** There is a court in the park with a ball on it, and it is the same ball for everybody. Pick it up and the world watches you carry it; sink one and the world is told.
+- **A world to cross:** Six building supply stores along the west road, the head offices and the plaza in the middle, the campus gate east of that — and past it a third of the map with nothing built on it at all, with a highway down the far side and a car on it now and then.
 - **Eggs to collect:** Michael the chicken drops one in the grass now and then when somebody startles him — six kinds, from an ordinary hen's egg to a rainbow one nobody can account for. Anybody out on the map can walk up and pocket it.
 - **Workers at their desks:** Idle workers roam the office — whiteboards, printers, sofas, bookshelves — and the seat manager sets their names, roles and sprites.
 
@@ -473,6 +474,34 @@ it is and who has found one.
 There is no text chat. There was a Chat tab ahead of all three, with a box
 to type a remark into and a log of everything anybody had said, and it is
 gone — talking is Global Chat.
+
+### The shops along the west road
+
+West of Blockhouse and Chester the road carries on past four more building
+supply stores — **Targetts**, **Masstown**, **MacCallum** and **Happy
+Harrys** — in the same two staggered ranks, each with its name over the door
+and its stock stacked outside it. Walk in and you are in the shop; a door at
+the back of every one of them goes through to that business's warehouse, and
+that is all there is to them. None of the four runs a field crew, so there is
+no third door.
+
+Two more avenues join the north and south promenades out there, so whichever
+shop you have come out of, a way down to the sea is a few doors away.
+
+### The wilderness, and the highway
+
+East of the campus car park the paving stops and the town does with it.
+What follows is a third of the map with nothing built on it: meadow,
+scattered trees and bushes, a pond somebody could walk out to, and the Gold
+River coming down through the top of it and turning away north.
+
+Four columns in from the far edge of the world there is a **highway**, two
+lanes of tarmac running the whole height of the map with a broken line down
+the middle of it. Nothing on it goes anywhere you can — it passes through
+rather than arriving — but every so often a car comes down it, or goes up it,
+and it is the same car for everybody: whoever else is out on the map watches
+the same one go by. Nothing collides with a car, so you can stand in the road
+and watch one come straight through you.
 
 ### The island across the water
 

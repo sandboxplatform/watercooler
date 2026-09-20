@@ -28,7 +28,21 @@
  * is what it took to trace the drawing properly rather than approximately.
  */
 
-import { TILE, WOOD_ROWS, WORLD_COLUMNS, type Rect } from "./tenants";
+import { TILE, TOWN_COLUMNS, TOWN_LEFT, WOOD_ROWS, WORLD_COLUMNS, type Rect } from "./tenants";
+
+/**
+ * The town's first column, which everything traced off the drawing is
+ * measured from.
+ *
+ * The wood runs the map's whole width, but the river was fitted to the town
+ * and stays fitted to it: stretched across a map three times as wide, a
+ * shape already flattened twice by the fit would have come out as a band of
+ * water with a kink in it. So the drawing lands on the town exactly as it
+ * always did, the west stretch is wood with no water in it — the limb comes
+ * down out of the north *of the town*, and the land west of it never had a
+ * river — and east of the town the line is ours: see `TAIL`.
+ */
+const TOWN = TOWN_LEFT / TILE;
 
 /** A point on the river's centreline, in tiles. */
 export interface Bend {
@@ -115,6 +129,50 @@ const BANK_ROOM = 6;
 const DEEPEST = Math.max(...TRACED.filter(([x]) => x <= DRAWING.width).map(([, y]) => y));
 
 /**
+ * Where the river goes once it is past the town: out into the wilderness,
+ * and then north off the top edge of the map.
+ *
+ * In tiles rather than in the drawing's pixels, because the drawing is the
+ * town's and this is not — it picks up where the traced line leaves off, a
+ * few columns east of the car park, and it is the one stretch with no
+ * picture behind it at all — the traced line runs out a dozen columns east
+ * of the town and this carries on from there.
+ *
+ * **It turns north, and that is the whole reason it is drawn rather than
+ * carried on east.** The highway runs the height of the map four columns in
+ * from the east edge, and water and a road cannot cross without a bridge —
+ * which is not a detail, because a bridge is a way over the Gold River and
+ * *nothing crosses the Gold River*. The far bank is the one part of this
+ * world you can see and not reach: the cabin stands on it and the marked
+ * boulder stands in the water off it, and `wood.test.ts` says in as many
+ * words that neither can be walked to. A crossing at the far end of the map
+ * would quietly undo that from behind.
+ *
+ * So the river bottoms out in the second valley, climbs out of it, and
+ * leaves by the top edge well west of the road — which also closes the
+ * pocket of wood on the far bank at its eastern end, where before it simply
+ * ran off the side of the map.
+ *
+ * It climbs faster than a row a column on the way out, which the eastward
+ * run may not do: the walk along the bank steps down with the water, and a
+ * step of two rows is a walk with a hole in it. There is no walk up here —
+ * the wilderness has no paths — so the limb is free to be a limb.
+ */
+const TAIL: readonly Bend[] = [
+  // The floor of the second valley, and the lowest the river gets anywhere.
+  { x: TOWN + 71, y: 26.2 },
+  { x: TOWN + 79, y: 24.5 },
+  // And out of it, turning north as it goes.
+  { x: TOWN + 86, y: 20 },
+  { x: TOWN + 92, y: 13 },
+  { x: TOWN + 96, y: 5 },
+  // Off the top edge, which is where it ends: a river that stops at the
+  // edge stops with a blunt end, so this last one is deliberately off the
+  // map, as the first of the traced ones is.
+  { x: TOWN + 99, y: -6 },
+];
+
+/**
  * The centreline in tiles: the drawing fitted across the map's whole width,
  * and down until the lowest the river gets on the map sits `BANK_ROOM` rows
  * off the wood's foot.
@@ -136,10 +194,14 @@ const DEEPEST = Math.max(...TRACED.filter(([x]) => x <= DRAWING.width).map(([, y
  * the walk along the bank steps down with the water, and a step of two rows
  * is a walk with a hole in it. `wood.test.ts` holds it.
  */
-export const RIVER: readonly Bend[] = TRACED.map(([x, y]) => ({
-  x: (x * WORLD_COLUMNS) / DRAWING.width,
-  y: (y * (WOOD_ROWS - BANK_ROOM)) / DEEPEST,
-}));
+
+export const RIVER: readonly Bend[] = [
+  ...TRACED.map(([x, y]) => ({
+    x: TOWN + (x * TOWN_COLUMNS) / DRAWING.width,
+    y: (y * (WOOD_ROWS - BANK_ROOM)) / DEEPEST,
+  })),
+  ...TAIL,
+];
 
 /**
  * Half the river's width, in tiles.
@@ -359,9 +421,9 @@ function bankAbove(bed: readonly Rect[], column: number): number {
  */
 const BEACHES: readonly { from: number; to: number }[] = [
   // The shoulder of the elbow, where the limb widens and turns east.
-  { from: 16, to: 22 },
+  { from: TOWN + 16, to: TOWN + 22 },
   // The tip of the tongue, below the cabin.
-  { from: 38, to: 42 },
+  { from: TOWN + 38, to: TOWN + 42 },
 ];
 
 /**
@@ -423,7 +485,7 @@ export const WOOD_BOULDER = (() => {
  * The tongue is four columns across and this is the middle of it, so the
  * cabin sits on the point rather than off to one side of it.
  */
-const CABIN_COLUMN = 39;
+const CABIN_COLUMN = TOWN + 39;
 
 /**
  * Which row the cabin's feet stand at the bottom of: two rows back from the
@@ -489,7 +551,7 @@ const TRAIL_ROWS = 2;
  * Which columns the walk up from the town runs in, and so where the wood's
  * one way in is.
  */
-export const WALK_UP = { column: 29, width: 2 };
+export const WALK_UP = { column: TOWN + 29, width: 2 };
 
 /**
  * Where the walk up from the town stops, which is where it meets the walk
@@ -510,7 +572,7 @@ const walkUpTop = () => southBank(WALK_UP.column, WALK_UP.width) + BANK_GAP;
  * there climbs the map's west edge in a strip two tiles wide, which is not a
  * riverside walk and is barely a place.
  */
-const BANK_WALK = { from: 10, to: 60 };
+const BANK_WALK = { from: TOWN + 10, to: TOWN + 60 };
 
 /** Where the walk along the bank runs at a column: on the bank, a row off it. */
 const walkRowAt = (column: number) => southBank(column, 1) + BANK_GAP;
@@ -602,9 +664,9 @@ const onTheBank = (column: number) => ({
  */
 export const WOOD_WANDER_SPOTS: readonly { x: number; y: number }[] = [
   onTheBank(BANK_WALK.from + 2),
-  onTheBank(20),
+  onTheBank(TOWN + 20),
   onTheBank(WALK_UP.column),
-  onTheBank(40),
+  onTheBank(TOWN + 40),
   onTheBank(BANK_WALK.to - 3),
 ];
 

@@ -25,15 +25,12 @@ describe("campuses", () => {
   for (const campus of Object.values(CAMPUSES)) {
     describe(campus.slug, () => {
       const bounds = { width: campus.columns * TILE, height: campus.rows * TILE };
-      const grid = groundGrid(
-        campus.columns,
-        campus.rows,
-        campus.paved,
-        campus.buildings.map((b) => tilesOf(b.frame)),
-        [],
-        campus.water ?? [],
-        campus.dock ?? [],
-      );
+      const grid = groundGrid(campus.columns, campus.rows, {
+        paved: campus.paved,
+        built: campus.buildings.map((b) => tilesOf(b.frame)),
+        water: campus.water ?? [],
+        dock: campus.dock ?? [],
+      });
       const solids = [
         ...campus.buildings.map((b) => b.solid),
         ...campus.props.map(propBody).filter((r) => r !== null),

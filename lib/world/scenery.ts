@@ -19,6 +19,8 @@ import {
   EAST_X,
   SHORE_ROW,
   TILE,
+  TOWN_LEFT,
+  TOWN_RIGHT,
   TOWN_TOP,
   WOOD_ROWS,
   WORLD_COLUMNS,
@@ -28,6 +30,8 @@ import {
   WORLD_WIDTH,
   type Rect,
 } from "./tenants";
+import { HIGHWAY, SEA, WILD_PLANTING, WILD_POND, shoreAt } from "./wilderness";
+import { blockedCells } from "./route";
 import { COURT, HOOPS, hoopProp } from "./basketball";
 import {
   WOOD_BEACHES,
@@ -44,6 +48,7 @@ export type Ground =
   | "paving"
   | "kerb"
   | "asphalt"
+  | "highway"
   | "water"
   | "dock"
   | "court"
@@ -51,6 +56,8 @@ export type Ground =
   | "shingle";
 
 const CENTRE = CENTRE_X / TILE;
+/** The town's first column: what a column written in the town's own layout is off by. */
+const TOWN = TOWN_LEFT / TILE;
 
 /** Where the promenades run, in tile rows. */
 export const NORTH_ROAD = WOOD_ROWS + 16;
@@ -62,9 +69,23 @@ export const SOUTH_ROAD = WOOD_ROWS + 30;
  * east by the campus. Named because they are junctions — the routes across
  * the map run along them, and a wanderer's spots sit on them.
  */
-export const WEST_AVENUE = 8;
+export const WEST_AVENUE = TOWN + 8;
 export const CENTRE_AVENUE = CENTRE + 14;
 export const EAST_AVENUE = CENTRE + 30 + 6;
+
+/**
+ * The two crossings out in the shops' stretch, west of the town.
+ *
+ * Same job as the three above and no name of their own, because there is
+ * nothing out there for them to be named after: they join the two roads
+ * where the walk between them would otherwise be forty columns. One between
+ * the first pair of shops and one between the second, so no doorstep on that
+ * road is more than a few shops from a way down to the promenade.
+ */
+export const SHOP_AVENUES: readonly number[] = [12, 38];
+
+/** Every crossing between the two roads, west to east. */
+const AVENUES: readonly number[] = [...SHOP_AVENUES, WEST_AVENUE, CENTRE_AVENUE, EAST_AVENUE];
 
 /** A path from a building's door straight down to the road below it, in tiles. */
 function pathDown(b: (typeof BUILDINGS)[number]): Rect {
@@ -76,13 +97,19 @@ function pathDown(b: (typeof BUILDINGS)[number]): Rect {
 
 /** Paved ground, in tiles. Order does not matter; anything paved is walkable. */
 export const PAVED: readonly Rect[] = [
-  { x: 0, y: NORTH_ROAD, width: WORLD_COLUMNS, height: 2 }, // the north road, the whole way
-  { x: 0, y: SOUTH_ROAD, width: WORLD_COLUMNS, height: 2 }, // the south road, the same
+  // The two promenades, from the west edge of the map to the town's own east
+  // edge — which is as far as the town goes. They used to run the map's whole
+  // width, which was the same thing while the map was the town; carried east
+  // unchanged, a slabbed promenade would have run out through the meadow and
+  // off the edge of the world, and the wilderness is wilderness because
+  // nothing has been laid through it.
+  { x: 0, y: NORTH_ROAD, width: TOWN_RIGHT / TILE, height: 2 },
+  { x: 0, y: SOUTH_ROAD, width: TOWN_RIGHT / TILE, height: 2 },
   { x: CENTRE + 11, y: WOOD_ROWS + 9, width: 8, height: 7 }, // plaza
   // A path to each door; the ferry has the dock instead.
   ...BUILDINGS.filter((b) => b.frame.y < SOUTH_ROAD * TILE).map(pathDown),
-  // Three avenues join the two roads: west, centre and east.
-  ...[WEST_AVENUE, CENTRE_AVENUE, EAST_AVENUE].map((x) => ({
+  // The avenues joining the two roads.
+  ...AVENUES.map((x) => ({
     x,
     y: NORTH_ROAD + 2,
     width: 2,
@@ -90,10 +117,32 @@ export const PAVED: readonly Rect[] = [
   })),
 ];
 
-/** Asphalt, in tiles: the car park by the campus, off the east avenue. */
+/**
+ * Asphalt, in tiles: the car park by the campus, off the east avenue, and
+ * the highway down the far side of the wilderness.
+ *
+ * The same tarmac for both, and deliberately: a highway is a car park you
+ * cannot stop on, and what makes it a road is the markings painted down it
+ * rather than a second kind of ground. The scene lays those over the top in
+ * one piece, the way it lays the basketball court's lines — see
+ * `HIGHWAY_MARKS` in `components/game/scenes/outdoors.ts`.
+ */
 export const ASPHALT: readonly Rect[] = [
   { x: CENTRE + 30 + 9, y: WOOD_ROWS + 22, width: 6, height: 5 },
 ];
+
+/**
+ * The highway, in tiles, which is tarmac of its own rather than the car
+ * park's.
+ *
+ * Not the same ground, and the difference is one white line: the car park's
+ * tile carries a bay line down its left edge, which is what makes a field of
+ * them read as parking bays and what would put a stripe across both lanes of
+ * a road every forty-eight pixels. The markings that make this one a road
+ * are painted over it in one piece, the way the basketball court's are —
+ * see `placeHighwayMarks` in `components/game/scenes/outdoors.ts`.
+ */
+export const HIGHWAYS: readonly Rect[] = [HIGHWAY];
 
 /**
  * The trails through the wood, in tiles.
@@ -137,10 +186,7 @@ export const COURTS: readonly Rect[] = [COURT];
  * what the sea already goes through — `waterBodies` walks the ground grid
  * rather than this, so it never had to know there was only one of them.
  */
-export const WATER: readonly Rect[] = [
-  { x: 0, y: SHORE_ROW, width: WORLD_COLUMNS, height: WORLD_ROWS - SHORE_ROW },
-  ...riverBed(),
-];
+export const WATER: readonly Rect[] = [...SEA, ...riverBed()];
 
 /**
  * Planking, in tiles: the dock out over the sea, and nothing else.
@@ -192,18 +238,32 @@ export const tilesOf = (r: Rect): Rect => ({
  * rather than describing the map as it is. Dock planking lies over the
  * water, so it is decided first.
  */
-export function groundGrid(
-  columns: number,
-  rows: number,
-  paved: readonly Rect[],
-  built: readonly Rect[],
-  asphalt: readonly Rect[] = [],
-  water: readonly Rect[] = [],
-  dock: readonly Rect[] = [],
-  court: readonly Rect[] = [],
-  trail: readonly Rect[] = [],
-  shingle: readonly Rect[] = [],
-): Ground[][] {
+export interface GroundPlan {
+  /** Slabs: the roads, the plaza, the paths to the doors. */
+  paved: readonly Rect[];
+  /** The buildings' footprints, which is what keeps a kerb from being drawn at a doorstep. */
+  built: readonly Rect[];
+  asphalt?: readonly Rect[];
+  highway?: readonly Rect[];
+  water?: readonly Rect[];
+  dock?: readonly Rect[];
+  court?: readonly Rect[];
+  trail?: readonly Rect[];
+  shingle?: readonly Rect[];
+}
+
+export function groundGrid(columns: number, rows: number, plan: GroundPlan): Ground[][] {
+  const {
+    paved,
+    built,
+    asphalt = [],
+    highway = [],
+    water = [],
+    dock = [],
+    court = [],
+    trail = [],
+    shingle = [],
+  } = plan;
   const isPaved = (x: number, y: number) => paved.some((r) => inRect(r, x, y));
   const grid: Ground[][] = [];
   for (let y = 0; y < rows; y++) {
@@ -212,6 +272,10 @@ export function groundGrid(
       if (dock.some((r) => inRect(r, x, y))) row.push("dock");
       else if (water.some((r) => inRect(r, x, y))) row.push("water");
       else if (court.some((r) => inRect(r, x, y))) row.push("court");
+      // After the water, which is the rule the wilderness's coastline is
+      // drawn to rather than a thing to remember: the road stops at the sea
+      // rather than being laid over it, and the sea stops short of the road.
+      else if (highway.some((r) => inRect(r, x, y))) row.push("highway");
       else if (asphalt.some((r) => inRect(r, x, y))) row.push("asphalt");
       // After the water, so a trail laid up to the river stops at the bank
       // rather than being drawn across it. Nothing crosses the Gold River
@@ -241,18 +305,17 @@ export function groundGrid(
 }
 
 export function groundTiles(): Ground[][] {
-  return groundGrid(
-    WORLD_COLUMNS,
-    WORLD_ROWS,
-    PAVED,
-    BUILDINGS.map((b) => tilesOf(b.frame)),
-    ASPHALT,
-    WATER,
-    DOCKS,
-    COURTS,
-    TRAILS,
-    BEACHES,
-  );
+  return groundGrid(WORLD_COLUMNS, WORLD_ROWS, {
+    paved: PAVED,
+    built: BUILDINGS.map((b) => tilesOf(b.frame)),
+    asphalt: ASPHALT,
+    highway: HIGHWAYS,
+    water: WATER,
+    dock: DOCKS,
+    court: COURTS,
+    trail: TRAILS,
+    shingle: BEACHES,
+  });
 }
 
 /**
@@ -367,6 +430,21 @@ const centre = (props: PlacedProp[]): PlacedProp[] =>
 const town = (props: PlacedProp[]): PlacedProp[] => props.map((p) => ({ ...p, y: p.y + TOWN_TOP }));
 
 /**
+ * The town's *west* props, written in the town's own columns and moved east
+ * past the shops — the same trick again, on the other axis, for the reason
+ * in `TOWN_LEFT`.
+ *
+ * Only the west stretch needs it. Everything in the middle already goes
+ * through `centre()` and everything out east is written off `EAST_X`, and
+ * both of those are measured from `CENTRE_X`, which carries the shift
+ * already. Sending one of those through here as well would move it east
+ * twice — which is the mistake the basketball hoops were already caught by
+ * on the other axis, and the reason they sit outside the `town()` block.
+ */
+const townWest = (props: PlacedProp[]): PlacedProp[] =>
+  props.map((p) => ({ ...p, x: p.x + TOWN_LEFT }));
+
+/**
  * Where the trail comes down out of the wood, in pixels, and how wide a hole
  * it needs in the tree line along the town's top edge.
  *
@@ -381,48 +459,56 @@ const TRAIL_HEAD = { from: WOOD_TRAILS[0].x * TILE - 20, to: (WOOD_TRAILS[0].x +
 const overlaps = (a: Rect, b: Rect) =>
   a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 
+/** A tile rectangle in pixels. */
+const inPixels = (r: Rect): Rect => ({
+  x: r.x * TILE,
+  y: r.y * TILE,
+  width: r.width * TILE,
+  height: r.height * TILE,
+});
+
 /**
- * The wood's trees and bushes: every candidate `wood.ts` scattered, less
- * the ones that cannot stand where they fell.
+ * What no prop's **picture** may be drawn over, in pixels.
  *
- * Three rules, and all three are about the **picture** rather than about a
- * pair of feet — which is why they are here and not in `wood.ts`, where the
- * scatter is: only this file knows how big a tree is drawn.
+ * Everything out of doors sorts by the bottom of its own picture, so a tree
+ * whose feet are above a walker's is drawn in front of them: a canopy over a
+ * path is a stretch of it somebody disappears along, and a canopy over a
+ * lane is a car that vanishes halfway down the map.
  *
- * | Rule                            | Why                                                                                                                                                                                              |
- * | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
- * | Nothing hangs over a trail      | Everything out of doors sorts by the bottom of its own picture, so a walker whose feet are above a tree's is drawn *behind* it. A stretch of path somebody disappears along is not a path         |
- * | Nothing off the top of the map  | The camera is clamped to the map, so a tree planted on row 0 is a tree with its bottom third showing and nothing above it                                                                         |
- * | No two trunks in the same place | Bodies, not pictures. Canopies overlapping is what a wood *is*; two footprints merged into one is a wider solid than either, and enough of them is a thicket the route planner has to go round    |
+ * So: every hard surface — the roads and paths, the car park, the highway,
+ * the court, the dock, the trails — and the buildings. It began as the
+ * trails alone, which was the whole of it while the only scatter was the
+ * wood's and the wood had nothing in it but trails. The meadow's scatter
+ * runs down to the town's own edge, and the first thing it did was hang a
+ * bush over the end of the north road.
  *
- * The first is asymmetric and rightly so: a tree's picture is above its
- * feet, so one on the north side of a trail may stand almost on the edge of
- * it while one on the south side has to be a good two tiles back. Canopies
- * lean over the path from above, which is what a wood looks like.
+ * Asked of the scatter, which is where it matters, and of the tree line
+ * along the town's top edge, which is the one run placed by hand long enough
+ * to walk into something.
  */
-const WOOD_PROPS: readonly PlacedProp[] = (() => {
-  const inPixels = (r: Rect) => ({
-    x: r.x * TILE,
-    y: r.y * TILE,
-    width: r.width * TILE,
-    height: r.height * TILE,
-  });
-  const paths = WOOD_TRAILS.map(inPixels);
-  const planted: PlacedProp[] = [];
-  const bodies: Rect[] = [];
-  for (const p of WOOD_PLANTING) {
-    const picture = propBounds(p);
-    if (paths.some((r) => overlaps(picture, r))) continue;
-    if (picture.y < -TILE || picture.x < -TILE || picture.x + picture.width > WORLD_WIDTH + TILE) {
-      continue;
-    }
-    const body = propBody(p);
-    if (body && bodies.some((other) => overlaps(body, other))) continue;
-    planted.push(p);
-    if (body) bodies.push(body);
-  }
-  return planted;
-})();
+const KEEP_CLEAR: readonly Rect[] = [
+  ...[...PAVED, ...ASPHALT, ...HIGHWAYS, ...COURTS, ...DOCKS, ...WOOD_TRAILS].map(inPixels),
+  ...BUILDINGS.map((b) => b.frame),
+];
+
+/**
+ * Lamps and flowers at a shop's door, and a tree to one side of it.
+ *
+ * Measured off the building so that it follows the building, in the pixels
+ * the frame is already in — which is why this sits outside the `town()`
+ * block below rather than in it.
+ */
+const atTheDoor = (b: (typeof BUILDINGS)[number]): PlacedProp[] => {
+  const base = b.frame.y + b.frame.height;
+  const right = b.frame.x + b.frame.width;
+  return [
+    { kind: "bush", x: b.frame.x + 22, y: base + 20 },
+    { kind: "bush", x: right - 22, y: base + 20 },
+    { kind: "lamp", x: b.frame.x + 76, y: base + 66 },
+    { kind: "lamp", x: right - 76, y: base + 66 },
+    { kind: "tree", x: right + 96, y: b.frame.y + 32 },
+  ];
+};
 
 /** Every 140px across a stretch. */
 const along = (from: number, to: number, step: number): number[] => {
@@ -431,20 +517,74 @@ const along = (from: number, to: number, step: number): number[] => {
   return xs;
 };
 
-export const SCENERY: readonly PlacedProp[] = [
-  // The wood at the top of the map: two hundred-odd trees and bushes, in
-  // world rows already, scattered round the river and off the trails.
-  ...WOOD_PROPS,
-  // And the cabin on the far bank, which is placed rather than scattered.
+/**
+ * Everything on the map that was put somewhere on purpose.
+ *
+ * Kept apart from the scatter because the scatter has to fit **around** it:
+ * a tree planted by a hash where a bench already stands is two footprints
+ * merged into one wider solid, and the one that was chosen should be the one
+ * that stays. So this is worked out first and `SCATTERED` is given its
+ * bodies to keep off — which is the same rule the scatter already applies to
+ * itself, asked one list wider.
+ */
+const PLACED: readonly PlacedProp[] = [
+  // The cabin on the far bank of the Gold River.
   { kind: "cabin", ...WOOD_CABIN },
   // The boulder standing in the river at the foot of the shoulder beach,
   // likewise: a marked rock on the far side of water nothing crosses.
   { kind: "boulder", ...WOOD_BOULDER },
   // Bushes along the shore, the whole way — except at the dock and the
-  // ferry. Off `SHORE_ROW`, which is a world row, so not one of the town's.
+  // ferry. Their row is read off the coast rather than written as
+  // `SHORE_ROW`: the shore steps south twice out in the wilderness and then
+  // leaves the map altogether, so a row would put the last of them in the
+  // water and the rest in a meadow with no sea in sight.
   ...along(80, WORLD_WIDTH - 60, 220)
     .filter((x) => x < DOCK.x * TILE - 140 || x > (DOCK.x + DOCK.width) * TILE + BOAT.width + 60)
-    .map((x): PlacedProp => ({ kind: "bush", x, y: SHORE_ROW * TILE - 12 })),
+    .map((x) => ({ x, shore: shoreAt(Math.floor(x / TILE)) }))
+    .filter((b): b is { x: number; shore: number } => b.shore !== null)
+    .map(({ x, shore }): PlacedProp => ({ kind: "bush", x, y: shore * TILE - 12 })),
+
+  // The four newer shops' doorsteps. Taken off each building rather than
+  // written out four times over, which is also what keeps them in front of
+  // the door when a shop moves: Blockhouse's and Chester's are the same
+  // arrangement, measured off theirs, from when there were two of them.
+  ...BUILDINGS.filter((b) => b.org.style === "shop").flatMap(atTheDoor),
+
+  // The one thing to walk to in the meadow.
+  { kind: "pond", ...WILD_POND },
+
+  // The shops' own park, between the two roads west of the town: trees,
+  // benches and a lamp or two, the same furniture the town's blocks have.
+  // In world columns, since this is the stretch the town moved east to make
+  // room for and there is nothing here to be relative to. Written out rather
+  // than scattered because a park is somewhere somebody laid out — the
+  // scatter is for the wood and the meadow, which are not.
+  { kind: "tree", x: 160, y: 2450 },
+  { kind: "tree", x: 400, y: 2620 },
+  { kind: "tree", x: 100, y: 2780 },
+  { kind: "bench", x: 280, y: 2520 },
+  { kind: "lamp", x: 220, y: 2360 },
+  { kind: "lamp", x: 360, y: 2360 },
+
+  { kind: "tree", x: 820, y: 2460 },
+  { kind: "tree", x: 1150, y: 2700 },
+  { kind: "tree", x: 1520, y: 2430 },
+  { kind: "tree", x: 1700, y: 2650 },
+  { kind: "tree", x: 960, y: 2800 },
+  { kind: "bench", x: 1180, y: 2470 },
+  { kind: "bench", x: 1360, y: 2470 },
+  { kind: "planter", x: 1270, y: 2380 },
+  { kind: "lamp", x: 790, y: 2360 },
+  { kind: "lamp", x: 930, y: 2360 },
+  { kind: "lamp", x: 1620, y: 2360 },
+  { kind: "lamp", x: 1760, y: 2360 },
+
+  { kind: "tree", x: 2060, y: 2520 },
+  { kind: "tree", x: 2420, y: 2700 },
+  { kind: "tree", x: 2660, y: 2460 },
+  { kind: "bench", x: 2220, y: 2600 },
+  { kind: "lamp", x: 2010, y: 2360 },
+  { kind: "lamp", x: 2150, y: 2360 },
 
   // The basketball court's two hoops, standing on their own end lines. Read
   // off `HOOPS` rather than written out, because the ball is judged against
@@ -457,29 +597,41 @@ export const SCENERY: readonly PlacedProp[] = [
 
   // Everything below is the town, laid out in the town's own rows.
   ...town([
-    // The trees along the town's top edge, the whole way — except where
-    // Blockhouse stands against them, and where the trail comes down out of
-    // the wood. It used to be the wood; it is the wood's southern edge now.
+    // The trees along the town's top edge, the whole way — except over a
+    // shopfront, and where the trail comes down out of the wood. It used to
+    // be the wood; it is the wood's southern edge now.
     ...treeLine(
       118,
       along(60, WORLD_WIDTH - 60, 140).filter(
-        (x) => (x < 150 || x > 520) && (x < TRAIL_HEAD.from || x > TRAIL_HEAD.to),
+        (x) =>
+          // Not over a shopfront, and not over the highway. It used to be a
+          // pair of numbers excluding the stretch Blockhouse stands on, which
+          // was one building's worth of exception written out by hand; there
+          // are five shops standing in this row now and a road through the
+          // east end of it, so it is asked of the map instead.
+          !KEEP_CLEAR.some((r) =>
+            overlaps(propBounds({ kind: "tree", x, y: TOWN_TOP + 118 }), r),
+          ) &&
+          (x < TRAIL_HEAD.from || x > TRAIL_HEAD.to),
       ),
     ),
 
-    // West: the two stores, each with lamps and flowers at the door.
-    { kind: "tree", x: 700, y: 250 },
-    { kind: "tree", x: 1330, y: 300 },
-    { kind: "tree", x: 1000, y: 640 },
-    { kind: "bush", x: 214, y: 404 },
-    { kind: "bush", x: 458, y: 404 },
-    { kind: "lamp", x: 268, y: 450 },
-    { kind: "lamp", x: 404, y: 450 },
-    { kind: "bush", x: 550, y: 692 },
-    { kind: "bush", x: 794, y: 692 },
-    { kind: "lamp", x: 600, y: 740 },
-    { kind: "lamp", x: 744, y: 740 },
-    { kind: "planter", x: 520, y: 300 },
+    // The town's own west: Blockhouse and Chester, each with lamps and
+    // flowers at the door. In the town's columns, so east past the shops.
+    ...townWest([
+      { kind: "tree", x: 700, y: 250 },
+      { kind: "tree", x: 1330, y: 300 },
+      { kind: "tree", x: 1000, y: 640 },
+      { kind: "bush", x: 214, y: 404 },
+      { kind: "bush", x: 458, y: 404 },
+      { kind: "lamp", x: 268, y: 450 },
+      { kind: "lamp", x: 404, y: 450 },
+      { kind: "bush", x: 550, y: 692 },
+      { kind: "bush", x: 794, y: 692 },
+      { kind: "lamp", x: 600, y: 740 },
+      { kind: "lamp", x: 744, y: 740 },
+      { kind: "planter", x: 520, y: 300 },
+    ]),
 
     // Centre: the plaza between the two head offices. The trail down out of
     // the wood lands on its top edge, so the west half of that edge is kept
@@ -527,16 +679,19 @@ export const SCENERY: readonly PlacedProp[] = [
     { kind: "planter", x: CENTRE_X + 1100, y: 950 },
     { kind: "tree", x: CENTRE_X + 816, y: 1160 },
     { kind: "tree", x: CENTRE_X + 1382, y: 950 },
-    // The lab stands back among trees.
-    ...treeLine(990, [80, 210, 330]),
-    { kind: "tree", x: 520, y: 1120 },
-    { kind: "tree", x: 530, y: 1260 },
-    { kind: "bush", x: 60, y: 1330 },
-    { kind: "lamp", x: 120, y: 1370 },
-    { kind: "lamp", x: 264, y: 1370 },
+    // The lab stands back among trees, at the far end of the town's own
+    // south road — which is no longer the far end of the map.
+    ...townWest([
+      ...treeLine(990, [80, 210, 330]),
+      { kind: "tree", x: 520, y: 1120 },
+      { kind: "tree", x: 530, y: 1260 },
+      { kind: "bush", x: 60, y: 1330 },
+      { kind: "lamp", x: 120, y: 1370 },
+      { kind: "lamp", x: 264, y: 1370 },
 
-    { kind: "lamp", x: 360, y: 1250 },
-    { kind: "lamp", x: 504, y: 1250 },
+      { kind: "lamp", x: 360, y: 1250 },
+      { kind: "lamp", x: 504, y: 1250 },
+    ]),
     { kind: "lamp", x: CENTRE_X + 650, y: 1000 },
     { kind: "lamp", x: CENTRE_X + 790, y: 1000 },
     { kind: "van", x: EAST_X + 480, y: 1280 },
@@ -560,6 +715,61 @@ export const SCENERY: readonly PlacedProp[] = [
     ].map((p): PlacedProp => ({ ...(p as PlacedProp), x: p.x + EAST_X })),
   ]),
 ];
+
+/**
+ * The wood's and the meadow's trees and bushes: every candidate `wood.ts`
+ * and `wilderness.ts` scattered, less the ones that cannot stand where they
+ * fell.
+ *
+ * Four rules, and all of them are about the **picture** or the body rather
+ * than about a pair of feet — which is why they are here and not in the two
+ * files the scatters come from: only this file knows how big a tree is
+ * drawn.
+ *
+ * | Rule                              | Why                                                                                                                                                                                           |
+ * | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+ * | Nothing hangs over hard ground    | Everything out of doors sorts by the bottom of its own picture, so a walker whose feet are above a tree's is drawn *behind* it. A stretch of path somebody disappears along is not a path     |
+ * | Nothing off the edges of the map  | The camera is clamped to the map, so a tree planted on row 0 is a tree with its bottom third showing and nothing above it                                                                     |
+ * | No two trunks in the same place   | Bodies, not pictures. Canopies overlapping is what a wood *is*; two footprints merged into one is a wider solid than either, and enough of them is a thicket the route planner has to go round |
+ * | And none of them on a placed prop | Same rule, asked one list wider: what somebody chose the place of wins, and the scatter fits round it                                                                                         |
+ *
+ * The first is asymmetric and rightly so: a tree's picture is above its
+ * feet, so one on the north side of a trail may stand almost on the edge of
+ * it while one on the south side has to be a good two tiles back. Canopies
+ * lean over the path from above, which is what a wood looks like.
+ */
+const SCATTERED: readonly PlacedProp[] = (() => {
+  const planted: PlacedProp[] = [];
+  // Seeded with what is already standing, so the scatter fits round the
+  // things somebody chose the place of — the tree line along the town's top
+  // edge, the bushes on the shore, the lamps at a shopfront. It began empty,
+  // and the four props that came out of it stacked were all at a seam: the
+  // meadow's scatter meeting the shore, and the wood's meeting the tree line
+  // under it.
+  const bodies: Rect[] = PLACED.map(propBody).filter((r): r is Rect => r !== null);
+  for (const p of [...WOOD_PLANTING, ...WILD_PLANTING]) {
+    const picture = propBounds(p);
+    if (KEEP_CLEAR.some((r) => overlaps(picture, r))) continue;
+    if (picture.y < -TILE || picture.x < -TILE || picture.x + picture.width > WORLD_WIDTH + TILE) {
+      continue;
+    }
+    const body = propBody(p);
+    if (body && bodies.some((other) => overlaps(body, other))) continue;
+    planted.push(p);
+    if (body) bodies.push(body);
+  }
+  return planted;
+})();
+
+/**
+ * Everything on the world map that is not a building: the scatter, and what
+ * was put where it is.
+ *
+ * The order between the two is nothing — out of doors everything sorts by
+ * the bottom of its own picture — but it is the order they are worked out
+ * in, and the scatter is the one that has to be told about the other.
+ */
+export const SCENERY: readonly PlacedProp[] = [...SCATTERED, ...PLACED];
 
 /** The picture's rectangle. */
 export function propBounds(p: PlacedProp): Rect {
@@ -590,10 +800,14 @@ export function allReachable(
 ): boolean {
   const cols = Math.ceil(bounds.width / cell);
   const rows = Math.ceil(bounds.height / cell);
-  const blocked = (cx: number, cy: number) => {
-    const c = { x: cx * cell, y: cy * cell, width: cell, height: cell };
-    return solids.some((s) => overlaps(s, c));
-  };
+  // Painted once rather than asked per cell, which is the route planner's
+  // own answer to the same question — see `blockedCells`. It used to test
+  // every solid against every cell: on the map as it now stands that is
+  // fifty thousand cells against better than a thousand rectangles, a
+  // second or so a call, and this is called several times over in the
+  // tests that hold the map together.
+  const cells = blockedCells(solids, cols, rows, cell);
+  const blocked = (cx: number, cy: number) => cells[cy * cols + cx] === 1;
   const key = (cx: number, cy: number) => cy * cols + cx;
   const start = { cx: Math.floor(from.x / cell), cy: Math.floor(from.y / cell) };
   const seen = new Set<number>([key(start.cx, start.cy)]);
