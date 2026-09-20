@@ -67,6 +67,23 @@ const SHADOW_FADE_Z = 260;
 const SHADOW_SMALLEST = 0.5;
 const SHADOW_ALPHA = 0.45;
 
+/**
+ * How much of a step down or up the screen counts as roll.
+ *
+ * Sideways is honest: the ball is drawn at its own radius, so a pixel of
+ * ground is a pixel of circumference and the turn is the arc length over
+ * the radius, with nothing to tune. North and south are not, and cannot
+ * be — the court is looked at from above, so a ball rolling away from the
+ * camera turns about an axis pointing across the screen, which is a
+ * sprite not turning at all. Drawn honestly, every throw up the court
+ * would slide.
+ *
+ * So a step up or down the screen is taken as most of a roll rather than
+ * none of one. It is the fudge in here and it is the one that makes the
+ * ball read as a ball.
+ */
+const ROLL_NS = 0.7;
+
 export class BasketballCourt {
   private ball: Phaser.GameObjects.Image;
   private shadow: Phaser.GameObjects.Ellipse;
@@ -81,6 +98,15 @@ export class BasketballCourt {
   private drawn = { x: 0, y: 0, z: 0 };
   /** Nothing has been said about the ball yet, so there is nothing to draw. */
   private known = false;
+  /** How far round it has turned, in radians, from however far it has rolled. */
+  private spin = 0;
+  /**
+   * The drawn position was put rather than moved, so this frame's step is
+   * not travel and must not turn the ball. A ball changing hands crosses
+   * the court in one frame, which at a pixel of turn per pixel of ground
+   * is a couple of dozen revolutions in a single frame.
+   */
+  private put = false;
 
   /** How far through its swing the meter is, while we are holding the ball. */
   private charge = 0;
@@ -148,6 +174,7 @@ export class BasketballCourt {
     if (!this.known || changedHands) {
       this.drawn = { x: ball.x, y: ball.y, z: ball.z };
       this.known = true;
+      this.put = true;
     }
     if (!ball.heldBy) this.charge = 0;
     if (scored) this.mark(scored);
@@ -187,6 +214,7 @@ export class BasketballCourt {
     // Our own ball is drawn at our own hand. Everything else is drawn
     // towards where the server last said, which arrives twenty times a
     // second and would otherwise be visibly steppy.
+    const from = this.drawn;
     if (carrying) {
       this.drawn = carriedAt(at, at.facing);
     } else {
@@ -198,8 +226,20 @@ export class BasketballCourt {
       };
     }
 
+    // It turns as far as it has travelled, whether that is a roll across
+    // the tarmac or a throw through the air — a ball leaves the hand
+    // spinning and the arc is the one place there is nothing else on
+    // screen to say it is moving at all. A carried ball is held, so it
+    // does not turn: it is riding at somebody's hand and its whole step
+    // is theirs rather than its own.
+    if (!carrying && !this.put) {
+      this.spin += (this.drawn.x - from.x + (this.drawn.y - from.y) * ROLL_NS) / BALL_RADIUS;
+    }
+    this.put = false;
+
     this.ball
       .setPosition(this.drawn.x, this.drawn.y - this.drawn.z)
+      .setRotation(this.spin)
       .setDepth(this.drawn.y + BALL_DEPTH_LIFT)
       .setVisible(true);
     const shrink = Math.max(SHADOW_SMALLEST, 1 - this.drawn.z / SHADOW_FADE_Z);

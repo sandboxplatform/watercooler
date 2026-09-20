@@ -77,6 +77,7 @@ const P = {
   rim: [214, 122, 62, 255],
   ball: [206, 116, 58, 255],
   ballLit: [228, 148, 88, 255],
+  ballDark: [162, 84, 38, 255],
 };
 
 function canvas(w, h) {
@@ -743,19 +744,54 @@ function hoop(dir) {
 }
 slot("hoopWest", 112, 128, hoop(1));
 slot("hoopEast", 112, 128, hoop(-1));
+/**
+ * The basketball, drawn at the size it is judged at — BALL_RADIUS in
+ * lib/world/basketball.ts — so a pixel of ground is a pixel of its own
+ * circumference and the roll in BasketballCourt needs nothing tuned.
+ *
+ * It is a rolling ball, so everything about the drawing has to survive
+ * being turned. The shading is therefore **rim darkening** — a ring, the
+ * one kind of shading that is the same at every angle — rather than a lit
+ * patch up one side, which would swing round the ball like a torch
+ * strapped to it. The one highlight is small enough to read as a mark on
+ * the leather rather than as a light that ought to have stayed put.
+ *
+ * And the seams are what make the turning visible at all. There were four
+ * lines in a cross, which is a pattern with a cross's symmetry: turn it a
+ * quarter and it is the same picture, so a rolling ball read as a sliding
+ * one. The two arcs break that. They were meant to be there and never
+ * were — the arithmetic put them at 5 plus a bulge, which is a curve
+ * outside the eight-pixel body at every row, so every pixel of both of
+ * them was clipped and the cross was the whole of it.
+ *
+ * A seam is a great circle seen at an angle, which projects to an ellipse
+ * with the ball's own radius for its long axis — so the arcs meet the
+ * meridian exactly at the poles, which is where the real seams meet.
+ */
 slot("ball", 20, 20, (set, d) => {
-  d.disc(10, 10, 9, P.ink);
-  d.disc(10, 10, 8, P.ball);
-  d.disc(7, 7, 4, P.ballLit);
-  // Seams: the meridian, the equator, and the two curves either side.
-  for (let i = -8; i <= 8; i++) {
-    set(10 + i, 10, P.ink2);
-    set(10, 10 + i, P.ink2);
+  const C = 10;
+  const R = 9;
+  d.disc(C, C, R, P.ink);
+  d.disc(C, C, R - 1, P.ballDark);
+  d.disc(C, C, R - 2, P.ball);
+  d.disc(C - 3, C - 3, 2, P.ballLit);
+  // The equator and the meridian.
+  for (let i = -(R - 1); i <= R - 1; i++) {
+    set(C + i, C, P.ink2);
+    set(C, C + i, P.ink2);
   }
-  for (const s of [-1, 1]) {
-    for (let y = -7; y <= 7; y++) {
-      set(10 + s * Math.round(5 + Math.sqrt(Math.max(0, 49 - y * y)) * 0.42), 10 + y, P.ink2);
-    }
+  // The two arcs, walked round their own curve rather than down the rows.
+  // Stepping by row and joining the gaps up gives three pixels on a row
+  // near the poles, where a row of height is most of two pixels of width
+  // — which is a cap on the top of the ball rather than a seam.
+  const RX = 5;
+  const RY = R - 1;
+  for (let i = 0; i <= 96; i++) {
+    const t = (i / 96) * Math.PI;
+    const x = Math.round(RX * Math.sin(t));
+    const y = Math.round(RY * Math.cos(t));
+    set(C + x, C + y, P.ink2);
+    set(C - x, C + y, P.ink2);
   }
 });
 frames.fountain.animateWith = "fountain2";
