@@ -43,6 +43,13 @@ interface SidebarProps {
    */
   musicOpen: boolean;
   onToggleMusic: () => void;
+  /**
+   * Whether the character picker is up. Held by the page for the reason the
+   * profile is mounted there: the window is over the whole app, column
+   * included, and the button that opens it is down in the footer.
+   */
+  characterOpen: boolean;
+  onToggleCharacter: () => void;
 }
 
 export default function Sidebar({
@@ -54,6 +61,8 @@ export default function Sidebar({
   onClose,
   musicOpen,
   onToggleMusic,
+  characterOpen,
+  onToggleCharacter,
 }: SidebarProps) {
   const online = useOnline();
   const draggingRef = useRef(false);
@@ -167,7 +176,12 @@ export default function Sidebar({
         </div>
 
         {/* The music and the way out, at the foot of the column that holds them */}
-        <SidebarFooter musicOpen={musicOpen} onToggleMusic={onToggleMusic} />
+        <SidebarFooter
+          musicOpen={musicOpen}
+          onToggleMusic={onToggleMusic}
+          characterOpen={characterOpen}
+          onToggleCharacter={onToggleCharacter}
+        />
       </div>
     </aside>
   );

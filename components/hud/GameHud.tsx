@@ -3,20 +3,19 @@
 import { gameEvents } from "@/lib/events";
 import "./hud.css";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStudio } from "@/lib/store";
-import type { HudDockItem, HudPanelId } from "./HudDock";
+import type { HudPanelId } from "./HudDock";
 import TopBar from "./TopBar";
 import BottomBar from "./BottomBar";
 import SeatManagerModal from "./SeatManagerModal";
-import CharacterStudio from "./CharacterStudio";
 import Welcome from "./Welcome";
 import AlreadyOnline from "./AlreadyOnline";
 import Arrival from "./Arrival";
 import GamepadDriver from "./GamepadDriver";
 import { profileSnapshot, subscribeToProfile } from "@/lib/profile";
 import { registerProfile } from "@/lib/people-client";
-import { pushProfileToAccount, useMe } from "@/lib/account-client";
+import { pushProfileToAccount } from "@/lib/account-client";
 import ElevatorModal from "./ElevatorModal";
 import BadgeToast from "./BadgeToast";
 import Whiteboard from "./Whiteboard";
@@ -29,7 +28,6 @@ import Boardroom from "./Boardroom";
 import Arcade from "./Arcade";
 import PingPong from "./PingPong";
 import TouchControls from "./TouchControls";
-import { asset } from "@/lib/assets";
 
 interface GameHudProps {
   /** Whether the column is up on People, so the pill can say so. */
@@ -52,14 +50,7 @@ export default function GameHud({
   onCloseMusic,
 }: GameHudProps) {
   const { state } = useStudio();
-  // Somebody whose own code names their sheet wears that and nothing else,
-  // so there is no character to choose and no button to choose it with.
-  // Assumed locked until the answer comes: a picker that is briefly there
-  // and then gone is worse than one that arrives a moment late.
-  const me = useMe();
-  const ownLookOnly = !me || !!me.access?.persona?.characterKey;
   const [seatManagerOpen, setSeatManagerOpen] = useState(false);
-  const [studioOpen, setStudioOpen] = useState(false);
 
   // Keep the building's register current: name or home may have changed.
   // And a change made here — a new character, say — follows someone
@@ -106,32 +97,6 @@ export default function GameHud({
     };
   }, [onShowMusic, onCloseMusic]);
 
-  /**
-   * Top-right toolbar items: who you are in the world, and nothing else.
-   *
-   * The music was here, beside the door, and both are now at the foot of the
-   * column — so neither of them stands over the corner of the office for a
-   * whole session to be pressed once.
-   */
-  const toolItems: HudDockItem[] = useMemo(
-    () =>
-      ownLookOnly
-        ? []
-        : [
-            {
-              id: "workers" as const,
-              label: "Character",
-              icon: asset("/ui/icons/icon-workers.png"),
-              iconActive: asset("/ui/icons/icon-workers-active.png"),
-            },
-          ],
-    [ownLookOnly],
-  );
-
-  const togglePanel = useCallback(() => {
-    if (!ownLookOnly) setStudioOpen((prev) => !prev);
-  }, [ownLookOnly]);
-
   return (
     <div className="hud-overlay">
       <GamepadDriver />
@@ -150,13 +115,15 @@ export default function GameHud({
       <Arcade />
       <PingPong />
       <TouchControls />
-      {/* Top area: logo | agent pills | tool buttons */}
-      <TopBar
-        seats={state.seats}
-        toolItems={toolItems}
-        openPanel={studioOpen ? "workers" : null}
-        onToggle={togglePanel}
-      />
+      {/*
+        Top area: the agent pills, and the account.
+
+        The Character button was in that corner too, and it is at the foot of
+        the column now with the music and the door — the three things in this
+        app that are the app rather than the world, none of them worth a
+        button standing over the office for a whole session.
+      */}
+      <TopBar seats={state.seats} />
 
       {/*
         Bottom area: the status pills.
@@ -176,8 +143,6 @@ export default function GameHud({
         onClose={() => setSeatManagerOpen(false)}
         seats={state.seats}
       />
-
-      <CharacterStudio open={studioOpen} onClose={() => setStudioOpen(false)} />
     </div>
   );
 }

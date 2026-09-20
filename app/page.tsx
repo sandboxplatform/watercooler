@@ -8,6 +8,7 @@ import { GameErrorBoundary } from "@/components/game/GameErrorBoundary";
 import GameHud from "@/components/hud/GameHud";
 import Sidebar, { type SidebarTab } from "@/components/hud/Sidebar";
 import Profile from "@/components/hud/Profile";
+import CharacterStudio from "@/components/hud/CharacterStudio";
 import { loadSidebarWidth } from "@/lib/persistence";
 import { useBackToClose } from "@/lib/hooks/useBackToClose";
 import { SIDEBAR_DEFAULT_WIDTH } from "@/lib/constants";
@@ -56,6 +57,14 @@ export default function Page() {
    * for. Neither is the other's parent, so it sits above them both.
    */
   const [musicOpen, setMusicOpen] = useState(false);
+  /**
+   * Whether the character picker is up.
+   *
+   * Its button is at the foot of the column with the music and the door, and
+   * the window itself is over the whole app — so, like the profile, it is
+   * neither the column's nor the HUD's and sits above them both.
+   */
+  const [characterOpen, setCharacterOpen] = useState(false);
   const wideEnough = useSyncExternalStore(subscribeToNothing, readWideEnough, () => true);
 
   // Closing the column takes the slider with it: it lives in there.
@@ -81,6 +90,8 @@ export default function Page() {
     setSidebarOpen(true);
   }, [sidebarOpen, sidebarTab, closeSidebar]);
   const toggleMusic = useCallback(() => setMusicOpen((open) => !open), []);
+  const toggleCharacter = useCallback(() => setCharacterOpen((open) => !open), []);
+  const closeCharacter = useCallback(() => setCharacterOpen(false), []);
   // The controller's half: it has to open the column too, or it would turn
   // to a panel that is not on screen.
   const showMusic = useCallback(() => {
@@ -123,6 +134,8 @@ export default function Page() {
             onClose={closeSidebar}
             musicOpen={musicOpen}
             onToggleMusic={toggleMusic}
+            characterOpen={characterOpen}
+            onToggleCharacter={toggleCharacter}
           />
 
           {/*
@@ -137,6 +150,13 @@ export default function Page() {
             the column and leads with a picture too big to read behind one.
           */}
           <Profile />
+
+          {/*
+            The character picker, for the same reason and opened from the same
+            place: its button is at the foot of the column, so the window is
+            the page's rather than the HUD's.
+          */}
+          <CharacterStudio open={characterOpen} onClose={closeCharacter} />
         </main>
       </StudioProvider>
     </ErrorBoundary>
