@@ -1689,9 +1689,38 @@ its block and touches no road — so it is a rule about where the court may go
 rather than a description of the map.
 
 **The hoops are read off `HOOPS` rather than placed by hand**, because the
-ball is judged against those same two points — a post put down separately
+ball is judged against those same three points — a post put down separately
 is a rim the ball falls through somewhere the picture is not. Only the pole
-is solid; the board is over your head and the rim is out over the court.
+is solid on the ground; the rim is out over the court and the board is over
+your head, where the only thing that meets either of them is the ball.
+
+**The backboard is the second way in, and that is the point of it.** A shot
+too long for the hole comes back off the board and can still drop through
+the rim on the way down, so the far end of the meter is a chance rather than
+a miss. Swept over every power from a given range it reads as a swish window,
+a gap, then a bank window, then nothing — and `basketball.test.ts` asserts
+that order, since a bank that were _easier_ than a clean shot would make the
+board the way to play rather than the way to recover.
+
+Three things about it:
+
+| Rule                              | Why                                                                                                                                                                     |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A plane at one `x`, not a solid   | Both boards face along the court, so the ball meets one square on and a flat wall reverses only the component across it. Height and the way along the board are its own |
+| Struck mid-tick, like the rim     | The ball covers twenty-six pixels in a tick and a pane has no thickness, so a board tested where the frame left the ball is a board the ball flies through              |
+| The rest of the tick is re-walked | The rim below is judged from the bounce rather than from the straight line the ball would have flown, or a shot that banks in is scored as a miss                       |
+
+Its numbers are the picture's — `BOARD_BEHIND_RIM`, `BOARD_HALF_WIDTH` and
+the two heights in `lib/world/basketball.ts`, measured off the board drawn
+in `scripts/make-world-art.mjs`. A pane reaching past its own picture is a
+rebound out of clear air. Two honest ways past it fall out of that: under it,
+through the gap between the hole and the foot of the board, and over the top.
+
+It also means **the longest throws on the meter cannot be swished from the
+centre line**, because a perfect shot at full power is taken from behind the
+far hoop — where that hoop's own board is in the way, from the back. Which
+is right, and is the reason the power sweep in the tests stops at the court's
+own edge.
 
 **A ball left off the court finds its own way back.** A throw at full
 stretch carries it clean over the end line and the avenue beyond, and there

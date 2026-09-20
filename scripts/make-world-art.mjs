@@ -663,6 +663,13 @@ slot("board", 144, 88, (set, d) => {
  * the rim sits RIM_REACH across and RIM_Z up from it — which is where a
  * falling ball is judged to have gone in. A rim drawn anywhere else is a
  * hoop the ball passes through beside.
+ *
+ * The board is the same bargain and is now three numbers rather than a
+ * picture: a ball bounces off the pane it stands on, so its middle column
+ * is BOARD_BEHIND_RIM back from the rim (POST + 4 here, the middle of the
+ * skewed face), and its face runs between BOARD_BOTTOM_Z and BOARD_TOP_Z —
+ * BASE minus the top edge, and that less TALL. Redraw it taller, lower or
+ * further back and the ball comes off thin air beside it.
  */
 function hoop(dir) {
   const POST = 56;

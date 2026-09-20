@@ -13,6 +13,11 @@
  * the hand at `HAND_Z`, arcs under `GRAVITY_PX_S2`, and is a basket only
  * where it crosses a rim's height on the way *down*. Up through a rim is the
  * ball hitting the underside of the net, which is not a point.
+ *
+ * The backboard is the second thing height buys: a pane behind each rim and
+ * above it, so a throw too long for the hole comes back off the board and
+ * can still drop through on the way down. Which is what turns the far end
+ * of the meter from a miss into a chance.
  */
 
 import { TILE, WOOD_ROWS, WORLD_HEIGHT, WORLD_WIDTH, type Rect } from "./tenants";
@@ -60,18 +65,65 @@ export const RIM_Z = 64;
 export const RIM_RADIUS = 20;
 
 /**
+ * The backboard, and why it is three numbers rather than a box.
+ *
+ * It is a pane hung behind the rim and above it, so a throw that is too
+ * long for the hole comes back off the board and falls — sometimes through
+ * the rim on the way down, which is the whole of a bank shot. A plane at
+ * one `x` rather than a solid: both boards face along the court, so the ball
+ * meets one square on and the only component a flat wall reverses is the
+ * one across it.
+ *
+ * Every number is read off the picture in `scripts/make-world-art.mjs`,
+ * which draws the board at three quarters. Its middle column stands
+ * `BOARD_BEHIND_RIM` back from the rim, and the face runs between these two
+ * heights, measured up from the post's own feet like `RIM_Z`. A board the
+ * ball meets where no board is drawn is worse than no board at all, since a
+ * rebound out of clear air has nothing on screen to explain it.
+ */
+const BOARD_BEHIND_RIM = 26;
+/**
+ * Half the board's width, across the court.
+ *
+ * A shade wider than the hole, so a shot a little off the centre line still
+ * has something to come back off, and no wider than the board is drawn — a
+ * rim is already the more generous of the two at `RIM_RADIUS`, and a board
+ * reaching past its own picture is a rebound out of clear air.
+ */
+export const BOARD_HALF_WIDTH = 24;
+export const BOARD_BOTTOM_Z = 77;
+export const BOARD_TOP_Z = 117;
+
+/**
+ * How much of its speed across the board a ball keeps off it.
+ *
+ * The number that decides whether a bank is a chance or a certainty: it is
+ * what carries the rebound the `BOARD_BEHIND_RIM` out to the rim while it
+ * falls the few pixels from the board's foot to the hole. A board that gave
+ * the ball back everything would send every long shot straight out over the
+ * end line it came from.
+ */
+const BOARD_BOUNCE = 0.5;
+
+/**
  * A hoop: a post on the ground with a board and a rim jutting inward.
  *
  * `post` is the feet, which is what the picture stands on and what is solid;
  * `rim` is the hole, which is what the ball has to fall through. Two points
  * rather than one, because the rim hangs out over the court in front of the
  * board — a throw aimed at the post is a throw at the back of the backboard.
+ *
+ * `board` is the third, and it is where that backboard hangs: the one `x`
+ * the pane stands at, behind the rim from whoever is shooting. Its width
+ * and its two heights are the same at both ends, so they are the constants
+ * above rather than a rectangle written out twice.
  */
 export interface Hoop {
   /** Which end of the court it stands at; the rim faces in from there. */
   side: "west" | "east";
   post: { x: number; y: number };
   rim: { x: number; y: number };
+  board: { x: number };
 }
 
 /** How far the rim hangs out from the post it is bolted to. */
@@ -84,11 +136,13 @@ export const HOOPS: readonly Hoop[] = [
     side: "west",
     post: { x: COURT_PX.x + POST_INSET, y: CENTRE_SPOT.y },
     rim: { x: COURT_PX.x + POST_INSET + RIM_REACH, y: CENTRE_SPOT.y },
+    board: { x: COURT_PX.x + POST_INSET + RIM_REACH - BOARD_BEHIND_RIM },
   },
   {
     side: "east",
     post: { x: COURT_PX.x + COURT_PX.width - POST_INSET, y: CENTRE_SPOT.y },
     rim: { x: COURT_PX.x + COURT_PX.width - POST_INSET - RIM_REACH, y: CENTRE_SPOT.y },
+    board: { x: COURT_PX.x + COURT_PX.width - POST_INSET - RIM_REACH + BOARD_BEHIND_RIM },
   },
 ];
 
@@ -257,6 +311,49 @@ export function throwReach(power: number): number {
   return (vx * (vz + Math.sqrt(disc))) / GRAVITY_PX_S2;
 }
 
+/** Where and when a step met a backboard. */
+interface Bank {
+  /** The point on the pane it struck, in all three. */
+  x: number;
+  y: number;
+  z: number;
+  /** How far through the step it struck, as a fraction of it. */
+  through: number;
+}
+
+/**
+ * Whether this step takes the ball into a backboard, and where.
+ *
+ * Asked of the whole step rather than of where it ends, for the reason the
+ * rim is: the ball covers up to twenty-six pixels in a tick and the pane is
+ * no thickness at all, so a ball tested at the frame's own position goes
+ * clean through the board whenever the crossing falls between two frames.
+ * That is the miss nobody would forgive, since the ball carries on out the
+ * back of a hoop it visibly hit.
+ *
+ * Both boards stand across the court's long axis, so the crossing is a
+ * question about `x` alone; the other two are only asked whether the pane
+ * is there to be hit at that height and that far along it.
+ */
+function bankOff(ball: BallState, dt: number): Bank | null {
+  const toX = ball.x + ball.vx * dt;
+  for (const hoop of HOOPS) {
+    const from = ball.x - hoop.board.x;
+    const to = toX - hoop.board.x;
+    // Strictly across it. A ball that starts on the pane has already come
+    // off it, and bouncing it a second time would pin it to the board.
+    if (from === 0 || from * to > 0) continue;
+    const through = (hoop.board.x - ball.x) / (toX - ball.x);
+    const t = dt * through;
+    const y = ball.y + ball.vy * t;
+    if (Math.abs(y - hoop.rim.y) > BOARD_HALF_WIDTH) continue;
+    const z = ball.z + ball.vz * t - (GRAVITY_PX_S2 * t * t) / 2;
+    if (z < BOARD_BOTTOM_Z || z > BOARD_TOP_Z) continue;
+    return { x: hoop.board.x, y, z, through };
+  }
+  return null;
+}
+
 /** Whether a point lies in any of the rectangles. */
 const inside = (rects: readonly Rect[], x: number, y: number) =>
   rects.some((r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height);
@@ -309,13 +406,31 @@ export function stepBall(ball: BallState, dtMs: number, blocked: readonly Rect[]
   next.z = ball.z + ball.vz * dt - (GRAVITY_PX_S2 * dt * dt) / 2;
   next.vz = ball.vz - GRAVITY_PX_S2 * dt;
 
+  // A backboard, if this step takes it into one: back the way it came, at
+  // half the speed across the pane and with the other two untouched, which
+  // is all a flat vertical wall does to anything.
+  //
+  // The rest of the step is then walked from the board rather than from
+  // where the ball set out, so the rim below is judged against the rebound
+  // and not against the straight line the ball would have flown. That is
+  // the whole point of the board: a shot too long for the hole can still
+  // drop through it on the way down off the pane.
+  const bank = bankOff(ball, dt);
+  const fromX = bank ? bank.x : ball.x;
+  const fromY = bank ? bank.y : ball.y;
+  const fromZ = bank ? bank.z : wasZ;
+  const rest = bank ? dt * (1 - bank.through) : dt;
+  if (bank) next.vx = -next.vx * BOARD_BOUNCE;
+  next.x = fromX;
+  next.y = fromY;
+
   // Along the ground, one axis at a time, so a ball meeting the corner of a
   // bench runs along it rather than stopping dead in front of it.
   const low = next.z < CLEARS_SCENERY_Z;
-  const tryX = ball.x + next.vx * dt;
-  if (low && inside(blocked, tryX, ball.y)) next.vx = -next.vx * BOUNCE;
+  const tryX = fromX + next.vx * rest;
+  if (low && inside(blocked, tryX, fromY)) next.vx = -next.vx * BOUNCE;
   else next.x = tryX;
-  const tryY = ball.y + next.vy * dt;
+  const tryY = fromY + next.vy * rest;
   if (low && inside(blocked, next.x, tryY)) next.vy = -next.vy * BOUNCE;
   else next.y = tryY;
 
@@ -340,10 +455,10 @@ export function stepBall(ball: BallState, dtMs: number, blocked: readonly Rect[]
   // the one thing a player would not forgive, since there is nothing on
   // screen to tell that apart from a miss.
   let scored: Hoop | null = null;
-  if (next.vz < 0 && wasZ >= RIM_Z && next.z < RIM_Z) {
-    const through = (wasZ - RIM_Z) / (wasZ - next.z);
-    const cx = ball.x + (next.x - ball.x) * through;
-    const cy = ball.y + (next.y - ball.y) * through;
+  if (next.vz < 0 && fromZ >= RIM_Z && next.z < RIM_Z) {
+    const through = (fromZ - RIM_Z) / (fromZ - next.z);
+    const cx = fromX + (next.x - fromX) * through;
+    const cy = fromY + (next.y - fromY) * through;
     scored = HOOPS.find((h) => Math.hypot(cx - h.rim.x, cy - h.rim.y) <= RIM_RADIUS) ?? null;
   }
 

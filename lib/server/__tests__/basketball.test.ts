@@ -108,6 +108,22 @@ describe("a basket", () => {
     expect(scored?.hoop.side).toBe("east");
   });
 
+  it("is still theirs when it goes in off the board", () => {
+    // The thrower is kept past the throw, so a bank — which is a bounce and
+    // then a fall, several ticks after the ball left their hand — hangs on
+    // the same person a clean shot does.
+    const ball = new Basketball();
+    const [, east] = HOOPS;
+    // Too long for the hole from here, which is what the board is for.
+    const at = standingOn({ x: east.rim.x - 300, y: east.rim.y }, "right");
+    ball.take("coop", onIt);
+    ball.release("coop", at, 0.5);
+    let scored = null;
+    for (let i = 0; i < 200 && !scored; i++) scored = ball.step(TICK, nobody).scored;
+    expect(scored?.by).toBe("coop");
+    expect(scored?.hoop.side).toBe("east");
+  });
+
   it("is credited to nobody for a ball that went in on its own", () => {
     // Nothing threw it, so there is nobody for the badge to hang on — and a
     // basket with no thrower must not be credited to whoever last had it.

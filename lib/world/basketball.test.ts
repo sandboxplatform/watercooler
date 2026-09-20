@@ -1,9 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
   BALL_RADIUS,
+  BOARD_BOTTOM_Z,
+  BOARD_HALF_WIDTH,
+  BOARD_TOP_Z,
   CENTRE_SPOT,
   COURT_PX,
   FEET_BELOW_CENTRE,
+  GRAVITY_PX_S2,
   HOOPS,
   RIM_RADIUS,
   RIM_Z,
@@ -193,20 +197,31 @@ describe("a basket", () => {
     }
   });
 
-  it("is scored for a well aimed throw at any power the meter offers", () => {
+  it("is scored for a well aimed throw at any power the court has room for", () => {
     // The frames are fifty milliseconds apart and the ball covers up to
     // twenty-six pixels in one, so a rim tested at the frame's own position
     // drops a good shot whenever the crossing falls between two of them —
     // more often the harder it is thrown, and indistinguishable on screen
     // from having missed.
+    //
+    // The top of the meter is left out because there is nowhere on the
+    // court to take it from: a perfect shot at full power is thrown from
+    // eight hundred pixels out, which on the centre line is behind the
+    // other hoop and its board. That is the board doing its job rather
+    // than the rim failing at it, and it is asserted as such below.
     const [, east] = HOOPS;
+    let taken = 0;
     for (let power = 0; power <= 1.0001; power += 0.05) {
-      const at = standingOn({ x: east.rim.x - throwReach(power), y: east.rim.y });
+      const from = { x: east.rim.x - throwReach(power), y: east.rim.y };
+      if (from.x < COURT_PX.x) continue;
+      taken++;
       expect({
         power: power.toFixed(2),
-        scored: settle(thrown(at, "right", power)).scored,
+        scored: settle(thrown(standingOn(from), "right", power)).scored,
       }).toEqual({ power: power.toFixed(2), scored: 1 });
     }
+    // Most of the meter, not a token few of it.
+    expect(taken).toBeGreaterThan(15);
   });
 
   it("is judged where the ball crossed, not where the frame left it", () => {
@@ -271,6 +286,135 @@ describe("a basket", () => {
       heldBy: null,
     };
     expect(settle(rolling).scored).toBe(0);
+  });
+});
+
+describe("the backboard", () => {
+  const [west, east] = HOOPS;
+
+  /**
+   * One tick of a ball flying at the east board at a given height and a
+   * given distance off the centre line.
+   *
+   * It starts twenty pixels out and covers thirty in the tick, so the pane
+   * is met in the middle of a frame rather than at the end of one — which
+   * is how it is met in play, and the only way the arithmetic either side
+   * of the bounce is exercised at all.
+   */
+  const atTheBoard = (z: number, offCentre = 0) =>
+    stepBall(
+      { x: east.board.x - 20, y: east.rim.y + offCentre, z, vx: 600, vy: 0, vz: 0, heldBy: null },
+      TICK,
+      worldSolids(),
+    );
+
+  /**
+   * Shoot along the centre line from a fixed distance and say what became
+   * of it: whether it went in, and whether the board was what turned it.
+   *
+   * A bank is read off the ball rather than reported by `stepBall`, since
+   * nothing in the game needs telling and the board is only a wall.
+   */
+  const outcome = (from: number, power: number) => {
+    let ball = thrown(standingOn({ x: east.rim.x - from, y: east.rim.y }), "right", power);
+    let scored = 0;
+    let banked = false;
+    // A ball can only score while it is in the air, and no throw on the
+    // meter stays up for six seconds — so there is nothing to learn from
+    // watching it roll.
+    for (let i = 0; i < 120; i++) {
+      const was = ball.vx;
+      const step = stepBall(ball, TICK, worldSolids());
+      if (step.ball.vx * was < 0 && step.ball.z > RIM_Z) banked = true;
+      ball = step.ball;
+      if (step.scored) scored++;
+      if (!step.live) break;
+    }
+    return { scored, banked };
+  };
+
+  it("hangs behind each rim and above it", () => {
+    // Behind, from the court: a shot has to pass the hole to reach the board.
+    expect(west.board.x).toBeGreaterThan(west.post.x);
+    expect(west.board.x).toBeLessThan(west.rim.x);
+    expect(east.board.x).toBeLessThan(east.post.x);
+    expect(east.board.x).toBeGreaterThan(east.rim.x);
+    // And above: the foot of the board clears the rim, so a ball dropping
+    // through the hole is never judged against the pane as well.
+    expect(BOARD_BOTTOM_Z).toBeGreaterThan(RIM_Z);
+    expect(BOARD_TOP_Z).toBeGreaterThan(BOARD_BOTTOM_Z);
+  });
+
+  it("sends a ball back the way it came, and keeps it in front of itself", () => {
+    const step = atTheBoard((BOARD_BOTTOM_Z + BOARD_TOP_Z) / 2);
+    expect(step.ball.vx).toBeLessThan(0);
+    expect(step.ball.x).toBeLessThan(east.board.x);
+  });
+
+  it("takes a share of the speed across it and none of the rest", () => {
+    // A flat wall reverses the one component that meets it. Height and the
+    // way along the board are the ball's own business.
+    const flying = { x: east.board.x - 20, y: east.rim.y, z: 100, vx: 600, vy: 40, vz: -50 };
+    const step = stepBall({ ...flying, heldBy: null }, TICK, worldSolids());
+    expect(Math.abs(step.ball.vx)).toBeLessThan(600);
+    expect(step.ball.vy).toBe(40);
+    // Falling as it was, less the tick of gravity every ball pays.
+    expect(step.ball.vz).toBeCloseTo(-50 - (GRAVITY_PX_S2 * TICK) / 1000, 6);
+  });
+
+  it("is not there under the rim, nor over the top of the board", () => {
+    // Between the hole and the foot of the pane is a gap a flat shot goes
+    // clean through, and a lobbed one sails over. Both are honest misses.
+    expect(atTheBoard(RIM_Z - 2).ball.vx).toBe(600);
+    expect(atTheBoard(BOARD_TOP_Z + 2).ball.vx).toBe(600);
+  });
+
+  it("is no wider than its own picture", () => {
+    const z = (BOARD_BOTTOM_Z + BOARD_TOP_Z) / 2;
+    expect(atTheBoard(z, BOARD_HALF_WIDTH - 2).ball.vx).toBeLessThan(0);
+    expect(atTheBoard(z, BOARD_HALF_WIDTH + 2).ball.vx).toBe(600);
+  });
+
+  it("gives a shot that was too long a chance at the rim", () => {
+    // The point of the whole thing: past the power that drops the ball
+    // straight through, there is more of the meter that puts it in off the
+    // board. Every banked basket is harder than every swish, which is what
+    // makes the board the second chance rather than the easy way.
+    for (const from of [200, 300, 400, 500]) {
+      const swished: number[] = [];
+      const banked: number[] = [];
+      for (let power = 0; power <= 1.0001; power += 0.025) {
+        const { scored, banked: off } = outcome(from, power);
+        if (scored) (off ? banked : swished).push(power);
+      }
+      expect({ from, swished: swished.length > 0, banked: banked.length > 0 }).toEqual({
+        from,
+        swished: true,
+        banked: true,
+      });
+      expect(Math.min(...banked)).toBeGreaterThan(Math.max(...swished));
+    }
+  });
+
+  it("is a chance and not a certainty", () => {
+    // Plenty of board hits come straight back out: too high on the pane and
+    // the rebound clears the rim on the way down, which is a miss with the
+    // board in plain sight to explain it.
+    let hitAndMissed = 0;
+    for (let power = 0; power <= 1.0001; power += 0.025) {
+      const { scored, banked } = outcome(150, power);
+      if (banked && !scored) hitAndMissed++;
+    }
+    expect(hitAndMissed).toBeGreaterThan(2);
+  });
+
+  it("stops a shot taken from behind the other hoop", () => {
+    // The longest throws on the meter are taken from off the court, and on
+    // the centre line that is behind the far board — which the ball meets
+    // from the back, exactly as it would from the front.
+    const behind = standingOn({ x: west.board.x - 120, y: east.rim.y });
+    const { scored } = settle(thrown(behind, "right", 1));
+    expect(scored).toBe(0);
   });
 });
 
