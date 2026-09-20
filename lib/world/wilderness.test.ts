@@ -6,7 +6,6 @@ import {
   SEA,
   WILD_FROM,
   WILD_PLANTING,
-  WILD_POND,
   shoreAt,
 } from "./wilderness";
 import { SCENERY, allReachable, groundTiles, propPicture, worldSolids } from "./scenery";
@@ -50,10 +49,15 @@ describe("the wilderness", () => {
     expect(WILD_PLANTING.length / cells).toBeLessThan(WOOD_PLANTING.length / woodCells / 2);
   });
 
-  it("puts the pond somewhere a person can walk to", () => {
+  /**
+   * The meadow is walked as well as looked at: the wanderer's spots out here
+   * are the map's own open ground, so the scatter must not close the way to
+   * them. `residents.test.ts` holds each spot; this holds the ground.
+   */
+  it("can be walked into from the town", () => {
     expect(
       allReachable({ width: WORLD_WIDTH, height: WORLD_HEIGHT }, worldSolids(), WORLD_SPAWN, [
-        { x: WILD_POND.x, y: WILD_POND.y + TILE },
+        { x: (WILD_FROM + 15) * TILE, y: WORLD_HEIGHT / 2 },
       ]),
     ).toBe(true);
   });

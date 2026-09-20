@@ -492,8 +492,8 @@ shop you have come out of, a way down to the sea is a few doors away.
 
 East of the campus car park the paving stops and the town does with it.
 What follows is a third of the map with nothing built on it: meadow,
-scattered trees and bushes, a pond somebody could walk out to, and the Gold
-River coming down through the top of it and turning away north.
+scattered trees and bushes, and the Gold River coming down through the top
+of it and turning away north.
 
 Four columns in from the far edge of the world there is a **highway**, two
 lanes of tarmac running the whole height of the map with a broken line down

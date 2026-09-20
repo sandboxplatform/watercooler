@@ -38,7 +38,7 @@ import {
   WEST_AVENUE,
   clearToStand,
 } from "./scenery";
-import { WILD_POND } from "./wilderness";
+import { WILD_FROM } from "./wilderness";
 import { TILE, WIDTH as LOBBY_COLS } from "../map/office";
 import { opsSupportPost } from "../map/floor";
 import { standingSpot } from "./desks";
@@ -451,13 +451,13 @@ export const WORLD_WANDER_SPOTS: readonly { x: number; y: number }[] = [
   // The shore end of the dock — near the water, and well short of the
   // gangway, so a wanderer never boards the ferry.
   { x: onAvenue(CENTRE_AVENUE), y: TOWN_TOP + 1560 },
-  // Out in the wilderness: the pond in the meadow, and a spot well east of
-  // it. Nothing is laid out there, so these are the map's own open ground
-  // rather than somewhere it means people to stand — which is what
+  // Out in the wilderness: a spot a little way into the meadow and one well
+  // east of it. Nothing is laid out there, so these are the map's own open
+  // ground rather than somewhere it means people to stand — which is what
   // `residents.test.ts` is for. Deliberately short of the highway: a car
   // goes through anybody standing in the road, and a chicken pacing the
   // centre line would be the one place this world looks like a bug.
-  { x: WILD_POND.x - 180, y: WILD_POND.y + 40 },
+  { x: (WILD_FROM + 15) * WORLD_TILE, y: TOWN_TOP + 856 },
   { x: 150 * WORLD_TILE, y: TOWN_TOP + 1080 },
   // And up in the wood, on the trails and the footbridge.
   ...WOOD_WANDER_SPOTS,

@@ -141,24 +141,6 @@ const scatter = (a: number, b: number) => {
 };
 
 /**
- * The patch kept clear of the scatter around the pond, in tiles.
- *
- * Bigger than the water, because everything out of doors sorts by the bottom
- * of its own picture: a tree standing a foot in front of a pond is a tree
- * drawn across it.
- */
-export const POND_CLEARING: Rect = {
-  x: WILD_FROM + 12,
-  y: WOOD_ROWS + 13,
-  width: 10,
-  height: 8,
-};
-
-/** Whether a tile is on a rectangle. */
-const on = (r: Rect, column: number, row: number) =>
-  column >= r.x && column < r.x + r.width && row >= r.y && row < r.y + r.height;
-
-/**
  * Where a tree or a bush could stand out here: scattered by a hash rather
  * than written out, by the feet, in world pixels.
  *
@@ -175,8 +157,8 @@ const on = (r: Rect, column: number, row: number) =>
  * which out here is land, the coast having turned away.
  *
  * **Candidates, not the planting**, exactly as the wood's are: what is kept
- * out here is what a pair of feet can decide — the sea, the road and the
- * pond. Whether a prop's *picture* hangs over something is `scenery.ts`'s
+ * out here is what a pair of feet can decide — the sea and the road.
+ * Whether a prop's *picture* hangs over something is `scenery.ts`'s
  * question, since only that file knows how big a tree is drawn.
  */
 export const WILD_PLANTING: readonly { kind: "tree" | "bush"; x: number; y: number }[] = (() => {
@@ -187,7 +169,6 @@ export const WILD_PLANTING: readonly { kind: "tree" | "bush"; x: number; y: numb
       if (roll > 0.17) continue;
       if (atSea(column, row)) continue;
       if (onTheRoad(column, row)) continue;
-      if (on(POND_CLEARING, column, row)) continue;
       // Jittered off the grid, or a meadow reads as an orchard.
       const jitter = scatter(row + 7, column + 13);
       const x = (column + 0.2 + jitter * 0.6) * TILE;
@@ -197,15 +178,3 @@ export const WILD_PLANTING: readonly { kind: "tree" | "bush"; x: number; y: numb
   }
   return props;
 })();
-
-/**
- * The pond out in the meadow, by its picture's middle.
- *
- * One thing to walk to in sixty columns of grass. It stands well west of the
- * road and south of the wood, in the clearing above, where the scatter is
- * thin enough to see it from the car park.
- */
-export const WILD_POND = {
-  x: (POND_CLEARING.x + POND_CLEARING.width / 2) * TILE,
-  y: (POND_CLEARING.y + POND_CLEARING.height / 2) * TILE,
-};

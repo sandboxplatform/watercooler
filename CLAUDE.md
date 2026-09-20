@@ -2090,8 +2090,8 @@ the scene letters the name.
 
 **The wilderness is wilderness**, which means nothing has been laid through
 it: the two promenades stop at the town's own east edge, and what follows is
-sixty-odd columns of meadow and scattered trees with a pond in the middle of
-it. `lib/world/wilderness.ts` is the whole of it — a thinner scatter than the
+sixty-odd columns of meadow and scattered trees, and nothing in it at all.
+`lib/world/wilderness.ts` is the whole of it — a thinner scatter than the
 wood's, about one cell in six against two in five and more bushes than trees,
 so walking east out of the car park reads as leaving the town rather than as
 entering another wood.

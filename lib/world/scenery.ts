@@ -30,7 +30,7 @@ import {
   WORLD_WIDTH,
   type Rect,
 } from "./tenants";
-import { HIGHWAY, SEA, WILD_PLANTING, WILD_POND, shoreAt } from "./wilderness";
+import { HIGHWAY, SEA, WILD_PLANTING, shoreAt } from "./wilderness";
 import { blockedCells } from "./route";
 import { COURT, HOOPS, hoopProp } from "./basketball";
 import {
@@ -549,9 +549,6 @@ const PLACED: readonly PlacedProp[] = [
   // the door when a shop moves: Blockhouse's and Chester's are the same
   // arrangement, measured off theirs, from when there were two of them.
   ...BUILDINGS.filter((b) => b.org.style === "shop").flatMap(atTheDoor),
-
-  // The one thing to walk to in the meadow.
-  { kind: "pond", ...WILD_POND },
 
   // The shops' own park, between the two roads west of the town: trees,
   // benches and a lamp or two, the same furniture the town's blocks have.
