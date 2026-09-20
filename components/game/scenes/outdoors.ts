@@ -32,6 +32,8 @@ const GROUND: Record<Exclude<Ground, "water">, string> = {
   asphalt: "world-asphalt",
   dock: "world-dock",
   court: "world-court",
+  trail: "world-trail",
+  shingle: "world-shingle",
 };
 
 /** The lines painted on the basketball court, laid over its surface. */
@@ -44,7 +46,9 @@ export function preloadOutdoors(scene: Phaser.Scene) {
   scene.load.image(GROUND.asphalt, asset("/sprites/world/asphalt_48.png"));
   scene.load.image(GROUND.dock, asset("/sprites/world/dock_48.png"));
   scene.load.image(GROUND.court, asset("/sprites/world/court_48.png"));
-  scene.load.image(COURT_LINES_KEY, asset("/sprites/world/court_lines_432x288.png"));
+  scene.load.image(GROUND.trail, asset("/sprites/world/trail_48.png"));
+  scene.load.image(GROUND.shingle, asset("/sprites/world/shingle_48.png"));
+  scene.load.image(COURT_LINES_KEY, asset("/sprites/world/court_lines_768x384.png"));
   scene.load.image(WATER_KEY, asset("/sprites/world/water_48.png"));
   scene.load.image(WATER2_KEY, asset("/sprites/world/water2_48.png"));
   scene.load.image(FOAM_KEY, asset("/sprites/world/foam_48.png"));

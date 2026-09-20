@@ -4,6 +4,7 @@ import {
   GREET_CLEAR_PX,
   GREET_PX,
   GREET_QUIET_MS,
+  LEAVE_WALK_MS,
   ResidentSimulation,
   SPOOK_MS,
   SPOOK_SPEED_PX_S,
@@ -17,12 +18,16 @@ import {
   WORLD_WANDER_SPOTS,
   deskSpot,
   doorstepOf,
+  doorwayFor,
+  hauntsOf,
+  outsideSpots,
   residentById,
   roomToStand,
   yardArea,
   type Whereabouts,
 } from "../../world/residents";
 import { worldSolids } from "../../world/scenery";
+import { routeAcross } from "../../world/route";
 import { WORLD_HEIGHT, WORLD_WIDTH, operationsRoomCount, tenantFor } from "../../world/tenants";
 import { WORLD_ROOM_SLUG } from "../../rooms";
 import { TILE } from "../../map/office";
@@ -297,7 +302,15 @@ describe("a wanderer's day", () => {
         const dx = player.x - last.x;
         const dy = player.y - last.y;
         const expected = facingFor(dx, dy);
-        if (expected) {
+        // A step at a dead-even 45° is not a fair question here. The hub
+        // rounds a position to a hundredth for the wire, `facingFor` breaks
+        // an exact diagonal towards the horizontal, and the resident faced
+        // by the full-precision figures — so a leg that happens to run at
+        // exactly 45°, which a route across a grid of square cells throws
+        // up now and then, is decided one way by the simulation and the
+        // other by a hundredth of a pixel of rounding.
+        const even = Math.abs(Math.abs(dx) - Math.abs(dy)) < 0.02;
+        if (expected && !even) {
           expect(player.facing, `step ${i}`).toBe(expected);
           checked += 1;
         }
@@ -669,8 +682,82 @@ describe("what a resident says when you walk up", () => {
     setRoomBroadcast(null);
   });
 
-  /** A fright is a dash, a turn and another dash — not a run to somewhere. */
-  it("runs in no particular direction", () => {
+  /**
+   * A cluck is a fright, and a fright goes the other way.
+   *
+   * Put as the distance from where whoever startled him was standing rather
+   * than as a compass direction, because the dashes wobble either side of
+   * straight away: what has to hold is that the bolt is putting ground
+   * between the two of them, not that any one dash points anywhere exact.
+   * Run from both sides of him, since a bolt that always went east would
+   * pass this from one of them by luck.
+   */
+  it("runs away from whoever startled him", () => {
+    for (const side of [-1, 1]) {
+      let clock = 0;
+      listening();
+      const { sim, hub } = outside(() => clock, rolls(7));
+      const start = whereIsHe(sim);
+      const them = { x: start.x + side * (GREET_PX - 12), y: start.y };
+      person(hub, them);
+      const apart = Math.hypot(start.x - them.x, start.y - them.y);
+      let nearest = Infinity;
+      let afterASecond: { x: number; y: number } | null = null;
+      while (clock < SPOOK_MS) {
+        clock += 120;
+        sim.tick(clock);
+        const at = whereIsHe(sim);
+        nearest = Math.min(nearest, Math.hypot(at.x - them.x, at.y - them.y));
+        afterASecond ??= clock >= 1000 ? at : null;
+      }
+      const ended = whereIsHe(sim);
+      // He sets off the other way: somebody standing to his west leaves him
+      // east of where he was. Said of the first second rather than of the
+      // finish, because a dash is planned around what is in the way — over
+      // five seconds of it the route bends round trees and buildings and
+      // the compass bearing of the whole bolt is the map's answer, not this
+      // rule's.
+      expect(Math.sign(afterASecond!.x - start.x)).toBe(-side);
+      // And at no point in the fright is he nearer them than when he
+      // clucked, which a bolt in no particular direction would not manage.
+      expect(nearest).toBeGreaterThanOrEqual(apart);
+      expect(Math.hypot(ended.x - them.x, ended.y - them.y)).toBeGreaterThan(apart * 10);
+    }
+    setRoomBroadcast(null);
+  });
+
+  /**
+   * Two people within earshot, and the fright is the near one's.
+   *
+   * The far one is inside the reach too and joined first, so a rule that
+   * took whoever it came across first would send him straight past the
+   * person standing on top of him. Which is why the hub is asked for the
+   * nearest rather than for any.
+   */
+  it("runs from the nearer of two people", () => {
+    let clock = 0;
+    listening();
+    const { sim, hub } = outside(() => clock, rolls(7));
+    const start = whereIsHe(sim);
+    const stand = (id: string, x: number) =>
+      hub.join(id, { name: id, spriteKey: "character_boss", x, y: start.y, facing: "down" });
+    stand("far", start.x - (GREET_PX - 6));
+    stand("near", start.x + 20);
+    while (clock < SPOOK_MS) {
+      clock += 120;
+      sim.tick(clock);
+    }
+    // Away from the near one, which is past the far one rather than from it.
+    expect(whereIsHe(sim).x).toBeLessThan(start.x);
+    setRoomBroadcast(null);
+  });
+
+  /**
+   * A fright is a dash, a turn and another dash, not a run to somewhere —
+   * so the cone it is aimed into is a third of the circle rather than a
+   * bearing, and he comes out of it having faced more than one way.
+   */
+  it("scrambles rather than running a line", () => {
     let clock = 0;
     listening();
     const { sim, hub } = outside(() => clock, rolls(5));
@@ -838,6 +925,44 @@ describe("keeping out of each other", () => {
    * the green is part of leaving, so the last thing anybody sees of them is
    * stepping inside rather than winking out on the grass.
    */
+  /**
+   * The backstop has to be longer than the longest honest walk.
+   *
+   * `LEAVE_WALK_MS` is there for a resident who *cannot* reach their door —
+   * blocked by somebody who will not move, or no route to plan — and it is
+   * the wrong answer for one who simply has a long way to go: they go
+   * indoors from wherever they got to, which is the fault it exists to
+   * prevent rather than a smaller version of it. Yash walks from the row by
+   * the fountain to Mettara's door in the far south-west and that is
+   * thirty-five seconds; the limit was thirty, so he never once arrived.
+   * Measured off the map rather than remembered, so a building put further
+   * out fails here instead of on somebody's screen.
+   */
+  it("leaves long enough for the longest walk home", () => {
+    const solids = worldSolids();
+    const map = { width: WORLD_WIDTH, height: WORLD_HEIGHT };
+    let longest = 0;
+    for (const resident of RESIDENTS) {
+      const outside = hauntsOf(resident).find((h) => h.kind === "outside");
+      const door = outside && doorwayFor(resident, outside);
+      if (!door) continue;
+      for (const spot of outsideSpots(resident)) {
+        const route = routeAcross(map, solids, spot, door);
+        expect(route, `${resident.name} cannot reach his own door`).not.toBeNull();
+        let walk = 0;
+        let at = spot;
+        for (const leg of route!) {
+          walk += Math.hypot(leg.x - at.x, leg.y - at.y);
+          at = leg;
+        }
+        longest = Math.max(longest, (walk / WANDER_SPEED_PX_S) * 1000);
+      }
+    }
+    expect(longest).toBeGreaterThan(0);
+    // Half as long again, for the moments they stand aside for each other.
+    expect(LEAVE_WALK_MS).toBeGreaterThan(longest * 1.5);
+  });
+
   it("comes out of its own door and walks back to it before going in", () => {
     const frames = aDay(6000, 0.5, seeded(5));
     let arrivals = 0;

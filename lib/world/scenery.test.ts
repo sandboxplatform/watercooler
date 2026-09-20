@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  BEACHES,
   DOCKS,
   PAVED,
   SCENERY,
+  TRAILS,
   WORLD_SIGNS,
   everyDoorReachable,
   groundTiles,
@@ -36,10 +38,13 @@ describe("ground", () => {
     for (const row of tiles) expect(row).toHaveLength(WORLD_COLUMNS);
   });
 
-  it("puts a kerb only where paving meets grass above it", () => {
+  // A trail counts as unpaved ground here: the one out of the wood comes
+  // down to the plaza's top edge, and the town's paving is raised above
+  // trodden earth exactly as it is above grass, so that lip is a kerb too.
+  it("puts a kerb only where paving meets open ground above it", () => {
     for (let y = 1; y < WORLD_ROWS; y++)
       for (let x = 0; x < WORLD_COLUMNS; x++) {
-        if (tiles[y][x] === "kerb") expect(tiles[y - 1][x]).toBe("grass");
+        if (tiles[y][x] === "kerb") expect(["grass", "trail"]).toContain(tiles[y - 1][x]);
         if (tiles[y][x] === "asphalt") continue;
         const underBuilding = BUILDINGS.some(
           (b) =>
@@ -120,18 +125,68 @@ describe("props", () => {
     }
   });
 
+  // Pictures rather than bodies, unlike the walkways above. A trunk beside a
+  // trail is nothing to walk into; a canopy over one is a stretch of path
+  // somebody walking it disappears behind, since everything out of doors
+  // sorts by the bottom of its own picture. `WOOD_PROPS` holds the wood's own
+  // scatter to this as it plants it — what this catches is the half of the
+  // map placed by hand, where the trail arrived after the props did and three
+  // of the plaza's stood in the middle of it.
+  it("hang nothing over a trail", () => {
+    const paths = TRAILS.map((r) => ({
+      x: r.x * TILE,
+      y: r.y * TILE,
+      width: r.width * TILE,
+      height: r.height * TILE,
+    }));
+    const over = SCENERY.filter((p) => paths.some((r) => overlaps(propBounds(p), r))).map(
+      (p) => `${p.kind} at ${p.x},${p.y}`,
+    );
+    expect(over).toEqual([]);
+  });
+
+  // Collected and asserted once rather than asserted per pair: the wood
+  // put the cast of props up past four hundred, and a quadratic sweep of
+  // `expect` calls is ninety thousand of them, which times the test out on
+  // the framework's own overhead rather than on anything it is measuring.
   it("do not stand on each other", () => {
     const bodies = SCENERY.map((p) => ({ p, body: propBody(p) })).filter((b) => b.body);
-    for (let i = 0; i < bodies.length; i++)
-      for (let j = i + 1; j < bodies.length; j++)
-        expect(
-          overlaps(bodies[i].body!, bodies[j].body!),
-          `${bodies[i].p.kind} and ${bodies[j].p.kind}`,
-        ).toBe(false);
+    const stacked: string[] = [];
+    for (let i = 0; i < bodies.length; i++) {
+      for (let j = i + 1; j < bodies.length; j++) {
+        if (!overlaps(bodies[i].body!, bodies[j].body!)) continue;
+        stacked.push(
+          `${bodies[i].p.kind} at ${bodies[i].p.x},${bodies[i].p.y}` +
+            ` and ${bodies[j].p.kind} at ${bodies[j].p.x},${bodies[j].p.y}`,
+        );
+      }
+    }
+    expect(stacked).toEqual([]);
   });
 
   it("leave every door reachable from the spawn", () => {
     expect(everyDoorReachable()).toBe(true);
+  });
+});
+
+describe("the beaches", () => {
+  const tiles = groundTiles();
+
+  /**
+   * The one thing this file can say about them that `wood.test.ts` cannot:
+   * that the shingle survives the ground grid, which decides the water
+   * first — a beach laid at the bank and then drawn over by the river would
+   * pass every test about where it is and still not be on the map.
+   */
+  it("lay shingle on the bank, with the river at the foot of it", () => {
+    expect(BEACHES.length).toBeGreaterThan(0);
+    for (const beach of BEACHES)
+      for (let x = beach.x; x < beach.x + beach.width; x++) {
+        for (let y = beach.y; y < beach.y + beach.height; y++)
+          expect(tiles[y][x], `${x},${y}`).toBe("shingle");
+        const foot = beach.y + beach.height;
+        expect(tiles[foot][x], `${x},${foot}`).toBe("water");
+      }
   });
 });
 

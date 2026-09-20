@@ -200,6 +200,34 @@ export class PresenceHub {
   }
 
   /**
+   * Where the nearest person within `range` is standing, or null for nobody.
+   *
+   * The third of these, and the narrowest caller: a resident who has just
+   * been walked up to needs somewhere to run *away* from, which is a point
+   * rather than a yes or a list of ids. `personNear` stays the tick check,
+   * because it stops at the first person it finds and allocates nothing;
+   * this scans the room and hands back a point, and is asked only on the
+   * tick somebody actually says something.
+   *
+   * The nearest rather than the first, because a chicken with two people
+   * around him should put the near one behind him.
+   */
+  nearestPerson(at: { x: number; y: number }, range: number): { x: number; y: number } | null {
+    let best = range * range;
+    let found: { x: number; y: number } | null = null;
+    for (const player of this.players.values()) {
+      if (player.resident || player.hidden) continue;
+      const dx = player.x - at.x;
+      const dy = player.y - at.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > best) continue;
+      best = d2;
+      found = { x: player.x, y: player.y };
+    }
+    return found;
+  }
+
+  /**
    * Which people are standing within `range` of a point, by connection.
    *
    * `personNear` answers whether anybody is, which is all a resident needs

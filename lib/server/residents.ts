@@ -27,7 +27,7 @@
 
 import type { PresenceHub } from "./presence-hub";
 import { currentBroadcast } from "./room-broadcast";
-import type { Facing } from "../presence-types";
+import { SPRINT_SPEED_PX_S, type Facing } from "../presence-types";
 import {
   PERSONAL_SPACE_PX,
   RESIDENTS,
@@ -72,8 +72,19 @@ const ARRIVED_PX = 8;
  * somebody who will not move, a route that cannot be planned — must not be
  * stuck outside for the rest of the day. Leaving from where they stand is
  * the worse of the two behaviours and the safer one.
+ *
+ * **It has to be comfortably longer than the longest honest walk**, or it
+ * stops being a backstop and becomes a deadline: a resident who could have
+ * got home is taken indoors in the middle of the map instead, which is the
+ * thing this exists to avoid rather than a milder version of it. Yash's
+ * walk from his place in the row by the fountain to Mettara's door, right
+ * down in the south-west corner, is nineteen hundred pixels and thirty-five
+ * seconds at `WANDER_SPEED_PX_S` — it was thirty and he never once made it.
+ * `residents.test.ts` measures every resident's route home against this, so
+ * a building put somewhere further off is a failing test rather than
+ * somebody winking out on the grass.
  */
-const LEAVE_WALK_MS = 30_000;
+export const LEAVE_WALK_MS = 90_000;
 /** How long they wait for somebody in the way before going somewhere else. */
 const MAKE_WAY_MS = 3000;
 /**
@@ -106,12 +117,42 @@ export const GREET_QUIET_MS = 8000;
  * afternoon fleeing is a chicken nobody can walk up to.
  */
 export const SPOOK_MS = 5000;
-/** How fast a bolt is: a good deal quicker than the stroll, short of a sprint. */
-export const SPOOK_SPEED_PX_S = 150;
-/** How far one dash of a bolt goes before the next one turns somewhere else. */
-const SPOOK_DASH_PX: [number, number] = [70, 160];
+/**
+ * How fast a bolt is: a fifth again as fast as a person can sprint.
+ *
+ * Measured against the sprint rather than written down, because the only
+ * thing that matters about it is that it is faster than whoever startled
+ * him. He used to bolt at 150, which is under half a sprint — so a person
+ * who ran after him caught him inside a second, and a fright you can keep
+ * up with at a jog is not a fright. Anybody chasing him now watches him go.
+ *
+ * Well inside what the hub will carry: `move` clamps against the sprint
+ * times `SPEED_TOLERANCE`, which is two and a half of them, so a resident
+ * at 1.2 of one is nowhere near being hauled backwards.
+ */
+export const SPOOK_SPEED_PX_S = Math.round(SPRINT_SPEED_PX_S * 1.2);
+/**
+ * How far one dash of a bolt goes before the next one turns somewhere else.
+ *
+ * Lengthened with the speed, and for the same reason the speed is measured
+ * against the sprint: 70 to 160 was a fifth of a second apiece at this pace,
+ * which is a chicken shaking rather than a chicken running. These are about
+ * three quarters of a second each, so the bolt reads as a run with turns in
+ * it — and it takes him a great deal further before the fright wears off.
+ */
+const SPOOK_DASH_PX: [number, number] = [200, 420];
 /** How many directions to try before standing still for a tick and trying again. */
 const SPOOK_TRIES = 6;
+/**
+ * How wide the cone a dash is aimed into: either side of straight away from
+ * whoever startled them, so a third of the circle and the third with the
+ * fright at the back of it.
+ *
+ * Wide enough that a bolt is still a scramble rather than a ruler-straight
+ * line away, narrow enough that every dash of it puts more ground between
+ * the two of them. Straight away and nothing else would read as a machine.
+ */
+const SPOOK_SPREAD = Math.PI / 3;
 /** How many places to try before settling for a crowded one. */
 const SPACING_TRIES = 8;
 /** Which way a step aside goes: along the front of a door, not into it. */
@@ -186,6 +227,17 @@ interface State {
   /** While they are bolting from whoever walked up to them; 0 when they are not. */
   spookedUntil: number;
   /**
+   * Where whoever startled them was standing when they did, which is what
+   * every dash of the bolt is aimed away from. Null when nothing has.
+   *
+   * Where they *were*, not where they are: the fright is a moment, and
+   * re-reading the person each dash would turn a bolt into a chase — one
+   * that a person could steer by walking round him. Running from the spot
+   * he was startled at is what a startled animal does, and it comes out as
+   * a line away rather than a circle.
+   */
+  spookedFrom: Point | null;
+  /**
    * Who is standing beside them right now, by connection.
    *
    * Kept so that `mingle` can report the arrivals rather than the crowd:
@@ -238,6 +290,7 @@ export class ResidentSimulation {
         greeted: false,
         greetedAt: 0,
         spookedUntil: 0,
+        spookedFrom: null,
         beside: new Set<string>(),
       };
       this.states.set(resident.id, state);
@@ -312,15 +365,34 @@ export class ResidentSimulation {
       state.leavingFor = next;
       state.leaveBy = now + LEAVE_WALK_MS;
       state.pauseUntil = 0;
-      this.setCourse(state, doorway);
+      this.headForTheDoor(state);
       return;
     }
     this.go(state, next, now);
   }
 
-  /** At the door, or out of time to reach it: through it. */
+  /** Plan the walk to their own doorstep, from wherever they are standing. */
+  private headForTheDoor(state: State) {
+    const doorway = doorwayFor(state.resident, state.haunt);
+    if (doorway) this.setCourse(state, doorway);
+  }
+
+  /**
+   * At the door, or out of time to reach it: through it.
+   *
+   * **Asked of where they are standing, not of whether they still have a
+   * course.** An empty course used to mean "arrived", which is true of the
+   * walk ending and of nothing else — and a course is dropped for other
+   * reasons. `holdOn` drops one after a few seconds behind somebody who
+   * will not move, which is two residents on adjacent spots in front of the
+   * fountain, one of whom wants to walk east past the other. That read as
+   * arrival, so Bud went into his building from the middle of the plaza,
+   * four hundred pixels from his own front door, in full view of anybody
+   * standing there.
+   */
   private goIfAtTheDoor(state: State, now: number) {
-    const there = !state.target && state.legs.length === 0;
+    const doorway = doorwayFor(state.resident, state.haunt);
+    const there = !doorway || this.standingOn(state, doorway);
     if (!there && now < state.leaveBy) return;
     this.go(state, state.leavingFor!, now);
   }
@@ -342,6 +414,7 @@ export class ResidentSimulation {
     state.heldSince = 0;
     state.greeted = false;
     state.spookedUntil = 0;
+    state.spookedFrom = null;
     state.pauseUntil = now + ARRIVAL_PAUSE_MS;
     const doorway = doorwayFor(state.resident, haunt);
     const area = wanderArea(haunt, state.resident);
@@ -421,7 +494,11 @@ export class ResidentSimulation {
     if (state.greetedAt && now - state.greetedAt < GREET_QUIET_MS) return;
     state.greetedAt = now;
     this.say(state, greeting);
-    this.spook(state, now);
+    // Asked for a second time, and only here: the tick check above wants a
+    // yes or no and this wants somewhere to run away from. Nobody by the
+    // time it is asked is possible — somebody can walk off inside a tick —
+    // and a bolt in no particular direction is the right answer to that.
+    this.spook(state, now, hub.nearestPerson({ x: state.x, y: state.y }, reach));
   }
 
   /**
@@ -455,15 +532,17 @@ export class ResidentSimulation {
   }
 
   /**
-   * The fright that goes with the greeting: off they go for `SPOOK_MS`.
+   * The fright that goes with the greeting: off they go for `SPOOK_MS`,
+   * away from `from` — where whoever startled them was standing.
    *
    * Whatever they were walking to is dropped, because a fright interrupts the
    * errand — except the walk to a door, which is a departure already under
    * way: `goIfAtTheDoor` reads an empty course as being at the door, so
    * clearing one would put them through it from the middle of the room.
    */
-  private spook(state: State, now: number) {
+  private spook(state: State, now: number, from: Point | null) {
     state.spookedUntil = now + SPOOK_MS;
+    state.spookedFrom = from;
     state.pauseUntil = 0;
     if (state.leavingFor) return;
     state.target = null;
@@ -646,31 +725,47 @@ export class ResidentSimulation {
   }
 
   /**
-   * One dash of a bolt: somewhere near, in no particular direction.
+   * One dash of a bolt: somewhere near, and away from whoever startled them.
    *
-   * Short and aimless on purpose — a fright is a dash, a turn and another
-   * dash, not a journey — so the pattern comes out of the dashes themselves
-   * rather than out of anywhere they were headed.
+   * Short on purpose — a fright is a dash, a turn and another dash, not a
+   * journey — so the scramble comes out of the dashes themselves. What it
+   * is not is aimless: a chicken who clucks at somebody and then dashes
+   * *past* them reads as a chicken with something else on his mind, and
+   * running away is the whole point of the cluck. Each dash is therefore
+   * aimed into a `SPOOK_SPREAD` cone with the fright behind it.
+   *
+   * Aimed away from the same remembered point every time, not from wherever
+   * that person now is: see `spookedFrom`. As he puts ground between them
+   * the direction hardly moves, so the bolt comes out as a line away with a
+   * wobble on it rather than a circle round his pursuer.
    *
    * Nothing collides a resident, so somewhere they could have wandered to
-   * anyway is the whole rule: inside the bounds where a room is what they
-   * have, and on the map's own open ground where they are outside. A dash
-   * nobody checked is a chicken through a wall. Where a haunt offers neither
-   * — a desk — there is nothing to bolt across and they sit tight, which is
-   * what `aim` does there too.
+   * anyway is the other half of the rule: inside the bounds where a room is
+   * what they have, and on the map's own open ground where they are
+   * outside. A dash nobody checked is a chicken through a wall. Where a
+   * haunt offers neither — a desk — there is nothing to bolt across and
+   * they sit tight, which is what `aim` does there too.
+   *
+   * **The cone gives way before the wall does.** A chicken backed into a
+   * corner has no way out that is also away, and a bolt that found nothing
+   * in the cone and gave up would leave him standing still in the middle of
+   * a fright — so the tries past `SPOOK_TRIES` open out to the whole circle
+   * and he goes wherever there is room.
    */
   private bolt(state: State) {
     const area = wanderArea(state.haunt, state.resident);
     const outside = state.room === WORLD_ROOM_SLUG;
     if (!area && !outside) return;
-    for (let tries = 0; tries < SPOOK_TRIES; tries++) {
-      const angle = this.random() * Math.PI * 2;
+    const from = state.spookedFrom;
+    const away = from ? Math.atan2(state.y - from.y, state.x - from.x) : null;
+    for (let tries = 0; tries < SPOOK_TRIES * 2; tries++) {
+      const cornered = away === null || tries >= SPOOK_TRIES;
+      const angle = cornered
+        ? this.random() * Math.PI * 2
+        : away + (this.random() * 2 - 1) * SPOOK_SPREAD;
       const reach = SPOOK_DASH_PX[0] + this.random() * (SPOOK_DASH_PX[1] - SPOOK_DASH_PX[0]);
       const to = { x: state.x + Math.cos(angle) * reach, y: state.y + Math.sin(angle) * reach };
-      if (area && !inside(area, to)) continue;
-      if (outside && !openGround({ width: WORLD_WIDTH, height: WORLD_HEIGHT }, worldSolids(), to)) {
-        continue;
-      }
+      if (!this.standable(state, to)) continue;
       this.setCourse(state, to);
       return;
     }
@@ -686,8 +781,16 @@ export class ResidentSimulation {
     // pause a finished dash sets is for the walk it ended, and standing about
     // in the middle of a fright is not fleeing.
     if (now >= state.pauseUntil || this.spooked(state, now)) {
-      // Nothing new while they are on their way out: the door is the errand.
-      if (!state.target && !state.leavingFor) this.aim(state, now);
+      // Nothing new while they are on their way out — except the way out
+      // itself. `holdOn` drops a course after a few seconds behind somebody
+      // who will not move, and a leaver with no course and nothing to
+      // replace it stands where they are until `leaveBy` runs out. Planned
+      // again from where they now stand, so the moment the way clears they
+      // are walking to their own door instead of waiting out the half minute.
+      if (!state.target) {
+        if (state.leavingFor) this.headForTheDoor(state);
+        else this.aim(state, now);
+      }
       if (state.target) moving = this.step(state, now);
     }
     hub.move(presenceIdFor(state.resident), {
@@ -744,15 +847,81 @@ export class ResidentSimulation {
     return nearest(next, bodies) <= nearest({ x: state.x, y: state.y }, bodies);
   }
 
-  /** Wait for the way to clear, and give up on it after a moment. */
+  /**
+   * Wait for the way to clear, then go round it, and only then give up.
+   *
+   * Giving up alone is no answer for somebody on their way out: a route is
+   * planned over the map's solids and a person is not one, so the way to
+   * the door is the same way every time it is planned and it runs through
+   * whoever is standing in it. Bud and Yash have adjacent spots in the row
+   * in front of the fountain, and Bud's building is east of both — so for
+   * thirty seconds he planned, was blocked, gave up and planned the same
+   * route again, and then `leaveBy` took him indoors from the middle of the
+   * plaza.
+   */
   private holdOn(state: State, now: number): boolean {
     if (!state.heldSince) state.heldSince = now;
     if (now - state.heldSince < MAKE_WAY_MS) return false;
     state.heldSince = 0;
+    if (this.stepAside(state)) return false;
     state.target = null;
     state.legs = [];
     state.pauseUntil = now + PAUSE_MS[0];
     return false;
+  }
+
+  /**
+   * A step out of the way of whoever will not move, and a new course after.
+   *
+   * Across the line to them rather than back down it: sideways is the one
+   * direction that gives up none of the journey and still clears the way,
+   * and one space of it is enough, since what is in the way is a person
+   * rather than a wall. The course is dropped with it, so the next tick
+   * plans again from where they now stand — at the door for somebody
+   * leaving, anywhere for somebody wandering.
+   *
+   * `stand` has the same idea for two people coming out of one door. That
+   * one goes along the front of the door because a doorstep has a building
+   * above it and its own path below; this one is anywhere on a map.
+   */
+  private stepAside(state: State): boolean {
+    const bodies = this.bodies(state);
+    let closest: Point | null = null;
+    let least = Infinity;
+    for (const body of bodies) {
+      const d = Math.hypot(body.x - state.x, body.y - state.y);
+      if (d >= least) continue;
+      least = d;
+      closest = body;
+    }
+    if (!closest) return false;
+    const length = least || 1;
+    const across = { x: -(closest.y - state.y) / length, y: (closest.x - state.x) / length };
+    for (const step of ASIDE) {
+      const beside = {
+        x: state.x + across.x * step * PERSONAL_SPACE_PX,
+        y: state.y + across.y * step * PERSONAL_SPACE_PX,
+      };
+      if (!this.standable(state, beside) || !roomToStand(beside, bodies)) continue;
+      state.legs = [];
+      state.target = beside;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Whether a resident could be sent to this point at all: inside the bounds
+   * where a room is what they have, and on the map's own open ground where
+   * they are outside. Nothing collides a resident, so this is the only thing
+   * between one and a wall.
+   */
+  private standable(state: State, at: Point): boolean {
+    if (state.room === WORLD_ROOM_SLUG) {
+      return openGround({ width: WORLD_WIDTH, height: WORLD_HEIGHT }, worldSolids(), at);
+    }
+    const area = wanderArea(state.haunt, state.resident);
+    return !area || inside(area, at);
   }
 }
 

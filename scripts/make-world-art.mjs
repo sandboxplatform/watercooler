@@ -57,6 +57,23 @@ const P = {
   court: [78, 116, 110, 255],
   courtDark: [68, 104, 98, 255],
   courtLine: [226, 232, 236, 255],
+  // A woodland trail: trodden earth out of the wood family, warmer and
+  // lighter than the tree trunks so a path reads against them.
+  trail: [150, 122, 92, 255],
+  trailDark: [128, 102, 76, 255],
+  trailLit: [176, 150, 118, 255],
+  // The shingle on the far bank of the Gold River: wet stone, greyer and
+  // cooler than the trail, which is dry earth — the two are a few tiles
+  // apart in places and a beach that read as brown would read as more path.
+  // Four stone tones rather than one, because a pebble beach is pebbles of
+  // different stone; one tone with a highlight on it is a gravel path.
+  shingle: [118, 112, 104, 255],
+  shingleDark: [95, 90, 84, 255],
+  shingleLit: [140, 134, 124, 255],
+  stonePale: [200, 194, 182, 255],
+  stoneMid: [170, 163, 150, 255],
+  stoneDim: [142, 136, 127, 255],
+  stoneDeep: [100, 96, 94, 255],
   rim: [214, 122, 62, 255],
   ball: [206, 116, 58, 255],
   ballLit: [228, 148, 88, 255],
@@ -174,6 +191,118 @@ function asphalt() {
 }
 
 /**
+ * A woodland trail: trodden earth, with grit and a few stones in it.
+ *
+ * Plain and seamless like the grass it runs through, because a trail is a
+ * dozen tiles long and anything with an edge on it would repeat down the
+ * whole length. No kerb either — that is a thing a town lays along a road.
+ */
+function trail() {
+  const c = canvas(48, 48);
+  c.rect(0, 0, 48, 48, P.trail);
+  for (let y = 0; y < 48; y++) {
+    for (let x = 0; x < 48; x++) {
+      const n = hash(x + 21, y + 7);
+      if (n < 0.1) c.set(x, y, P.trailDark);
+      else if (n > 0.93) c.set(x, y, P.trailLit);
+    }
+  }
+  // A handful of stones, each two pixels across so they read at this size.
+  for (let i = 0; i < 5; i++) {
+    const x = Math.floor(hash(i + 31, 5) * 44) + 2;
+    const y = Math.floor(hash(7, i + 41) * 44) + 2;
+    c.rect(x, y, x + 2, y + 2, P.trailLit);
+    c.set(x, y + 1, P.trailDark);
+  }
+  return c;
+}
+
+/**
+ * A rocky beach: pebbles, packed, with wet grit showing between them.
+ *
+ * Seamless like the grass and the trail, and for the same reason — a beach
+ * is half a dozen tiles long and an edge on the tile repeats the whole way
+ * down it. So every pebble is drawn wrapped round the tile's edges rather
+ * than inset, or the seam between two of them would be a line of bare grit.
+ *
+ * **What makes it read as stones is their shape, their spread and their
+ * size — in that order**, and it took three goes to find that out:
+ *
+ * | Go  | What went in                          | What it read as                                                  |
+ * | --- | ------------------------------------- | ---------------------------------------------------------------- |
+ * | 1   | One- and two-pixel flecks, one tone   | Concrete. Nothing in it was big enough to be a thing             |
+ * | 2   | Five-pixel stones, few, at random     | Bare floor in three places and a clump in the corner             |
+ * | 3   | The same, packed, drawn as ellipses   | Diamonds. A five-wide ellipse comes out of the arithmetic a plus |
+ *
+ * So the stones are **drawn** rather than solved — half a dozen little
+ * masks, wider than they are tall, which is what a pebble lying in a bed of
+ * them looks like from above. They go down on a jittered grid rather than at
+ * random: one to a cell, moved off its centre by up to half of one, which
+ * covers the tile evenly and still lands nothing on a lattice. Smaller ones
+ * fill the gaps on a grid of their own, offset half a cell so the two do not
+ * line up.
+ *
+ * Each stone is its own tone with a crown and an underside struck off *that*
+ * tone rather than off one shared pair: at four or five pixels across a lit
+ * top row and a dark bottom row is the whole of saying a stone is round and
+ * lying on something, and a shared highlight would make every pebble the
+ * same stone in a different shirt.
+ */
+function shingle() {
+  const c = canvas(48, 48);
+  c.rect(0, 0, 48, 48, P.shingle);
+  // The wet grit the stones lie in. It shows only in the gaps, so it is
+  // sparse: any busier and it reads through the pebbles as static.
+  for (let y = 0; y < 48; y++) {
+    for (let x = 0; x < 48; x++) {
+      const n = hash(x + 53, y + 11);
+      if (n < 0.09) c.set(x, y, P.shingleDark);
+      else if (n > 0.94) c.set(x, y, P.shingleLit);
+    }
+  }
+  const shade = (colour, by) =>
+    colour.map((v, i) => (i === 3 ? v : Math.max(0, Math.min(255, v + by))));
+  // Pebbles, drawn. Wider than tall, and the bigger ones lopsided, because
+  // a stone that is symmetrical about both axes is a bead.
+  const BIG = [
+    [".XXX.", "XXXXX", "XXXXX", ".XXX."],
+    ["..XX.", ".XXXX", "XXXXX", ".XXX."],
+    [".XXX.", "XXXXX", ".XXXX", "..XX."],
+    [".XX.", "XXXX", "XXXX", ".XX."],
+  ];
+  const SMALL = [["XX", "XX"], [".XX.", "XXXX", ".XX."], ["XXX", ".XX"], ["XX"]];
+  const TONES = [P.stonePale, P.stoneMid, P.stoneMid, P.stoneDim, P.stoneDim, P.stoneDeep];
+  const pebble = (cx, cy, mask, tone) => {
+    const crown = shade(tone, 34);
+    const under = shade(tone, -34);
+    const left = cx - (mask[0].length >> 1);
+    const top = cy - (mask.length >> 1);
+    mask.forEach((line, row) => {
+      const colour = row === 0 ? crown : row === mask.length - 1 ? under : tone;
+      for (let col = 0; col < line.length; col++) {
+        if (line[col] !== "X") continue;
+        c.set((left + col + 48) % 48, (top + row + 48) % 48, colour);
+      }
+    });
+  };
+  /** A pass of stones, one to a cell of the grid, jittered off the middle. */
+  const pass = (cell, shapes, offset, seed) => {
+    for (let gy = 0; gy < 48 / cell; gy++)
+      for (let gx = 0; gx < 48 / cell; gx++) {
+        const jx = Math.round((hash(gx + seed, gy + 5) - 0.5) * cell);
+        const jy = Math.round((hash(gy + seed, gx + 17) - 0.5) * cell);
+        const mask = shapes[Math.floor(hash(gx + seed + 3, gy + 23) * shapes.length)];
+        const tone = TONES[Math.floor(hash(gx + seed + 7, gy + 31) * TONES.length)];
+        pebble(gx * cell + offset + jx, gy * cell + offset + jy, mask, tone);
+      }
+  };
+  // The big stones, then smaller ones half a cell off them, in the gaps.
+  pass(8, BIG, 4, 3);
+  pass(8, SMALL, 0, 61);
+  return c;
+}
+
+/**
  * The basketball court's surface: plain, because the lines go over it.
  *
  * A tile cannot carry the markings — a centre circle and two keys are one
@@ -193,39 +322,58 @@ function court() {
 /**
  * The markings, as one transparent picture the size of the whole court.
  *
- * Nine tiles by six, matching COURT in lib/world/basketball.ts. The boundary
- * is inset a little from the tarmac's edge, the way a real one is, so the
- * court reads as a surface with a court painted on it rather than as a
- * rectangle of a different colour.
+ * Takes the court's size in tiles, matching COURT in
+ * lib/world/basketball.ts — sixteen by eight as it stands, and it was nine
+ * by six, so nothing here may be a number that only suits one of them. The
+ * boundary is inset a little from the tarmac's edge, the way a real one is,
+ * so the court reads as a surface with a court painted on it rather than as
+ * a rectangle of a different colour.
+ *
+ * **Every distance on it is struck off the real thing**, which is 28 metres
+ * by 15: the key is 5.8 of them deep and 4.9 across, the centre circle is
+ * 1.8 in radius and the arc is 6.75 from the basket. Written as pixels they
+ * were four numbers that happened to suit a 432-wide court, and a court of
+ * another size would have had them re-guessed rather than re-derived.
  */
-function courtLines() {
-  const W = 9 * 48;
-  const H = 6 * 48;
+function courtLines(tilesW, tilesH) {
+  const W = tilesW * 48;
+  const H = tilesH * 48;
+  const alongM = W / 28;
+  const acrossM = H / 15;
+  const inset = 8;
+  const keyDepth = Math.round(5.8 * alongM);
+  const keyHalf = Math.round(2.45 * acrossM);
+  const circle = Math.round(1.8 * alongM);
+  // The arc is kept clear of the sidelines. A real one runs into a straight
+  // line down each side rather than closing; ours is a plain semicircle, so
+  // at full radius on a court this shape it would come out on the sideline
+  // and read as a second boundary.
+  const arc = Math.min(Math.round(6.75 * alongM), H / 2 - inset - 16);
   const c = canvas(W, H);
   const line = P.courtLine;
   const band = (cx, cy, r, from, to) => {
-    for (let a = from; a <= to; a += 0.004) {
+    for (let a = from; a <= to; a += 0.002) {
       for (const rr of [r, r + 1]) {
         c.set(Math.round(cx + Math.cos(a) * rr), Math.round(cy + Math.sin(a) * rr), line);
       }
     }
   };
   // The boundary, two pixels thick.
-  for (const i of [0, 1]) c.outline(6 + i, 6 + i, W - 6 - i, H - 6 - i, line);
+  for (const i of [0, 1]) c.outline(inset + i, inset + i, W - inset - i, H - inset - i, line);
   // The half-way line and the centre circle.
-  c.rect(W / 2 - 1, 6, W / 2 + 1, H - 6, line);
-  band(W / 2, H / 2, 44, 0, Math.PI * 2);
+  c.rect(W / 2 - 1, inset, W / 2 + 1, H - inset, line);
+  band(W / 2, H / 2, circle, 0, Math.PI * 2);
   // A key at each end, and the arc over it, struck from the rim.
   for (const dir of [1, -1]) {
-    const end = dir > 0 ? 6 : W - 6;
-    const key = end + 96 * dir;
-    c.rect(Math.min(end, key), H / 2 - 56, Math.max(end, key), H / 2 - 54, line);
-    c.rect(Math.min(end, key), H / 2 + 54, Math.max(end, key), H / 2 + 56, line);
+    const end = dir > 0 ? inset : W - inset;
+    const key = end + keyDepth * dir;
+    c.rect(Math.min(end, key), H / 2 - keyHalf - 2, Math.max(end, key), H / 2 - keyHalf, line);
+    c.rect(Math.min(end, key), H / 2 + keyHalf, Math.max(end, key), H / 2 + keyHalf + 2, line);
     c.rect(
       Math.min(key, key - 2 * dir),
-      H / 2 - 56,
+      H / 2 - keyHalf - 2,
       Math.max(key, key - 2 * dir),
-      H / 2 + 56,
+      H / 2 + keyHalf + 2,
       line,
     );
     // Struck from the rim, which is 50px in from the end line — the same
@@ -234,7 +382,7 @@ function courtLines() {
     band(
       rim,
       H / 2,
-      104,
+      arc,
       dir > 0 ? -Math.PI / 2 : Math.PI / 2,
       dir > 0 ? Math.PI / 2 : (Math.PI * 3) / 2,
     );
@@ -414,6 +562,45 @@ slot("planter", 64, 48, (set, d) => {
     set(fx, 15, col);
     set(fx + 1, 15, col);
   }
+});
+// A log cabin for the far bank of the Gold River: about as tall as a person
+// and a little wider, so it reads as a building at a glance without looking
+// like one of the town's. Logs rather than boards, a steep dark roof, one lit
+// window and a door nobody opens — see `WOOD_CABIN` in lib/world/wood.ts,
+// which is across the water and reachable by nothing.
+slot("cabin", 64, 72, (set, d) => {
+  d.ellipse(32, 69, 24, 3, P.shadow);
+  // The walls: courses of logs, the lower ones in shadow.
+  d.rect(8, 32, 56, 68, P.wood);
+  for (let y = 34; y < 68; y += 6) d.rect(8, y, 56, y + 1, P.woodDark);
+  d.rect(8, 58, 56, 68, P.woodDark);
+  d.outline(8, 32, 56, 68);
+  // The roof: a steep gable, overhanging both walls, in the leaf-dark green
+  // the trees are so it sits in the wood rather than on it.
+  for (let i = 0; i < 22; i++) {
+    d.rect(4 + i, 32 - i, 60 - i, 33 - i, i < 2 ? P.ink : P.leafDark);
+  }
+  for (let i = 2; i < 20; i += 4) d.rect(6 + i, 31 - i, 58 - i, 32 - i, P.leaf);
+  d.rect(4, 30, 60, 33, P.ink);
+  // The door, shut, with a step.
+  d.rect(26, 46, 38, 68, P.ink);
+  d.rect(27, 47, 37, 68, P.woodDark);
+  d.rect(33, 57, 35, 59, P.yellow);
+  d.rect(25, 66, 39, 68, P.stone);
+  // One window, lit, with a sill.
+  d.rect(13, 44, 23, 54, P.ink);
+  d.rect(14, 45, 22, 53, P.yellow);
+  d.rect(17, 45, 19, 53, P.ink2);
+  d.rect(14, 48, 22, 50, P.ink2);
+  d.rect(12, 54, 24, 56, P.woodLit);
+  // A chimney on the far side, with a curl of smoke: the one thing on it
+  // that says somebody is in, which is the point of a cabin you cannot
+  // reach.
+  d.rect(44, 8, 52, 24, P.stoneDark);
+  d.rect(45, 9, 51, 23, P.stone);
+  d.outline(44, 8, 52, 24);
+  d.disc(49, 5, 3, P.slabLit);
+  d.disc(54, 2, 2, P.slabLit);
 });
 slot("signpost", 48, 96, (set, d) => {
   d.ellipse(24, 92, 8, 3, P.shadow);
@@ -1508,7 +1695,9 @@ save("site_office_operations.png", siteOfficeOperations());
 save("van_96x144.png", van());
 save("asphalt_48.png", asphalt());
 save("court_48.png", court());
-save("court_lines_432x288.png", courtLines());
+save("trail_48.png", trail());
+save("shingle_48.png", shingle());
+save("court_lines_768x384.png", courtLines(16, 8));
 save("pond_288x192.png", pond());
 save("site_office_sales_2x.png", doubled(siteOfficeSales()));
 save("site_office_finance_2x.png", doubled(siteOfficeFinance()));

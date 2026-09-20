@@ -319,8 +319,33 @@ export function storeOf(orgSlug: string): Tenant | null {
 export const TILE = 48;
 /** The stores to the west, the plaza in the middle, the campus to the east: each a short walk. */
 export const WORLD_COLUMNS = 62;
+/**
+ * How deep the wood along the top of the map is, in tiles, and the same in
+ * pixels — which is how far down the town begins.
+ *
+ * The town was laid out from row 0 down and the wood went in **above** it,
+ * so rather than every coordinate in the town being rewritten by hand, the
+ * town moved down by this much. `TOWN_TOP` is added in the few places a row
+ * of the town is written down as a number: `placeBuilding` below, the two
+ * roads and the shore, the plaza and the car park, the court, and the
+ * town's own props, which go through `town()` in `scenery.ts` the way the
+ * middle stretch already goes through `centre()`.
+ *
+ * So a y in the town's own layout still reads as it always did, and
+ * anything laid out in the wood is in world rows from 0 — see `wood.ts`.
+ *
+ * It is thirty rather than the twenty-two it began as, and the river is why:
+ * the wood's depth is the whole of the vertical the Gold River has to bend
+ * in, and at twenty-two the drawing it is traced off came out as a diagonal
+ * band with a squiggle on the end of it. Eight rows is as far as that is
+ * worth taking — the world is already as deep as it is wide — and it is
+ * enough for the shape to read.
+ */
+export const WOOD_ROWS = 30;
+export const TOWN_TOP = WOOD_ROWS * TILE;
 /** Two rows of buildings deep: the businesses along the north road, plots for more along the south — and then the sea. */
-export const WORLD_ROWS = 39;
+export const TOWN_ROWS = 39;
+export const WORLD_ROWS = WOOD_ROWS + TOWN_ROWS;
 export const WORLD_WIDTH = WORLD_COLUMNS * TILE;
 export const WORLD_HEIGHT = WORLD_ROWS * TILE;
 /** Where the middle stretch — the plaza between the two head offices — begins. */
@@ -338,9 +363,9 @@ export interface Rect {
 // ── The shore ───────────────────────────────────────────
 
 /** The first row of open water; everything below it is the sea. */
-export const SHORE_ROW = 34;
+export const SHORE_ROW = WOOD_ROWS + 34;
 /** The dock: the centre avenue carried on past the south road and out over the water, in tiles. */
-export const DOCK: Rect = { x: CENTRE_X / TILE + 14, y: 32, width: 2, height: 5 };
+export const DOCK: Rect = { x: CENTRE_X / TILE + 14, y: WOOD_ROWS + 32, width: 2, height: 5 };
 /** The ferry's picture. */
 export const BOAT = { width: 192, height: 168 };
 
@@ -373,15 +398,17 @@ function placeBuilding(
   art: string,
 ): Building {
   const height = 6 * TILE;
-  const frame = { x, y, width, height };
+  // Every building is placed in the town's own rows and moved down past the
+  // wood here, which is the one crossing between the two — see `TOWN_TOP`.
+  const frame = { x, y: y + TOWN_TOP, width, height };
   const doorX = x + (width - doorWidth) / 2;
   return {
     org: org(orgSlug),
     frame,
     // The wall is solid; the doorway is a gap in it so you can walk up to it.
-    solid: { x, y, width, height: height - TILE / 2 },
-    door: { x: doorX, y: y + height - TILE / 2, width: doorWidth, height: TILE },
-    outside: { x: x + width / 2, y: y + height + TILE * 1.25 },
+    solid: { x, y: frame.y, width, height: height - TILE / 2 },
+    door: { x: doorX, y: frame.y + height - TILE / 2, width: doorWidth, height: TILE },
+    outside: { x: x + width / 2, y: frame.y + height + TILE * 1.25 },
     entrance,
     art,
   };
@@ -469,7 +496,7 @@ function ferry(): Building {
 }
 
 /** Where a person appears on the world map with no building to step out of: by the fountain. */
-export const WORLD_SPAWN = { x: CENTRE_X + 600, y: 655 };
+export const WORLD_SPAWN = { x: CENTRE_X + 600, y: TOWN_TOP + 655 };
 
 /** The building a slug — a tenant's or an organisation's — comes out of. */
 export function buildingFrom(slug: string | null | undefined): Building | null {

@@ -116,8 +116,13 @@ describe("wandering mode", () => {
     expect(wanderSpots(haunt)).toBe(WORLD_WANDER_SPOTS);
   });
 
-  it("has twenty of them", () => {
-    expect(WORLD_WANDER_SPOTS).toHaveLength(20);
+  // Twenty in the town and five more up in the wood, which is the point of
+  // counting them at all: a map that grows a place and forgets to give a
+  // wanderer anywhere in it is a place nobody is ever seen walking. The
+  // wood has five rather than eight because the far bank of the river has
+  // no crossing, so there is nowhere over there to be sent.
+  it("has a place in every part of the map", () => {
+    expect(WORLD_WANDER_SPOTS).toHaveLength(25);
   });
 
   it("spreads them over the whole map rather than one corner of it", () => {

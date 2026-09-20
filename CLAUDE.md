@@ -1580,10 +1580,46 @@ sign should say BREAKOUT, and nothing but looking at it would tell you.
 
 ### The basketball court
 
-Out of doors, in the park between the trees and the east avenue, with its
-south side on the kerb of the south road. Nine tiles by six of tarmac, a
-hoop at each end, and **one ball for the whole world**: pick it up, and
-whoever else is out there sees you carrying it.
+Out of doors, in the middle of the park's east block — the grass between the
+centre avenue and the east one. Sixteen tiles by eight of tarmac, a hoop at
+each end, and **one ball for the whole world**: pick it up, and whoever else
+is out there sees you carrying it.
+
+**It has most of the block, with two tiles of grass round it.** The block is
+twenty by twelve, so the court is centred exactly on both axes and the park
+keeps a fringe to stand its trees and its lamps in — which is where the two
+planters and three trees that stood on what is now tarmac went. It was nine
+by six in a corner of that block, its south side on the kerb of the road and
+its east side on the avenue: a half-court pushed out of the way of the park
+rather than the thing the park is for, with the hoops seven tiles apart, so
+a throw from anywhere on it was the same throw and two people on it were in
+each other's way.
+
+Two to one is also the shape of the real thing — 28 metres by 15 — where
+nine by six was half as wide again as it should have been. **Every marking
+is now struck off those metres** rather than written as pixels that happened
+to suit a 432-wide court: the key is 5.8 of them deep and 4.9 across, the
+centre circle 1.8 in radius, the arc 6.75 from the basket, clamped so a
+plain semicircle does not come out on the sideline and read as a second
+boundary. `courtLines(tilesW, tilesH)` in `scripts/make-world-art.mjs`.
+
+**The top of the meter had to go up with it.** A full-power throw covered
+453px, which crosses a nine-tile court and falls well short of a sixteen —
+so the length of the court would have been a length nobody could throw and
+the top third of the swing a part of it nothing used. `THROW_MAX_SPEED` and
+`THROW_MAX_LIFT` now carry the ball from one end line to the far rim; the
+minima are untouched, since the bottom of the meter is a lay-up at either
+size.
+
+**And the flight had to be the parabola it is solved as.** `throwReach` is
+the analytic answer and `stepBall` was integrating `vz -= g·dt` and then
+moving at the speed it _ended_ with, which loses `g·dt²/2` of height every
+step — a pixel at a time, and twenty-five over a long throw. The two
+therefore disagreed by more the harder the ball was thrown, so a shot the
+meter says is perfect dropped to rim height twenty pixels short of the rim,
+with nothing on screen to explain the miss. It is `z += vz·dt − g·dt²/2`
+now, which is the parabola exactly at every step boundary and at any frame
+rate.
 
 **The ball is the server's.** Where it is, where a throw takes it and
 whether it went in are all decided in `lib/server/basketball.ts`, and the
@@ -1648,7 +1684,9 @@ two keys are nine tiles wide and no repeating tile can carry them, so the
 markings are one transparent image at depth 1 — over the ground, under
 everything standing on it. Paving that meets the court gets **no kerb**:
 between two hard surfaces a kerb is a stone lip drawn across the middle of
-the tarmac.
+the tarmac. Nothing exercises that today — the court stands in the middle of
+its block and touches no road — so it is a rule about where the court may go
+rather than a description of the map.
 
 **The hoops are read off `HOOPS` rather than placed by hand**, because the
 ball is judged against those same two points — a post put down separately
@@ -1822,6 +1860,7 @@ lib/
   map/ world/                      map generation and world layout
   world/cast.ts                    who the world is of: roles, concept art, backstories
   world/basketball.ts              the court in the park, and the flight of the one ball
+  world/wood.ts                    the wood north of the town: the Gold River and its trails
   arcade/ pinball/ pong/           the games (Oak Island, Flappy, Snake, Breakout, Solitaire)
   pixel/ characters/               sheet validation, PNG codec, palettes, recolouring
   voice/                           WebRTC voice, one conversation server-wide
@@ -1831,6 +1870,242 @@ public/maps|tilesets|sprites|characters|audio|ui
 scripts/                build-map, seed-erp, sprite and world-art generators
 types/game.ts           shared game types
 ```
+
+### The wood, and the Gold River
+
+North of the town, above the buildings, are thirty rows of trees with a
+river through them: `lib/world/wood.ts`. The Gold River comes down out of
+the north-west, bends east and runs the whole width of the map, with a walk
+along the near bank of it.
+
+**Nothing crosses the water, on purpose.** The river is solid like the sea,
+so the north-east of the wood is somewhere to look at rather than somewhere
+to go: every trail is on this side of it, and there is no path over there
+for nobody to walk on. A crossing, when there is one, is a rectangle in
+`DOCKS` read off `riverBed()` — planking over water is already walked at
+the ferry dock — plus a couple of rows of trail either side and a hole in
+`riverBanks` where it lands.
+
+**And nobody stands in it either, which is a second rule.** Keeping feet
+out of the water is not the same as keeping a person out of the river:
+everything outdoors is drawn over whatever is behind it, and a character's
+position is the middle of their 96px frame, so twenty pixels of them are
+drawn _above_ where they stand. Somebody on the first dry tile is therefore
+painted across the near bank from the waist up, and somebody walking past a
+tile below that still has their head in the water — which is what residents
+sent to the water's edge looked like, since nothing collides a resident and
+the route planner only ever kept their feet dry.
+
+So `riverBanks()` grows the water's rectangles by the figure that would be
+drawn over them — up by what hangs below a position, down by what stands
+above it, half a body either side — and `worldSolids` carries them. That
+makes it a solid rather than a rule anybody has to remember: the route
+planner, the player's own collision and `clearToStand` all get it for
+nothing, and `drawnOver` is the one place the figure's size is written
+down. `wood.test.ts` asks it of every cell of the wood the planner calls
+open. The sea is deliberately left out: its edge is the bottom of the map,
+where a character at the water is seen against it from below rather than
+standing in it.
+
+**The town moved down; nothing in it was rewritten.** The town was laid out
+from row 0 and the wood went in above it, so `WOOD_ROWS` / `TOWN_TOP` in
+`lib/world/tenants.ts` is what shifted it — added inside `placeBuilding`,
+to the two roads and the shore, the plaza, the car park and the court, and
+to the town's props through `town()` in `scenery.ts`, which is the same
+trick `centre()` already played with x. So a y in the town's own layout
+still reads as it always did and anything laid out in the wood is in world
+rows from 0.
+
+The one thing that bites is a coordinate that is **already** a world row:
+the court's hoops are read off `COURT`, which carries the shift, so sending
+them through `town()` moved them down past the wood twice and put the two
+posts a wood's depth south of the court. They sit outside the `town()` block
+with a note saying why.
+
+**The wood is thirty rows rather than the twenty-two it began as, and the
+river is the reason.** The wood's depth is the whole of the vertical the
+river has to bend in, so it is what decides how much of the drawing's shape
+survives. Eight rows is as far as that trade is worth taking — the world is
+already as deep as it is wide — and it is the difference between a diagonal
+band with a squiggle on the end and a river with a shape.
+
+**The river is a line with a width, not a list of rectangles.** `RIVER` is
+the centreline in tiles and `riverBed()` rasterises it into one rectangle
+per run along a row, so reshaping the river is moving points on a line.
+Rectangles would have made it a river nobody can change: move a bend and
+every rectangle after it is wrong. It joins `WATER` beside the sea, so it
+is solid, drawn and foamed at its banks by exactly what the sea already
+went through.
+
+**Anything that has to meet the water is read off the water.** `southBank`
+gives the first dry row under the river at a given pair of columns, and
+every trail takes its rows from that, as do the wanderer's spots — and the
+beaches on the far bank take theirs off `northBank`. A walk meant to follow
+the bank and written as a row number leaves the bank — or ends up in the water — the next time a bend
+moves, and there is nothing in the map's own drawing to say which.
+
+**The walk along the bank follows it down.** The river falls some nine rows
+between the elbow and the east edge, so a bank walk written as one row
+touches the water at one end and is out in the trees at the other — which
+is what it was, and why it needed a spur out to the water beside it. It is
+built column by column off `southBank` now, a row back from the water and
+two rows deep, with the columns at the same height gathered into a dozen
+rectangles. Each step shares a row with the next because the river never
+falls faster than a row per column; that is a fact about the shape rather
+than something enforced, and `residents.test.ts` is what holds it, since a
+walk broken at a corner is a spot nobody can reach. The spur is gone: every
+step of the walk is the spur now.
+
+**The shape is traced off the drawing, and traced rather than sketched.**
+`TRACED` in `wood.ts` is the centreline as measured out of the picture —
+the blue read out of it, the middle taken row by row down the north-south
+limb and column by column along the eastward run, thinned to the points
+where it actually turns. It is kept in the **drawing's own pixels**, and
+`RIVER` fits it across the map's whole width and down until its lowest
+point sits `BANK_ROOM` rows off the wood's foot. So the shape is one list
+and the fit is one pair of numbers, rather than twenty pairs to redo by
+hand every time the wood changes depth.
+
+**It is a soft W and that is the thing to keep.** It comes in off the top
+edge and leans **east** as it falls, turns back west a fifth of the way
+down and runs to an elbow — the first V — then east across the map, shallow
+at first, dropping steeply a little past halfway into a valley, rising over
+a hump, and falling into a second valley as it leaves the map. That second
+pair is the other half of the W and it is the softer one. `wood.test.ts`
+asserts each of those as a comparison rather than as a coordinate, because
+the wood's depth is allowed to change and the shape is not. Sketched at
+eight bends every one of them was lost and it read as a diagonal.
+
+**The corners are the point, not the line.** What a bend is _for_ is the
+land: each turn crops a wedge of wood out of the bank on the inside of it,
+and those wedges are what make the wood a few little places rather than one
+long even strip. Fitting a square drawing onto a map twice as wide as it is
+deep halves every angle in it, so a bend has to be a real bend to begin with
+or it lands as a bevel nobody would notice — which is what happened the
+first time, with a trace that was right to within a tile everywhere and a
+river that still read as one smooth bank.
+
+**So east of the drop the line is ours rather than the drawing's.** The
+drawing runs near enough flat from there to the edge, and flat water crops
+nothing. The tail is a **valley** at the foot of the drop, a **hump**
+halfway along and a **second valley** as it leaves the east edge — which
+puts a tongue of wood into each valley from the north and one into the hump
+from the south. Three outcrops, and the first of them is the one with the
+cabin on it. The drawing's own flat stretch is still in there as the shallow
+top of the hump; what changed is that it now has something either side.
+Everything down to the head of the drop is the trace, untouched.
+
+`wood.test.ts` holds each of the turns to an **angle** rather than a slope,
+since an angle is exactly what the squash takes away, and it counts the
+elbow's tongue directly — that is the one with water on two sides, so a
+column with two runs of river in it has land between them.
+
+One constraint runs through the whole tail: **no bend falls faster than a
+row a column.** The walk along the bank steps down with the water, and a
+step of two rows is a walk with a hole in it.
+
+The rest is flatter than in the drawing and cannot not be: the vertical is
+compressed about twice as hard as the horizontal. What survives — and what
+makes it the same river — is where the bends fall and how they compare. A
+diagonal at its true angle everywhere would need a wood as deep as the map
+is wide, which is a wood bigger than the world under it.
+
+**Two rocky beaches, on the far bank.** `WOOD_BEACHES` — shingle, its own
+ground like the trails, at the shoulder where the limb turns east and at
+the tip of the tongue. Which rows are **read off the bank the centreline
+draws**, for the reason the walk on the near bank is read off `southBank`:
+the bank staircases, so a beach written as a row number is a beach in the
+river at one end of itself the next time a bend moves.
+
+**A beach is a shelf rather than a staircase**, and that is the one place
+the water is not simply what the line draws. A tile deep, stepping down
+with the bank, the shoulder's came out five tiles on one row and a sixth on
+the row below with a strip of river between them — a beach with a notch
+bitten out of the middle of it. It takes every row from the highest the
+bank reaches across its run to the lowest, and **the river gives up what
+falls inside it**: `riverBed()` is the drawn bed less the shelves, so the
+water's edge comes out straight along the foot of the shingle. Squaring off
+can only ever take water and never stand shingle in it — above the bank a
+column is dry by definition. The tongue's bank is flat and its beach is one
+row, exactly as before.
+
+That subtraction is why `riverBed()` is not the bed the centreline
+rasterises: `drawnBed()` is, it is private, and a beach measures the bank
+off it because a beach asking `riverBed()` where the bank is would be
+asking a question its own answer had already moved.
+
+The far bank rather than the near one, and on purpose: shingle underfoot is
+ground somebody would expect to walk down to the water on, and nothing
+crosses the water. They are laid after the water in `groundGrid`, so a
+beach at the bank stops at it rather than being drawn over the river, and
+the water's own foam laps at the stones because the foam goes over the
+ground.
+
+The tile is drawn by `shingle()` in `make-world-art.mjs`, and it took three
+goes to stop it reading as concrete: pebbles have to be four or five pixels
+across to be a thing rather than a speck, packed on a jittered grid rather
+than dropped at random — which clumps and leaves bare floor — and **drawn
+from masks rather than solved as ellipses**, since a five-wide ellipse comes
+out of the arithmetic a diamond.
+
+**There is a cabin on the far bank**, on the tongue in the first valley —
+`WOOD_CABIN`, taken off `northBank` rather than written as a row, so the
+bend that makes the tongue is what puts it there. It is the one place the
+north side comes far enough south to be looked at properly from the walk.
+
+It stands **two rows back from the water**, with the shingle on the last dry
+row and a row of grass between. Its feet used to be on the water's own edge,
+and a prop's picture hangs a row and a half above its feet — so the bottom
+of it was drawn over the river, a cabin with its porch in the water, on the
+one bank nobody can walk up to and see it is not.
+
+It is **decoration and nothing else**: an ordinary prop with a footprint,
+so it is solid, and solid is all it is — no door to walk into, nothing to
+press at, no fixture entry. It does not need one, because there is no
+bridge: `wood.test.ts` asserts `allReachable` cannot get to it from the
+spawn, which is the honest way to say "you cannot go in" and would fail the
+day somebody plants a crossing. `CABIN_CLEARING` keeps the scatter two
+tiles off it, or the wood would grow a canopy over it — outdoors everything
+sorts by the bottom of its own picture, so a tree a foot in front is a tree
+drawn across the front of it.
+
+**The trails are their own ground**, `trail` — trodden earth, generated like
+the rest of the tiles — for the reason the court and the car park have
+theirs: what is underfoot is a fact about the map, and a slabbed pavement
+through a wood reads as the town having got there first. No kerb, except
+where the trail meets the plaza's own edge: the town's paving is raised
+above trodden earth exactly as it is above grass.
+
+**The wood is scattered, not written out.** A wood is a thing you cannot see
+the far side of, and one written prop by prop is a wood nobody will ever
+move a trail through. `WOOD_PLANTING` is a settled hash scatter — the same
+wood every run — and `scenery.ts` plants what can actually stand there.
+Three rules, all about the **picture** rather than a pair of feet, which is
+why they live there rather than in `wood.ts`:
+
+| Rule                            | Why                                                                                                                                                                                     |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nothing hangs over a trail      | Everything outdoors sorts by the bottom of its own picture, so a walker is drawn _behind_ a tree whose feet are below theirs. A stretch of path somebody disappears along is not a path |
+| Nothing off the top of the map  | The camera is clamped to the map, so a tree on row 0 is a tree with its bottom third showing and nothing above it                                                                       |
+| No two trunks in the same place | Bodies, not pictures. Canopies overlapping is what a wood _is_; two footprints merged are a wider solid than either, and enough of them is a thicket a route has to go round            |
+
+The first is asymmetric and rightly so: a tree's picture is above its feet,
+so one north of a trail may stand almost on the edge of it while one south
+of it has to be two tiles back. Canopies lean over the path from above.
+
+**A wood with nobody in it is scenery.** `WOOD_WANDER_SPOTS` puts five of a
+wanderer's places up there, spread along the walk on the bank and taken off
+it rather than written as rows, so Michael crosses the wood like anywhere
+else. All on the near bank, since a spot a wanderer is sent
+to and cannot reach is one they stand still for; `residents.test.ts` holds
+every one of them to being clear to stand on and reachable from every
+other, which is what catches both that and a trail the scatter closed.
+
+The way in is the trail itself: it runs down through a gap cut in the tree
+line along the town's top edge and ends on the plaza's own north edge. A
+trail that stopped short on the grass would be a path to a lawn, and a wood
+whose entrance is a gap somebody happens to find between two buildings is
+not one anybody will find.
 
 ### Outdoors
 
@@ -1947,6 +2222,29 @@ up they walk back to it before they go in. Only the world map has one — a
 route is planned over `worldSolids()`, and a campus's own buildings are not
 in them, so a yard is entered the way a room is and wandered inside its
 paving once there.
+
+**Three things were quietly taking them indoors from the middle of the
+map**, which is the one thing that walk exists to prevent:
+
+| What             | Was                                                                                    | Is                                                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `goIfAtTheDoor`  | An empty course meant "arrived"                                                        | Asks where they are standing. A course is dropped for other reasons than getting there                               |
+| A leaver held up | `holdOn` dropped the course and `walk` skipped `aim` for a leaver, so they stood still | A step aside, then the way to the door planned again from where they now stand                                       |
+| `LEAVE_WALK_MS`  | 30s, and Yash's walk home is 35                                                        | 90s. It is a backstop for somebody who _cannot_ get there, and shorter than the longest honest walk it is a deadline |
+
+The middle one is the interesting one. A route is planned over the map's
+solids and a person is not one, so the way to the door is the same way
+every time it is planned and it runs straight through whoever is standing
+in it. Bud and Yash have adjacent places in the row in front of the
+fountain and Bud's building is east of both — so Bud planned, was blocked,
+gave up, and planned the same route again for thirty seconds, and then the
+backstop took him inside four hundred pixels short of his own front door.
+`stepAside` goes **across** the line to whoever is in the way, since
+sideways is the one direction that gives up none of the journey, and one
+space of it is enough when what is in the way is a person rather than a
+wall. The last one is measured off the map by `residents.test.ts` rather
+than remembered, so a building put further out fails there instead of on
+somebody's screen.
 
 Because a resident is a player in every room now, the hub's `isFull` counts
 humans rather than everybody in it, as `count` always did. It counted
@@ -2077,26 +2375,52 @@ walked up. Three rules keep one word from becoming a stuck horn, all in
 | `GREET_CLEAR_PX` | Wider than `GREET_PX`, so somebody hovering on the boundary does not cross it twice a second    |
 | `GREET_QUIET_MS` | A floor under the gap between two of them, so a queue of arrivals is one cluck rather than five |
 
-**And then he bolts.** A cluck is a fright, so saying it sets `spookedUntil`
-five seconds ahead (`SPOOK_MS`) and off he goes at `SPOOK_SPEED_PX_S` —
-short dashes in random directions, one after another, until it wears off and
-his ordinary wander picks up where it left it. Only a cluck that is actually
+**And then he bolts, away from whoever startled him.** A cluck is a fright,
+so saying it sets `spookedUntil` five seconds ahead (`SPOOK_MS`) and off he
+goes at `SPOOK_SPEED_PX_S` — dashes one after another, each aimed into a
+`SPOOK_SPREAD` cone with the fright behind it, until it wears off and his
+ordinary wander picks up where it left it. Only a cluck that is actually
 said spooks him: the quiet period above returns before the say, so a second
 person walking up inside it gets neither.
 
-Three things in it, and the first is the one that would go wrong quietly:
+**The pace is measured against the sprint, not written down.**
+`SPOOK_SPEED_PX_S` is `SPRINT_SPEED_PX_S * 1.2`, because the only thing
+that matters about it is that it is faster than whoever startled him. It
+was 150 — under half a sprint — so anybody who ran after him caught him
+inside a second, and a fright you can keep up with at a jog is not a
+fright. It is well inside what the hub will carry: `move` clamps against
+the sprint times `SPEED_TOLERANCE`, which is two and a half of them.
+`SPOOK_DASH_PX` went up with it, since 70 to 160 is a fifth of a second
+apiece at this pace — a chicken shaking rather than a chicken running.
 
-| Rule                                      | Why                                                                                                                                         |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| A dash lands where he could have wandered | Nothing collides a resident. Outdoors that is `openGround` on the route planner's own grid; in a room it is the haunt's `wanderArea` bounds |
-| The pause between wanders is ignored      | `walk` lets a spooked resident aim again the moment a dash ends — standing about in the middle of a fright is not fleeing                   |
-| A walk to a door is not dropped           | `goIfAtTheDoor` reads an empty course as being at the door, so clearing one would put somebody through it from the middle of the room       |
+The direction used to be a plain random angle, which is a chicken who says
+his one word and then dashes _past_ you as often as not — the cluck and the
+fright pointing at different things. The cone is a third of the circle
+rather than straight away, so it is still a scramble: every dash puts ground
+between the two of them and no two of them are the same bearing.
+
+Five things in it, and the first is the one that would go wrong quietly:
+
+| Rule                                      | Why                                                                                                                                                              |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A dash lands where he could have wandered | Nothing collides a resident. Outdoors that is `openGround` on the route planner's own grid; in a room it is the haunt's `wanderArea` bounds                      |
+| The pause between wanders is ignored      | `walk` lets a spooked resident aim again the moment a dash ends — standing about in the middle of a fright is not fleeing                                        |
+| A walk to a door is not dropped           | `goIfAtTheDoor` reads an empty course as being at the door, so clearing one would put somebody through it from the middle of the room                            |
+| Away from where they _were_               | `spookedFrom` is a point taken at the cluck, not a person read each dash. Re-reading it would be a chase, and one a person could steer by walking round him      |
+| The cone gives way before the wall does   | A chicken in a corner has no way out that is also away. Tries past `SPOOK_TRIES` open out to the whole circle, or he would stand still in the middle of a fright |
 
 It asks the room's hub rather than the simulation, because only a **person**
 counts as somebody walking up: `personNear` skips the residents — who are
 sent to places nobody is standing in anyway — and skips anyone hidden in a
 lift. It answers without allocating, for the reason `get` does not use
 `snapshot()`: this is asked of a room on every tick.
+
+**`nearestPerson` is the second question and it is asked far less often.**
+The tick check above wants a yes or a no and stops at the first person it
+finds; a bolt wants a point to run away from, which means scanning the room
+and building one. So it is asked only on the tick something is actually
+said — and for the nearest rather than for any, since a chicken with two
+people around him should put the near one behind him.
 
 One thing that looks like tidiness and is not: `greetedAt` is 0 for _never_,
 the way `heldSince` is 0 for nobody in the way. A plain `now - greetedAt`

@@ -42,38 +42,44 @@
     "width": 64,
     "height": 48
   },
-  "signpost": {
+  "cabin": {
     "x": 696,
+    "y": 0,
+    "width": 64,
+    "height": 72
+  },
+  "signpost": {
+    "x": 768,
     "y": 0,
     "width": 48,
     "height": 96
   },
   "sheep": {
-    "x": 752,
+    "x": 824,
     "y": 0,
     "width": 48,
     "height": 40
   },
   "board": {
-    "x": 808,
+    "x": 880,
     "y": 0,
     "width": 144,
     "height": 88
   },
   "hoopWest": {
-    "x": 960,
+    "x": 1032,
     "y": 0,
     "width": 112,
     "height": 128
   },
   "hoopEast": {
-    "x": 1080,
+    "x": 1152,
     "y": 0,
     "width": 112,
     "height": 128
   },
   "ball": {
-    "x": 1200,
+    "x": 1272,
     "y": 0,
     "width": 20,
     "height": 20

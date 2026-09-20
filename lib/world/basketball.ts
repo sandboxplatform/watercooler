@@ -15,21 +15,29 @@
  * ball hitting the underside of the net, which is not a point.
  */
 
-import { TILE, WORLD_HEIGHT, WORLD_WIDTH, type Rect } from "./tenants";
+import { TILE, WOOD_ROWS, WORLD_HEIGHT, WORLD_WIDTH, type Rect } from "./tenants";
 import type { Facing } from "../presence-types";
 
 // ── The court ───────────────────────────────────────────
 
 /**
- * The court, in tiles: in the park, between the trees and the east avenue,
- * with its south side on the kerb of the south road.
+ * The court, in tiles: the middle of the park's east block, which is the
+ * grass between the centre avenue and the east one.
  *
- * Nine tiles by six of tarmac, which is a street court rather than a
- * stadium — wide enough for the two hoops to be a real throw apart, small
- * enough that it does not take the park over, and standing on the one patch
- * of the park that had nothing on it already.
+ * **Sixteen tiles by eight, with two of grass round it.** The block is
+ * twenty by twelve, so the court has most of both and the park keeps a
+ * fringe to stand its trees and its lamps in. It was nine by six in a
+ * corner of the block, which is a half-court with the park's furniture all
+ * round it: the two hoops were seven tiles apart, so a throw from anywhere
+ * on it was the same throw, and two people on it were in each other's way.
+ * Two tiles all round divides exactly on both axes, which is why the margin
+ * is the number it is.
+ *
+ * Two to one is also about the shape of the real thing — 28 metres by 15 —
+ * where nine by six was half as wide again as it should have been, and the
+ * markings in `scripts/make-world-art.mjs` are struck off those metres.
  */
-export const COURT: Rect = { x: 43, y: 24, width: 9, height: 6 };
+export const COURT: Rect = { x: 34, y: WOOD_ROWS + 20, width: 16, height: 8 };
 
 /** The same in world pixels, which is what everything else here is in. */
 export const COURT_PX: Rect = {
@@ -117,12 +125,21 @@ const ROLL_DECAY_PER_S = 0.12;
 /** Under this, a ball on the ground has stopped. */
 const REST_SPEED = 8;
 
-/** The slowest and the fastest throw, in px/s across the ground. */
+/**
+ * The slowest and the fastest throw, in px/s across the ground, and how
+ * hard it is thrown upward — which is what makes the arc an arc.
+ *
+ * The top of the meter has to carry the ball from one end line to the far
+ * rim, or the length of the court is a length nobody can throw and the top
+ * third of the swing is a part of it nothing uses. So the two maxima went up
+ * with the court: 520 and 420 covered 453px, which crossed a nine-tile
+ * court and falls well short of a sixteen-tile one. The minima are
+ * untouched — the bottom of the meter is a lay-up at either size.
+ */
 const THROW_MIN_SPEED = 180;
-const THROW_MAX_SPEED = 520;
-/** And how hard it is thrown upward, which is what makes the arc an arc. */
+const THROW_MAX_SPEED = 700;
 const THROW_MIN_LIFT = 260;
-const THROW_MAX_LIFT = 420;
+const THROW_MAX_LIFT = 540;
 
 /**
  * How close you have to stand to pick the ball up, and how low it has to be.
@@ -277,9 +294,20 @@ export function stepBall(ball: BallState, dtMs: number, blocked: readonly Rect[]
 
   // Up and down first, because whether it went through a rim is a question
   // about the height it passed through during this step.
-  next.vz -= GRAVITY_PX_S2 * dt;
+  //
+  // The height moves at the speed the ball *had*, less the half of a step's
+  // gravity — `z += vz·dt − g·dt²/2` — rather than at the speed it ends
+  // with. That is the parabola exactly, at every step boundary and at any
+  // frame rate; taking the whole step's gravity off the velocity first and
+  // then moving at that loses `g·dt²/2` of height every step, which is a
+  // pixel here and twenty-five over a long throw. `throwReach` is solved
+  // off the parabola, so the two disagreed by more the harder the ball was
+  // thrown — and a shot the meter says is perfect dropped to rim height
+  // twenty pixels short of the rim, which is a miss with nothing on screen
+  // to explain it.
   const wasZ = ball.z;
-  next.z = ball.z + next.vz * dt;
+  next.z = ball.z + ball.vz * dt - (GRAVITY_PX_S2 * dt * dt) / 2;
+  next.vz = ball.vz - GRAVITY_PX_S2 * dt;
 
   // Along the ground, one axis at a time, so a ball meeting the corner of a
   // bench runs along it rather than stopping dead in front of it.

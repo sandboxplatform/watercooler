@@ -16,6 +16,7 @@ import type { Facing } from "../presence-types";
 import { campusRoomSlug, floorRoomSlug, WORLD_ROOM_SLUG } from "../rooms";
 import {
   BUILDINGS,
+  TOWN_TOP,
   WORLD_SPAWN,
   WORLD_WIDTH,
   TILE as WORLD_TILE,
@@ -39,6 +40,7 @@ import { TILE, WIDTH as LOBBY_COLS } from "../map/office";
 import { opsSupportPost } from "../map/floor";
 import { standingSpot } from "./desks";
 import { CAMPUSES } from "./campus";
+import { WOOD_WANDER_SPOTS } from "./wood";
 
 export interface Resident {
   /** Stable id; also the second half of their office's URL segment. */
@@ -413,17 +415,19 @@ export const WORLD_WANDER_SPOTS: readonly { x: number; y: number }[] = [
   { x: 2064, y: onRoad(NORTH_ROAD) },
   { x: 2880, y: onRoad(NORTH_ROAD) },
   // Half way down the outer avenues, between the two promenades.
-  { x: onAvenue(WEST_AVENUE), y: 1152 },
-  { x: onAvenue(EAST_AVENUE), y: 1152 },
+  { x: onAvenue(WEST_AVENUE), y: TOWN_TOP + 1152 },
+  { x: onAvenue(EAST_AVENUE), y: TOWN_TOP + 1152 },
   // The car park by the campus, in front of the vans.
-  { x: 2760, y: 1080 },
+  { x: 2760, y: TOWN_TOP + 1080 },
   // The south promenade.
   { x: onAvenue(WEST_AVENUE), y: onRoad(SOUTH_ROAD) },
   { x: onAvenue(CENTRE_AVENUE), y: onRoad(SOUTH_ROAD) },
   { x: onAvenue(EAST_AVENUE), y: onRoad(SOUTH_ROAD) },
   // The shore end of the dock — near the water, and well short of the
   // gangway, so a wanderer never boards the ferry.
-  { x: onAvenue(CENTRE_AVENUE), y: 1560 },
+  { x: onAvenue(CENTRE_AVENUE), y: TOWN_TOP + 1560 },
+  // And up in the wood, on the trails and the footbridge.
+  ...WOOD_WANDER_SPOTS,
 ];
 
 export const WANDER_AREAS: Record<Exclude<Area, "world">, Rect> = {
