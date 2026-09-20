@@ -54,7 +54,7 @@ export interface EggKind {
  * pulled apart a little further: the point of a ladder is that the last
  * step is worth telling somebody about. The weights total two thousand, so
  * a share reads straight off — a rainbow is forty of them, which is one
- * egg in fifty and one cluck in a thousand.
+ * egg in fifty and, at `EGG_CHANCE`, one cluck in five thousand.
  */
 export const EGG_KINDS: readonly EggKind[] = [
   {
@@ -157,14 +157,21 @@ export function tierFromRoll(roll: number): EggTier {
 }
 
 /**
- * How often a fright leaves an egg behind: one cluck in twenty.
+ * How often a fright leaves an egg behind: one cluck in a hundred.
+ *
+ * **Odds, not a count.** It is drawn afresh on every cluck
+ * (`this.random() >= EGG_CHANCE` in `lib/server/residents.ts`) and
+ * nothing anywhere counts clucks — so a hundred of them may pass with
+ * nothing to show, and two eggs in a row is a thing that happens. An egg
+ * on every hundredth fright would be a rhythm somebody could learn, and
+ * then walking up to Michael would be a chore with a payout at the end of
+ * it rather than a chance.
  *
  * A fact about the world rather than about the simulation, so the one
- * number is here beside the ladder it feeds. It is rolled in
- * `lib/server/residents.ts`, where the fright is, because that is where
- * the seeded randomness lives.
+ * number is here beside the ladder it feeds. It is rolled where the
+ * fright is, because that is where the seeded randomness lives.
  */
-export const EGG_CHANCE = 1 / 20;
+export const EGG_CHANCE = 1 / 100;
 
 /**
  * How close you have to be standing to pick one up.

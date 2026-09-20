@@ -266,8 +266,10 @@ centre spot.
 ### Michael's eggs
 
 Michael is a chicken in a necktie who wanders the world map, and if you walk
-up to him he clucks and bolts. Now and then — one cluck in twenty — the
-fright leaves an **egg** in the grass where he was standing.
+up to him he clucks and bolts. Rarely — one cluck in a hundred — the
+fright leaves an **egg** in the grass where he was standing. It is a
+chance rather than a countdown: there is nothing to work through, so an
+egg is something you come across rather than something you earn.
 
 It stays where it fell for ten minutes, and it belongs to whoever gets there
 first: walk up and press E. There are six kinds, and which one you have got
@@ -282,8 +284,8 @@ is luck rather than skill:
 | Gilded Egg   | one in 22    |
 | Rainbow Egg  | one in 50    |
 
-A rainbow is one cluck in a thousand, so there may only ever be a couple in
-a world. Anything better than a speckled one is called out over the grass
+A rainbow is one cluck in five thousand, so there may only ever be one in a
+world, if that. Anything better than a speckled one is called out over the grass
 for everyone on the map to see.
 
 Your basket is the **Eggs** tab in the column, and it shows on your profile

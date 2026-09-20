@@ -1748,10 +1748,19 @@ empty court until somebody touched it.
 
 ### The eggs
 
-Startle Michael and one cluck in twenty — `EGG_CHANCE` — he leaves an egg
-in the grass where he was standing before he bolts. Anybody out on the map
-can walk up to it and press E, and it goes in their basket, which hangs on
-their profile beside their badges and stays there.
+Startle Michael and one cluck in a hundred — `EGG_CHANCE` — he leaves an
+egg in the grass where he was standing before he bolts. Anybody out on the
+map can walk up to it and press E, and it goes in their basket, which hangs
+on their profile beside their badges and stays there.
+
+**Odds, not every hundredth cluck**, and the two are nothing alike to
+play: the draw is fresh on every fright and nothing anywhere counts them,
+so a hundred may pass with nothing to show and two may come one after the
+other. A counter would be a rhythm somebody could learn, and then walking
+up to Michael would be a chore with a payout at the end of it rather than
+a chance. `residents.test.ts` holds it to that from both ends — a roll
+that keeps paying out keeps paying out, which is what says there is no
+counter swallowing the other ninety-nine.
 
 **There is a ladder, and rarity is one number written once.** Six kinds
 (`EGG_KINDS` in `lib/world/eggs.ts`), each declaring a `weight`, and
@@ -1769,9 +1778,11 @@ is a second thing to be wrong the next time a weight moves.
 | Gilded Egg   | 90     | 1 in 22  |
 | Rainbow Egg  | 40     | 1 in 50  |
 
-So a rainbow is one cluck in a thousand, which is the world's rarity rather
-than an afternoon's goal — and The Whole Clutch, the badge for one of every
-kind, is the long one in the catalogue on purpose.
+So a rainbow is one cluck in five thousand, which is the world's rarity
+rather than anybody's goal — and The Whole Clutch, the badge for one of
+every kind, is the long one in the catalogue on purpose. Both numbers are
+meant to be read as "there may be one of these in this world", not as
+something to sit down and work through.
 
 Three files, and the split is the basketball's exactly:
 

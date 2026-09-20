@@ -35,8 +35,8 @@ export const EGG_SPOILS_MS = 10 * 60_000;
 /**
  * How many may lie about at once.
  *
- * A ceiling rather than a rule anybody feels: at one egg in twenty clucks
- * it takes a determined crowd to reach it. When it is reached the oldest
+ * A ceiling rather than a rule anybody feels: at one egg in a hundred
+ * clucks nothing short of a siege reaches it. When it is reached the oldest
  * goes, not the newest — the one somebody has walked past twice already is
  * the one least likely to be collected, and refusing to lay a new one
  * instead would silently switch the whole feature off for as long as the

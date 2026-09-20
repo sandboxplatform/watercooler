@@ -67,9 +67,15 @@ describe("the ladder", () => {
     expect(eggKind("golden")).toBeUndefined();
   });
 
+  /**
+   * Deliberately rare, and a bound rather than the number itself: what
+   * has to hold is that an egg is a thing that happens now and then to
+   * somebody who was not waiting for one. A chance loose enough to farm
+   * turns walking up to Michael into a chore with a payout at the end.
+   */
   it("leaves a fright worth waiting for, and not one worth farming", () => {
     expect(EGG_CHANCE).toBeGreaterThan(0);
-    expect(EGG_CHANCE).toBeLessThan(0.25);
+    expect(EGG_CHANCE).toBeLessThanOrEqual(0.01);
   });
 });
 

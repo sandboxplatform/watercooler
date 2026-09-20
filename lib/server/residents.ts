@@ -521,7 +521,11 @@ export class ResidentSimulation {
   }
 
   /**
-   * The one thing a fright leaves behind, one time in twenty.
+   * The one thing a fright leaves behind, one time in a hundred.
+   *
+   * Odds rather than a count: the draw below is fresh on every cluck and
+   * nothing counts them, so a hundred frights may pass with nothing to
+   * show and two eggs may come one after the other.
    *
    * Rolled here rather than by whoever is told about it, because this is
    * where the seeded randomness is: `residents.test.ts` drives the

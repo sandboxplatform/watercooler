@@ -1100,6 +1100,63 @@ describe("the egg a fright leaves behind", () => {
   });
 
   /**
+   * **Odds, not every hundredth cluck.**
+   *
+   * The two read the same in a sentence and are nothing alike to play:
+   * a counter is a rhythm somebody can learn, and then walking up to
+   * Michael is a chore with a payout at the end of it. The draw is fresh
+   * every time and nothing anywhere counts clucks, so a roll that keeps
+   * paying out keeps paying out — which is also what says there is no
+   * counter quietly swallowing the other ninety-nine.
+   */
+  it("rolls afresh every cluck rather than counting them", () => {
+    let clock = 0;
+    setRoomBroadcast(() => {});
+    const { sim, hub, laid } = outside(
+      () => clock,
+      () => EGG_CHANCE / 2,
+    );
+    // Five separate arrivals: away past the wider radius, wait out the
+    // quiet period, and walk up again — which is one cluck each.
+    for (let visit = 0; visit < 5; visit++) {
+      walkUp(hub, whereIsHe(sim));
+      clock += 120;
+      sim.tick(clock);
+      hub.leave("visitor");
+      const until = clock + GREET_QUIET_MS + 120;
+      while (clock < until) {
+        clock += 120;
+        sim.tick(clock);
+      }
+    }
+    expect(laid).toHaveLength(5);
+    setRoomBroadcast(null);
+  });
+
+  /** And the other way round: a roll that never pays out never does. */
+  it("leaves nothing at all over a long run of frights that miss", () => {
+    let clock = 0;
+    setRoomBroadcast(() => {});
+    const { sim, hub, laid } = outside(
+      () => clock,
+      () => EGG_CHANCE,
+    );
+    for (let visit = 0; visit < 5; visit++) {
+      walkUp(hub, whereIsHe(sim));
+      clock += 120;
+      sim.tick(clock);
+      hub.leave("visitor");
+      const until = clock + GREET_QUIET_MS + 120;
+      while (clock < until) {
+        clock += 120;
+        sim.tick(clock);
+      }
+    }
+    expect(laid).toEqual([]);
+    setRoomBroadcast(null);
+  });
+
+  /**
    * It is a mode, not a check for a chicken — and it is the only mode in
    * the cast that has it, which is worth saying out loud: a second resident
    * given `lays` starts leaving eggs with no other change anywhere.
