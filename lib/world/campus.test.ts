@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { CAMPUSES, campusMatchesTenants, campusSpawnFor } from "./campus";
-import { allReachable, groundGrid, propBody, signBody, tilesOf, waterBodies } from "./scenery";
+import {
+  PROPS,
+  allReachable,
+  groundGrid,
+  propBody,
+  signBody,
+  tilesOf,
+  waterBodies,
+  type PropSpec,
+} from "./scenery";
+import { yardArea } from "./residents";
 import { BOAT, TILE, hasCampus, ORGANISATIONS } from "./tenants";
 
 const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
@@ -32,6 +42,16 @@ describe("campuses", () => {
         ...waterBodies(grid),
       ];
 
+      /** What a prop actually covers, feet at the bottom centre. A board is one too. */
+      const picture = (kind: keyof typeof PROPS, x: number, y: number) => {
+        const { width, height } = PROPS[kind] as PropSpec;
+        return { x: x - width / 2, y: y - height, width, height };
+      };
+      const pictures = [
+        ...campus.props.map((p) => picture(p.kind, p.x, p.y)),
+        ...(campus.signs ?? []).map((s) => picture("board", s.x, s.y)),
+      ];
+
       it("has one little building per lobby, apart from the warehouse behind the store", () => {
         expect(campusMatchesTenants(campus)).toBe(true);
       });
@@ -58,6 +78,41 @@ describe("campuses", () => {
         if (!campus.dock)
           expect(grid[campus.rows - 1][Math.floor(campus.columns / 2)]).not.toBe("grass");
       });
+
+      /**
+       * A prop is drawn above its own feet, so one standing at the edge of a
+       * path is drawn across it and whoever walks there disappears behind it —
+       * the rule the wood's trails are planted by. On a campus the paving is
+       * all thoroughfare, which is what leaves no room for anything as tall as
+       * a tree: the widest run of grass here is a tile deep.
+       */
+      it("hangs nothing over the paving anybody has to walk on", () => {
+        const paving = campus.paved.map((r) => ({
+          x: r.x * TILE,
+          y: r.y * TILE,
+          width: r.width * TILE,
+          height: r.height * TILE,
+        }));
+        for (const pic of pictures)
+          for (const p of paving) expect(overlaps(pic, p), JSON.stringify(pic)).toBe(false);
+      });
+
+      it("stands nothing in a wall", () => {
+        for (const b of campus.buildings)
+          for (const s of [...campus.props.map(propBody), ...(campus.signs ?? []).map(signBody)])
+            if (s) expect(overlaps(s, b.solid), JSON.stringify(s)).toBe(false);
+      });
+
+      /**
+       * Nothing collides a resident, so the bounds are the only thing keeping
+       * a wanderer out of the furniture: a bench inside them is a bench Mark
+       * is drawn straight through.
+       */
+      const yard = yardArea(campus.slug);
+      if (yard.width > 0)
+        it("leaves the yard a wanderer paces clear of furniture", () => {
+          for (const pic of pictures) expect(overlaps(pic, yard), JSON.stringify(pic)).toBe(false);
+        });
 
       it("lets you walk from the gate to every door, and back out", () => {
         const doors = campus.buildings.map((b) => ({

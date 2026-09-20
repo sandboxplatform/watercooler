@@ -112,6 +112,7 @@ function layout(
   rows: number,
   placements: Placement[],
   props: PlacedProp[],
+  signs: Sign[] = [],
   yardTop = 7,
 ): Campus {
   const buildings = placements.map((p) => building(p));
@@ -142,6 +143,7 @@ function layout(
     buildings,
     paved,
     props,
+    signs,
     // The road is drawn down the middle, but the whole bottom edge is the
     // way out: this is a menu, and walking off it should always work.
     exit: { x: 0, y: (rows - 1) * TILE, width: columns * TILE, height: TILE },
@@ -219,7 +221,36 @@ export const CAMPUSES: Record<string, Campus> = {
       { tenant: "homestar-store", tx: 1, ty: 11, side: "right", art: "site-store-2x" },
       { tenant: "homestar-field-crew", tx: 13, ty: 11, side: "left", art: "site-garage-2x" },
     ],
-    [],
+    // Everything stands on the grass, and it has to: the paving is all
+    // thoroughfare. The road and the two mats are the only ways to a door,
+    // and the yard is the bounds a wanderer walks (`yardArea`) — nothing
+    // collides a resident, so a bench on the yard is a bench Mark walks
+    // through. That leaves the three strips of grass the buildings do not
+    // take, and each gets what fits in it.
+    [
+      // Row 10, between the yard and the lower court: a tile deep, which is
+      // exactly a bench or a planter and two and a half tiles short of a
+      // tree. A canopy here would hang over the yard, and the yard is walked.
+      { kind: "planter", x: 56, y: 528 },
+      { kind: "bench", x: 192, y: 528 },
+      { kind: "planter", x: 344, y: 528 },
+      { kind: "planter", x: 616, y: 528 },
+      { kind: "bench", x: 768, y: 528 },
+      { kind: "planter", x: 904, y: 528 },
+      // The alleys either side of the road, clear of the mats at row 14: a
+      // lamp is 32 wide, which is the one thing a one-tile alley holds.
+      ...lamps([360, 600], 624),
+      ...lamps([360, 600], 816),
+      // And the yard's two ends, in the edge columns rather than on it.
+      ...lamps([24, 936], 480),
+      // And the gate itself, a planter either side of the way in.
+      { kind: "planter", x: 344, y: 856 },
+      { kind: "planter", x: 616, y: 856 },
+    ],
+    // The board at the gate, on the right as you walk in. It greets rather
+    // than names: the place label at the top of the screen already says
+    // Homestar, and a board repeating it would be the same word twice.
+    [{ text: "WELCOME TO\nHOMESTAR", x: 720, y: 856 }],
     7,
   ),
   "apeiron-media": island(),
