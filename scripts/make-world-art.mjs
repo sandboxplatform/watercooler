@@ -436,7 +436,7 @@ function pond() {
 }
 
 // ── Props: one sheet, each prop in a named rectangle ──
-const props = canvas(1536, 128);
+const props = canvas(1792, 128);
 const frames = {};
 let cursor = 0;
 function slot(name, w, h, draw) {
@@ -450,6 +450,10 @@ function slot(name, w, h, draw) {
     ellipse: (a, b, rx, ry, e) => props.ellipse(x0 + a, b, rx, ry, e),
   });
   cursor += w + 8;
+  // `set` clips what falls off the canvas without a word, so a prop added
+  // past the right-hand edge would come out as an empty frame and nothing
+  // would say why. Widen the sheet: nothing measures it but this.
+  if (cursor > props.w) throw new Error(`props sheet full at "${name}": widen it`);
 }
 slot("tree", 96, 120, (set, d) => {
   d.ellipse(48, 112, 30, 8, P.shadow);
@@ -602,6 +606,105 @@ slot("cabin", 64, 72, (set, d) => {
   d.outline(44, 8, 52, 24);
   d.disc(49, 5, 3, P.slabLit);
   d.disc(54, 2, 2, P.slabLit);
+});
+/**
+ * A boulder in the shallows at the foot of the shoulder beach, with a cross
+ * daubed on it — see `WOOD_BOULDER` in lib/world/wood.ts, which stands it
+ * in the river a step off the shingle's western corner.
+ *
+ * **It is the same stone as the beach it stands beside.** The four
+ * `stone*` tones are the shingle's own pebble ramp, because a rock in this
+ * river and the stones washed up at its foot are the same rock broken up;
+ * drawn out of the lilac-grey furniture stone it read as masonry somebody
+ * had dropped in the water.
+ *
+ * **Four lumps rather than one ellipse.** A boulder drawn as a single dome
+ * is a bush with no leaves on it, and at forty rows there is no shading
+ * that rescues a symmetrical outline. The union is cut off flat at the
+ * waterline, since what is below that is river.
+ *
+ * **The cross is paint and is drawn as paint**: a stroke three pixels
+ * thick with bits worn off it and two tones through it, kept out of the wet
+ * band at the foot because paint does not survive down there. Printed
+ * cleanly it reads as a sign rather than as something somebody daubed on a
+ * rock, which is the whole of what it is for.
+ */
+slot("boulder", 64, 56, (set, d) => {
+  const WATERLINE = 49;
+  // A wide slab at the water and a mass narrowing over it: broad where it
+  // goes in, so it reads as a rock standing in the river rather than one
+  // floating on it.
+  const LUMPS = [
+    [32, 44, 27, 13],
+    [31, 31, 22, 17],
+    [16, 33, 11, 12],
+    [48, 34, 12, 12],
+    [27, 20, 13, 10],
+  ];
+  const rock = (x, y) =>
+    y <= WATERLINE &&
+    LUMPS.some(([cx, cy, rx, ry]) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1);
+  const inside = (x, y) =>
+    rock(x, y) && rock(x - 1, y) && rock(x + 1, y) && rock(x, y - 1) && rock(x, y + 1);
+  // Its shadow on the surface, under everything else.
+  d.ellipse(32, WATERLINE + 1, 27, 5, P.shadow);
+  for (let y = 0; y <= WATERLINE; y++)
+    for (let x = 0; x < 64; x++) {
+      if (!rock(x, y)) continue;
+      // Outlined everywhere but along the waterline: ink there reads as a
+      // rock cut off rather than as one going into water, and the wet band
+      // above it does that job instead.
+      if (!inside(x, y) && !(y === WATERLINE && rock(x - 1, y) && rock(x + 1, y))) {
+        set(x, y, P.ink);
+        continue;
+      }
+      if (WATERLINE - y <= 3) {
+        set(x, y, P.stoneDeep);
+        continue;
+      }
+      // Lit from a point off the top left, as a distance rather than as
+      // bands: a boulder shaded by rows comes out striped, and stripes
+      // across a rock read as strata nobody drew.
+      const lit = Math.hypot(x - 16, y - 8);
+      const tone = lit < 27 ? P.stonePale : lit < 45 ? P.stoneMid : P.stoneDim;
+      set(x, y, hash(x + 31, y + 5) < 0.06 ? P.stoneDim : tone);
+    }
+  // The cross: two bands four pixels across, measured **across** the
+  // stroke rather than stepped along it. Stepping a diagonal by whole
+  // pixels either side leaves the run of it a pixel and a half apart, and
+  // what comes out is two rails with daylight down the middle rather than
+  // one stroke. Worn at the edges only, so it is old paint and not dotted
+  // paint, and kept out of the wet band at the foot, where none would last.
+  const ARM = 16;
+  const HALF = 3.1;
+  for (let y = 0; y <= WATERLINE; y++)
+    for (let x = 0; x < 64; x++) {
+      const u = (x - 31 + (y - 29)) / Math.SQRT2;
+      const v = (x - 31 - (y - 29)) / Math.SQRT2;
+      const across = Math.min(Math.abs(u), Math.abs(v));
+      const along = Math.max(Math.abs(u), Math.abs(v));
+      if (across > HALF || along > ARM) continue;
+      if (!inside(x, y) || y > WATERLINE - 7) continue;
+      // The rim of a stroke is where a daub thins out and where the weather
+      // gets at it: darker, and half of it gone.
+      const rim = across > HALF - 1.2 || along > ARM - 1.5;
+      if (rim ? hash(x + 19, y + 7) < 0.45 : hash(x + 43, y + 3) < 0.05) continue;
+      set(x, y, rim ? P.woodDark : P.red);
+    }
+  // The river lapping at its foot: dashes along the waterline and a little
+  // way out on the water, rather than a ring — a closed ripple round
+  // something that never moves reads as a splash it never made.
+  const lap = (rx, ry, seed) => {
+    for (let a = 0; a < 360; a += 2) {
+      const r = (a * Math.PI) / 180;
+      const x = Math.round(32 + rx * Math.cos(r));
+      const y = Math.round(WATERLINE + ry * Math.sin(r));
+      if (y < WATERLINE - 1 || hash(x + seed, y + seed) < 0.45) continue;
+      set(x, y, P.waterLit);
+    }
+  };
+  lap(29, 5, 41);
+  lap(23, 3, 13);
 });
 slot("signpost", 48, 96, (set, d) => {
   d.ellipse(24, 92, 8, 3, P.shadow);

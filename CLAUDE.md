@@ -2218,6 +2218,32 @@ tiles off it, or the wood would grow a canopy over it — outdoors everything
 sorts by the bottom of its own picture, so a tree a foot in front is a tree
 drawn across the front of it.
 
+**And a boulder standing in the river**, off the western corner of the
+shoulder beach — `WOOD_BOULDER`, with a red cross daubed across it. Both
+of its numbers come off `WOOD_BEACHES[0]`, which comes off the water, for
+the reason the cabin's row does: the shoulder is made by a bend, so a rock
+pinned to a row is a rock on dry land the next time the bend moves. The row
+is the one below the shingle — a beach is a shelf, so the water's edge along
+its foot is straight — and the column is the one west of it, where there is
+water to stand in.
+
+It is the cabin's argument at one tile: **a thing across the water with a
+mark on it and no way of getting to it**, so the mark is all there ever is.
+There is nothing under it and nothing to press at, and `wood.test.ts`
+asserts `allReachable` cannot reach it, which is what would fail the day
+somebody plants a crossing beside it. Its footprint buys nothing where it
+stands, since the tile is water and water is already solid; it is there so
+that a rock is a rock on that day.
+
+The picture is a `slot` in `make-world-art.mjs` like every other prop, and
+two things in it were the work. It is drawn in the **shingle's own pebble
+ramp** rather than the lilac-grey furniture stone, because a rock in this
+river and the stones washed up at its foot are the same rock broken up.
+And the cross is measured **across** the stroke rather than stepped along
+it: stepping a diagonal a whole pixel either side leaves the run of it a
+pixel and a half apart, and what comes out is two rails with daylight down
+the middle instead of one stroke.
+
 **The trails are their own ground**, `trail` — trodden earth, generated like
 the rest of the tiles — for the reason the court and the car park have
 theirs: what is underfoot is a fact about the map, and a slabbed pavement

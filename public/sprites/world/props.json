@@ -48,74 +48,80 @@
     "width": 64,
     "height": 72
   },
-  "signpost": {
+  "boulder": {
     "x": 768,
+    "y": 0,
+    "width": 64,
+    "height": 56
+  },
+  "signpost": {
+    "x": 840,
     "y": 0,
     "width": 48,
     "height": 96
   },
   "sheep": {
-    "x": 824,
+    "x": 896,
     "y": 0,
     "width": 48,
     "height": 40
   },
   "board": {
-    "x": 880,
+    "x": 952,
     "y": 0,
     "width": 144,
     "height": 88
   },
   "hoopWest": {
-    "x": 1032,
+    "x": 1104,
     "y": 0,
     "width": 112,
     "height": 128
   },
   "hoopEast": {
-    "x": 1152,
+    "x": 1224,
     "y": 0,
     "width": 112,
     "height": 128
   },
   "ball": {
-    "x": 1272,
+    "x": 1344,
     "y": 0,
     "width": 20,
     "height": 20
   },
   "egg-plain": {
-    "x": 1300,
-    "y": 0,
-    "width": 16,
-    "height": 28
-  },
-  "egg-speckled": {
-    "x": 1324,
-    "y": 0,
-    "width": 16,
-    "height": 28
-  },
-  "egg-copper": {
-    "x": 1348,
-    "y": 0,
-    "width": 16,
-    "height": 28
-  },
-  "egg-jade": {
     "x": 1372,
     "y": 0,
     "width": 16,
     "height": 28
   },
-  "egg-gilded": {
+  "egg-speckled": {
     "x": 1396,
     "y": 0,
     "width": 16,
     "height": 28
   },
-  "egg-rainbow": {
+  "egg-copper": {
     "x": 1420,
+    "y": 0,
+    "width": 16,
+    "height": 28
+  },
+  "egg-jade": {
+    "x": 1444,
+    "y": 0,
+    "width": 16,
+    "height": 28
+  },
+  "egg-gilded": {
+    "x": 1468,
+    "y": 0,
+    "width": 16,
+    "height": 28
+  },
+  "egg-rainbow": {
+    "x": 1492,
     "y": 0,
     "width": 16,
     "height": 28

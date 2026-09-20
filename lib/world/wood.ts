@@ -394,6 +394,29 @@ export const WOOD_BEACHES: readonly Rect[] = BEACHES.map(({ from, to }) => {
 });
 
 /**
+ * The boulder in the shallows at the foot of the shoulder beach, in world
+ * pixels: feet at the bottom of the tile it stands in.
+ *
+ * **It is standing in the river**, a step off the beach's western corner,
+ * and that is the whole of what makes it worth looking at: the walk is on
+ * the near bank, so this is a thing across the water with a cross daubed on
+ * it and no way of getting to it. It is the cabin's argument at one tile —
+ * see `WOOD_CABIN`, and `PROPS.boulder` in `scenery.ts` for the picture.
+ *
+ * **Both numbers come off the beach**, which comes off the water, for the
+ * reason everything else along this bank does: the shoulder is made by a
+ * bend, so a rock pinned to a row is a rock standing on dry land the next
+ * time the bend moves. The row is the one below the shingle, which is the
+ * water's edge along its foot — a beach is a shelf, so that edge is straight
+ * — and the column is the one west of it, where there is water to stand in
+ * rather than stones to stand on.
+ */
+export const WOOD_BOULDER = (() => {
+  const beach = WOOD_BEACHES[0];
+  return { x: (beach.x - 0.5) * TILE, y: (beach.y + beach.height + 1) * TILE };
+})();
+
+/**
  * Which column the cabin stands on: the tip of the tongue of wood the first
  * valley leaves, where the far bank reaches furthest south.
  *

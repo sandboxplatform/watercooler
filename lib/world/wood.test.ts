@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   RIVER,
   WOOD_BEACHES,
+  WOOD_BOULDER,
   WOOD_CABIN,
   WOOD_TRAILS,
   WOOD_WANDER_SPOTS,
@@ -253,6 +254,63 @@ describe("the cabin on the far bank", () => {
         `${prop.kind} at ${prop.x},${prop.y} over the cabin`,
       ).toBe(false);
     }
+  });
+});
+
+describe("the boulder in the river", () => {
+  const boulder = { kind: "boulder", ...WOOD_BOULDER } as const;
+  const tile = { x: Math.floor(WOOD_BOULDER.x / TILE), y: WOOD_BOULDER.y / TILE - 1 };
+
+  /**
+   * In the water, which is the one thing about it: a rock with a cross on
+   * it standing on the bank is a rock somebody could have walked up to and
+   * did not. Both of its numbers come off the shoulder beach, so this is
+   * the assertion that keeps it wet when a bend moves the beach.
+   */
+  it("stands in the river, at the foot of the shoulder beach", () => {
+    const wet = riverBed().some((r) => tile.x >= r.x && tile.x < r.x + r.width && tile.y === r.y);
+    expect(wet, `(${tile.x}, ${tile.y}) is not river`).toBe(true);
+    const beach = WOOD_BEACHES[0];
+    expect(tile.y).toBe(beach.y + beach.height);
+    expect(tile.x).toBe(beach.x - 1);
+  });
+
+  /** Off the corner of the shingle, not under it. */
+  it("stands beside the shingle rather than on it", () => {
+    for (const beach of WOOD_BEACHES) {
+      const on =
+        tile.x >= beach.x &&
+        tile.x < beach.x + beach.width &&
+        tile.y >= beach.y &&
+        tile.y < beach.y + beach.height;
+      expect(on).toBe(false);
+    }
+  });
+
+  /** Nothing crosses the water, so nobody reaches it either. */
+  it("is across the water, so nobody can walk to it", () => {
+    const map = { width: WORLD_WIDTH, height: WORLD_HEIGHT };
+    expect(
+      allReachable(map, worldSolids(), WORLD_SPAWN, [{ x: WOOD_BOULDER.x, y: WOOD_BOULDER.y }]),
+      "a rock in the river should have no way to it",
+    ).toBe(false);
+  });
+
+  /**
+   * Solid, and the footprint buys nothing where it stands — the tile is
+   * water and water is already solid. What this says is that it has not
+   * grown out of its own tile into one somebody walks on.
+   */
+  it("is solid, and nowhere near anything walkable", () => {
+    const body = propBody(boulder);
+    expect(body).not.toBeNull();
+    const river = riverBed().map(inPixels);
+    expect(river.some((r) => overlaps(body!, r))).toBe(true);
+    expect(
+      river.every(
+        (r) => !overlaps(body!, r) || (body!.x >= r.x && body!.x + body!.width <= r.x + r.width),
+      ),
+    ).toBe(true);
   });
 });
 

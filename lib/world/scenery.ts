@@ -29,7 +29,15 @@ import {
   type Rect,
 } from "./tenants";
 import { COURT, HOOPS, hoopProp } from "./basketball";
-import { WOOD_BEACHES, WOOD_CABIN, WOOD_PLANTING, WOOD_TRAILS, riverBanks, riverBed } from "./wood";
+import {
+  WOOD_BEACHES,
+  WOOD_BOULDER,
+  WOOD_CABIN,
+  WOOD_PLANTING,
+  WOOD_TRAILS,
+  riverBanks,
+  riverBed,
+} from "./wood";
 
 export type Ground =
   | "grass"
@@ -318,6 +326,13 @@ export const PROPS = {
   // the chimney stands off the top, neither of which is anything to bump
   // into.
   cabin: { width: 64, height: 72, footprint: { width: 48, height: 16 } },
+  // The boulder in the Gold River, off the corner of the shoulder beach —
+  // see `WOOD_BOULDER` in wood.ts. Solid like any other rock, and the
+  // footprint buys nothing at all here, because the tile it stands in is
+  // water and water is already solid: it is there so that a rock is a rock
+  // the day somebody plants a crossing beside it. The body is the slab at
+  // the waterline rather than the picture, which leans out over it.
+  boulder: { width: 64, height: 56, footprint: { width: 48, height: 12 } },
   // The two ends of the basketball court, mirrored. Only the pole is solid:
   // the board is over your head and the rim is out over the court, so
   // walling off the whole picture would take a tile and a half of the end
@@ -422,6 +437,9 @@ export const SCENERY: readonly PlacedProp[] = [
   ...WOOD_PROPS,
   // And the cabin on the far bank, which is placed rather than scattered.
   { kind: "cabin", ...WOOD_CABIN },
+  // The boulder standing in the river at the foot of the shoulder beach,
+  // likewise: a marked rock on the far side of water nothing crosses.
+  { kind: "boulder", ...WOOD_BOULDER },
   // Bushes along the shore, the whole way — except at the dock and the
   // ferry. Off `SHORE_ROW`, which is a world row, so not one of the town's.
   ...along(80, WORLD_WIDTH - 60, 220)
