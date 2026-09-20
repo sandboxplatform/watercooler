@@ -41,7 +41,7 @@ const SIGN_Y: Record<string, number> = {
   "world-office": 186,
   "world-supply": 92,
   "world-blocks": 169,
-  "world-campus": 173,
+  "world-campus": 199,
   "world-lab": 159,
 };
 /** A door zone target that starts a scene rather than loading a page. */

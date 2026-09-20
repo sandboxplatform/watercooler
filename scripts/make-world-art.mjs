@@ -1230,11 +1230,37 @@ function blocks() {
   return c;
 }
 
-/** The campus gate: a wide glass headquarters behind a gateway with flags. */
+/**
+/**
+ * The campus gate: three of the organisation's buildings standing back from
+ * the road, behind a low wall with a gateway through it.
+ *
+ * Two things about the ground here were wrong. The wall stopped at 232 with
+ * grass under it and the picture's own shadow band twenty pixels lower
+ * again — a fence hanging in the air — and the path through the gateway
+ * stopped with it, leaving the doorstep as a slab of paving on its own down
+ * at the bottom. Everything along the front now finishes at `BASE`, which is
+ * where every other building on the map meets the ground, and the path runs
+ * from the gate to the step.
+ *
+ * The buildings are meant to stand further back than the wall and do — in
+ * this projection further back is higher up. What made them read as cut-outs
+ * propped on the grass is that they had no shadow at their own feet, which
+ * is a different fix from moving them, so they each get one.
+ */
 function campus() {
   const CW = 384;
   const c = canvas(CW, H);
+  /** Where the front of the picture meets the ground, as on every building. */
+  const BASE = 258;
   c.rect(0, 252, CW, 268, P.shadow);
+  // A shadow at each building's own feet, out on the lawn behind the wall.
+  for (const [x0, x1] of [
+    [20, 124],
+    [146, 238],
+    [260, 364],
+  ])
+    c.rect(x0, 170, x1, 184, P.shadow);
   // three buildings behind the wall, each its own kind
   const wallA = [94, 127, 163, 255];
   c.rect(24, 60, 120, 176, wallA);
@@ -1263,8 +1289,8 @@ function campus() {
     c.rect(wx, 60, wx + 22, 96, P.ink);
     c.rect(wx + 3, 63, wx + 19, 93, P.glass);
   }
-  c.rect(160, 120, 224, 136, P.yellow);
-  c.outline(159, 119, 225, 137);
+  // No band on the tower: the name hangs on the gateway's lintel, and a
+  // second one up here was a blank yellow rectangle that read as a fault.
   c.outline(150, 40, 234, 177);
   c.rect(264, 76, 360, 176, P.steelDark);
   for (let x = 266; x < 360; x += 6) c.rect(x, 80, x + 3, 176, P.steel);
@@ -1274,43 +1300,61 @@ function campus() {
   c.rect(288, 120, 336, 176, P.ink);
   c.rect(291, 123, 333, 176, [64, 52, 46, 255]);
   c.outline(264, 76, 360, 177);
-  // trees between them
+  // trees between them, on the lawn, each with its own shadow
   for (const [tx, ty] of [
     [136, 150],
     [250, 140],
     [372, 160],
     [12, 150],
   ]) {
+    c.ellipse(tx, ty + 24, 11, 3, P.shadow);
     c.disc(tx, ty, 14, P.ink);
     c.disc(tx, ty, 12, P.leafDark);
     c.disc(tx - 3, ty - 3, 7, P.leaf);
     c.rect(tx - 2, ty + 10, tx + 2, ty + 24, P.woodDark);
   }
-  // a low wall along the front, with a gateway and lamps
+  // The low wall along the front, with a gateway and lamps. Its base is the
+  // ground line, not two tiles above it.
   for (const [x0, x1] of [
     [0, 150],
     [234, CW],
   ]) {
-    c.rect(x0, 200, x1, 232, P.stone);
-    c.rect(x0, 200, x1, 206, P.slabLit);
-    c.rect(x0, 226, x1, 232, P.stoneDark);
-    c.outline(x0, 199, x1, 233);
+    c.rect(x0, 226, x1, BASE, P.stone);
+    c.rect(x0, 226, x1, 232, P.slabLit);
+    c.rect(x0, 252, x1, BASE, P.stoneDark);
+    c.outline(x0, 225, x1, BASE + 1);
   }
+  // A pier at each end, so the wall finishes rather than being severed by
+  // the edge of the picture.
+  for (const px of [0, 370]) {
+    c.rect(px, 216, px + 14, BASE, P.stoneDark);
+    c.rect(px, 216, px + 14, 220, P.stone);
+    c.outline(px, 216, px + 14, BASE + 1);
+  }
+  // The two posts, in the bluer stone so they read against the wall rather
+  // than merging into it, and standing a good deal proud of it.
   for (const px of [140, 232]) {
-    c.rect(px, 184, px + 12, 240, P.stone);
-    c.rect(px, 184, px + 12, 188, P.slabLit);
-    c.outline(px, 184, px + 12, 241);
-    c.rect(px + 2, 174, px + 10, 184, P.yellow);
-    c.outline(px + 1, 173, px + 11, 185);
+    c.rect(px, 170, px + 12, BASE, P.stoneDark);
+    c.rect(px, 170, px + 12, 174, P.stone);
+    c.outline(px, 170, px + 12, BASE + 1);
   }
-  c.rect(130, 160, 254, 176, P.yellow);
-  c.rect(130, 160, 254, 163, P.slabLit);
-  c.outline(129, 159, 255, 177);
-  c.rect(152, 176, 232, 232, P.slab);
-  for (let y = 182; y < 232; y += 12) c.rect(152, y, 232, y + 1, P.grout);
-  c.rect(144, 258, 240, 266, P.slab);
-  c.rect(144, 258, 240, 260, P.slabLit);
-  c.outline(144, 257, 240, 267);
+  c.rect(130, 186, 254, 202, P.yellow);
+  c.rect(130, 186, 254, 189, P.slabLit);
+  c.outline(129, 185, 255, 203);
+  // A lamp on each post top, which is why the posts run past the beam
+  // rather than stopping under it: the name is lettered over the beam at
+  // run time, on a plate of its own wider than the beam is, so anything
+  // level with it is a thing nobody ever sees.
+  for (const px of [140, 232]) {
+    c.rect(px + 2, 160, px + 10, 170, P.yellow);
+    c.outline(px + 1, 159, px + 11, 171);
+  }
+  // The path through the gate, which reaches the doorstep.
+  c.rect(152, 202, 232, BASE, P.slab);
+  for (let y = 208; y < BASE; y += 12) c.rect(152, y, 232, y + 1, P.grout);
+  c.rect(144, BASE, 240, 266, P.slab);
+  c.rect(144, BASE, 240, 260, P.slabLit);
+  c.outline(144, BASE - 1, 240, 267);
   return c;
 }
 
