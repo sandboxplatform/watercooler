@@ -211,10 +211,19 @@ export class PresenceHub {
    *
    * The nearest rather than the first, because a chicken with two people
    * around him should put the near one behind him.
+   *
+   * Their connection comes back with the point, because two things want
+   * this answer and they want different halves of it: the bolt wants
+   * somewhere to run away from, and the egg a fright may leave behind is
+   * credited to whoever caused the fright. One scan of the room for both,
+   * since it is the same person.
    */
-  nearestPerson(at: { x: number; y: number }, range: number): { x: number; y: number } | null {
+  nearestPerson(
+    at: { x: number; y: number },
+    range: number,
+  ): { id: string; x: number; y: number } | null {
     let best = range * range;
-    let found: { x: number; y: number } | null = null;
+    let found: { id: string; x: number; y: number } | null = null;
     for (const player of this.players.values()) {
       if (player.resident || player.hidden) continue;
       const dx = player.x - at.x;
@@ -222,7 +231,7 @@ export class PresenceHub {
       const d2 = dx * dx + dy * dy;
       if (d2 > best) continue;
       best = d2;
-      found = { x: player.x, y: player.y };
+      found = { id: player.id, x: player.x, y: player.y };
     }
     return found;
   }

@@ -192,6 +192,21 @@ export interface BasketballMessage {
   power?: number;
 }
 
+/**
+ * Bending down for an egg.
+ *
+ * It says nothing but that: which egg is whichever one is nearest, and
+ * whether there is one within reach at all is the server's to answer off
+ * the room's own record of where this person is standing. A message that
+ * named an egg would be a message that could name one on the other side
+ * of the map, and the tier — the whole point of an egg — would be a thing
+ * a browser had a say in.
+ */
+export interface EggMessage {
+  type: "egg";
+  action: "take";
+}
+
 /** A move in a game of ping pong, on its way to the other player. */
 export interface PongRelayMessage {
   type: "pong";
@@ -271,6 +286,7 @@ export type ClientMessage =
   | MicMessage
   | BoardedMessage
   | BasketballMessage
+  | EggMessage
   | MeetingMessage;
 
 // ── Server → client ────────────────────────────────────
@@ -392,6 +408,51 @@ export interface BasketballBroadcast {
   scored?: { side: "west" | "east"; by: string };
 }
 
+/**
+ * What is lying in the grass on the world map.
+ *
+ * The whole field every time rather than one egg appearing and another
+ * going, for the reason `online` and `meetings` are whole lists: it is
+ * sent on every change and to everybody arriving, so a browser that
+ * missed a message is not left drawing an egg somebody pocketed ten
+ * minutes ago. It is a short list — `NEST_LIMIT` at the very most — and
+ * it changes a handful of times an hour, which is nothing beside the
+ * ball's twenty a second.
+ *
+ * `taken` is the moment: what somebody just picked up, what they are
+ * called and the patch of grass they picked it up off, so every screen on
+ * the map marks the same find in the same place. Which is the only part
+ * of this the people standing about actually watch for.
+ *
+ * The spot is on the message rather than worked out from the list,
+ * because by the time the list arrives the egg is out of it — and it is
+ * the egg's own spot rather than the finder's, so a screen that has never
+ * drawn that person still puts the words where the thing was.
+ */
+export interface EggsBroadcast {
+  type: "eggs";
+  eggs: import("./world/eggs").LaidEgg[];
+  taken?: { tier: import("./world/eggs").EggTier; by: string; x: number; y: number };
+}
+
+/**
+ * Somebody's basket gained an egg — to **everybody**, wherever they are.
+ *
+ * The same split the badges are under, and for the same reason: the field
+ * of eggs is a fact about one room and goes to that room, and what is in
+ * somebody's basket is a fact about a person, which the panel listing
+ * baskets lists the world of. A browser keeps its tally current off this
+ * rather than refetching, exactly as it does for a badge.
+ */
+export interface EggFoundMessage {
+  type: "egg-found";
+  /** The holder id: a persona's identity, or `guest:<name>`. */
+  person: string;
+  name: string;
+  tier: import("./world/eggs").EggTier;
+  at: string;
+}
+
 /** The same, arriving at the other end, stamped with who sent it. */
 export interface PongBroadcast {
   type: "pong";
@@ -481,6 +542,8 @@ export type ServerMessage =
   | VoiceBroadcast
   | OnlineMessage
   | BasketballBroadcast
+  | EggsBroadcast
+  | EggFoundMessage
   | MeetingsMessage;
 
 export function isClientMessage(value: unknown): value is ClientMessage {
@@ -496,6 +559,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     type === "mic" ||
     type === "boarded" ||
     type === "basketball" ||
+    type === "egg" ||
     type === "meeting"
   );
 }

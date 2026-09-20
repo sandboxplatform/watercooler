@@ -164,6 +164,7 @@ For that, configure sign-in (below) — it layers on top.
 - **Nothing reloads:** Front doors, campus gates and lifts all move you inside the page. You stay online, mid-sentence on Global Chat, from the plaza to the third floor and back.
 - **Things to walk up to:** Boards, a support queue, an arcade cabinet, a pinball table, a ping pong table, a boardroom table you can call a meeting at.
 - **One basketball:** There is a court in the park with a ball on it, and it is the same ball for everybody. Pick it up and the world watches you carry it; sink one and the world is told.
+- **Eggs to collect:** Michael the chicken drops one in the grass now and then when somebody startles him — six kinds, from an ordinary hen's egg to a rainbow one nobody can account for. Anybody out on the map can walk up and pocket it.
 - **Workers at their desks:** Idle workers roam the office — whiteboards, printers, sofas, bookshelves — and the seat manager sets their names, roles and sprites.
 
 ## How it works
@@ -261,6 +262,34 @@ that hoop. Sink your first and you have earned **Swish**.
 Overcook it and the ball sails off the court and over the avenue; go and fetch
 it, or leave it a minute and a half and it makes its own way back to the
 centre spot.
+
+### Michael's eggs
+
+Michael is a chicken in a necktie who wanders the world map, and if you walk
+up to him he clucks and bolts. Now and then — one cluck in twenty — the
+fright leaves an **egg** in the grass where he was standing.
+
+It stays where it fell for ten minutes, and it belongs to whoever gets there
+first: walk up and press E. There are six kinds, and which one you have got
+is luck rather than skill:
+
+| Egg          | How often    |
+| ------------ | ------------ |
+| Hen's Egg    | one in two   |
+| Speckled Egg | one in four  |
+| Copper Egg   | one in eight |
+| Jade Egg     | one in 17    |
+| Gilded Egg   | one in 22    |
+| Rainbow Egg  | one in 50    |
+
+A rainbow is one cluck in a thousand, so there may only ever be a couple in
+a world. Anything better than a speckled one is called out over the grass
+for everyone on the map to see.
+
+Your basket is the **Eggs** tab in the column, and it shows on your profile
+beside your badges. Four badges go with them: your first egg, startling him
+into laying one, finding the rainbow, and — the long one — an egg of every
+kind there is.
 
 ### The project board on Sandbox ERP's third floor
 
@@ -417,7 +446,7 @@ Press any name and you get their **profile**: the full concept art they were
 drawn from, what they do, a short and largely unreliable account of who they
 are, and their badges.
 
-**Badges** is the second tab — twenty-one of them, in five groups, and the
+**Badges** is the second tab — twenty-six of them, in six groups, and the
 whole catalogue is listed whether or not anybody has one, because half the
 point of a badge is knowing it is there to be had. They are for going
 places (every organisation in the world; the ferry across to the island; an
@@ -426,15 +455,21 @@ every machine; first place on a board; a game of ping pong), for being here
 with other people (Global Chat with three others; a room that filled up; a
 meeting called at the boardroom table), for the locals (standing close
 enough to Michael to startle him; finding Doc; meeting every resident
-there is), and for a few odd ones — drawing on a whiteboard, being here in
-the small hours, being the only person in the whole world.
+there is), for his eggs (your first; startling him into laying one; the
+rainbow; one of every kind), and for a few odd ones — drawing on a
+whiteboard, being here in the small hours, being the only person in the
+whole world.
 
 Nothing is earned by doing anything for the hundredth time, and nothing is
 earned on your browser's say-so: every badge fires off something the server
 watched happen.
 
-There is no text chat. There was a Chat tab ahead of both, with a box to
-type a remark into and a log of everything anybody had said, and it is
+**Eggs** is the third tab: your own basket at the top, a slot for each kind
+filled in as you find them, and under it every kind there is with how rare
+it is and who has found one.
+
+There is no text chat. There was a Chat tab ahead of all three, with a box
+to type a remark into and a log of everything anybody had said, and it is
 gone — talking is Global Chat.
 
 ### The island across the water

@@ -48,6 +48,7 @@ import {
   type Resident,
   type Whereabouts,
 } from "../world/residents";
+import { EGG_CHANCE } from "../world/eggs";
 import { WORLD_ROOM_SLUG } from "../rooms";
 import { createLogger } from "../logger";
 import { facingFor } from "../facing";
@@ -174,6 +175,22 @@ export interface ResidentHost {
    * in the tests do not care who walked up.
    */
   met?(residentId: string, connectionIds: readonly string[]): void;
+  /**
+   * A fright has left an egg behind, here.
+   *
+   * The simulation decides *whether* — it holds the fright and the seeded
+   * randomness the tests drive — and the host decides what kind and what
+   * becomes of it, because the ladder and the field of eggs are its. The
+   * chicken does not choose what he lays.
+   *
+   * `startledBy` is the connection that walked up, or null for somebody
+   * who has stepped away inside the tick. Whoever caused it gets the
+   * credit for it, which is a badge they cannot claim for themselves.
+   *
+   * Optional like `met`: nothing about the world stops working without
+   * it, and the simulations in the tests want the fright and not the egg.
+   */
+  laid?(residentId: string, room: string, at: Point, startledBy: string | null): void;
 }
 
 export interface ResidentOptions {
@@ -498,7 +515,34 @@ export class ResidentSimulation {
     // yes or no and this wants somewhere to run away from. Nobody by the
     // time it is asked is possible — somebody can walk off inside a tick —
     // and a bolt in no particular direction is the right answer to that.
-    this.spook(state, now, hub.nearestPerson({ x: state.x, y: state.y }, reach));
+    const startled = hub.nearestPerson({ x: state.x, y: state.y }, reach);
+    this.spook(state, now, startled);
+    this.layEgg(state, startled?.id ?? null);
+  }
+
+  /**
+   * The one thing a fright leaves behind, one time in twenty.
+   *
+   * Rolled here rather than by whoever is told about it, because this is
+   * where the seeded randomness is: `residents.test.ts` drives the
+   * simulation with a random of its own, and a chance rolled out of
+   * `Math.random` somewhere downstream would be the one part of a cluck
+   * that could not be replayed. What kind of egg it is stays the host's —
+   * see `laid`.
+   *
+   * Where he was standing, not where he is: it is dropped as he turns to
+   * run, and by the time anybody walks over he is a field away.
+   */
+  private layEgg(state: State, startledBy: string | null) {
+    // Nobody to tell, or nothing to tell them: asked before the roll
+    // rather than after, so a simulation with no host for this draws no
+    // random number at all. `laid` is optional and most of the tests do
+    // without it — a draw taken here would shift every roll after it and
+    // change where he runs to, in tests that are about the running.
+    const laid = this.host.laid;
+    if (!laid || !state.resident.lays || !state.room) return;
+    if (this.random() >= EGG_CHANCE) return;
+    laid.call(this.host, state.resident.id, state.room, { x: state.x, y: state.y }, startledBy);
   }
 
   /**

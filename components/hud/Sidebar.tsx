@@ -5,6 +5,7 @@ import { PanelRightClose } from "lucide-react";
 import { SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "@/lib/constants";
 import { saveSidebarWidth } from "@/lib/persistence";
 import BadgesPanel from "./BadgesPanel";
+import EggsPanel from "./EggsPanel";
 import PeoplePanel from "./PeoplePanel";
 import SidebarFooter from "./SidebarFooter";
 import { useOnline } from "@/lib/presence-online";
@@ -16,13 +17,18 @@ import { useOnline } from "@/lib/presence-online";
  * who else is about, and where — and because the Online pill in the bottom
  * bar counts exactly this list and opens it. Badges are the second glance.
  *
- * There was a Chat tab ahead of both and it has gone with the feature. A
- * log of what was said, in a window beside the office, is the thing this
- * world was built not to have; talking is Global Chat, which is a
- * microphone and a pill in the bottom bar.
+ * Then Eggs, which is the third glance and last on purpose: badges are
+ * what there is to do in this world and eggs are one of the things you do.
+ * A collection that is not yours yet is the least pressing of the three
+ * questions the column answers.
+ *
+ * There was a Chat tab ahead of all of them and it has gone with the
+ * feature. A log of what was said, in a window beside the office, is the
+ * thing this world was built not to have; talking is Global Chat, which is
+ * a microphone and a pill in the bottom bar.
  */
 
-export type SidebarTab = "people" | "badges";
+export type SidebarTab = "people" | "badges" | "eggs";
 
 interface SidebarProps {
   open: boolean;
@@ -162,6 +168,14 @@ export default function Sidebar({
           </button>
           <button
             type="button"
+            className={`app-sidebar__tab${tab === "eggs" ? " is-active" : ""}`}
+            onClick={() => onTabChange("eggs")}
+            title="What Michael has left in the grass, and who found it"
+          >
+            Eggs
+          </button>
+          <button
+            type="button"
             className="app-sidebar__collapse"
             onClick={onClose}
             title="Hide the panel"
@@ -172,7 +186,7 @@ export default function Sidebar({
         </div>
 
         <div className="app-sidebar__content">
-          {tab === "people" ? <PeoplePanel /> : <BadgesPanel />}
+          {tab === "people" ? <PeoplePanel /> : tab === "badges" ? <BadgesPanel /> : <EggsPanel />}
         </div>
 
         {/* The music and the way out, at the foot of the column that holds them */}

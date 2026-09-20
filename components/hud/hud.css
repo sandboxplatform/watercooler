@@ -2011,6 +2011,92 @@
   font-size: var(--fs-3xs);
 }
 
+/* ── Eggs: your basket, and every kind there is ────────
+   Built on the badge rows above rather than beside them: the two panels
+   answer the same shape of question — the whole catalogue, and who holds
+   each one — and a second set of rules for the same list is two things to
+   keep looking alike. What is here is only what an egg has and a badge
+   does not: a basket of your own, a count, and how rare each kind is. */
+.eggs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  color: var(--pixel-text);
+}
+
+.eggs__basket {
+  margin-bottom: 10px;
+}
+
+.eggs__slots {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.eggs__slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 0 4px;
+  border: 1px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-sm);
+}
+
+/* One you have not found. Dimmed rather than hidden: half the point of
+   showing the ladder is that the gap in it can be seen. */
+.eggs__slot--empty {
+  opacity: 0.55;
+}
+
+.eggs__slot-count {
+  font-size: var(--fs-2xs);
+  color: var(--pixel-muted);
+}
+
+.eggs__how {
+  font-size: var(--fs-xs);
+  line-height: 1.7;
+  color: var(--pixel-muted);
+}
+
+/* The row's picture sits where a badge's emoji does, so the two panels
+   line up down the left-hand edge. */
+.eggs__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.eggs__odds {
+  margin-left: 6px;
+  color: var(--pixel-muted);
+  font-size: var(--fs-2xs);
+}
+
+.eggs__many {
+  color: var(--pixel-muted);
+  font-size: var(--fs-3xs);
+}
+
+/* The egg itself: a shell drawn in CSS, from the same three tones the
+   sprite is drawn from. An ovoid rather than a circle — the corner radii
+   are the whole difference between an egg and a bead. */
+.egg-mark {
+  display: inline-block;
+  width: 13px;
+  height: 17px;
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.egg-mark--dim {
+  filter: grayscale(0.85);
+}
+
 /* ── A badge, announced ───────────────────────────────── */
 .badge-toasts {
   position: absolute;
@@ -2296,6 +2382,27 @@
    readable at a glance, and a greyed-out one still says which. */
 .profile__badge--locked .profile__badge-icon {
   filter: grayscale(1);
+}
+
+/* The basket under the shelf. Tiles like the badges, because they are
+   looked at rather than read, and only the kinds they actually have —
+   what is still out there is the Eggs panel's question, and a profile
+   listing every empty rung of somebody else's ladder is a card mostly
+   about what a stranger has not done. */
+.profile__eggs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.profile__egg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--pixel-border-light);
+  border-radius: var(--pixel-radius-sm);
+  font-size: var(--fs-2xs);
 }
 
 @media (max-width: 760px) {

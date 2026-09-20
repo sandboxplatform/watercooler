@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { BADGES, BADGE_GROUPS, badgeFor, isGuestHolder } from "@/lib/badges";
 import { badgesOf, useBadges } from "@/lib/badges-client";
+import { basketOf, useEggTallies } from "@/lib/eggs-client";
+import { EGG_KINDS, basketSize } from "@/lib/world/eggs";
 import { castMember, type CastMember } from "@/lib/world/cast";
 import { useOnline, useLocals } from "@/lib/presence-online";
 import { organisationFor } from "@/lib/world/tenants";
@@ -11,6 +13,7 @@ import { describeRoom } from "@/lib/world/places";
 import { sheetPathFor } from "@/lib/characters/library";
 import { SPRITE_PATH } from "@/components/game/config/animations";
 import CharacterPortrait from "./CharacterPortrait";
+import EggMark from "./EggMark";
 import { gameEvents } from "@/lib/events";
 import { asset } from "@/lib/assets";
 
@@ -86,6 +89,8 @@ export default function Profile() {
   }, [person, close]);
 
   const earned = useMemo(() => (person ? badgesOf(all, person) : []), [all, person]);
+  const tallies = useEggTallies();
+  const basket = useMemo(() => basketOf(tallies, person), [tallies, person]);
   const earnedCodes = useMemo(() => new Set(earned.map((b) => b.code)), [earned]);
 
   if (!subject) return null;
@@ -232,6 +237,37 @@ export default function Profile() {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/*
+          And their basket. Not part of the shelf above, because a badge is
+          something they did once and an egg is something they have — the
+          two read as one list only until somebody has four of something.
+          A resident gets none of this for the reason they get no badges:
+          Michael is where eggs come from, not somebody who collects them.
+        */}
+        {!resident && basket.length > 0 && (
+          <div className="profile__shelf">
+            <div className="profile__shelf-name">
+              Eggs
+              <span className="profile__tally">{basketSize(basket)}</span>
+            </div>
+            <div className="profile__eggs">
+              {EGG_KINDS.map((kind) => {
+                const count = basket.find((t) => t.tier === kind.id)?.count ?? 0;
+                if (count === 0) return null;
+                return (
+                  <div key={kind.id} className="profile__egg" title={kind.note}>
+                    <EggMark kind={kind} />
+                    <span className="profile__badge-title">
+                      {kind.name}
+                      {count > 1 && <span className="eggs__many">×{count}</span>}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

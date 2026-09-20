@@ -24,10 +24,14 @@ import { badgeFor, badgeHolder, type EarnedBadge } from "../badges";
 import { isPongPayload } from "../pong/protocol";
 import { SHARED_BOARD, isStroke, sanitiseStroke } from "../whiteboard";
 import { Basketball } from "./basketball";
+import { Nest } from "./eggs";
+import { eggSpot, type EggTier } from "../world/eggs";
 import {
   onArrival,
   onAlone,
   onBasket,
+  onEggFound,
+  onEggLaid,
   onMeetingCalled,
   onMeetingJoined,
   onMicOn,
@@ -205,6 +209,17 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
    * nobody is left drawing it mid-roll for ever.
    */
   let ballWasLive = false;
+
+  /**
+   * The eggs lying in the grass on the world map.
+   *
+   * Beside the ball, in memory, for the same reason: an egg nobody has
+   * picked up yet is something happening rather than something kept, and
+   * a server that restarts has tidied the field. A basket is the other
+   * half of it and lives in the room store, because that is a person's
+   * and outlives any server.
+   */
+  const nest = new Nest();
 
   setRoomBroadcast((slug, message) => broadcast(slug, message));
   setWorldBroadcast((message) => broadcastAll(message));
@@ -681,6 +696,37 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     publishBall();
   };
 
+  // ── The eggs ──────────────────────────────────────────
+
+  /**
+   * What is lying in the grass, to everybody on the world map.
+   *
+   * That room only, as the ball is: the field is on the map and a floor of
+   * Sandbox ERP has no use for it. The whole list every time, because it
+   * is a handful of eggs changing a few times an hour — see
+   * `EggsBroadcast` for why one appearing and another going would be the
+   * wrong shape.
+   */
+  const publishEggs = (taken?: { tier: EggTier; by: string; x: number; y: number }) => {
+    broadcast(WORLD_ROOM_SLUG, {
+      type: "eggs",
+      eggs: nest.lying,
+      ...(taken ? { taken } : {}),
+    });
+  };
+
+  /**
+   * Somebody's basket gained one, and the world is told.
+   *
+   * Two messages for one event, which is the badges' arrangement exactly:
+   * the field is a fact about a room and goes to that room, and a basket
+   * is a fact about a person, so every browser keeps its tally current
+   * without refetching.
+   */
+  const tellEveryoneEgg = (holder: Holder, tier: EggTier, at: string) => {
+    broadcastAll({ type: "egg-found", person: holder.person, name: holder.name, tier, at });
+  };
+
   /**
    * Persist one change and pass it on. The author already applied it locally,
    * so the echo goes to everyone else — the room converges without the author
@@ -747,6 +793,9 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
       broadcast(slug, { type: "presence", players: room.hub.snapshot() });
     }
     stepBasketball();
+    // Eggs nobody came for. Free unless one has actually gone: the field
+    // is kept in the order it was laid, so this is one comparison.
+    if (nest.spoil(Date.now())) publishEggs();
   }, TICK_MS);
   ticker.unref?.();
 
@@ -888,7 +937,12 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         // A still ball is published once and then not again, so without
         // this an arrival would see an empty court until somebody touched
         // it — including somebody who has walked out to play with it.
-        if (slug === WORLD_ROOM_SLUG) send(ws, ballMessage());
+        // And what is lying in the grass, for the same reason: the field
+        // is published when it changes, which may have been an hour ago.
+        if (slug === WORLD_ROOM_SLUG) {
+          send(ws, ballMessage());
+          send(ws, { type: "eggs", eggs: nest.lying });
+        }
 
         // Badges, after the room has been told they are here: everything
         // below reads the hub, and a `holderOf` before the join would have
@@ -1130,6 +1184,29 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           return;
         }
 
+        if (parsed.type === "egg") {
+          // The field is on the world map and nowhere else, so a hand in
+          // the grass from any other room is a browser reaching for
+          // something that does not exist where it is standing.
+          if (slug !== WORLD_ROOM_SLUG) return;
+          const player = room.hub.get(id);
+          if (!player) return;
+          const egg = nest.take({ x: player.x, y: player.y });
+          // Nothing within reach, which is the ordinary answer to E being
+          // pressed in an empty field. Nothing is published, because
+          // nothing happened.
+          if (!egg) return;
+          const holder = holderOf(id);
+          const at = new Date().toISOString();
+          if (holder) {
+            getRoomStore().collectEgg(holder.person, holder.name, egg.tier, egg.id);
+            tellEveryoneEgg(holder, egg.tier, at);
+            announce(slug, onEggFound(holder, egg.tier));
+          }
+          publishEggs({ tier: egg.tier, by: holder?.name ?? player.name, x: egg.x, y: egg.y });
+          return;
+        }
+
         if (parsed.type === "meeting") {
           // A meeting is held at a table, so it can only be called in a
           // room that has one — every Operations floor, and nowhere else.
@@ -1272,6 +1349,30 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           const holder = holderOf(id);
           if (holder) announce(roomOf.get(id) ?? "", onMingle(holder, residentId));
         }
+      },
+      /**
+       * A fright left an egg behind.
+       *
+       * The simulation has already rolled whether; what kind it is, and
+       * what becomes of it, is this side's — the chicken does not choose
+       * what he lays, and a tier the browser had a hand in would be a
+       * rainbow anybody could claim.
+       *
+       * The world map only. Nothing draws an egg indoors and nothing
+       * should: a wanderer never goes in, so an egg in a lobby would be
+       * one nobody could ever see, let alone pick up. The day a second
+       * layer turns up with a desk, this is the line that has to change,
+       * and it says so loudly rather than dropping the egg into a room
+       * with no grass in it.
+       */
+      laid: (_residentId, room, at, startledBy) => {
+        if (room !== WORLD_ROOM_SLUG) return;
+        nest.lay(eggSpot(at), Math.random(), Date.now());
+        publishEggs();
+        // Whoever walked up to him gets the credit, which is a badge
+        // nobody can hand themselves: the fright is the server's to see.
+        const holder = startledBy ? holderOf(startledBy) : null;
+        if (holder) announce(room, onEggLaid(holder));
       },
     },
     { dwellScale },

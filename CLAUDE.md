@@ -12,8 +12,8 @@ in the room's database. All of it is gone: the panel, the `say` message on
 the socket, the `messages` table, and the two badges — Icebreaker and
 Whisperer — that were earned by talking. Talking is **Global Chat**, which
 is audio between browsers and one conversation for the whole server. The
-column beside the office is now **People** and **Badges**, in that order,
-and the Online pill opens it on People. A `said` message still comes down
+column beside the office is now **People**, **Badges** and **Eggs**, in
+that order, and the Online pill opens it on People. A `said` message still comes down
 the socket, because the residents remark on arriving; it draws a bubble
 that fades and nothing keeps it.
 
@@ -605,8 +605,8 @@ dropped without a word.
 
 ### Badges
 
-Twenty-two of them (`lib/badges.ts`), in five groups — Getting about,
-Playing, Together, The locals, Curios. Three rules run through the
+Twenty-six of them (`lib/badges.ts`), in six groups — Getting about,
+Playing, Together, The locals, Eggs, Curios. Three rules run through the
 catalogue, and the last two are what the one before it got wrong.
 
 **A badge is a place you went or a thing you did, never a tally.** Nothing
@@ -652,6 +652,8 @@ Where each rule is called from:
 | `onMingle`                      | Somebody coming to stand beside a local   | `ResidentSimulation` |
 | `onScore`                       | The two high score routes                 | `machine-badges.ts`  |
 | `onBasket`                      | A thrown ball falling through a rim       | `stepBasketball`     |
+| `onEggFound`                    | An egg taken out of the grass             | `presence-socket`    |
+| `onEggLaid`                     | A fright that left one behind             | The socket's `laid`  |
 
 Four of those would otherwise write to the database far too often — a
 rally sends a message a frame, and the online list refreshes on a timer —
@@ -665,11 +667,15 @@ under a prefix reaches the target. A set rather than a counter because
 every one of these asks "have they done each of these", so two visits to
 the same lobby must count once.
 
-Three of the targets are **read off the world rather than written down**,
+Four of the targets are **read off the world rather than written down**,
 which is what keeps them true when the world changes:
 
 - **Grand Tour** counts `ORGANISATIONS`, so a new company moves the target.
 - **Knows Everybody** counts `RESIDENT_COUNT`, off the cast.
+- **The Whole Clutch** counts `EGG_TIER_COUNT`, off the ladder in
+  `lib/world/eggs.ts` — a seventh kind of egg moves it. Its marks are
+  `egg:<tier>`, which is why nine of one kind is not a clutch: the rule
+  about tallies applies to eggs exactly as it does to lobbies.
 - **Played the Lot** counts `SCORED_MACHINES`, which is read off `TENANTS`
   rather than off the arcade's catalogue — and that is the whole point.
   Three of the five arcade games stand in no building at all, so a badge
@@ -1740,6 +1746,100 @@ anybody walking onto the map. That last one matters: a still ball is
 published once and then not again, so without it an arrival would see an
 empty court until somebody touched it.
 
+### The eggs
+
+Startle Michael and one cluck in twenty — `EGG_CHANCE` — he leaves an egg
+in the grass where he was standing before he bolts. Anybody out on the map
+can walk up to it and press E, and it goes in their basket, which hangs on
+their profile beside their badges and stays there.
+
+**There is a ladder, and rarity is one number written once.** Six kinds
+(`EGG_KINDS` in `lib/world/eggs.ts`), each declaring a `weight`, and
+everything else is read off it — the share of eggs that come out that kind,
+the "1 in 50" the panel prints, the order the ladder is shown in, and the
+target of the badge for finding one of each. A second field saying "rare"
+is a second thing to be wrong the next time a weight moves.
+
+| Kind         | Weight | Which is |
+| ------------ | ------ | -------- |
+| Hen's Egg    | 1000   | 1 in 2   |
+| Speckled Egg | 500    | 1 in 4   |
+| Copper Egg   | 250    | 1 in 8   |
+| Jade Egg     | 120    | 1 in 17  |
+| Gilded Egg   | 90     | 1 in 22  |
+| Rainbow Egg  | 40     | 1 in 50  |
+
+So a rainbow is one cluck in a thousand, which is the world's rarity rather
+than an afternoon's goal — and The Whole Clutch, the badge for one of every
+kind, is the long one in the catalogue on purpose.
+
+Three files, and the split is the basketball's exactly:
+
+| Where                 | What                                                                             |
+| --------------------- | -------------------------------------------------------------------------------- |
+| `lib/world/eggs.ts`   | The ladder, the weighted pick, the reach. Pure, shared by all three layers       |
+| `lib/server/eggs.ts`  | The field: what is lying about, who may take it, and forgetting the stale ones   |
+| `systems/EggPatch.ts` | The drawing of them, the `Press E`, and the shout when somebody finds a good one |
+
+Five decisions in it:
+
+- **Whether is the simulation's and what kind is the field's.** The chicken
+  does not choose what he lays. `ResidentSimulation` holds the fright and
+  the seeded randomness the tests drive, so it rolls the chance and calls
+  `laid` on its host; the tier is rolled on the other side of that call,
+  where the ladder is. Both halves take a roll rather than a random
+  function, so a cluck can be replayed.
+- **It is a mode, not a chicken.** `lays: true` on a resident
+  (`lib/world/residents.ts`), beside `wanders`. Only ever alongside a
+  `greeting`, since the egg comes of the fright and the fright comes of the
+  cluck.
+- **The world map only.** The socket's `laid` refuses anywhere else and says
+  why: a wanderer never goes indoors, so an egg in a lobby would be one
+  nobody could ever see. The day a second layer turns up with a desk, that
+  is the line to change.
+- **Lying about is in memory; picked up is in the store.** The field is
+  beside the ball and the meetings — an egg nobody has come for is something
+  happening, and a server that restarts has tidied the park. A basket is a
+  person's and outlives any server, so it is the `eggs` table (migration 6),
+  one row per egg because an egg is a thing that happened at a time. What
+  anybody asks of it is a **tally**, which is bounded by people times six
+  where the rows are bounded by nothing.
+- **Two of them go stale and one of them goes first.** `EGG_SPOILS_MS` is
+  ten minutes — long enough to finish what you were doing and walk over,
+  short enough that an afternoon of clucking is not a park you cannot cross.
+  `NEST_LIMIT` is twelve, and reaching it drops the **oldest**: the egg
+  people have walked past twice is the one least likely to be collected, and
+  refusing to lay a new one would switch the feature off for as long as the
+  field stayed full.
+
+**Two messages, which is the badges' arrangement.** `eggs` is a fact about
+the world map and goes to that room — the whole field every time, like
+`online` and `meetings`, because it is a handful of eggs changing a few
+times an hour and a browser that missed one message would otherwise draw an
+egg somebody pocketed. `egg-found` is a fact about a person and goes to
+everybody, so every browser's tally stays current without refetching.
+`/api/eggs` is the catch-up for a panel opened cold.
+
+The browser's whole say is `{ type: "egg", action: "take" }`: which egg is
+whichever is nearest, and whether anything is in reach at all is answered
+off the room's own record of where that person is standing. A message that
+named an egg could name one across the map, and the tier — the whole point
+of an egg — would be a thing a browser had an opinion about.
+
+**A press of E goes to every `extra`, not to the first that wants it.** The
+world map now runs two of them, so `OutdoorPlace.extras` is a list; the ball
+and an egg a step apart never argue over a press, because neither acts on
+one unless something of theirs is within arm's length.
+
+**The sprite and the HUD are the same egg drawn twice.** `scripts/make-world-art.mjs`
+draws one frame per kind into the props atlas from the `shell` tones in
+`lib/world/eggs.ts` — written in both because a `.mjs` cannot import a
+`.ts`, which is the arrangement the basketball's board and rim numbers are
+already under. The panel draws its own from those tones rather than
+slicing the atlas, so the HUD never has to know where in a generated sheet
+an egg sits. The frame is **centred on the ground the egg lies on** and
+padded below, so no scene has to know where in the frame the ground is.
+
 ### Fixtures
 
 The things in a room you walk up to and press E at — the boards, the games,
@@ -1820,6 +1920,14 @@ half-carried is worse than a shelf that starts empty — everybody begins with
 none, which is the honest state for a catalogue nobody has yet had a chance
 at. See **Badges** for the shape that replaced it.
 
+Migration 6 adds `eggs`, which is the other half of **The eggs**: the field
+of them lying in the park is in memory beside the basketball, because that
+is something happening, and what somebody picked up is kept, because a
+basket is a person's. One row per egg rather than a count per kind — an egg
+is a thing that happened at a time — and everything read back off it is a
+tally, which is bounded by people times the ladder where the rows are
+bounded by nothing.
+
 **The room store's shape is versioned.** `MIGRATIONS` in
 `lib/server/room-store.ts` is every change to it in order, the index being
 the version it brings the database _to_, and `PRAGMA user_version` records
@@ -1889,6 +1997,7 @@ lib/
   map/ world/                      map generation and world layout
   world/cast.ts                    who the world is of: roles, concept art, backstories
   world/basketball.ts              the court in the park, and the flight of the one ball
+  world/eggs.ts                    the ladder of eggs Michael leaves behind, and how rare each is
   world/wood.ts                    the wood north of the town: the Gold River and its trails
   arcade/ pinball/ pong/           the games (Oak Island, Flappy, Snake, Breakout, Solitaire)
   pixel/ characters/               sheet validation, PNG codec, palettes, recolouring

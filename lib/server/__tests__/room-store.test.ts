@@ -86,3 +86,52 @@ describe("people", () => {
     expect(store.listPeople("castle-atlantic").map((p) => p.name)).toEqual(["Alice"]);
   });
 });
+
+describe("the egg basket", () => {
+  const at = (iso: string) => new Date(iso);
+
+  it("tallies what somebody has found, by kind", () => {
+    const store = new RoomStore(":memory:");
+    store.collectEgg("coop", "Coop", "plain", "a", at("2026-01-01T09:00:00.000Z"));
+    store.collectEgg("coop", "Coop", "plain", "b", at("2026-01-02T09:00:00.000Z"));
+    store.collectEgg("coop", "Coop", "rainbow", "c", at("2026-01-03T09:00:00.000Z"));
+    const tallies = store.eggTallies().filter((t) => t.person === "coop");
+    expect(tallies.find((t) => t.tier === "plain")?.count).toBe(2);
+    expect(tallies.find((t) => t.tier === "rainbow")?.count).toBe(1);
+  });
+
+  it("keeps two baskets apart", () => {
+    const store = new RoomStore(":memory:");
+    store.collectEgg("coop", "Coop", "jade", "a");
+    store.collectEgg("guest:ann", "Ann", "jade", "b");
+    const jade = store.eggTallies().filter((t) => t.tier === "jade");
+    expect(jade.map((t) => t.person).sort()).toEqual(["coop", "guest:ann"]);
+    expect(jade.every((t) => t.count === 1)).toBe(true);
+  });
+
+  /** The same egg twice is one egg: its id is the one it was laid with. */
+  it("cannot be handed the same egg twice", () => {
+    const store = new RoomStore(":memory:");
+    store.collectEgg("coop", "Coop", "gilded", "the-same-egg");
+    store.collectEgg("coop", "Coop", "gilded", "the-same-egg");
+    expect(store.eggTallies().find((t) => t.person === "coop")?.count).toBe(1);
+  });
+
+  /**
+   * A row should read without the roster, and somebody who has changed
+   * their name reads as who they are now — which is SQLite's rule about a
+   * bare column beside `MAX`, and worth pinning rather than assuming.
+   */
+  it("reports the name they found the latest one under", () => {
+    const store = new RoomStore(":memory:");
+    store.collectEgg("coop", "Chris", "copper", "a", at("2026-01-01T09:00:00.000Z"));
+    store.collectEgg("coop", "Coop", "copper", "b", at("2026-02-01T09:00:00.000Z"));
+    const tally = store.eggTallies().find((t) => t.person === "coop")!;
+    expect(tally.name).toBe("Coop");
+    expect(tally.latest).toBe("2026-02-01T09:00:00.000Z");
+  });
+
+  it("has nothing to say about a world where nobody has found one", () => {
+    expect(new RoomStore(":memory:").eggTallies()).toEqual([]);
+  });
+});

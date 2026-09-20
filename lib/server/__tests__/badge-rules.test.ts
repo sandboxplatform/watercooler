@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { BADGES, BADGE_GROUPS, badgeFor, badgeHolder, isGuestHolder } from "../../badges";
 import { ORGANISATIONS, TENANTS } from "../../world/tenants";
 import { RESIDENT_COUNT, CAST_RESIDENTS } from "../../world/cast";
+import { EGG_KINDS } from "../../world/eggs";
 import { floorRoomSlug, campusRoomSlug } from "../../rooms";
 import { RoomStore } from "../room-store";
 
@@ -167,6 +168,37 @@ describe("together", () => {
   });
 });
 
+describe("the eggs", () => {
+  it("gives Finders Keepers on the first egg and not the second", () => {
+    expect(codes(rules.onEggFound(coop, "plain"))).toContain("finders-keepers");
+    expect(codes(rules.onEggFound(coop, "plain"))).not.toContain("finders-keepers");
+  });
+
+  it("gives Over the Rainbow for the rainbow one only", () => {
+    expect(codes(rules.onEggFound(coop, "gilded"))).not.toContain("over-the-rainbow");
+    expect(codes(rules.onEggFound(coop, "rainbow"))).toContain("over-the-rainbow");
+  });
+
+  /**
+   * A set rather than a count, with the target read off the ladder — so a
+   * seventh kind moves it, the way a new organisation moves the Grand Tour.
+   */
+  it("gives the Whole Clutch on the last kind and not before", () => {
+    const earned = EGG_KINDS.flatMap((kind) => codes(rules.onEggFound(coop, kind.id)));
+    expect(earned.filter((code) => code === "whole-clutch")).toHaveLength(1);
+
+    // And nine of one kind is not a clutch, which is the half that would
+    // pass by accident if it counted eggs rather than kinds.
+    const same = Array.from({ length: 9 }).flatMap(() => codes(rules.onEggFound(guest, "plain")));
+    expect(same).not.toContain("whole-clutch");
+  });
+
+  it("credits the fright to whoever caused it, once", () => {
+    expect(codes(rules.onEggLaid(coop))).toContain("ruffled-feathers");
+    expect(codes(rules.onEggLaid(coop))).not.toContain("ruffled-feathers");
+  });
+});
+
 describe("the catalogue", () => {
   it("rewards no badge for sheer volume", () => {
     // Every entry keys on a moment, or on a set of distinct moments — a map
@@ -219,6 +251,8 @@ describe("the catalogue", () => {
     take(rules.onWhiteboard(someone));
     take(rules.onPingPong([someone]));
     take(rules.onBasket(someone));
+    take(rules.onEggLaid(someone));
+    for (const kind of EGG_KINDS) take(rules.onEggFound(someone, kind.id));
     for (const machine of rules.SCORED_MACHINES) take(rules.onScore(someone, machine, true));
     for (const resident of CAST_RESIDENTS) take(rules.onMingle(someone, resident.id));
 

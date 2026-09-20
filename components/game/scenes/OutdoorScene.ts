@@ -83,16 +83,22 @@ export interface OutdoorPlace {
   /** Camera behaviour beyond the standard fit-and-follow. */
   camera?: { coverMap?: boolean; remembersZoom?: boolean };
   /**
-   * Something this place runs each frame beyond walking about in it: the
-   * world map's basketball, and whatever comes after it.
+   * What this place runs each frame beyond walking about in it: the world
+   * map's basketball and the eggs lying in its grass, and whatever comes
+   * after them.
    *
    * A field on the place rather than a method on the scene, because a place
    * already says everything else about itself here — its ground, its
    * buildings, where you start — and this is the same kind of fact. The
-   * scene gathers the input and takes it down on shutdown; what it does
-   * with a frame is the place's own business.
+   * scene gathers the input and takes them down on shutdown; what each does
+   * with a frame is its own business.
+   *
+   * A list because the world map now has two of them, and because the
+   * alternative — one object standing for several — is a place having to
+   * invent a thing to hold its things. They are run in the order given,
+   * which is the order a press of E is offered to them: see `runExtras`.
    */
-  extra?: OutdoorExtra | null;
+  extras?: readonly OutdoorExtra[] | null;
 }
 
 /** Whatever a place runs each frame of its own, and how to take it down. */
@@ -121,13 +127,13 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
   protected presence: ScenePresence | null = null;
   protected cameraController!: CameraController;
   /** Whatever this place runs each frame of its own; see `OutdoorExtra`. */
-  private extra: OutdoorExtra | null = null;
+  private extras: readonly OutdoorExtra[] = [];
   /**
    * E, for walking up to something out here and using it.
    *
    * Indoors this is the fixture registry's; out of doors there are no
    * panels to open, so the key is read here and handed to whatever the
-   * place put in `extra`. Null where the browser gives the scene no
+   * place put in `extras`. Null where the browser gives the scene no
    * keyboard at all, which is what the guard in `create` is about.
    */
   private eKey: Phaser.Input.Keyboard.Key | null = null;
@@ -227,7 +233,7 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     this.gamepad = new GamepadInput(this);
     this.initTapToWalk();
     this.eKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E, false) ?? null;
-    this.extra = place.extra ?? null;
+    this.extras = place.extras ?? [];
     gameEvents.emit("place-changed", place.label);
 
     // Everyone else out here, and the socket told we are out here now.
@@ -254,8 +260,8 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     const letGo = () => {
       unsubLook();
       unsubInteract();
-      this.extra?.destroy();
-      this.extra = null;
+      for (const extra of this.extras) extra.destroy();
+      this.extras = [];
       this.presence?.detach();
       this.presence = null;
     };
@@ -332,13 +338,20 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     return key || this.gamepad.justPressed("interact") || virtual;
   }
 
-  /** Whatever this place runs of its own, given the frame and the press. */
-  private runExtra(delta: number, pressed: boolean) {
-    this.extra?.update(
-      delta,
-      { x: this.player.sprite.x, y: this.player.sprite.y, facing: this.player.direction },
-      pressed,
-    );
+  /**
+   * Whatever this place runs of its own, given the frame and the press.
+   *
+   * The press goes to every one of them rather than being claimed by the
+   * first: two things a step apart — an egg in the grass beside the ball —
+   * each decide for themselves whether they are the one being reached
+   * for, by the same reach the server will check. Neither of them acts on
+   * a press meant for the other, because neither acts on a press at all
+   * unless something of theirs is within arm's length.
+   */
+  private runExtras(delta: number, pressed: boolean) {
+    if (this.extras.length === 0) return;
+    const at = { x: this.player.sprite.x, y: this.player.sprite.y, facing: this.player.direction };
+    for (const extra of this.extras) extra.update(delta, at, pressed);
   }
 
   /** Sort against the props by where the feet are. */
@@ -370,7 +383,7 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
       // Still drawn while the arrival walk has the keys — the ball is on
       // the court whether or not anybody can steer yet — but no press is
       // taken, since the keys are not theirs to press with.
-      this.runExtra(delta, false);
+      this.runExtras(delta, false);
       return;
     }
 
@@ -389,7 +402,7 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     this.player.update(steering ?? padVelocity);
     this.sortByFeet();
     this.reportPosition();
-    this.runExtra(delta, this.takeInteract());
+    this.runExtras(delta, this.takeInteract());
     // Walking after a look around brings the camera back to you.
     if (!this.cameraController.cameraFollowing && this.player.isMoving()) {
       this.cameraController.resumeCameraFollow();

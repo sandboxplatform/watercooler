@@ -83,6 +83,15 @@ CREATE TABLE IF NOT EXISTS badge_marks (
   PRIMARY KEY (person, mark)
 );
 
+CREATE TABLE IF NOT EXISTS eggs (
+  id       TEXT PRIMARY KEY,
+  person   TEXT NOT NULL,
+  name     TEXT NOT NULL,
+  tier     TEXT NOT NULL,
+  found_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS eggs_by_person ON eggs (person, tier);
+
 CREATE TABLE IF NOT EXISTS board_strokes (
   room       TEXT NOT NULL,
   stroke_id  TEXT NOT NULL,
@@ -230,6 +239,31 @@ const MIGRATIONS: readonly Migration[] = [
           mark   TEXT NOT NULL,
           PRIMARY KEY (person, mark)
         );
+      `);
+    },
+  },
+  {
+    name: "the egg basket",
+    up: (db) => {
+      // What somebody picked up out of the grass, which unlike the eggs
+      // lying about in it is kept: the field is in memory beside the
+      // basketball and a restart has tidied it, and a basket is a person's
+      // and outlives every server there will ever be.
+      //
+      // A row per egg rather than a count per tier, because an egg is a
+      // thing that happened at a time — the row is what lets a basket say
+      // when the rainbow turned up. Everything anybody asks of it is a
+      // tally over these rows, which is bounded by people times the ladder
+      // where the rows are bounded by nothing.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS eggs (
+          id       TEXT PRIMARY KEY,
+          person   TEXT NOT NULL,
+          name     TEXT NOT NULL,
+          tier     TEXT NOT NULL,
+          found_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS eggs_by_person ON eggs (person, tier);
       `);
     },
   },
@@ -650,6 +684,61 @@ export class RoomStore {
       name: string;
       code: string;
       earnedAt: string;
+    }>;
+  }
+
+  /**
+   * One egg into somebody's basket.
+   *
+   * The name is kept beside it for the reason a badge keeps one: a row
+   * should read without the roster, and whoever found it may not be in the
+   * world when somebody looks. `id` is the egg's own, minted when it was
+   * laid, so collecting the same egg twice — which the field will not
+   * allow anyway — cannot double it.
+   */
+  collectEgg(person: string, name: string, tier: string, id: string, at = new Date()): void {
+    this.stmt(
+      `INSERT OR IGNORE INTO eggs (id, person, name, tier, found_at) VALUES (?, ?, ?, ?, ?)`,
+    ).run(id, person, name.slice(0, 32), tier, at.toISOString());
+  }
+
+  /**
+   * Every basket in the world, by person and kind.
+   *
+   * A tally rather than the rows, because that is what every question
+   * anybody asks of a basket wants and it is the one shape with a bound on
+   * it: people times the six rungs of the ladder, where the rows themselves
+   * grow for as long as the world runs.
+   *
+   * `name` is the one they found the most recent of that kind under, so
+   * somebody who has changed theirs reads as who they are now. That is
+   * SQLite's own rule rather than an accident: a bare column in a query
+   * with `MAX` on it takes its value from the row that matched — which is
+   * why the `MAX(found_at)` above is what makes this line true, and why
+   * adding a second aggregate would quietly stop it being so.
+   */
+  eggTallies(): Array<{
+    person: string;
+    name: string;
+    tier: string;
+    count: number;
+    latest: string;
+  }> {
+    return this.stmt(
+      `SELECT person,
+              tier,
+              COUNT(*) AS count,
+              MAX(found_at) AS latest,
+              name
+         FROM eggs
+        GROUP BY person, tier
+        ORDER BY person, latest`,
+    ).all() as unknown as Array<{
+      person: string;
+      name: string;
+      tier: string;
+      count: number;
+      latest: string;
     }>;
   }
 

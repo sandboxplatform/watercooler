@@ -794,6 +794,117 @@ slot("ball", 20, 20, (set, d) => {
     set(C - x, C + y, P.ink2);
   }
 });
+/**
+ * Michael's eggs, one frame per rung of the ladder.
+ *
+ * The shells are the `shell` colours in lib/world/eggs.ts, which is a `.ts`
+ * this script cannot import — the same arrangement the basketball's board
+ * and rim numbers are under, where what is written there is a measurement
+ * of what is drawn here. Change a shell in one and change it in the other,
+ * or the egg in the grass and the egg in the panel stop being the same egg.
+ *
+ * **The frame is centred on the ground the egg lies on**, not on the egg:
+ * it is fourteen rows of egg with its base on the middle row, and thirteen
+ * empty rows under that. An egg drawn hard against the top of its frame
+ * would need the scene to know where in the frame the ground was, which is
+ * a number to keep in step in two places for the sake of half a kilobyte.
+ */
+const EGGS = [
+  { id: "plain", base: [232, 220, 192], shade: [194, 177, 145], lit: [246, 240, 222] },
+  { id: "speckled", base: [221, 208, 174], shade: [138, 111, 74], lit: [239, 230, 204] },
+  { id: "copper", base: [192, 122, 68], shade: [142, 83, 38], lit: [226, 164, 110] },
+  { id: "jade", base: [111, 174, 154], shade: [72, 121, 108], lit: [162, 214, 194] },
+  { id: "gilded", base: [224, 184, 112], shade: [176, 140, 62], lit: [247, 227, 168] },
+  { id: "rainbow", base: [122, 168, 224], shade: [180, 94, 168], lit: [242, 224, 122] },
+];
+
+/** The bands on the one egg nobody can account for, top to bottom. */
+const RAINBOW = [
+  [226, 106, 106],
+  [232, 160, 92],
+  [242, 224, 122],
+  [126, 196, 128],
+  [122, 168, 224],
+  [172, 124, 214],
+];
+
+const EGG_W = 16;
+const EGG_H = 28;
+/** The row the egg's base sits on, which is the middle of the frame. */
+const EGG_BASE = 14;
+/** How tall the egg itself is, and how wide at its widest. */
+const EGG_TALL = 14;
+const EGG_WIDE = 5.4;
+
+/**
+ * Half the egg's width at a row, in the ovoid's own coordinates.
+ *
+ * An ellipse taken in at the top: `v` runs -1 at the crown to 1 at the
+ * base, the ellipse gives the round part, and the taper is what makes it
+ * an egg rather than a bead. A plain ellipse reads as a pebble at this
+ * size, which is the whole difficulty of drawing one in fourteen rows.
+ */
+function eggHalf(v) {
+  const round = Math.sqrt(Math.max(0, 1 - v * v));
+  return EGG_WIDE * round * (0.78 + 0.22 * ((v + 1) / 2));
+}
+
+for (const egg of EGGS) {
+  slot(`egg-${egg.id}`, EGG_W, EGG_H, (set, d) => {
+    const cx = EGG_W / 2;
+    const ry = EGG_TALL / 2;
+    const cy = EGG_BASE - ry;
+    // The shadow it casts on whatever it is lying on, baked in: an egg
+    // does not move, so unlike the ball's there is nothing for the scene
+    // to keep in step. Wider than the egg, or it is hidden behind it.
+    d.ellipse(cx, EGG_BASE, 7, 2, P.shadow);
+    for (let y = -ry; y <= ry; y++) {
+      const v = y / ry;
+      const half = Math.round(eggHalf(v));
+      if (half < 1) continue;
+      for (let x = -half; x <= half; x++) {
+        const row = cy + y;
+        if (Math.abs(x) >= half) {
+          set(cx + x, row, P.ink);
+          continue;
+        }
+        // The rainbow is banded across the shell; every other kind is one
+        // colour with the light on one side of it.
+        const band =
+          RAINBOW[Math.min(RAINBOW.length - 1, Math.floor(((v + 1) / 2) * RAINBOW.length))];
+        // Shading that hugs the edge rather than splitting the egg down
+        // the middle: a rim a pixel deep on the right, widening along the
+        // bottom, which is the one kind of shading that reads as round at
+        // this size. A boundary anywhere inside the body comes out as a
+        // seam, because at six pixels of half-width there is no room for
+        // a gradient to be anything else.
+        const rim = half - Math.abs(x);
+        const shaded = (x > 0 && rim <= 1) || (v > 0.5 && rim <= 2);
+        const colour = egg.id === "rainbow" ? band : shaded ? egg.shade : egg.base;
+        set(cx + x, row, [...colour, 255]);
+      }
+    }
+    // The highlight, up on the narrow end where the light would catch it.
+    // Two pixels by three: one is a speck, and a proper ellipse at this
+    // size is most of the shell.
+    for (let y = -4; y <= -2; y++)
+      for (let x = -2; x <= -1; x++) {
+        set(cx + x, cy + y, [...egg.lit, 255]);
+      }
+    // Freckles, for the one kind that has them: a settled scatter rather
+    // than a random one, so every speckled egg in the world is the same
+    // egg and two lying side by side do not read as two different kinds.
+    if (egg.id === "speckled") {
+      for (let y = -ry + 2; y < ry - 1; y++) {
+        const half = Math.round(eggHalf(y / ry)) - 2;
+        for (let x = -half; x <= half; x++) {
+          if (hash(x + 40, y + 40) < 0.16) set(cx + x, cy + y, [...egg.shade, 255]);
+        }
+      }
+    }
+  });
+}
+
 frames.fountain.animateWith = "fountain2";
 
 /** Open water: two frames, the glints shifting between them so it moves. */

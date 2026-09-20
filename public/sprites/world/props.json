@@ -83,5 +83,41 @@
     "y": 0,
     "width": 20,
     "height": 20
+  },
+  "egg-plain": {
+    "x": 1300,
+    "y": 0,
+    "width": 16,
+    "height": 28
+  },
+  "egg-speckled": {
+    "x": 1324,
+    "y": 0,
+    "width": 16,
+    "height": 28
+  },
+  "egg-copper": {
+    "x": 1348,
+    "y": 0,
+    "width": 16,
+    "height": 28
+  },
+  "egg-jade": {
+    "x": 1372,
+    "y": 0,
+    "width": 16,
+    "height": 28
+  },
+  "egg-gilded": {
+    "x": 1396,
+    "y": 0,
+    "width": 16,
+    "height": 28
+  },
+  "egg-rainbow": {
+    "x": 1420,
+    "y": 0,
+    "width": 16,
+    "height": 28
   }
 }

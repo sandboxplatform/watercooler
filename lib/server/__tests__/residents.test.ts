@@ -27,7 +27,8 @@ import {
   type Whereabouts,
 } from "../../world/residents";
 import { worldSolids } from "../../world/scenery";
-import { routeAcross } from "../../world/route";
+import { EGG_CHANCE } from "../../world/eggs";
+import { routeAcross, type Point } from "../../world/route";
 import { WORLD_HEIGHT, WORLD_WIDTH, operationsRoomCount, tenantFor } from "../../world/tenants";
 import { WORLD_ROOM_SLUG } from "../../rooms";
 import { TILE } from "../../map/office";
@@ -991,5 +992,125 @@ describe("keeping out of each other", () => {
     }
     expect(arrivals).toBeGreaterThan(0);
     expect(departures).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The one thing a fright leaves behind.
+ *
+ * The simulation's whole part in it is deciding *whether* — it holds the
+ * fright and the seeded randomness — so that is what is asserted here.
+ * What kind of egg it is and what becomes of it belong to the host, and
+ * are `lib/server/eggs.ts` and the socket's business.
+ */
+describe("the egg a fright leaves behind", () => {
+  /** A simulation with Michael out on the map, and every laying recorded. */
+  function outside(clock: () => number, random: () => number) {
+    const { rooms, host } = world(clock);
+    const laid: { id: string; room: string; at: Point; by: string | null }[] = [];
+    const sim = new ResidentSimulation(
+      {
+        ...host,
+        laid: (id, room, at, by) => laid.push({ id, room, at, by }),
+      },
+      { now: clock, random },
+    );
+    return { sim, laid, hub: rooms.get(WORLD_ROOM_SLUG)!.hub };
+  }
+
+  function whereIsHe(sim: ResidentSimulation): { x: number; y: number } {
+    return sim.whereabouts().find((w) => w.id === michael.id)!.spot!;
+  }
+
+  function walkUp(hub: PresenceHub, at: { x: number; y: number }, id = "visitor") {
+    hub.join(id, { name: "Coop", spriteKey: "character_boss", x: at.x, y: at.y, facing: "down" });
+  }
+
+  it("leaves one where he was standing when the roll pays out", () => {
+    let clock = 0;
+    setRoomBroadcast(() => {});
+    const { sim, hub, laid } = outside(
+      () => clock,
+      () => EGG_CHANCE / 2,
+    );
+    const start = whereIsHe(sim);
+    walkUp(hub, start);
+    clock += 120;
+    sim.tick(clock);
+    expect(laid).toHaveLength(1);
+    expect(laid[0].id).toBe(michael.id);
+    expect(laid[0].room).toBe(WORLD_ROOM_SLUG);
+    // Where he *was*, not where the bolt has taken him: the egg is dropped
+    // as he turns to run, and by the time anybody walks over he is a field
+    // away.
+    expect(laid[0].at).toEqual({ x: start.x, y: start.y });
+    setRoomBroadcast(null);
+  });
+
+  it("leaves nothing when it does not", () => {
+    let clock = 0;
+    setRoomBroadcast(() => {});
+    const { sim, hub, laid } = outside(
+      () => clock,
+      () => 0.5,
+    );
+    walkUp(hub, whereIsHe(sim));
+    clock += 120;
+    sim.tick(clock);
+    expect(laid).toEqual([]);
+    setRoomBroadcast(null);
+  });
+
+  /** Whoever caused the fright gets the credit; the badge is theirs to be given. */
+  it("names the person who walked up", () => {
+    let clock = 0;
+    setRoomBroadcast(() => {});
+    const { sim, hub, laid } = outside(
+      () => clock,
+      () => EGG_CHANCE / 2,
+    );
+    walkUp(hub, whereIsHe(sim), "somebody");
+    clock += 120;
+    sim.tick(clock);
+    expect(laid[0].by).toBe("somebody");
+    setRoomBroadcast(null);
+  });
+
+  /**
+   * One per cluck, and a cluck is one per arrival — so standing there does
+   * not fill a basket. The quiet period is the other half of it and is the
+   * reason a queue of people is one egg rather than five.
+   */
+  it("leaves one for the arrival, not one a tick for as long as they stay", () => {
+    let clock = 0;
+    setRoomBroadcast(() => {});
+    const { sim, hub, laid } = outside(
+      () => clock,
+      () => EGG_CHANCE / 2,
+    );
+    walkUp(hub, whereIsHe(sim));
+    for (let i = 0; i < 40; i++) {
+      clock += 120;
+      sim.tick(clock);
+      hub.place("visitor", { ...whereIsHe(sim), facing: "down" });
+    }
+    expect(clock).toBeLessThan(GREET_QUIET_MS);
+    expect(laid).toHaveLength(1);
+    setRoomBroadcast(null);
+  });
+
+  /**
+   * It is a mode, not a check for a chicken — and it is the only mode in
+   * the cast that has it, which is worth saying out loud: a second resident
+   * given `lays` starts leaving eggs with no other change anywhere.
+   */
+  it("is one resident's, by a flag rather than by name", () => {
+    expect(michael.lays).toBe(true);
+    expect(RESIDENTS.filter((r) => r.lays)).toEqual([michael]);
+    // And it only ever fires alongside a greeting, since the egg comes of
+    // the fright and the fright comes of the cluck.
+    for (const resident of RESIDENTS) {
+      if (resident.lays) expect(resident.greeting).toBeTruthy();
+    }
   });
 });

@@ -27,7 +27,7 @@
  * and a badge a client can claim is a badge worth nothing.
  */
 
-export type BadgeGroup = "about" | "playing" | "together" | "locals" | "curios";
+export type BadgeGroup = "about" | "playing" | "together" | "locals" | "eggs" | "curios";
 
 export interface BadgeGroupInfo {
   id: BadgeGroup;
@@ -40,6 +40,9 @@ export const BADGE_GROUPS: readonly BadgeGroupInfo[] = [
   { id: "playing", title: "Playing" },
   { id: "together", title: "Together" },
   { id: "locals", title: "The locals" },
+  // After the locals, because every one of these starts with startling
+  // Michael, and before the curios, which is where the odds and ends go.
+  { id: "eggs", title: "Eggs" },
   { id: "curios", title: "Curios" },
 ];
 
@@ -198,6 +201,44 @@ export const BADGES: readonly Badge[] = [
     title: "Knows Everybody",
     description: "Stood beside every resident in the world",
     icon: "🤝",
+  },
+
+  // ── Eggs ────────────────────────────────────────────────
+  //
+  // Four, and not one of them a count of eggs. The Whole Clutch is the
+  // catalogue's usual answer to wanting more than one of something: a set
+  // of distinct things, one of every kind there is, with the target read
+  // off the ladder rather than written down here.
+  {
+    code: "finders-keepers",
+    group: "eggs",
+    title: "Finders Keepers",
+    description: "Picked up an egg Michael left in the grass",
+    icon: "🥚",
+  },
+  {
+    code: "ruffled-feathers",
+    group: "eggs",
+    title: "Ruffled Feathers",
+    description: "Startled Michael badly enough that he laid one",
+    // A feather would be the obvious one and it is not drawn on every
+    // machine — it measures as tofu here, which is a badge that reads as
+    // a blank box. The bolt away is the other half of the moment anyway.
+    icon: "💨",
+  },
+  {
+    code: "over-the-rainbow",
+    group: "eggs",
+    title: "Over the Rainbow",
+    description: "Found the rainbow egg, which nobody can account for",
+    icon: "🌈",
+  },
+  {
+    code: "whole-clutch",
+    group: "eggs",
+    title: "The Whole Clutch",
+    description: "Found an egg of every kind there is to find",
+    icon: "🧺",
   },
 
   // ── Curios ──────────────────────────────────────────────

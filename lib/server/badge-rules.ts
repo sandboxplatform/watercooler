@@ -22,6 +22,7 @@
 import { getRoomStore } from "./room-store";
 import { badgeFor, type EarnedBadge } from "../badges";
 import { RESIDENT_COUNT } from "../world/cast";
+import { EGG_TIER_COUNT } from "../world/eggs";
 import { ORGANISATIONS, TENANTS, type Tenant } from "../world/tenants";
 import { tenantInRoom } from "../world/floors";
 import { parseFloorRoomSlug } from "../rooms";
@@ -231,6 +232,45 @@ export function onScore(holder: Holder, machine: string, first: boolean): Earned
       grant(holder, "played-the-lot", earned);
     }
   }
+  return earned;
+}
+
+/**
+ * An egg was picked up out of the grass.
+ *
+ * The server saw the whole of it: it laid the egg, it rolled the tier, and
+ * it is the one that checked the finder was standing over it. A browser
+ * that could say "I found a rainbow" is exactly what the rule about
+ * claiming is for.
+ *
+ * The Whole Clutch counts distinct kinds rather than eggs, with the target
+ * read off the ladder — a seventh rung added to `EGG_KINDS` moves it, the
+ * way a new organisation moves the Grand Tour.
+ */
+export function onEggFound(holder: Holder, tier: string): EarnedBadge[] {
+  const earned: EarnedBadge[] = [];
+  grant(holder, "finders-keepers", earned);
+  if (tier === "rainbow") grant(holder, "over-the-rainbow", earned);
+  if (mark(holder, `egg:${tier}`)) {
+    if (getRoomStore().countMarks(holder.person, "egg:") >= EGG_TIER_COUNT) {
+      grant(holder, "whole-clutch", earned);
+    }
+  }
+  return earned;
+}
+
+/**
+ * A fright left an egg behind, and this is whoever caused the fright.
+ *
+ * Not the same thing as finding one: the egg lies where it was laid and
+ * anybody out on the map may walk over and pocket it, so the person who
+ * startled him and the person who ends up with it are often two people.
+ * This one is the moment, and it is the only badge in the world earned by
+ * frightening somebody.
+ */
+export function onEggLaid(holder: Holder): EarnedBadge[] {
+  const earned: EarnedBadge[] = [];
+  grant(holder, "ruffled-feathers", earned);
   return earned;
 }
 

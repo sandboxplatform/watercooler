@@ -88,6 +88,16 @@ export interface Resident {
    * bears saying.
    */
   greeting?: string;
+  /**
+   * Whether a fright now and then leaves an egg behind.
+   *
+   * A mode like `wanders`, rather than a check for a particular id: what
+   * lays eggs is a chicken, and the day a second one turns up the rule
+   * should already be written. It only ever fires alongside a `greeting`,
+   * since the egg comes of the fright and the fright comes of the cluck —
+   * see `EGG_CHANCE` in lib/world/eggs.ts for how often.
+   */
+  lays?: boolean;
 }
 
 /** A post in a room, by the sprite's centre, and the way they face at it. */
@@ -199,6 +209,7 @@ export const RESIDENTS: readonly Resident[] = [
     spriteKey: "character_michael",
     wanders: true,
     greeting: "Cluck!",
+    lays: true,
   },
 ];
 

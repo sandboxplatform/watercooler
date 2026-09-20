@@ -17,6 +17,7 @@ import { SCENERY, WORLD_SIGNS, groundTiles, worldSolids } from "@/lib/world/scen
 import { asset } from "@/lib/assets";
 import { COURT_PX } from "@/lib/world/basketball";
 import { BasketballCourt } from "../systems/BasketballCourt";
+import { EggPatch } from "../systems/EggPatch";
 import {
   addSolid,
   layGround,
@@ -117,9 +118,10 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
       entrances: BUILDINGS,
       solids,
       label: "World map",
-      // The one ball, on the court in the park. It is the server's — this
-      // draws it, offers the `Press E` and swings the meter.
-      extra: new BasketballCourt(this),
+      // The two things on this map that are not scenery, both of them
+      // the server's: this side draws them, offers the Press E and — for
+      // the ball — swings the meter.
+      extras: [new BasketballCourt(this), new EggPatch(this)],
       camera: {
         coverMap: true,
         // The map opens where it was left. Every building is a page of its
