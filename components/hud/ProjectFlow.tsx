@@ -186,6 +186,22 @@ export default function ProjectFlow() {
                   ))}
                 </div>
               </section>
+              {flow.blocked > 0 && (
+                /*
+                 * What the five bars cannot say: a stuck card is still
+                 * standing in a stage, so the bank above draws the same
+                 * picture whether the work is moving or not. It is the
+                 * barrier on the floor of the room, said in words for
+                 * whoever has walked up and pressed E at the wall.
+                 */
+                <p className="pulse-legend pulse-legend--stuck">
+                  <strong>
+                    {flow.blocked} card{flow.blocked === 1 ? " is" : "s are"} roadblocked
+                  </strong>{" "}
+                  on this board — counted wherever they are standing, by the label on the card or
+                  the list they are parked in.
+                </p>
+              )}
               <p className="pulse-legend">
                 Each bar is that stage&rsquo;s share of the work in flight, so the five compare with
                 each other. Nothing here is a percentage of the whole board.

@@ -4,9 +4,11 @@ import {
   DEFAULT_FLOW_LANES,
   FLOW_COLOURS,
   NO_LANE,
+  countRoadblocks,
   flowBars,
   flowFigure,
   flowRows,
+  isRoadblock,
   laneId,
   laneShort,
   toFlow,
@@ -17,7 +19,7 @@ function board(lists: Record<string, number>, name = "Sandbox ERP"): BoardView {
   const columns = Object.entries(lists).map(([listName, count], i) => ({
     id: `l${i}`,
     name: listName,
-    cards: Array.from({ length: count }, (_, c) => ({ id: `c${i}-${c}` })),
+    cards: Array.from({ length: count }, (_, c) => ({ id: `c${i}-${c}`, labels: [] })),
   }));
   return {
     id: "b1",
@@ -85,7 +87,7 @@ describe("counting a board's stages", () => {
         ...board({ Testing: 3 }),
         columns: [
           ...board({ Testing: 3 }).columns,
-          { id: "l9", name: "testing", cards: [{ id: "x" }] },
+          { id: "l9", name: "testing", cards: [{ id: "x", labels: [] }] },
         ],
       } as unknown as BoardView,
       ["Testing"],
@@ -165,5 +167,68 @@ describe("the rows on the plate", () => {
       expect(flowRows(lanes).flat()).toEqual(lanes);
     }
     expect(flowRows([])).toEqual([]);
+  });
+});
+
+/**
+ * Work that has stopped, which is the one thing the five bars cannot say:
+ * a stuck card is still standing in a stage, so a board in trouble and a
+ * board getting on with it draw the same picture.
+ */
+describe("counting a board's roadblocks", () => {
+  /** A board whose cards carry labels, and whose lists may be named anything. */
+  function labelled(lists: Record<string, string[][]>): BoardView {
+    return {
+      id: "b1",
+      name: "Sandbox ERP",
+      url: "https://trello.com/b/b1",
+      columns: Object.entries(lists).map(([name, cards], i) => ({
+        id: `l${i}`,
+        name,
+        cards: cards.map((labels, c) => ({
+          id: `c${i}-${c}`,
+          labels: labels.map((label) => ({ name: label, colour: "#f87168" })),
+        })),
+      })),
+      cardCount: Object.values(lists).reduce((a, b) => a + b.length, 0),
+    } as unknown as BoardView;
+  }
+
+  it("reads the word however the board spells it", () => {
+    for (const name of ["Roadblock", "Roadblocked", "BLOCKED", "blocker", " Road Block "])
+      expect(isRoadblock(name)).toBe(true);
+    for (const name of ["On Hold", "Backlog", "Blocked by design", "Unblocked", ""])
+      expect(isRoadblock(name)).toBe(false);
+  });
+
+  it("counts a card carrying the label, wherever it is standing", () => {
+    const view = labelled({
+      Backlog: [["Roadblocked"], [], ["bug"]],
+      "In Progress": [["Roadblocked"], []],
+    });
+    expect(countRoadblocks(view)).toBe(2);
+  });
+
+  it("counts a card parked in a list of that name", () => {
+    expect(countRoadblocks(labelled({ Backlog: [[], []], Roadblocked: [[], [], []] }))).toBe(3);
+  });
+
+  /** The count is of cards, not of the ways the board found to say so. */
+  it("counts a card once when it is both", () => {
+    expect(countRoadblocks(labelled({ Blocked: [["Roadblock"], []] }))).toBe(2);
+  });
+
+  it("counts them off the whole board, lanes or not", () => {
+    const view = labelled({
+      Backlog: [["Roadblock"]],
+      Production: [["Roadblock"], ["Roadblock"]],
+    });
+    expect(toFlow(view, ["Backlog"]).blocked).toBe(3);
+    // And it is not part of what the bars are a share of.
+    expect(toFlow(view, ["Backlog"]).total).toBe(1);
+  });
+
+  it("says none where nothing is stuck", () => {
+    expect(toFlow(board({ Backlog: 4, Testing: 2 }), LANES).blocked).toBe(0);
   });
 });

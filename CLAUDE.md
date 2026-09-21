@@ -1312,6 +1312,22 @@ it would have crowded the counts. It was two layouts saying the same thing in tw
 (`SUPPORT_WALL` and `OPS_WALL`), which is how one of them would have come
 to disagree with the other about a wall the corridor sees both of.
 
+**And the gap is measured rather than declared,** which is what `NAME_COLS`
+was: a band four tiles wide, hard against the board, centred on itself.
+That is the middle of the gap only where the gap happens to be four tiles
+— and the two ranks do not agree about it, because they are looking at
+different walls. Upstairs the boards hang on the map's top wall and the
+doorway is cut through another wall altogether, so the stretch runs the
+whole way from the board to the counts: nine tiles, middle at 7½.
+Downstairs all four want one run and the doorway takes the right-hand end
+of it: six tiles, middle at 6. The fixed band put both of them at 5, so
+every project room lettered its board's name a tile to the left of the
+clear wall it was written on, with the doorway's own edge beside it to
+compare against. `nameRun` is the stretch and `signOn` is its middle, and
+the scene wraps the lettering to what `cols` says it has. `DOOR_AT` was
+worked out _from_ the name band, so it now says what it always came to on
+its own terms: hard against the counts, less a clear tile.
+
 **The whiteboard is next door** — `opsWhiteboardRoom`, in the **left-hand
 corner** of that room's wall, where every other board on this floor starts
 (`BOARD_WALL.board`). Nothing else is on that wall to force it
@@ -1432,6 +1448,69 @@ scaled separately because a standing total against a day's flow is not a
 comparison; Backlog through Testing _are_ each other's comparison, so one
 scale and no dividing line. `divider` on the spec is that decision and
 nothing else.
+
+**A roadblock stands on the floor, and that is the point of it.** Work
+that has stopped is the one thing about a board nobody goes looking for
+and everybody needs to know, and the five counts on the wall cannot say
+it: a stuck card is still standing in a stage, so a board in trouble and
+a board getting on with it draw the same five bars. A sixth bay would
+have read as more of the same. So it is not on the wall at all — it is a
+striped barrier standing in the middle of the room's floor, with the
+number of stuck cards on a plate over it. Walking the corridor past three
+rooms says which of them is in trouble without going in, and standing in
+the room you cannot look at the board without it in shot.
+
+**The middle, rather than in line with the doorway,** which is where it
+stood first. Lined up with the door it was a thing to walk round on the
+way in, and off to one side of a room whose every other feature is on the
+wall opposite — so the room had the barrier in one corner of the eye and
+what it is about in the other. The middle is the one spot in an empty
+room that belongs to the room rather than to one of its edges, it is the
+same answer for both ranks, and it is in shot through the doorway either
+way. The middle column of seventeen is a half tile, which is exact rather
+than awkward: the marker is drawn centred on the point, and it stands on
+the bottom of its row, so its feet land a shade below centre — which is
+where a thing that stands up looks centred from.
+
+| Where                       | What                                                                       |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `countRoadblocks` in `flow` | What counts as stuck. Pure, over the board `readBoard` already holds       |
+| `opsRoadblock` in `floor`   | Where it stands, read off the room so a longer corridor carries it         |
+| `systems/Roadblock`         | The barrier, the figure on it, and the flash when the figure moves         |
+| `systems/room-flow`         | One read for the room: the counts on the wall and the barrier on the floor |
+
+Five decisions in it:
+
+- **A board says "stuck" in two ways and both count.** A label on the
+  card, or a list of its own with the cards parked in it — neither is
+  more correct than the other, and a board that uses the one this did not
+  know about would quietly read zero, which is the worst answer there is
+  here. A card doing both is one card: the count is of cards, not of the
+  ways a board found to say so. Matched on the folded name, so
+  Roadblock, Roadblocked, Blocked and Blocker are one word. Deliberately
+  **not** On Hold, which is a decision somebody made rather than a thing
+  in the way.
+- **Counted off the whole board, not off the five lanes.** A card is
+  stuck wherever it is standing, and a lane nobody put on the wall is
+  exactly where one would go to be forgotten about. So it is not a share
+  of `total` either, which is another reason it is not a sixth bay.
+- **Nothing is up when nothing is stuck.** A barrier reading 0 is a
+  barrier somebody has to walk round to find out there is nothing wrong.
+- **One read for the room.** The plate on the wall and the barrier on the
+  floor are the same fetch — `systems/room-flow` holds an answer for a
+  moment so the second asker gets it rather than the network. Short on
+  purpose: it is the width of the gap between two timers started in the
+  same tick, not a second opinion about how fresh the wall is.
+- **One beat when the number moves**, and no animation otherwise — the
+  rule `CountBoard` is already under. Hazard orange in a room of muted
+  blues is what makes it carry down the corridor; a thing that pulses
+  while you watch it reads as a fault.
+
+It is drawn rather than delivered as art for the reason the two count
+boards are: the figure on it is live, and a picture with a number baked
+into it is a second, wrong copy of the number. The stripes are laid a
+pixel row at a time, which is both the clipping and the staircase a
+forty-five degree diagonal is in pixel art.
 
 **Which stages, and off which board, is the building's** — `boards` in
 `lib/world/tenants.ts`, one entry per project room, each naming its Trello

@@ -1766,6 +1766,11 @@
   color: var(--pixel-text);
 }
 
+/* Work that has stopped, in the colour the barrier on the floor is painted. */
+.pulse-legend--stuck strong {
+  color: #faa53d;
+}
+
 /* ── People: everyone in the world, online first ── */
 .people {
   padding: 10px 12px;

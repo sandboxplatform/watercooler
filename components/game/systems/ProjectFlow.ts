@@ -1,11 +1,8 @@
 import * as Phaser from "phaser";
-import { currentRoom } from "@/lib/room-client";
 import { flowBars, flowRows, type Flow } from "@/lib/trello/flow";
 import { PULSE_REFRESH_MS } from "@/lib/constants";
-import { createLogger } from "@/lib/logger";
 import { CountBoard, type CountBay, type CountReading } from "./CountBoard";
-
-const log = createLogger("ProjectFlow");
+import { readRoomFlow } from "./room-flow";
 
 /**
  * The five stage counts, lit up beside the project board they count.
@@ -27,6 +24,10 @@ const log = createLogger("ProjectFlow");
  * at the moment the numbers are fetched (`flow` in `lib/world/tenants.ts`).
  * So the bays cannot be built until the first answer comes back, which is
  * why this one asks before it draws.
+ *
+ * The asking is `./room-flow` rather than a fetch of its own, because the
+ * roadblock standing on the floor of the same room is drawn off the same
+ * answer.
  */
 export class ProjectFlow {
   constructor(private scene: Phaser.Scene) {}
@@ -48,7 +49,7 @@ export class ProjectFlow {
     let stop: (() => void) | null = null;
     let stopped = false;
 
-    void fetchFlow(slot).then((flow) => {
+    void readRoomFlow(slot).then((flow) => {
       // Nothing to letter the bays with: an unconfigured Trello, a board
       // that could not be read, a room that counts nothing. The wall stays
       // bare rather than showing five headings with dashes under them,
@@ -64,7 +65,7 @@ export class ProjectFlow {
         // One bank wrapped over two rows, so no line: the five compare with
         // each other and a line across the middle would say they do not.
         divider: false,
-        read: async () => reading(await fetchFlow(slot)),
+        read: async () => reading(await readRoomFlow(slot)),
         every: PULSE_REFRESH_MS,
         what: "the board",
       });
@@ -75,21 +76,6 @@ export class ProjectFlow {
       stopped = true;
       stop?.();
     };
-  }
-}
-
-/** The stages, from the room's own server. Null where there are none to show. */
-async function fetchFlow(slot: number): Promise<Flow | null> {
-  try {
-    const room = encodeURIComponent(currentRoom());
-    const response = await fetch(`/api/trello/flow?room=${room}&slot=${slot}`, {
-      cache: "no-store",
-    });
-    const answer = (await response.json()) as { flow?: Flow };
-    return answer.flow ?? null;
-  } catch (err) {
-    log.warn("could not count the board:", (err as Error).message);
-    return null;
   }
 }
 

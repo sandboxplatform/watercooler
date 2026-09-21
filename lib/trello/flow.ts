@@ -90,6 +90,45 @@ export function laneId(name: string): string {
   );
 }
 
+/**
+ * What a board calls work that has stopped.
+ *
+ * A board says "this is stuck" in one of two ways and neither is more
+ * correct than the other: a label on the card, or a list of its own with
+ * the cards parked in it. Both are counted, and a card carrying the label
+ * while standing in the list is one card — the count is of cards, not of
+ * the ways a board found to say so.
+ *
+ * Matched on the folded name rather than against a written-down list of
+ * spellings, because "Roadblock", "Roadblocked", "Blocked" and "Blocker"
+ * are one word as far as anybody reading the wall is concerned, and a
+ * board that spells it the fifth way should not quietly count zero.
+ *
+ * Deliberately not "On Hold", which is a decision somebody made rather
+ * than a thing in the way.
+ */
+export function isRoadblock(name: string): boolean {
+  return /^(road)?block(s|ed|er|ers|ing)?$/.test(name.toLowerCase().replace(/[^a-z]+/g, ""));
+}
+
+/**
+ * Cards on the board that are roadblocked, however the board says so.
+ *
+ * The whole board rather than the counted lanes: a card is stuck wherever
+ * it is standing, and a lane nobody put on the wall is exactly where one
+ * would go to be forgotten about.
+ */
+export function countRoadblocks(board: BoardView): number {
+  let blocked = 0;
+  for (const column of board.columns) {
+    const parked = isRoadblock(column.name);
+    for (const card of column.cards) {
+      if (parked || card.labels.some((label) => isRoadblock(label.name))) blocked += 1;
+    }
+  }
+  return blocked;
+}
+
 export interface FlowLane {
   id: string;
   /** The Trello list this counts, named as the building declared it. */
@@ -123,6 +162,15 @@ export interface Flow {
   lanes: FlowLane[];
   /** Cards standing in the lanes, which is what each bar is a share of. */
   total: number;
+  /**
+   * Cards on the board that are roadblocked — see `countRoadblocks`.
+   *
+   * Counted off the whole board rather than off the lanes, so it is not a
+   * share of `total` and does not belong on the plate with the five that
+   * are. It is what stands on the floor of the room instead: a stage of
+   * the pipeline is where work is, and this is work that has stopped.
+   */
+  blocked: number;
   /** The board's other lists, counted but not on the wall. */
   others: FlowOther[];
 }
@@ -180,6 +228,7 @@ export function toFlow(board: BoardView, lanes: readonly string[]): Flow {
     url: board.url,
     lanes: flowLanes,
     total: flowLanes.reduce((sum, lane) => sum + (lane.missing ? 0 : lane.count), 0),
+    blocked: countRoadblocks(board),
     others,
   };
 }

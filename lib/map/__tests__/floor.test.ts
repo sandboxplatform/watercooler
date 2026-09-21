@@ -15,6 +15,7 @@ import {
   opsProjectFlow,
   opsProjectRooms,
   opsProjectSign,
+  opsRoadblock,
   opsRooms,
   opsSign,
   opsSupportRoom,
@@ -26,7 +27,6 @@ import {
   opsWidth,
   PLAYER_START,
   PROJECT_BOARD,
-  NAME_COLS,
   PROJECT_FLOW,
   ROOM_COLS,
   SUPPORT_PULSE,
@@ -338,17 +338,41 @@ describe("an Operations floor", () => {
     it("leaves room beside the board for the name", () => {
       const queue = named("Help desk").tx;
       const counts = named("Support pulse").tx;
-      const sign = opsSupportSign(6).tx;
+      const { tx: sign, cols } = opsSupportSign(6);
       // Half of each board's own width either side of its point, from the
       // spec the map was generated off.
       const queueRight = queue + Math.ceil(HELP_DESK.region.sw / 2);
       const countsLeft = counts - Math.floor(SUPPORT_PULSE.region.sw / 2);
       expect(sign).toBeGreaterThan(queueRight);
       expect(sign).toBeLessThan(countsLeft);
-      // Four tiles of name, hard against the board and clear of it.
-      expect(sign - NAME_COLS / 2).toBeGreaterThanOrEqual(queueRight);
-      expect(sign + NAME_COLS / 2).toBeLessThanOrEqual(countsLeft);
-      expect(sign - NAME_COLS / 2).toBe(support.x + HELP_DESK.region.sw);
+      // The name has the whole gap, hard against the board and clear of it.
+      expect(sign - cols / 2).toBeGreaterThanOrEqual(queueRight);
+      expect(sign + cols / 2).toBeLessThanOrEqual(countsLeft);
+      expect(sign - cols / 2).toBe(support.x + HELP_DESK.region.sw);
+    });
+
+    /**
+     * The name in the middle of the gap, not in the middle of a band of
+     * its own hard against the board.
+     *
+     * They were the same tile only while the band and the gap were the
+     * same four tiles. Downstairs the gap is six — the doorway takes the
+     * right-hand end of the wall — so a fixed band lettered every project
+     * room's board a whole tile left of the wall it was written on, with
+     * the doorway's edge beside it to compare against.
+     */
+    it("centres a room's name on the clear stretch it is written on", () => {
+      for (const slot of [1, 2, 3]) {
+        const sign = opsProjectSign(6, slot)!;
+        const room = opsProjectRooms(6, slot)[slot - 1];
+        const board = room.x + PROJECT_BOARD.region.sw;
+        // Downstairs the doorway is what the wall gives up next; upstairs
+        // it is cut elsewhere, so the counts are.
+        const next =
+          room.rank === "lower" ? room.door.from : room.x + ROOM_COLS - PROJECT_FLOW.region.sw;
+        expect(sign.tx).toBe((board + next) / 2);
+        expect(sign.cols).toBe(next - board);
+      }
     });
 
     /**
@@ -385,9 +409,31 @@ describe("an Operations floor", () => {
         // And the name between them, which is drawn rather than a point.
         const sign = opsProjectSign(6, 2);
         if (sign && sign.tx > room.x && sign.tx < room.x + ROOM_COLS) {
-          expect(sign.tx + NAME_COLS / 2).toBeLessThanOrEqual(room.door.from);
+          expect(sign.tx + sign.cols / 2).toBeLessThanOrEqual(room.door.from);
         }
       }
+    });
+
+    /**
+     * The roadblock stands in the middle of the room's floor.
+     *
+     * The middle both ways, and the same answer for either rank: it is
+     * the one spot in an empty room that belongs to the room rather than
+     * to one of its edges, and everything else in here is on the wall.
+     */
+    it("stands the roadblock in the middle of the room", () => {
+      for (const slot of [1, 2, 3]) {
+        const at = opsRoadblock(6, slot)!;
+        const room = opsProjectRooms(6, slot)[slot - 1];
+        expect(at.tx).toBe(room.x + ROOM_COLS / 2);
+        expect(at.ty).toBe(room.y + 3);
+        // Clear of both side walls, and inside the room's own rows.
+        expect(at.tx).toBeGreaterThan(room.x);
+        expect(at.tx).toBeLessThan(room.x + ROOM_COLS);
+        expect(at.ty).toBeGreaterThanOrEqual(room.y);
+        expect(at.ty).toBeLessThan(room.y + 7);
+      }
+      expect(opsRoadblock(6, 9)).toBeNull();
     });
 
     it("runs the counts to Support's right-hand corner", () => {

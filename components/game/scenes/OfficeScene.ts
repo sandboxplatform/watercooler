@@ -35,6 +35,7 @@ import {
   SUPPORT_BOARD,
   opsProjectFlow,
   opsProjectSign,
+  opsRoadblock,
   opsSign,
   opsSupportPulse,
   opsSupportSign,
@@ -42,6 +43,7 @@ import {
 } from "@/lib/map/floor";
 import { DeskWeek, SupportPulse } from "../systems/SupportPulse";
 import { ProjectFlow } from "../systems/ProjectFlow";
+import { Roadblock } from "../systems/Roadblock";
 import { legible } from "../systems/legible";
 import {
   hasCampus,
@@ -745,7 +747,13 @@ export class OfficeScene extends Phaser.Scene {
    * whatever the office picked, and a room with PROJECT BOARD written over
    * a project board says less than the sign already hanging on it.
    *
-   * Hands back one teardown for every plate, since each keeps a timer.
+   * And a roadblock on the floor of any room with work stuck in it, which
+   * is the one thing the plate on the wall cannot say — see
+   * `systems/Roadblock`. It reads the same answer as the counts beside it
+   * (`systems/room-flow`), so a room with both in it is still one request.
+   *
+   * Hands back one teardown for every plate and every marker, since each
+   * keeps a timer.
    */
   private addProjectRooms(address: Address): (() => void) | null {
     const ops = address.floor.kind === "floor" && address.floor.level === 3;
@@ -756,7 +764,13 @@ export class OfficeScene extends Phaser.Scene {
       if (board.board) this.addProjectSign(rooms, slot, board.board);
       if (board.lanes.length === 0) return [];
       const at = opsProjectFlow(rooms, slot);
-      return at ? [new ProjectFlow(this).place(at, TILE, slot)] : [];
+      const marker = opsRoadblock(rooms, slot);
+      return [
+        ...(at ? [new ProjectFlow(this).place(at, TILE, slot)] : []),
+        // The same read as the counts beside it, and nothing drawn until
+        // there is something stuck — see `systems/Roadblock`.
+        ...(marker ? [new Roadblock(this).place(marker, TILE, slot)] : []),
+      ];
     });
     if (!stops.length) return null;
     return () => {
@@ -774,10 +788,10 @@ export class OfficeScene extends Phaser.Scene {
         fontSize: "16px",
         color: "#3a3a50",
         align: "center",
-        // Two rooms of wall is what there is between the board and the
-        // counts, so a long board name wraps rather than being lettered
-        // across the pictures either side of it.
-        wordWrap: { width: 4 * TILE },
+        // The clear stretch the wall has, which the room works out: a long
+        // board name wraps rather than being lettered across the pictures
+        // either side of it or out through its own doorway.
+        wordWrap: { width: at.cols * TILE },
       })
       .setDepth(3)
       .setResolution(2);

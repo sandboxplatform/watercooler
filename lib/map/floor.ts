@@ -342,22 +342,67 @@ const BETWEEN_ROOMS = {
  * wall's. The middle of the gap is the one that matters — a name is only
  * the room's if it is lettered on wall rather than across a picture — and
  * centred on the wall it would have crowded the counts.
+ *
+ * And the gap is **measured** rather than declared, which is what it was:
+ * a name band four tiles wide, hard against the board, centred on itself.
+ * That is the middle of the gap only where the gap happens to be four
+ * tiles, and downstairs it is six — so every project room lettered its
+ * board's name a whole tile to the left of the clear wall it was written
+ * on, with the doorway's edge on the right of it to compare against.
+ * `nameRun` is the stretch and the name is the middle of it, whatever it
+ * comes to.
  */
-/** How wide a name is drawn, which is what `OfficeScene` wraps it to. */
-export const NAME_COLS = 4;
-
 const BOARD_AT = 0;
 const NAME_AT = BOARD_AT + PROJECT_BOARD.region.sw;
 const COUNTS_AT = ROOM_COLS - SUPPORT_PULSE.region.sw;
-/** Centred in what the name and the counts leave, to the nearest tile. */
-const DOOR_AT = Math.round((NAME_AT + NAME_COLS + COUNTS_AT - DOOR_COLS) / 2);
+/**
+ * Hard against the counts, less a clear tile.
+ *
+ * The same column it has always been at, and now saying why: the doorway
+ * is the last thing onto the wall, so it takes the right-hand end of what
+ * the name does not want and leaves a tile of wall between itself and the
+ * plate — without which the gap and the doorway read as one opening. What
+ * is left to the left of it is the name's, which is what `nameRun` hands
+ * out.
+ */
+const DOOR_AT = COUNTS_AT - DOOR_COLS - 1;
 
 const BOARD_WALL = {
   board: BOARD_AT,
-  sign: NAME_AT + NAME_COLS / 2,
   door: DOOR_AT,
   counts: COUNTS_AT,
 } as const;
+
+/**
+ * The clear stretch of a working room's wall, in columns from its left
+ * edge: what the board, the counts and — downstairs — its own doorway
+ * leave for the room's name.
+ *
+ * Two answers, because the two ranks are looking at different walls.
+ * Upstairs a room's boards hang on the map's top wall and its doorway is
+ * cut through another wall altogether, so the gap runs the whole way from
+ * the board to the counts. Downstairs all four want one run, and the
+ * doorway is the right-hand end of it.
+ */
+function nameRun(rank: OpsRoom["rank"]): WallRun {
+  return { from: NAME_AT, to: rank === "lower" ? DOOR_AT : COUNTS_AT };
+}
+
+/**
+ * Where a working room letters its name, and how much wall it has for it.
+ *
+ * The middle of the clear stretch, and `cols` is the stretch itself —
+ * which the scene wraps the lettering to, so a long board name takes two
+ * lines rather than running across the pictures either side of it.
+ */
+function signOn(room: OpsRoom) {
+  const run = nameRun(room.rank);
+  return {
+    tx: room.x + (run.from + run.to) / 2,
+    ty: room.wallRow,
+    cols: run.to - run.from,
+  } as const;
+}
 
 /**
  * Where the whiteboard hangs on whichever wall it has: the left end of it,
@@ -520,20 +565,19 @@ export function opsWeekCounts(rooms: number) {
 }
 
 /**
- * Where Support letters its name: the middle of its own wall, between the
- * queue on the left and the five counts running to the right-hand corner.
+ * Where Support letters its name: the middle of the clear stretch of its
+ * own wall, between the queue on the left and whatever the wall gives up
+ * next — the five counts upstairs, its own doorway downstairs.
  *
  * It used to have two tiles at the left end, which is all the whiteboard
  * and the queue left it — seven letters at twelve pixels, small enough
  * that the sign read as a caption rather than as the room's name. Moving
- * the whiteboard out and sliding the queue into its place opens four tiles
- * in the middle, which is both the centre of the wall and the centre of
- * the gap: the name is the room's, so the middle of the room is where it
- * goes.
+ * the whiteboard out and sliding the queue into its place opened the
+ * middle of the wall, and `nameRun` is how much of it: the name is the
+ * room's, so the middle of the clear wall is where it goes.
  */
 export function opsSupportSign(rooms: number) {
-  const room = opsSupportRoom(rooms);
-  return { tx: room.x + BOARD_WALL.sign, ty: room.wallRow } as const;
+  return signOn(opsSupportRoom(rooms));
 }
 
 /**
@@ -587,8 +631,8 @@ export function opsProjectRooms(rooms: number, count: number): OpsRoom[] {
 
 /**
  * Where a project room letters the name of the board hanging in it: the
- * middle of its own wall, between the board on the left and the counts
- * running to the right-hand corner.
+ * middle of the clear stretch of its own wall, between the board on the
+ * left and its own doorway on the right.
  *
  * Exactly where Support letters its own name, and that is the point: the
  * two kinds of working room are the same wall, so what changes from one
@@ -599,8 +643,7 @@ export function opsProjectRooms(rooms: number, count: number): OpsRoom[] {
  */
 export function opsProjectSign(rooms: number, slot: number) {
   const room = opsProjectRooms(rooms, slot)[slot - 1];
-  if (!room) return null;
-  return { tx: room.x + BOARD_WALL.sign, ty: room.wallRow } as const;
+  return room ? signOn(room) : null;
 }
 
 /**
@@ -620,6 +663,42 @@ export function opsProjectFlow(rooms: number, slot = 1) {
     ty: room.wallRow + PROJECT_FLOW.region.dy,
     tw: PROJECT_FLOW.region.sw,
     th: PROJECT_FLOW.region.sh,
+  } as const;
+}
+
+/**
+ * Where a project room stands its roadblock, in tiles: the middle of the
+ * room, both ways.
+ *
+ * On the floor rather than on the wall, and that is the whole of it. The
+ * wall is where the work is — the board and the five stages it is spread
+ * over — and a roadblock is not a stage, it is the reason a stage is not
+ * moving. Put up there it would be a sixth bay on a plate of five and
+ * would read as more of the same; stood on the floor it is a thing in the
+ * way, which is what it is.
+ *
+ * The middle rather than in line with the doorway, which is where it
+ * stood first. Lined up with the door it was a thing to walk round on the
+ * way in, and off to one side of a room whose every other feature is on
+ * the wall opposite — so the room had the barrier in one corner of the
+ * eye and what it is about in the other. The middle is the one spot in an
+ * empty room that belongs to the room rather than to one of its edges,
+ * and it is in shot through the doorway from the corridor either way.
+ *
+ * Both ways: the middle column of seventeen is a half tile, which is
+ * exact rather than awkward — the marker is drawn centred on the point.
+ * The row is the middle of seven, and the marker stands on the bottom of
+ * it, so the feet land a shade below centre, which is where a thing that
+ * stands up looks centred from.
+ *
+ * Null where the floor has no such room, as the sign and the counts are.
+ */
+export function opsRoadblock(rooms: number, slot: number) {
+  const room = opsProjectRooms(rooms, slot)[slot - 1];
+  if (!room) return null;
+  return {
+    tx: room.x + ROOM_COLS / 2,
+    ty: room.y + Math.floor(ROOM_ROWS / 2),
   } as const;
 }
 
