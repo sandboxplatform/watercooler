@@ -6,6 +6,7 @@ import {
   pulseFigure,
   weekNet,
   type Pulse,
+  type WeekBank,
 } from "@/lib/zoho/pulse";
 import { PULSE_REFRESH_MS } from "@/lib/constants";
 import { createLogger } from "@/lib/logger";
@@ -18,10 +19,10 @@ const log = createLogger("SupportPulse");
  * The desk's numbers, in the two places they hang.
  *
  * `SupportPulse` is the plate on Support's own wall: five counts, the
- * standing three and the day's two. `DeskWeek` is the week, lettered on the
- * corridor wall outside the room, where the floor writes its own name.
- * Same desk, one read each, and both of them read the room's own server
- * rather than Zoho.
+ * standing three and the day's two. `DeskWeek` is the two weeks, lettered
+ * on the corridor wall outside the room, where the floor writes its own
+ * name. Same desk, one read each, and both of them read the room's own
+ * server rather than Zoho.
  *
  * The plate, the bays and the timer are `systems/CountBoard`, which the
  * project board's stage counts next door are drawn by too. What is here is
@@ -39,10 +40,11 @@ const log = createLogger("SupportPulse");
 /**
  * The bays on the plate, in the order they hang: one row per bank.
  *
- * The week's two are named here by their absence. They are the same desk
+ * The two weeks are named here by their absence. They are the same desk
  * and they come off the same read, but the plate is five tiles of wall with
  * two rows on it — a third bank would take every figure down a size to make
- * room for one nobody asked the wall for. They hang outside instead.
+ * room for one nobody asked the wall for, and a fourth is not even
+ * arguable. They hang outside instead.
  */
 const ROWS: readonly (readonly CountBay[])[] = ["standing", "today"].map((bank) =>
   PULSE_METRICS.filter((metric) => metric.bank === bank).map((metric) => ({
@@ -107,30 +109,47 @@ export class SupportPulse {
 }
 
 /**
- * The week, lettered on the corridor wall outside Support.
+ * The two weeks, lettered on the corridor wall outside Support.
  *
  * Painted lettering rather than a board, which is the whole of the
  * difference from the plate inside: no plate, no bays, no bars, and the
  * wall's own two colours rather than the HUD's. The corridor wall already
- * carries the floor's name at this size — this is two more things written
- * on it, and it has to read as part of the building rather than as a screen
+ * carries the floor's name at this size — this is more lettering written on
+ * it, and it has to read as part of the building rather than as a screen
  * somebody hung there.
  *
  * Which is also why nothing here flashes when a number moves. A board is a
  * display and news on it is news; paint does not change while you watch it,
  * and a wall that pulses reads as a fault.
  *
- * The counts are `opened-week` and `closed-week` off the same read the
- * plate uses, on the same beat, which the server holds them for — see
- * `PULSE_REFRESH_MS`. Between them goes the third figure, which is the
- * two of them subtracted: see `NET`.
+ * Two blocks of three, on two stretches of that wall: this week on the one
+ * Support fronts and last week on the next along. Three figures apiece
+ * rather than two, because between the counts goes the net — see `NET` —
+ * and both are headed, since what tells one week from the other is the word
+ * over it and nothing else.
+ *
+ * One object drawing both, so the wall is one read on one timer. Two of
+ * these side by side would ask the room's own server the same question
+ * twice a minute and let the halves of one row of lettering fall out of
+ * step with each other.
  */
 
-/** The two counted ones, in the order they are lettered: raised, then closed. */
-const WEEK = PULSE_METRICS.filter((metric) => metric.bank === "week");
+/** Where a week's three figures go, in tiles: the two counts and the net. */
+export interface WeekColumns {
+  tx: readonly number[];
+  net: number;
+  ty: number;
+}
+
+/** What is lettered over each block, which is the only thing telling them apart. */
+const TITLES: Record<WeekBank, string> = {
+  week: "THIS WEEK",
+  "last-week": "LAST WEEK",
+};
 
 /**
- * The figure between them: the week's net, and the two ways it can lean.
+ * The figure between the two counts: a week's net, and the two ways it can
+ * lean.
  *
  * Not a `PulseMetric`, because nothing counts it — it is the other two
  * subtracted (`weekNet`), so there is no sweep behind it and nothing for
@@ -149,7 +168,6 @@ const WEEK = PULSE_METRICS.filter((metric) => metric.bank === "week");
  * to it reads as a light somebody switched on.
  */
 const NET = {
-  id: "net",
   short: NET_HEADING,
   /** More came in than went out. */
   rise: "#8f3138",
@@ -168,6 +186,9 @@ const LABEL = "#565972";
 /** With the room's props, over the wall it is painted on — as a board is. */
 const DEPTH = 4;
 
+/** The net's own key among the figures, which no metric claims. */
+const netKey = (bank: WeekBank) => `net-${bank}`;
+
 export class DeskWeek {
   private container: Phaser.GameObjects.Container | null = null;
   private figures = new Map<string, Phaser.GameObjects.Text>();
@@ -176,42 +197,37 @@ export class DeskWeek {
   constructor(private scene: Phaser.Scene) {}
 
   /**
-   * Letter it at `at` — the columns and the wall row `opsWeekCounts` gives,
-   * which are tiles rather than a footprint because nothing here is solid:
-   * it is paint on a wall that already is.
+   * Letter both blocks — the columns and the wall row `opsWeekCounts` and
+   * `opsLastWeekCounts` give, which are tiles rather than a footprint
+   * because nothing here is solid: it is paint on a wall that already is.
    *
    * Three columns off two of them: the net hangs at the middle of the
-   * stretch, between the two figures it is the difference of.
+   * stretch, between the two figures it is the difference of — which is
+   * also where the block's own heading goes, since the middle is the one
+   * spot on a stretch that belongs to all three of them.
    *
-   * Each heading and figure is centred on the wall as a pair, by the same
-   * rule the floor's own name on this wall goes by (`letterOnWall`) — which
-   * is what keeps the three of them reading as one row of lettering rather
-   * than as three things that happen to share a wall.
+   * Each block is three lines centred on the wall by the same rule the
+   * floor's own name goes by (`letterOnWall`), the headings and the figures
+   * being lines of three. Which is what keeps the two reading as one row of
+   * lettering along the corridor rather than as two things that happen to
+   * share a wall.
+   *
+   * `last` is null on a floor with only the one stretch to letter on, and
+   * then this week has the wall to itself, exactly as it did before there
+   * was a second week to put anywhere.
    *
    * Returns a teardown, because the scene restarts on every lift ride and
    * an interval that outlives it goes on fetching for a room nobody is in.
    */
-  place(at: { tx: readonly number[]; net: number; ty: number }, tile: number): () => void {
+  place(at: { week: WeekColumns; last: WeekColumns | null }, tile: number): () => void {
     const container = this.scene.add.container(0, 0).setDepth(DEPTH);
     this.container = container;
 
-    const columns = [
-      { id: WEEK[0].id, short: WEEK[0].short, tx: at.tx[0] },
-      { id: NET.id, short: NET.short, tx: at.net },
-      { id: WEEK[1].id, short: WEEK[1].short, tx: at.tx[1] },
-    ];
-
-    for (const column of columns) {
-      const x = column.tx * tile;
-      const heading = this.scene.add
-        .text(x, 0, column.short, { fontFamily: FONT, fontSize: "12px", color: LABEL })
-        .setResolution(2);
-      const figure = this.scene.add
-        .text(x, 0, NO_FIGURE, { fontFamily: FONT, fontSize: "22px", color: INK })
-        .setResolution(2);
-      letterOnWall(at.ty * tile, [heading, figure]);
-      container.add([heading, figure]);
-      this.figures.set(column.id, figure);
+    for (const [bank, where] of [
+      ["week", at.week],
+      ["last-week", at.last],
+    ] as const) {
+      if (where) this.letter(bank, where, tile, container);
     }
 
     void this.read();
@@ -219,11 +235,48 @@ export class DeskWeek {
     return () => this.destroy();
   }
 
+  /** One block: the week's name, three headings under it, three figures under those. */
+  private letter(
+    bank: WeekBank,
+    at: WeekColumns,
+    tile: number,
+    container: Phaser.GameObjects.Container,
+  ) {
+    const counted = PULSE_METRICS.filter((metric) => metric.bank === bank);
+    const columns = [
+      { id: counted[0].id as string, short: counted[0].short, tx: at.tx[0] },
+      { id: netKey(bank), short: NET.short, tx: at.net },
+      { id: counted[1].id as string, short: counted[1].short, tx: at.tx[1] },
+    ];
+
+    const title = this.scene.add
+      .text(at.net * tile, 0, TITLES[bank], { fontFamily: FONT, fontSize: "16px", color: INK })
+      .setResolution(2);
+    const headings: Phaser.GameObjects.Text[] = [];
+    const figures: Phaser.GameObjects.Text[] = [];
+    for (const column of columns) {
+      const x = column.tx * tile;
+      headings.push(
+        this.scene.add
+          .text(x, 0, column.short, { fontFamily: FONT, fontSize: "12px", color: LABEL })
+          .setResolution(2),
+      );
+      const figure = this.scene.add
+        .text(x, 0, NO_FIGURE, { fontFamily: FONT, fontSize: "22px", color: INK })
+        .setResolution(2);
+      figures.push(figure);
+      this.figures.set(column.id, figure);
+    }
+
+    letterOnWall(at.ty * tile, [title, headings, figures]);
+    container.add([title, ...headings, ...figures]);
+  }
+
   private async read() {
     const pulse = await readDesk();
     // The scene may have restarted while we were waiting.
     if (!this.container?.active) return;
-    for (const metric of WEEK) {
+    for (const metric of PULSE_METRICS) {
       this.figures
         .get(metric.id)
         ?.setText(
@@ -232,21 +285,21 @@ export class DeskWeek {
             : NO_FIGURE,
         );
     }
-    this.leanNet(pulse);
+    for (const bank of ["week", "last-week"] as const) this.leanNet(bank, pulse);
   }
 
   /**
-   * The middle figure, and its colour.
+   * The middle figure of a block, and its colour.
    *
    * A dash where either sweep was capped, which is `weekNet`'s call rather
    * than this one's — and it takes the ink with it, because a coloured dash
    * would be the wall claiming a direction it has just said it cannot
    * work out.
    */
-  private leanNet(pulse: Pulse | null) {
-    const figure = this.figures.get(NET.id);
+  private leanNet(bank: WeekBank, pulse: Pulse | null) {
+    const figure = this.figures.get(netKey(bank));
     if (!figure) return;
-    const net = pulse && weekNet(pulse.counts, pulse.capped);
+    const net = pulse && weekNet(pulse.counts, pulse.capped, bank);
     figure.setText(net ? net.figure : NO_FIGURE);
     figure.setColor(net?.lean === "rise" ? NET.rise : net?.lean === "fall" ? NET.fall : INK);
   }

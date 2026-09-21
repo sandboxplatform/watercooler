@@ -39,6 +39,7 @@ import {
   opsSign,
   opsSupportPulse,
   opsSupportSign,
+  opsLastWeekCounts,
   opsWeekCounts,
 } from "@/lib/map/floor";
 import { DeskWeek, SupportPulse } from "../systems/SupportPulse";
@@ -713,20 +714,25 @@ export class OfficeScene extends Phaser.Scene {
    * own teardown, since it keeps a timer.
    */
   /**
-   * The week, lettered on the corridor wall outside Support.
+   * The two weeks, lettered on the corridor wall outside Support.
    *
    * The same condition as the plate inside — it is the same desk — and one
    * more: `opsWeekCounts` answers null on a floor with no clear stretch of
    * that wall to letter, which the plate does not care about because it
-   * hangs on the room's own. Hands back its teardown, since it keeps a
-   * timer.
+   * hangs on the room's own. `opsLastWeekCounts` answers null one floor
+   * sooner, since it wants a second stretch, and this week is lettered on
+   * its own where there is none.
+   *
+   * Both go to the one object rather than to two, so the wall is one read
+   * on one timer. Hands back its teardown, since it keeps one.
    */
   private addDeskWeek(address: Address): (() => void) | null {
     const ops = address.floor.kind === "floor" && address.floor.level === 3;
     if (!ops || !operationsBoards(address.tenant).includes(SUPPORT_BOARD)) return null;
-    const at = opsWeekCounts(operationsRoomCount(address.tenant));
-    if (!at) return null;
-    return new DeskWeek(this).place(at, TILE);
+    const rooms = operationsRoomCount(address.tenant);
+    const week = opsWeekCounts(rooms);
+    if (!week) return null;
+    return new DeskWeek(this).place({ week, last: opsLastWeekCounts(rooms) }, TILE);
   }
 
   /**

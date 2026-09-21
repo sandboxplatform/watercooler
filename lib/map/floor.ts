@@ -537,6 +537,9 @@ export function opsSign(rooms: number) {
  * on, outside the room the numbers belong to, so walking out of the lift
  * tells you where you are and how the week has gone in two glances.
  *
+ * Last week hangs beside it on the next stretch along — see
+ * `opsLastWeekCounts`, which is where the two are one row of lettering.
+ *
  * Quarter and three-quarters of the run rather than a gap between them,
  * because each figure is centred under its own heading and the pair has to
  * read as two things rather than one long one. `net` is the middle of the
@@ -552,16 +555,61 @@ export function opsSign(rooms: number) {
  * and Support are the same room.
  */
 export function opsWeekCounts(rooms: number) {
+  const run = weekWallRun(rooms);
+  return run && weekOn(run);
+}
+
+/**
+ * The stretch this week is lettered on: the corridor wall outside Support,
+ * or null on the two floors that have none.
+ *
+ * Its own function because last week's is read off it — the two blocks are
+ * one row of lettering on one wall, and the second is "the next stretch
+ * along" rather than a stretch found again from scratch.
+ */
+function weekWallRun(rooms: number): WallRun | null {
   const support = opsSupportRoom(rooms);
   if (support.rank !== "upper") return null;
   const run = opsWallRun(rooms, support);
-  if (middleOf(run) === opsSign(rooms).tx) return null;
+  return middleOf(run) === opsSign(rooms).tx ? null : run;
+}
+
+/** The three columns a week is lettered in, on a stretch of wall. */
+function weekOn(run: WallRun) {
   const width = run.to - run.from;
   return {
     tx: [run.from + width / 4, run.from + (width * 3) / 4] as const,
     net: middleOf(run),
     ty: UPPER_WALL,
   };
+}
+
+/**
+ * And last week, on the next clear stretch along.
+ *
+ * The same three figures over the week before, because a week of traffic
+ * says very little on its own: twelve raised and eleven closed is a good
+ * week or a quiet disaster depending on what the week before it did, and
+ * the wall is the one place anybody is standing when they ask. Two blocks
+ * side by side is that comparison made by looking.
+ *
+ * The next stretch rather than the one before, so the corridor reads away
+ * from the lift as it reads back in time: the floor's name, then this week,
+ * then last. And a stretch of its own rather than six figures crowded onto
+ * Support's, which is the same argument that put the week out here in the
+ * first place — each block is headed, and a heading over three figures is
+ * the only thing saying which week they are.
+ *
+ * Null where there is no next stretch, which is a floor of three or four
+ * rooms: Support fronts the last one. The week keeps its own wall there,
+ * exactly as the desk keeps its five counts on a floor with no wall for the
+ * week at all.
+ */
+export function opsLastWeekCounts(rooms: number) {
+  const week = weekWallRun(rooms);
+  if (!week) return null;
+  const next = opsWallRuns(rooms).find((run) => run.from >= week.to);
+  return next && middleOf(next) !== opsSign(rooms).tx ? weekOn(next) : null;
 }
 
 /**

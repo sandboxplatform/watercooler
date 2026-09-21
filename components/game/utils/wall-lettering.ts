@@ -20,8 +20,18 @@ export const WALL_BAND = WALL_ROWS * TILE;
 /** The gap between two lines of it, which is the only spacing there is. */
 const LINE_GAP = 8;
 
+/** A line of lettering: one thing, or several sharing the line. */
+export type WallLine = Phaser.GameObjects.Text | readonly Phaser.GameObjects.Text[];
+
 /**
  * Stack these lines down the middle of the wall whose top row is `wallTop`.
+ *
+ * A line may be several pieces of lettering side by side — a heading over
+ * each of three figures, say — which is one line rather than three: they
+ * are at different x and they have to sit at the same y, or a row of
+ * numbers reads as three things that happen to share a wall. Each is
+ * measured at the tallest thing on it, so a bigger figure among smaller
+ * ones pushes the line below it down rather than being written over.
  *
  * Centred rather than hung off a fixed offset, which is what every one of
  * these used to do — a bottom edge at 92 and a top edge at 100, numbers
@@ -40,20 +50,22 @@ const LINE_GAP = 8;
  * lettering and this writes the layout — a line left on the bottom origin
  * would sit a line-height out and look like a font problem.
  */
-export function letterOnWall(
-  wallTop: number,
-  lines: readonly Phaser.GameObjects.Text[],
-  gap = LINE_GAP,
-): void {
-  const drawn = lines.filter((line) => line.text.length > 0);
+export function letterOnWall(wallTop: number, lines: readonly WallLine[], gap = LINE_GAP): void {
+  const drawn = lines
+    .map((line) => (Array.isArray(line) ? [...line] : [line as Phaser.GameObjects.Text]))
+    .map((pieces) => pieces.filter((piece) => piece.text.length > 0))
+    .filter((pieces) => pieces.length > 0);
   if (drawn.length === 0) return;
-  for (const line of drawn) line.setOrigin(0.5, 0);
-  const block = drawn.reduce((tall, line) => tall + line.height, 0) + gap * (drawn.length - 1);
+  const tallest = (pieces: Phaser.GameObjects.Text[]) =>
+    pieces.reduce((tall, piece) => Math.max(tall, piece.height), 0);
+  for (const pieces of drawn) for (const piece of pieces) piece.setOrigin(0.5, 0);
+  const block =
+    drawn.reduce((tall, pieces) => tall + tallest(pieces), 0) + gap * (drawn.length - 1);
   // Whole pixels: this is pixel art, and half a pixel of offset is a row of
   // lettering rendered twice as faintly as the row above it.
   let y = Math.round(wallTop + (WALL_BAND - block) / 2);
-  for (const line of drawn) {
-    line.setY(y);
-    y += line.height + gap;
+  for (const pieces of drawn) {
+    for (const piece of pieces) piece.setY(y);
+    y += tallest(pieces) + gap;
   }
 }

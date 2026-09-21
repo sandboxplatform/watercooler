@@ -21,14 +21,18 @@ interface Answer {
  *
  * The room splits them the same way, because the split is what makes the
  * bars mean anything: three numbers standing on the desk right now, two
- * that are a day's traffic, and two that are the week's. Naming the groups
- * here saves the paragraph that used to have to explain which three were
- * which.
+ * that are a day's traffic, two that are this week's and two that are last
+ * week's. Naming the groups here saves the paragraph that used to have to
+ * explain which three were which.
  *
- * The first two are the plate on Support's wall and the third is lettered
- * on the corridor wall outside it — which is a fact about where there was
- * room, not about the numbers. In here they are one desk read three ways,
- * so they are one panel.
+ * The first two are the plate on Support's wall and the last two are
+ * lettered on the corridor wall outside it — which is a fact about where
+ * there was room, not about the numbers. In here they are one desk read
+ * four ways, so they are one panel.
+ *
+ * Last week is the only one bounded at both ends, and its aside says so:
+ * "since" is the wrong word for a week that has finished, and a reader
+ * comparing two weeks needs to know which Mondays they run between.
  */
 const BANKS = [
   {
@@ -45,6 +49,12 @@ const BANKS = [
     bank: "week" as const,
     name: "This week",
     aside: (pulse: Pulse) => `since ${sinceLabel(pulse.weekSince, pulse.timeZone)}`,
+  },
+  {
+    bank: "last-week" as const,
+    name: "Last week",
+    aside: (pulse: Pulse) =>
+      `${sinceLabel(pulse.lastWeekSince, pulse.timeZone)} to ${sinceLabel(pulse.weekSince, pulse.timeZone)}`,
   },
 ];
 
@@ -106,9 +116,9 @@ function sinceLabel(iso: string, timeZone: string | null): string {
  * answer to "what does WIP mean" and the answer to "I cannot read that", in
  * one place.
  *
- * All seven, wherever they hang. The five on Support's plate and the two
- * lettered on the corridor wall outside are one desk, and a reader who
- * walked up to either wants the same explanation.
+ * All nine, wherever they hang. The five on Support's plate and the two
+ * weeks lettered on the corridor wall outside are one desk, and a reader
+ * who walked up to either wants the same explanation.
  *
  * A window onto the desk and only that. Nothing here answers a ticket.
  */
@@ -247,7 +257,8 @@ export default function SupportPulse() {
               <p className="pulse-legend">
                 Each bar is that number&rsquo;s share of its own group, so the numbers within a
                 group compare with each other and nothing here is a percentage of anything else. A
-                week starts on Monday, on the same clock as the day.
+                week starts on Monday, on the same clock as the day, and last week is the one that
+                ended on this one.
                 {zoneNote(pulse) && <> {zoneNote(pulse)}</>}
               </p>
             </>

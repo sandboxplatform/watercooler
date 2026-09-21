@@ -1223,6 +1223,37 @@ is room, and it is not a consolation: the numbers hang on the face the
 floor writes its own name on, so stepping out of the lift says where you
 are and how the week has gone in two glances.
 
+**And last week beside it, on the next stretch along** — `opsLastWeekCounts`,
+the same three figures over the week before. A week of traffic says very
+little on its own: twelve raised and eleven closed is a good week or a quiet
+disaster depending on what the week before it did, and the wall is where
+somebody is standing when they ask. Two blocks side by side is that
+comparison made by looking, rather than by remembering what the wall said
+last Friday.
+
+Three things about the pair:
+
+- **The next stretch, not the one before**, so the corridor reads away from
+  the lift as it reads back in time: the floor's name, then this week, then
+  last. A stretch of its own rather than six figures crowded onto Support's,
+  which is the argument that put the week out here in the first place.
+- **Both are headed now** — `THIS WEEK` and `LAST WEEK`, lettered over the
+  middle of each — because the headings under them are the same two words on
+  both blocks. Which is why the counts are `OPENED` and `CLOSED` rather than
+  `OPENED WEEK` and `CLOSED WEEK`: the block says which week, and a heading
+  that says it too says it in the place with least room.
+- **One `DeskWeek` draws both**, so the wall is one read on one timer. Two of
+  them would ask the room's own server the same question twice a minute and
+  let the halves of one row of lettering fall out of step. `last` is null on
+  a floor of three or four rooms, where Support fronts the last stretch there
+  is, and this week has the wall to itself exactly as it did before.
+
+A line of lettering may be several things side by side, which is what the
+blocks are made of: `letterOnWall` takes a heading over each of three
+figures as **one line** rather than three, measured at the tallest thing on
+it. Three separate calls would have laid three blocks of one column each and
+left a row of numbers reading as three things that happen to share a wall.
+
 Painted rather than plated, which is the whole difference from the plate
 inside — no bays, no bars, the wall's own two colours, and no flash on a
 number that moved. Paint does not change while you watch it. `DeskWeek` in
@@ -1233,7 +1264,9 @@ a teardown like the boards do.
 thing on the wall with a colour: red where the week put the desk deeper in
 than it started, green where it saw off more than it took on, and the
 wall's own ink where it came out level. `weekNet` in `lib/zoho/pulse.ts` is
-the arithmetic and the lean; `NET` in `SupportPulse.ts` is the two colours,
+the arithmetic and the lean, asked of either week by its `WeekBank` — the
+ids are `opened-${bank}` and `closed-${bank}`, so the two blocks cannot
+drift apart and a third week would need nothing there; `NET` in `SupportPulse.ts` is the two colours,
 both at the weight of the ink beside them rather than the HUD's warning
 colours — this is paint on a wall next to the floor's own name, and a
 `#ef4444` up there reads as a light somebody switched on.
@@ -1417,8 +1450,8 @@ knowing.
 come with the queue rather than being declared: `SUPPORT_PULSE` is not a
 `BoardKind`, and a building running no support desk has nothing for them to
 count. What is standing in three statuses, and what was raised and closed
-today. The week's two come with the queue for the same reason and hang
-outside the room, above.
+today. The four that are weeks come with the queue for the same reason and
+hang outside the room, above.
 
 They are one of the two fixtures whose picture is its numbers, which is why
 nothing delivers art for them. `systems/CountBoard` draws the plate, the
@@ -1545,16 +1578,22 @@ The arithmetic is `lib/zoho/pulse.ts`, pure, and the sweeps are
 `fetchPulse` in `lib/zoho/client.ts`. Three sweeps rather than one page,
 because they are three questions:
 
-| Sweep    | Asks Zoho for                         | Stops when                        |
-| -------- | ------------------------------------- | --------------------------------- |
-| Standing | `status=New,Queue,In Progress`        | The pages run out                 |
-| Opened   | Everything, `sortBy=-createdTime`     | A ticket is older than Monday     |
-| Closed   | `status=Closed`, `sortBy=-closedTime` | A ticket was closed before Monday |
+| Sweep    | Asks Zoho for                         | Stops when                                    |
+| -------- | ------------------------------------- | --------------------------------------------- |
+| Standing | `status=New,Queue,In Progress`        | The pages run out                             |
+| Opened   | Everything, `sortBy=-createdTime`     | A ticket is older than the Monday before last |
+| Closed   | `status=Closed`, `sortBy=-closedTime` | A ticket was closed before that Monday        |
 
-**Still three sweeps for seven counts.** The week is the longer reach of the
-two boundaries, so the traffic sweeps stop there and the day's counts are a
-prefix of what they already read — a second pair of sweeps to midnight would
-ask Zoho again for tickets it has just handed over.
+**Still three sweeps, now for nine counts.** The Monday before last is the
+longest reach of the boundaries, so the traffic sweeps stop there and every
+shorter count — this week's, today's — is a prefix of what those same pages
+already held. A pair of sweeps per boundary would ask Zoho again for tickets
+it has just handed over.
+
+What a second week costs is reach rather than requests: the sweeps read a
+fortnight of the desk before they stop, so a busy one runs into
+`PULSE_MAX_PAGES` sooner. Which is exactly what capping per boundary is for
+— see below.
 
 Five details are load-bearing. Zoho's `from` is **one-based** — its first
 record is 1 and 0 is treated as 1 — so a zero-based offset reads the
@@ -1563,14 +1602,14 @@ boundary record twice on every page and counts it twice with it. The
 ticket past the boundary, so the order is the only thing that makes them
 exact from one page. A sweep that hits `PULSE_MAX_PAGES` marks its counters
 `capped` and the figure is written `600+`, because a floor that looks like
-a total is worse than no number — but **capped is asked per boundary now**,
-since one sweep answers two questions: running out of pages somewhere inside
-the week says nothing about today if the sweep got as far back as midnight,
-which on a busy desk is the ordinary case (`sweptPast`). And a bar is a
-share of its own **bank** — the three standing against each other, the two
-day counters against each other, the two week counters against each other —
-since one scale across the lot would measure a standing total against a
-day's flow, which is not a comparison.
+a total is worse than no number — but **capped is asked per boundary**,
+since one sweep answers three questions: running out of pages somewhere
+inside last week says nothing about this week, and nothing about today, if
+the sweep got as far back as those boundaries, which on a busy desk is the
+ordinary case (`sweptPast`). And a bar is a share of its own **bank** — the
+three standing against each other, the two day counters against each other,
+each week's two against each other — since one scale across the lot would
+measure a standing total against a day's flow, which is not a comparison.
 
 There is no count endpoint behind this. `/ticketsCountByFieldValues` needs
 a scope the desk's token does not carry, and `/tickets/count` insists on a
@@ -1583,6 +1622,14 @@ is by literal value. They map onto the three bays by position, so the first
 named is the left-hand bay whatever it is called. Sandbox ERP's desk carries
 New, Queue and In Progress among its nine, which is where the default comes
 from.
+
+**Last week is Monday to Monday, and it is a window rather than a reach
+back.** `countBetween` is the count and the far end is open: the two weeks
+share a Monday, and a ticket raised at exactly that midnight belongs to the
+week it opened rather than to both. `weekStartIn(now, zone, 1)` is the
+boundary — whole weeks stepped off the desk's own calendar, for the reason
+the days are: the week the clocks change is 167 hours or 169, so this
+Monday less 168 of them lands an hour the wrong side of the one before.
 
 **"This week" is Monday to now, on the desk's clock.** Monday because a
 support desk's week is a working week: a Sunday ticket belongs with the

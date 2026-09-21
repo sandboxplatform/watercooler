@@ -6,9 +6,10 @@
  * other way: counts that say how much work is standing, how much moved
  * today and how much moved this week, big enough to read from the doorway.
  *
- * Five of them are the plate on Support's wall; the week's two are lettered
- * on the corridor wall outside it, where the floor writes its own name. Same
- * sweeps, same boundary arithmetic — a second reading of the same desk.
+ * Five of them are the plate on Support's wall; the two weeks are lettered
+ * on the corridor wall outside it, where the floor writes its own name — this
+ * week on the stretch Support fronts and last week on the next one along.
+ * Same sweeps, same boundary arithmetic — a second reading of the same desk.
  *
  * Everything here is pure. No fetching, no credentials, no clock of its
  * own, so the arithmetic can be checked without a network or a Zoho
@@ -26,7 +27,20 @@ export type PulseId =
   | "opened-today"
   | "closed-today"
   | "opened-week"
-  | "closed-week";
+  | "closed-week"
+  | "opened-last-week"
+  | "closed-last-week";
+
+/**
+ * The two banks that are a week of traffic: the one being worked, and the
+ * one before it.
+ *
+ * A type rather than two lists, because everything downstream is the same
+ * arrangement asked about a different pair of Mondays — the ids are
+ * `opened-${WeekBank}` and `closed-${WeekBank}`, which is what keeps the two
+ * from drifting apart the next time one of them gains anything.
+ */
+export type WeekBank = "week" | "last-week";
 
 export interface PulseMetric {
   id: PulseId;
@@ -45,7 +59,7 @@ export interface PulseMetric {
    * much of the week's". One scale across the lot would measure a standing
    * total against a day's flow, which is not a comparison.
    */
-  bank: "standing" | "today" | "week";
+  bank: "standing" | "today" | WeekBank;
 }
 
 /**
@@ -105,7 +119,7 @@ export const PULSE_METRICS: readonly PulseMetric[] = [
   },
   {
     id: "opened-week",
-    short: "OPENED WEEK",
+    short: "OPENED",
     label: "Opened this week",
     note: "Raised since Monday, whatever status they are in now",
     colour: "#7dd3fc",
@@ -113,11 +127,27 @@ export const PULSE_METRICS: readonly PulseMetric[] = [
   },
   {
     id: "closed-week",
-    short: "CLOSED WEEK",
+    short: "CLOSED",
     label: "Closed this week",
     note: "Closed since Monday, whenever they were raised",
     colour: "#6bd968",
     bank: "week",
+  },
+  {
+    id: "opened-last-week",
+    short: "OPENED",
+    label: "Opened last week",
+    note: "Raised between the Monday before last and this one",
+    colour: "#7dd3fc",
+    bank: "last-week",
+  },
+  {
+    id: "closed-last-week",
+    short: "CLOSED",
+    label: "Closed last week",
+    note: "Closed inside that week, whenever they were raised",
+    colour: "#6bd968",
+    bank: "last-week",
   },
 ];
 
@@ -158,6 +188,12 @@ export interface Pulse {
    * the thing the panel has to be able to say out loud.
    */
   weekSince: string;
+  /**
+   * Midnight on the Monday before that one, which last week's two counters
+   * are measured from — and to `weekSince`, since last week is a window
+   * rather than a reach back from now.
+   */
+  lastWeekSince: string;
   /** The desk's timezone, or null where it fell back to the server's clock. */
   timeZone: string | null;
   /** How that was decided. */
@@ -189,16 +225,19 @@ export function dayStart(now: number): number {
 const SINCE_MONDAY = (weekday: number) => (weekday + 6) % 7;
 
 /**
- * Midnight on Monday this week, where the server stands.
+ * Midnight on a Monday, where the server stands: this week's by default,
+ * and `back` weeks before it otherwise.
  *
  * The last resort, for the same reason `dayStart` is — and stepped back by
  * whole days on a local date rather than by 24-hour blocks, so the week
- * containing a clock change is still seven midnights long.
+ * containing a clock change is still seven midnights long. Which is the
+ * whole reason the weeks are counted in days here rather than the caller
+ * subtracting `back` lots of 604,800,000 from the answer.
  */
-export function weekStart(now: number): number {
+export function weekStart(now: number, back = 0): number {
   const at = new Date(now);
   at.setHours(0, 0, 0, 0);
-  at.setDate(at.getDate() - SINCE_MONDAY(at.getDay()));
+  at.setDate(at.getDate() - SINCE_MONDAY(at.getDay()) - 7 * back);
   return at.getTime();
 }
 
@@ -310,21 +349,23 @@ export function dayStartIn(now: number, timeZone: string | null): number {
  * `dayStartIn(now) - days * 86_400_000` — lands an hour inside Sunday or an
  * hour inside Monday twice a year, which moves two counts on the wall.
  * Whole days on a calendar have no such thing to get wrong, and `Date`'s
- * UTC side is the calendar with no daylight saving of its own.
+ * UTC side is the calendar with no daylight saving of its own. `back` steps
+ * whole weeks off the same calendar for the same reason: last week's Monday
+ * is the one the desk's clock says it is, not this one's less 168 hours.
  */
-export function weekStartIn(now: number, timeZone: string | null): number {
-  if (!timeZone) return weekStart(now);
+export function weekStartIn(now: number, timeZone: string | null, back = 0): number {
+  if (!timeZone) return weekStart(now, back);
   const wall = wallClock(now, timeZone);
-  if (!wall) return weekStart(now);
+  if (!wall) return weekStart(now, back);
 
   const date = new Date(Date.UTC(wall.year, wall.month - 1, wall.day));
-  date.setUTCDate(date.getUTCDate() - SINCE_MONDAY(date.getUTCDay()));
+  date.setUTCDate(date.getUTCDate() - SINCE_MONDAY(date.getUTCDay()) - 7 * back);
   const start = startOfDayIn(
     { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() },
     now,
     timeZone,
   );
-  return start ?? weekStart(now);
+  return start ?? weekStart(now, back);
 }
 
 /**
@@ -423,6 +464,31 @@ export function countSince(
 }
 
 /**
+ * How many of a swept page carry `field` inside [`from`, `to`).
+ *
+ * A window rather than a reach back from now, which is what makes last week
+ * a different question from this one: the week that has been worked is
+ * bounded at both ends, so a ticket raised this morning is not in it.
+ *
+ * Half-open, and the open end is deliberate: the two windows share a
+ * Monday, and a ticket raised at exactly that midnight belongs to the week
+ * it opened rather than to both of them.
+ */
+export function countBetween(
+  tickets: readonly Record<string, unknown>[],
+  field: "createdTime" | "closedTime",
+  from: number,
+  to: number,
+): number {
+  let count = 0;
+  for (const ticket of tickets) {
+    const stamp = ticket[field] as string | null | undefined;
+    if (atOrAfter(stamp, from) && !atOrAfter(stamp, to)) count += 1;
+  }
+  return count;
+}
+
+/**
  * Whether a swept page reached back past `boundary` — whether it saw
  * anything older than it.
  *
@@ -472,12 +538,20 @@ export function toPulse(input: {
    * which is why this costs no extra request.
    */
   weekSince: number;
+  /**
+   * The Monday before that, which last week's two are measured from — and
+   * the boundary the sweeps actually stopped at, since it is the longest
+   * reach of the three. Every count above it is a prefix of what those same
+   * pages already held, which is why a second week costs no extra sweep.
+   */
+  lastWeekSince: number;
   /** The desk's timezone that boundary came from, and how it was decided. */
   timeZone: string | null;
   zone: ZoneSource;
 }): Pulse {
   const from = input.since;
   const week = input.weekSince;
+  const lastWeek = input.lastWeekSince;
   const byStatus = countStatuses(input.standing, input.statuses);
   const counts = {
     new: 0,
@@ -487,6 +561,10 @@ export function toPulse(input: {
     "closed-today": countSince(input.closed, "closedTime", from),
     "opened-week": countSince(input.opened, "createdTime", week),
     "closed-week": countSince(input.closed, "closedTime", week),
+    // Bounded at both ends: last week is the week that was worked, so this
+    // Monday closes it. See `countBetween`.
+    "opened-last-week": countBetween(input.opened, "createdTime", lastWeek, week),
+    "closed-last-week": countBetween(input.closed, "closedTime", lastWeek, week),
   } as PulseCounts;
   for (const [i, id] of STANDING.entries()) {
     const name = input.statuses[i];
@@ -498,6 +576,7 @@ export function toPulse(input: {
     statuses: [...input.statuses],
     since: new Date(from).toISOString(),
     weekSince: new Date(week).toISOString(),
+    lastWeekSince: new Date(lastWeek).toISOString(),
     timeZone: input.timeZone,
     zone: input.zone,
   };
@@ -542,8 +621,12 @@ export function pulseFigure(value: number, capped: boolean): string {
 export const NET_HEADING = "NET";
 
 /**
- * The week's net, as the wall letters it between the two counts it is the
- * difference of: what the desk took on this week less what it saw off.
+ * A week's net, as the wall letters it between the two counts it is the
+ * difference of: what the desk took on that week less what it saw off.
+ *
+ * Asked of either week by `bank`, since the two blocks on the corridor
+ * wall are the same three figures over a different pair of Mondays — and
+ * the ids follow from it, so a third week would need nothing here.
  *
  * Signed, because the sign is the whole of what it says — a desk that
  * raised twelve and closed eleven is one ticket deeper in than it started,
@@ -561,9 +644,12 @@ export const NET_HEADING = "NET";
 export function weekNet(
   counts: PulseCounts,
   capped: readonly PulseId[] = [],
+  bank: WeekBank = "week",
 ): { net: number; figure: string; lean: "rise" | "level" | "fall" } | null {
-  if (capped.includes("opened-week") || capped.includes("closed-week")) return null;
-  const net = counts["opened-week"] - counts["closed-week"];
+  const opened = `opened-${bank}` as const;
+  const closed = `closed-${bank}` as const;
+  if (capped.includes(opened) || capped.includes(closed)) return null;
+  const net = counts[opened] - counts[closed];
   return {
     net,
     figure: net > 0 ? `+${net}` : String(net),

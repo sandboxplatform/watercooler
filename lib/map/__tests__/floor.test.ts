@@ -22,6 +22,7 @@ import {
   opsSupportSign,
   opsWallRun,
   opsWallRuns,
+  opsLastWeekCounts,
   opsWeekCounts,
   opsWhiteboardRoom,
   opsWidth,
@@ -559,6 +560,66 @@ describe("an Operations floor", () => {
     });
 
     /**
+     * Last week hangs on the next stretch along, so the corridor reads away
+     * from the lift as it reads back in time: the floor's name, then this
+     * week, then the week before it.
+     */
+    it("letters last week on the next clear stretch along", () => {
+      const week = opsWeekCounts(rooms)!;
+      const last = opsLastWeekCounts(rooms)!;
+      const runs = opsWallRuns(rooms);
+      const here = runs.find((run) => (run.from + run.to) / 2 === week.net)!;
+      const next = runs.find((run) => run.from >= here.to)!;
+      expect(last.ty).toBe(week.ty);
+      expect(last.net).toBe((next.from + next.to) / 2);
+      for (const tx of last.tx) {
+        expect(tx).toBeGreaterThan(next.from);
+        expect(tx).toBeLessThan(next.to);
+        expect(clear(tx)).toBe(true);
+      }
+      // Laid out exactly as this week's, since they are the same three
+      // figures asked about a different pair of Mondays.
+      expect(last.net - last.tx[0]).toBe(last.tx[1] - last.net);
+      expect(last.tx[0] - next.from).toBe(next.to - last.tx[1]);
+    });
+
+    /**
+     * And never on this week's stretch, nor on the floor's own name, which
+     * is what "the next one along" is for: six figures crowded onto one
+     * wall would be the arrangement the week was moved out here to avoid.
+     */
+    it("keeps the two weeks on stretches of their own", () => {
+      for (let count = 1; count <= 12; count++) {
+        const last = opsLastWeekCounts(count);
+        if (!last) continue;
+        const week = opsWeekCounts(count)!;
+        const name = opsSign(count);
+        expect(last.net, `${count} rooms`).toBeGreaterThan(week.net);
+        for (const tx of last.tx) {
+          for (const other of week.tx) expect(Math.abs(tx - other)).toBeGreaterThan(6);
+          expect(Math.abs(tx - name.tx)).toBeGreaterThan(6);
+        }
+      }
+    });
+
+    /**
+     * A floor of three or four rooms has Support fronting the last stretch
+     * there is, so there is nowhere for last week to go and this week has
+     * the wall to itself — the same answer, one floor up, as the desk
+     * keeping its five counts where there is no wall for the week at all.
+     */
+    it("letters last week only where there is a second stretch", () => {
+      expect(opsLastWeekCounts(1)).toBeNull();
+      expect(opsLastWeekCounts(2)).toBeNull();
+      expect(opsWeekCounts(3)).not.toBeNull();
+      expect(opsLastWeekCounts(3)).toBeNull();
+      expect(opsLastWeekCounts(4)).toBeNull();
+      for (let count = 5; count <= 12; count++) {
+        expect(opsLastWeekCounts(count), `${count} rooms`).not.toBeNull();
+      }
+    });
+
+    /**
      * The narrowest stretch the week is ever lettered on, which is what the
      * headings are sized against (see `pulse.test.ts`). The last run of a
      * floor with an odd number of rooms is the short one: nine tiles.
@@ -568,6 +629,12 @@ describe("an Operations floor", () => {
         if (!opsWeekCounts(count)) continue;
         const run = opsWallRun(count, opsSupportRoom(count));
         expect(run.to - run.from, `${count} rooms`).toBeGreaterThanOrEqual(9);
+      }
+      // Last week's is held to the same, since it is lettered the same way.
+      for (let count = 3; count <= 12; count++) {
+        const last = opsLastWeekCounts(count);
+        if (!last) continue;
+        expect((last.tx[1] - last.tx[0]) * 2, `${count} rooms`).toBeGreaterThanOrEqual(9);
       }
     });
   });

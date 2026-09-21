@@ -3,6 +3,7 @@ import {
   NET_HEADING,
   PULSE_METRICS,
   atOrAfter,
+  countBetween,
   countSince,
   commonZone,
   countStatuses,
@@ -313,6 +314,35 @@ describe("countSince", () => {
   });
 });
 
+describe("countBetween", () => {
+  const from = dayStart(at("2026-09-08T12:00:00Z"));
+  const to = from + 24 * 60 * 60 * 1000;
+  const stamp = (offset: number) => ({ createdTime: new Date(from + offset).toISOString() });
+
+  /**
+   * A window, which is what makes last week a different question from this
+   * one rather than a longer one: the week that has been worked is bounded
+   * at both ends, so a ticket raised since is not in it.
+   */
+  it("counts only what falls inside the window", () => {
+    const tickets = [stamp(-1), stamp(60_000), stamp(3_600_000), { createdTime: to }, {}];
+    expect(countBetween(tickets, "createdTime", from, to)).toBe(2);
+  });
+
+  /** Half-open: two neighbouring weeks share a Monday and must not both hold it. */
+  it("takes its own boundary and leaves the next week's", () => {
+    expect(countBetween([stamp(0)], "createdTime", from, to)).toBe(1);
+    expect(
+      countBetween([{ createdTime: new Date(to).toISOString() }], "createdTime", from, to),
+    ).toBe(0);
+  });
+
+  /** An unreadable stamp is no evidence of anything, here as everywhere. */
+  it("counts nothing it cannot read", () => {
+    expect(countBetween([{ createdTime: "whenever" }, {}], "createdTime", from, to)).toBe(0);
+  });
+});
+
 describe("weekStart", () => {
   /**
    * Monday, because a support desk's week is a working week — a Sunday
@@ -339,6 +369,15 @@ describe("weekStart", () => {
     const sunday = new Date(2026, 8, 13, 23, 0);
     const start = new Date(weekStart(sunday.getTime()));
     expect(start.getDate()).toBe(7);
+  });
+
+  /** And the Monday before, for the second block on the wall. */
+  it("steps back whole weeks", () => {
+    const now = new Date(2026, 8, 9, 15, 0).getTime();
+    const before = new Date(weekStart(now, 1));
+    expect(before.getDay()).toBe(1);
+    expect(before.getDate()).toBe(31);
+    expect(weekStart(now) - weekStart(now, 1)).toBe(7 * 24 * 60 * 60 * 1000);
   });
 });
 
@@ -401,6 +440,34 @@ describe("weekStartIn", () => {
     const now = at("2026-09-10T12:00:00Z");
     expect(weekStartIn(now, null)).toBe(weekStart(now));
     expect(weekStartIn(now, "Mars/Olympus")).toBe(weekStart(now));
+    expect(weekStartIn(now, null, 1)).toBe(weekStart(now, 1));
+  });
+
+  /**
+   * Last week's Monday is the one the desk's clock says it is, stepped back
+   * on its own calendar — not this week's less 168 hours, which lands an
+   * hour inside Sunday or an hour inside Monday twice a year.
+   */
+  it("steps back a whole week on the desk's calendar", () => {
+    const now = at("2026-09-10T12:00:00Z");
+    expect(reads(weekStartIn(now, zone, 1))).toBe("Mon 00:00");
+    expect(weekStartIn(now, zone) - weekStartIn(now, zone, 1)).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+
+  /**
+   * The week the clocks go back is 169 hours long there, so the two
+   * Mondays are not a fixed number of milliseconds apart — and both of
+   * them still read as midnight, which is the whole of what the wall
+   * needs.
+   */
+  it("holds both Mondays across a clock change", () => {
+    // Nova Scotia leaves daylight saving on Sunday 1 November 2026.
+    const after = at("2026-11-04T12:00:00Z");
+    expect(reads(weekStartIn(after, zone))).toBe("Mon 00:00");
+    expect(reads(weekStartIn(after, zone, 1))).toBe("Mon 00:00");
+    expect(weekStartIn(after, zone) - weekStartIn(after, zone, 1)).toBe(
+      (7 * 24 + 1) * 60 * 60 * 1000,
+    );
   });
 });
 
@@ -436,7 +503,9 @@ describe("toPulse", () => {
   const week = weekStartIn(at("2026-09-08T12:00:00Z"), "America/Halifax");
   const today = new Date(from + 3_600_000).toISOString();
   const yesterday = new Date(from - 3_600_000).toISOString();
-  const lastWeek = new Date(week - 3_600_000).toISOString();
+  const lastWeekFrom = weekStartIn(at("2026-09-08T12:00:00Z"), "America/Halifax", 1);
+  const inLastWeek = new Date(week - 3_600_000).toISOString();
+  const beforeThat = new Date(lastWeekFrom - 3_600_000).toISOString();
 
   const pulse = (over: Partial<Parameters<typeof toPulse>[0]> = {}) =>
     toPulse({
@@ -447,12 +516,13 @@ describe("toPulse", () => {
       capped: [],
       since: from,
       weekSince: week,
+      lastWeekSince: lastWeekFrom,
       timeZone: "America/Halifax",
       zone: "agents",
       ...over,
     });
 
-  it("fills the seven counters", () => {
+  it("fills the nine counters", () => {
     const view = pulse({
       standing: [{ status: "New" }, { status: "New" }, { status: "Queue" }],
       opened: [{ createdTime: today }, { createdTime: yesterday }],
@@ -466,6 +536,8 @@ describe("toPulse", () => {
       "closed-today": 2,
       "opened-week": 2,
       "closed-week": 3,
+      "opened-last-week": 0,
+      "closed-last-week": 0,
     });
   });
 
@@ -477,13 +549,47 @@ describe("toPulse", () => {
    */
   it("counts the week off the same sweep, and stops at Monday", () => {
     const view = pulse({
-      opened: [{ createdTime: today }, { createdTime: yesterday }, { createdTime: lastWeek }],
-      closed: [{ closedTime: yesterday }, { closedTime: lastWeek }],
+      opened: [{ createdTime: today }, { createdTime: yesterday }, { createdTime: inLastWeek }],
+      closed: [{ closedTime: yesterday }, { closedTime: inLastWeek }],
     });
     expect(view.counts["opened-today"]).toBe(1);
     expect(view.counts["opened-week"]).toBe(2);
     expect(view.counts["closed-today"]).toBe(0);
     expect(view.counts["closed-week"]).toBe(1);
+  });
+
+  /**
+   * And last week is the same page read a week further back — bounded at
+   * both ends, which is what makes it a different question rather than a
+   * longer one: a ticket raised this morning is in this week and in no
+   * sense in the one before it.
+   */
+  it("counts last week as a window between the two Mondays", () => {
+    const view = pulse({
+      opened: [
+        { createdTime: today },
+        { createdTime: inLastWeek },
+        { createdTime: inLastWeek },
+        { createdTime: beforeThat },
+      ],
+      closed: [{ closedTime: yesterday }, { closedTime: inLastWeek }],
+    });
+    expect(view.counts["opened-week"]).toBe(1);
+    expect(view.counts["opened-last-week"]).toBe(2);
+    expect(view.counts["closed-week"]).toBe(1);
+    expect(view.counts["closed-last-week"]).toBe(1);
+  });
+
+  /** The Monday the two windows share belongs to the week it opens. */
+  it("gives a ticket raised on the boundary to the newer week", () => {
+    const view = pulse({
+      opened: [{ createdTime: new Date(week).toISOString() }],
+      closed: [{ closedTime: new Date(lastWeekFrom).toISOString() }],
+    });
+    expect(view.counts["opened-week"]).toBe(1);
+    expect(view.counts["opened-last-week"]).toBe(0);
+    expect(view.counts["closed-week"]).toBe(0);
+    expect(view.counts["closed-last-week"]).toBe(1);
   });
 
   /**
@@ -526,6 +632,14 @@ describe("toPulse", () => {
     );
   });
 
+  /** And which pair of them last week runs between, for the same reason. */
+  it("says which Monday last week is measured from", () => {
+    expect(pulse().lastWeekSince).toBe(new Date(lastWeekFrom).toISOString());
+    expect(new Date(pulse().weekSince).getTime() - new Date(pulse().lastWeekSince).getTime()).toBe(
+      7 * 24 * 60 * 60 * 1000,
+    );
+  });
+
   it("carries the capped counters through", () => {
     expect(pulse({ capped: ["new", "queue", "in-progress"] }).capped).toEqual([
       "new",
@@ -544,6 +658,8 @@ describe("pulseBars", () => {
     "closed-today": 6,
     "opened-week": 9,
     "closed-week": 11,
+    "opened-last-week": 7,
+    "closed-last-week": 3,
   } as const;
 
   /**
@@ -561,11 +677,13 @@ describe("pulseBars", () => {
     expect(bars["closed-today"]).toBeCloseTo(6 / 8);
     expect(bars["opened-week"]).toBeCloseTo(9 / 20);
     expect(bars["closed-week"]).toBeCloseTo(11 / 20);
+    expect(bars["opened-last-week"]).toBeCloseTo(7 / 10);
+    expect(bars["closed-last-week"]).toBeCloseTo(3 / 10);
   });
 
   it("fills each bank, and only its own", () => {
     const bars = pulseBars(counts);
-    for (const bank of ["standing", "today", "week"] as const) {
+    for (const bank of ["standing", "today", "week", "last-week"] as const) {
       const total = PULSE_METRICS.filter((m) => m.bank === bank).reduce(
         (sum, m) => sum + bars[m.id],
         0,
@@ -583,6 +701,8 @@ describe("pulseBars", () => {
       "closed-today": 0,
       "opened-week": 0,
       "closed-week": 0,
+      "opened-last-week": 0,
+      "closed-last-week": 0,
     });
     for (const metric of PULSE_METRICS) expect(bars[metric.id]).toBe(0);
   });
@@ -608,6 +728,8 @@ describe("weekNet", () => {
     "closed-today": 0,
     "opened-week": openedWeek,
     "closed-week": closedWeek,
+    "opened-last-week": 0,
+    "closed-last-week": 0,
   });
 
   /**
@@ -642,14 +764,50 @@ describe("weekNet", () => {
     expect(weekNet(counts(12, 600), ["closed-week"])).toBeNull();
     expect(weekNet(counts(12, 11), ["opened-today"])).not.toBeNull();
   });
+
+  /**
+   * The same three figures over the week before, which is the other block
+   * on the wall — so the bank is asked for rather than assumed, and each
+   * block answers off its own pair of counts and its own capping.
+   */
+  it("takes last week off last week's counters", () => {
+    const week = { ...counts(12, 11), "opened-last-week": 4, "closed-last-week": 9 };
+    expect(weekNet(week, [], "last-week")).toEqual({ net: -5, figure: "-5", lean: "fall" });
+    expect(weekNet(week, ["opened-last-week"], "last-week")).toBeNull();
+    // A capped week does not take the other one with it.
+    expect(weekNet(week, ["opened-last-week"])).toMatchObject({ figure: "+1" });
+  });
 });
 
 describe("the metrics", () => {
-  it("are seven, each in one of the three banks", () => {
-    expect(PULSE_METRICS).toHaveLength(7);
+  it("are nine, each in one of the four banks", () => {
+    expect(PULSE_METRICS).toHaveLength(9);
     expect(PULSE_METRICS.filter((m) => m.bank === "standing")).toHaveLength(3);
     expect(PULSE_METRICS.filter((m) => m.bank === "today")).toHaveLength(2);
     expect(PULSE_METRICS.filter((m) => m.bank === "week")).toHaveLength(2);
+    expect(PULSE_METRICS.filter((m) => m.bank === "last-week")).toHaveLength(2);
+  });
+
+  /**
+   * The two weeks are one arrangement asked twice, so the ids follow from
+   * the bank — which is what `weekNet` builds them with, and what a third
+   * week would need nothing new for.
+   */
+  it("names each week's pair off its own bank", () => {
+    for (const bank of ["week", "last-week"] as const) {
+      const ids = PULSE_METRICS.filter((m) => m.bank === bank).map((m) => m.id);
+      expect(ids).toEqual([`opened-${bank}`, `closed-${bank}`]);
+    }
+  });
+
+  /**
+   * And the panel spells out which week it is, because the wall does it
+   * with a heading over the block and the short names are the same two
+   * words in both.
+   */
+  it("gives every metric its own label", () => {
+    const labels = PULSE_METRICS.map((m) => m.label);
+    expect(new Set(labels).size).toBe(labels.length);
   });
 
   it("gives each its own id", () => {
@@ -663,8 +821,8 @@ describe("the metrics", () => {
    * the bottom, in a font that advances by its own size. Twelve characters
    * is what the narrower of the two banks affords.
    *
-   * The week's two are not on the plate, so they are not held to a bay:
-   * they are lettered on the corridor wall outside, where what they have to
+   * The two weeks are not on the plate, so they are not held to a bay:
+   * they are lettered on the corridor wall outside, where what each has to
    * fit is a quarter of a stretch of wall. That is the test below.
    */
   it("keeps every heading on the plate short enough to fit its bay", () => {
@@ -687,10 +845,10 @@ describe("the metrics", () => {
    * lettering that draws it: the constraint is on the pair, and a test that
    * knew only one of them would pass a heading that overlapped.
    */
-  it("keeps the week's headings clear of the net between them", () => {
+  it("keeps the weeks' headings clear of the net between them", () => {
     const between = (9 / 4) * 48;
     const half = (text: string) => (text.length * 12) / 2;
-    for (const metric of PULSE_METRICS.filter((m) => m.bank === "week")) {
+    for (const metric of PULSE_METRICS.filter((m) => m.bank !== "standing" && m.bank !== "today")) {
       expect(half(metric.short) + half(NET_HEADING), metric.short).toBeLessThanOrEqual(between);
     }
   });

@@ -366,10 +366,18 @@ async function sweep(
  * raised and by when they were closed, which are different orders and
  * neither of them the first.
  *
- * Still three and not five. The week is the longer reach of the two
- * boundaries, so the two sweeps stop there and today's counts are a prefix
- * of what they already read — a second pair of sweeps to midnight would ask
- * Zoho again for tickets it has just handed over.
+ * Still three, and now over four boundaries. The Monday before last is the
+ * longest reach of them, so the two traffic sweeps stop there and every
+ * shorter count — this week's, today's — is a prefix of what those same
+ * pages already held. A pair of sweeps per boundary would ask Zoho again
+ * for tickets it has just handed over.
+ *
+ * What a second week does cost is reach: the sweeps read a fortnight of the
+ * desk before they stop, against a week before, so a busy desk runs into
+ * `PULSE_MAX_PAGES` sooner. That is why capping is asked per boundary — a
+ * sweep that ran out of pages inside last week has very often still read
+ * every ticket of this one, and marking this week a floor on those grounds
+ * would be a floor where there is a total.
  *
  * `sortBy` matters for more than tidiness on the last two: `until` trusts
  * the order to stop early, so the sort is what keeps them exact.
@@ -383,6 +391,7 @@ export async function fetchPulse(config: ZohoConfig, now: number = Date.now()): 
   const { timeZone, zone } = await fetchDeskZone(config);
   const from = dayStartIn(now, timeZone);
   const weekFrom = weekStartIn(now, timeZone);
+  const lastWeekFrom = weekStartIn(now, timeZone, 1);
   const scope: Record<string, string> = config.departmentId
     ? { departmentId: config.departmentId }
     : {};
@@ -396,35 +405,41 @@ export async function fetchPulse(config: ZohoConfig, now: number = Date.now()): 
   // that everything past here is older, and a ticket whose stamp is missing
   // or unreadable is no grounds for it. See the note on that function.
   const opened = await sweep(config, { ...scope, sortBy: "-createdTime" }, (ticket) =>
-    readableBefore(ticket.createdTime as string | undefined, weekFrom),
+    readableBefore(ticket.createdTime as string | undefined, lastWeekFrom),
   );
   const closed = await sweep(
     config,
     { ...scope, status: CLOSED_STATUS, sortBy: "-closedTime" },
-    (ticket) => readableBefore(ticket.closedTime as string | undefined, weekFrom),
+    (ticket) => readableBefore(ticket.closedTime as string | undefined, lastWeekFrom),
   );
 
   // A capped standing sweep leaves all three of its counters a floor: the
   // pages it did not read could have held any of the three statuses.
   //
   // The traffic sweeps are capped per boundary rather than outright, since
-  // one sweep now answers two questions. Running out of pages somewhere
-  // inside the week says nothing about today if the sweep got as far back
-  // as midnight — which, on a busy desk, is the ordinary case.
+  // one sweep now answers three questions. Running out of pages somewhere
+  // inside last week says nothing about this week, and nothing about today,
+  // if the sweep got as far back as those boundaries — which, on a busy
+  // desk, is the ordinary case.
   const short = (
     tickets: readonly Record<string, unknown>[],
     field: "createdTime" | "closedTime",
     capped: boolean,
-  ) => ({ day: capped && !sweptPast(tickets, field, from), week: capped });
-  const openedShort = short(opened.tickets, "createdTime", opened.capped);
-  const closedShort = short(closed.tickets, "closedTime", closed.capped);
+    boundary: number,
+  ) => capped && !sweptPast(tickets, field, boundary);
+  const openedShort = (boundary: number) =>
+    short(opened.tickets, "createdTime", opened.capped, boundary);
+  const closedShort = (boundary: number) =>
+    short(closed.tickets, "closedTime", closed.capped, boundary);
 
   const capped: PulseId[] = [
     ...(standing.capped ? (["new", "queue", "in-progress"] as PulseId[]) : []),
-    ...(openedShort.day ? (["opened-today"] as PulseId[]) : []),
-    ...(closedShort.day ? (["closed-today"] as PulseId[]) : []),
-    ...(openedShort.week ? (["opened-week"] as PulseId[]) : []),
-    ...(closedShort.week ? (["closed-week"] as PulseId[]) : []),
+    ...(openedShort(from) ? (["opened-today"] as PulseId[]) : []),
+    ...(closedShort(from) ? (["closed-today"] as PulseId[]) : []),
+    ...(openedShort(weekFrom) ? (["opened-week"] as PulseId[]) : []),
+    ...(closedShort(weekFrom) ? (["closed-week"] as PulseId[]) : []),
+    ...(openedShort(lastWeekFrom) ? (["opened-last-week"] as PulseId[]) : []),
+    ...(closedShort(lastWeekFrom) ? (["closed-last-week"] as PulseId[]) : []),
   ];
 
   return toPulse({
@@ -435,6 +450,7 @@ export async function fetchPulse(config: ZohoConfig, now: number = Date.now()): 
     capped,
     since: from,
     weekSince: weekFrom,
+    lastWeekSince: lastWeekFrom,
     timeZone,
     zone,
   });
