@@ -130,14 +130,16 @@ export default function BottomBar({ peopleOpen, onTogglePeople }: BottomBarProps
           peopleOpen ? " hud-pill--on" : ""
         }`}
         onClick={onTogglePeople}
+        /* Tab is the same door, and the pill is the only place it is written
+           down: the HUD has no key legend to put it in. */
         title={
           peopleOpen
-            ? "Click to put the list away."
+            ? "Click, or press Tab, to put the list away."
             : online.length > 0
               ? `${
                   online.length === 1 ? "1 person is" : `${online.length} people are`
-                } in the world. Click to see who, and where.`
-              : "Click to see who is in the world, and where."
+                } in the world. Click, or press Tab, to see who and where.`
+              : "Click, or press Tab, to see who is in the world, and where."
         }
         aria-expanded={peopleOpen}
         aria-label="Who is in the world"

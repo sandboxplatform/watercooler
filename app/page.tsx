@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { StudioProvider } from "@/lib/store";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GameErrorBoundary } from "@/components/game/GameErrorBoundary";
@@ -13,6 +13,8 @@ import BadgeCard from "@/components/hud/BadgeCard";
 import CharacterStudio from "@/components/hud/CharacterStudio";
 import { loadSidebarWidth } from "@/lib/persistence";
 import { useBackToClose } from "@/lib/hooks/useBackToClose";
+import { dialogOpen, typingInAField } from "@/lib/gamepad/dialogs";
+import { togglesSidebar } from "@/lib/sidebar-key";
 import { SIDEBAR_DEFAULT_WIDTH } from "@/lib/constants";
 
 const PhaserGame = dynamic(() => import("@/components/game/PhaserGame"), {
@@ -101,6 +103,30 @@ export default function Page() {
     setMusicOpen(true);
   }, []);
   const closeMusic = useCallback(() => setMusicOpen(false), []);
+
+  /**
+   * Tab is the other end of the Online pill, and it does exactly what the
+   * pill does: People, or away again.
+   *
+   * It is here rather than in the column because the column is not on
+   * screen half the time this fires, and a key that only works once the
+   * thing it opens is already open is no way in.
+   *
+   * `preventDefault` because Tab is the browser's key for walking focus,
+   * and left to it the press would also land the focus ring on whichever
+   * button of the HUD happens to come first. `togglesSidebar` is what
+   * decides when that is ours to take — never inside a field, never under
+   * a dialog, and never with a modifier held.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!togglesSidebar(event, typingInAField() || dialogOpen())) return;
+      event.preventDefault();
+      togglePeople();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [togglePeople]);
 
   // Only while it is a drawer over the office. Where it is a column beside
   // the office it covers nothing, and back should still mean back.

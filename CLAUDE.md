@@ -761,6 +761,64 @@ windows share one set of CSS rules — `.entry-card` in `hud.css`, which was
 `.egg-card` until the badges wanted the same shape — because a second set
 for the same card is two things to keep looking alike.
 
+### The column, and the key that opens it
+
+**Tab opens the People column and puts it away again**, which is the Online
+pill's job done from the keyboard — same call (`togglePeople`), same rule:
+People, or away. The pill is in the corner of the office and a key is where
+your hands already are.
+
+`togglesSidebar` in `lib/sidebar-key.ts` is the binding, kept away from the
+page for the reason `lib/sprint.ts` is kept away from Phaser. Tab already
+means something to the browser, so most of the rule is about giving it back:
+a modifier is somebody else's (Shift+Tab walks focus backwards), autorepeat
+is not a second press, and a text field or a dialog owns the keyboard
+outright. What is left is `preventDefault`ed, or the press would also land
+the focus ring on whichever HUD button comes first.
+
+It reads `event.key` rather than `event.code`, which is the other way round
+from the sprint toggle: there is one Tab, so there is no left and right to
+tell apart, and `key` is what the browser's own focus navigation reads.
+
+**Closed is a width of nothing, not an absence.** The column used to return
+null, and nothing can be transitioned into or out of the document — so it
+could only ever appear at full width. It stays mounted and `.is-open`
+carries it between 0 and the dragged width; the office is `flex: 1 1 auto`
+beside it and narrows in step, so the column never covers anything.
+
+Three things make that a slide rather than a squash:
+
+| Where                | Rule                                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.app-sidebar__body` | Held at the full width whatever the shell is doing, anchored to its left edge — so it slides in from off the right, and not a line of it re-wraps |
+| `SIDEBAR_SLIDE_MS`   | One number, given to the CSS as `--sidebar-ms` and to the unmount timer. The panel outlives the slide by nothing and is gone by nothing           |
+| `.is-dragging`       | The transition off for the length of a drag, or the column trails the pointer by a fifth of a second                                              |
+
+`--sidebar-w` is a custom property rather than the element's own `width`
+because the body reads it too: that is what keeps the panel still while the
+shell around it moves. `.app-shell` is `position: relative` so its
+`overflow: hidden` reaches the part of the panel that is still outside.
+
+On a phone the column is a drawer, out of the flow, so there is no office
+edge to walk across and nothing to gain from moving its width: it slides on
+a transform instead. Far enough past its own edge that its shadow goes with
+it — parked at exactly `100%` it leaves twenty-odd pixels of blur lying down
+the side of the office.
+
+**And the office stopped going black, which was the whole of the flashing.**
+Resizing a WebGL canvas clears its drawing buffer, and resize observations
+are broadcast _after_ a frame's animation callbacks and before it is
+painted — so `scale.refresh()` called where the resize is noticed lands
+after Phaser has drawn and throws that frame's picture away. One of those is
+a flicker nobody sees; sixty a second is an office that is simply black for
+as long as it is moving. `PhaserGame` now only records the pending size in
+the observer and takes it up on `PRE_STEP`, where the clear happens first
+and Phaser draws into the fresh buffer in the same frame.
+
+That was not new. **Dragging the handle had been doing it all along** — the
+column's slide is the same continuous resize, which is only how it came to
+be looked at.
+
 ### The cast, and profiles
 
 `lib/world/cast.ts` is everybody the world knows by name: the eight who

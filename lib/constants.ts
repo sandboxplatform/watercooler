@@ -98,6 +98,21 @@ export const SIDEBAR_MIN_WIDTH = 280;
 export const SIDEBAR_MAX_WIDTH = 680;
 export const SIDEBAR_DEFAULT_WIDTH = 380;
 
+/**
+ * How long the column takes to come in, and to go away again.
+ *
+ * Written down here rather than in the stylesheet because both halves need
+ * it: the CSS slides on it, and the column keeps its contents mounted for
+ * exactly this long on the way out — a panel that empties before it has
+ * finished leaving is the flash the slide exists to have removed. It is
+ * handed to the CSS as `--sidebar-ms`, so the two cannot drift.
+ *
+ * Short, because the office resizes with it: the canvas follows the column's
+ * edge frame by frame, exactly as it does under a drag, and a long slide is
+ * a long time spent rebuilding a framebuffer.
+ */
+export const SIDEBAR_SLIDE_MS = 180;
+
 // ── Audio ────────────────────────────────────────────────
 export const DEFAULT_BGM_VOLUME = 0;
 

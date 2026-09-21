@@ -47,10 +47,12 @@ export default function PhaserGame() {
       gameRef.current = game;
 
       // Phaser only checks its parent's size twice a second, which is a
-      // visible lag while the chat column is being dragged. Watching the
-      // container puts the canvas on the same frame as the drag.
+      // visible lag while the column is being dragged or sliding. Watching
+      // the container puts the canvas on the same frame as the stage.
       let lastWidth = 0;
       let lastHeight = 0;
+      let pending: { width: number; height: number } | null = null;
+
       observer = new ResizeObserver(([entry]) => {
         const width = Math.round(entry.contentRect.width);
         const height = Math.round(entry.contentRect.height);
@@ -60,17 +62,43 @@ export default function PhaserGame() {
         if (width === lastWidth && height === lastHeight) return;
         lastWidth = width;
         lastHeight = height;
+        pending = { width, height };
+      });
+      observer.observe(containerRef.current);
+
+      /*
+        Taken up at the head of Phaser's own step, not in the observer, and
+        that is the whole of why the office does not go black while the
+        column moves.
+
+        Resizing a WebGL canvas clears its drawing buffer, and resize
+        observations are broadcast *after* the frame's animation callbacks
+        and before it is painted — so a refresh done where it is noticed
+        lands after Phaser has drawn and throws that frame's picture away.
+        One of those is a flicker nobody sees. Sixty a second, which is what
+        a drag of the handle is and what the column's slide became, is an
+        office that is simply black for as long as it is moving.
+
+        PRE_STEP is the other side of that line: the clear happens first and
+        Phaser draws into the fresh buffer in the same frame. It is where
+        the scale manager does its own twice-a-second poll, for what is
+        presumably the same reason.
+      */
+      const applyPending = () => {
+        if (!pending) return;
+        const { width, height } = pending;
+        pending = null;
         // In RESIZE mode the scale manager derives the game size from what it
         // believes the parent to be, and it only re-reads that on a window
-        // resize or its own twice-a-second poll. Collapsing the chat column is
-        // neither: the element simply unmounts, the stage reflows, and no
-        // window event fires — so telling it the parent size directly, and
-        // refreshing, is what actually moves the canvas.
+        // resize or its own twice-a-second poll. A column that slides is
+        // neither: the stage reflows and no window event fires — so telling
+        // it the parent size directly, and refreshing, is what actually
+        // moves the canvas.
         game.scale.setParentSize(width, height);
         game.scale.refresh();
         log.debug(`canvas -> ${width}x${height}`);
-      });
-      observer.observe(containerRef.current);
+      };
+      game.events.on(Phaser.Core.Events.PRE_STEP, applyPending);
     }
 
     initGame().catch((err) => {

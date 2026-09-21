@@ -856,6 +856,10 @@
  * fixed thing the reader can widen.
  */
 .app-shell {
+  /* Positioned so the column is measured, and clipped, against the shell:
+     `overflow: hidden` only reaches a descendant whose containing block is
+     inside it, and the panel spends every slide half outside this one. */
+  position: relative;
   display: flex;
   width: 100vw;
   height: 100vh;
@@ -914,14 +918,45 @@
   --fs-lg: 15px;
   --fs-xl: 16px;
 
+  /* `--sidebar-w` and `--sidebar-ms` arrive on the element, from the width
+     the reader dragged to and from SIDEBAR_SLIDE_MS. The fallbacks are here
+     so this file still reads as a whole thing on its own. */
+  --sidebar-w: 380px;
+  --sidebar-ms: 180ms;
+  --sidebar-ease: cubic-bezier(0.4, 0, 0.2, 1);
+
   color: var(--pixel-text);
   position: relative;
   flex: 0 0 auto;
   display: flex;
   min-width: 0;
-  background: var(--pixel-panel, #14181d);
-  border-left: 2px solid var(--pixel-border, #2b3f4d);
   z-index: 30;
+
+  /* Closed is a width of nothing rather than an absence, because nothing
+     can be transitioned into or out of the document — a column that came
+     and went as a whole could only ever appear at full width.
+
+     The office is `flex: 1 1 auto` beside it, so this is also what walks
+     the canvas edge across: the ResizeObserver in PhaserGame follows the
+     stage frame by frame, exactly as it does under a drag of the handle. */
+  width: 0;
+  transition: width var(--sidebar-ms) var(--sidebar-ease);
+}
+
+.app-sidebar.is-open {
+  width: var(--sidebar-w);
+}
+
+/* A transition under a drag is a column trailing the pointer by a fifth of
+   a second. The class is on for the length of the drag and no longer. */
+.app-sidebar.is-dragging {
+  transition: none;
+}
+
+/* Shut, the handle would sit on the right edge of the office, offering to
+   resize a column that is not there. */
+.app-sidebar:not(.is-open) .app-sidebar__handle {
+  display: none;
 }
 
 /* The drag handle: a thin strip that widens under the pointer */
@@ -952,11 +987,29 @@
   background: var(--pixel-accent);
 }
 
+/* The panel itself, held at the width it was dragged to whatever the shell
+   around it is doing — so it slides in from off the right edge rather than
+   being squashed out of one, and not a line of it re-wraps on the way.
+   That is the other half of "no flashing": the first is that the office
+   resizes in step, so the panel never covers anything.
+
+   Anchored to the shell's left edge, which is what makes the slide come out
+   the right way round: the shell's right edge is the window's, so a shell of
+   no width leaves the panel entirely past it, and growing the shell walks
+   the panel back into view. .app-shell clips whatever is still outside.
+
+   It carries the panel colours and the border rather than the shell, since
+   on a shell of no width those are a two-pixel line down the edge of the
+   office with nothing behind it. */
 .app-sidebar__body {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--sidebar-w);
   display: flex;
   flex-direction: column;
-  width: 100%;
   min-width: 0;
+  background: var(--pixel-panel, #14181d);
+  border-left: 2px solid var(--pixel-border, #2b3f4d);
 }
 
 .app-sidebar__tabs {
@@ -1049,15 +1102,43 @@
 /* On a phone there is no room beside the office, so the column becomes a
    drawer over it — and the drag handle has nothing to do */
 @media (max-width: 900px) {
+  /* A drawer is out of the flow, so there is no office edge to walk across
+     and nothing to be gained from moving its width: it slides on a
+     transform instead, which costs no layout at all.
+
+     Far enough past its own edge that the shadow goes with it — a drawer
+     parked at exactly 100% leaves twenty-odd pixels of blur lying down the
+     side of the office. */
   .app-sidebar {
     position: absolute;
     inset: 0 0 0 auto;
     width: min(94vw, 420px) !important;
     box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);
+    transform: translateX(calc(100% + 32px));
+    transition: transform var(--sidebar-ms) var(--sidebar-ease);
+  }
+
+  .app-sidebar.is-open {
+    transform: none;
+  }
+
+  /* The drawer is its own width, so the panel simply fills it */
+  .app-sidebar__body {
+    position: static;
+    width: 100%;
   }
 
   .app-sidebar__handle {
     display: none;
+  }
+}
+
+/* Nobody asked for the column to move while they were reading it. After the
+   drawer rules above, not before: those declare a transition of their own
+   and the later rule is the one that wins. */
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar {
+    transition: none;
   }
 }
 
