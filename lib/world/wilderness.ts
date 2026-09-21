@@ -40,6 +40,19 @@ import {
 export const WILD_FROM = TOWN_RIGHT / TILE;
 
 /**
+ * Whether somebody has walked east out of the town.
+ *
+ * The town's own east edge is the line, which is where the promenades stop
+ * and sixty-odd columns of meadow begin. Anywhere past it counts, the wood
+ * above it included: the three stretches are the map's thirds and the wood
+ * runs along the top of all three, so somebody up among the trees out here
+ * is in both — which is true, and each badge is asked for on its own.
+ */
+export function inTheWilderness(at: { x: number; y: number }): boolean {
+  return at.x >= TOWN_RIGHT;
+}
+
+/**
  * The highway, in tiles: four columns of tarmac from the top edge of the map
  * to the bottom.
  *

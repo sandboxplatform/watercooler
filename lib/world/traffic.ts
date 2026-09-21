@@ -85,6 +85,24 @@ export function laneX(car: Car): number {
   return HIGHWAY_LANES[car.heading] + nudge;
 }
 
+/**
+ * The patch of road a car's picture covers, in world pixels.
+ *
+ * Nothing collides with it — that is the whole point of the paragraph at
+ * the top of this file — so this is not a solid. It is what "a car went
+ * straight through somebody" means, which is the one thing worth noticing
+ * about a road you can stand in, and the server is the only side that can
+ * notice it, since the cars are its.
+ */
+export function carBox(car: Car): { x: number; y: number; width: number; height: number } {
+  return {
+    x: laneX(car) - CAR.width / 2,
+    y: car.y - CAR.height / 2,
+    width: CAR.width,
+    height: CAR.height,
+  };
+}
+
 /** A car moved on by however long has passed. */
 export function drive(car: Car, deltaMs: number): Car {
   return { ...car, y: car.y + goes(car.heading) * CAR_SPEED_PX_S * (deltaMs / 1000) };

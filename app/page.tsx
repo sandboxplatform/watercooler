@@ -9,6 +9,7 @@ import GameHud from "@/components/hud/GameHud";
 import Sidebar, { type SidebarTab } from "@/components/hud/Sidebar";
 import Profile from "@/components/hud/Profile";
 import EggCard from "@/components/hud/EggCard";
+import BadgeCard from "@/components/hud/BadgeCard";
 import CharacterStudio from "@/components/hud/CharacterStudio";
 import { loadSidebarWidth } from "@/lib/persistence";
 import { useBackToClose } from "@/lib/hooks/useBackToClose";
@@ -159,6 +160,15 @@ export default function Page() {
             of its own, off the same bus.
           */}
           <EggCard />
+
+          {/*
+            And one badge: what it is, the line saying how to get it, and
+            who has it. Here for the reason the two above are, with one
+            caller neither of them has — the toast over the office, which
+            is the only thing that ever told anybody a badge existed and
+            took six seconds about it.
+          */}
+          <BadgeCard />
 
           {/*
             The character picker, for the same reason and opened from the same

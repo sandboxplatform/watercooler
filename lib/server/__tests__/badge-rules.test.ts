@@ -21,6 +21,9 @@ const guest = { person: "guest:ann", name: "Ann" };
 /** Every code granted by one call, for the assertions below. */
 const codes = (earned: { code: string }[]) => earned.map((b) => b.code);
 
+/** A plain basket: neither off the board nor from the far end. */
+const LAY_UP = { banked: false, far: false };
+
 beforeEach(() => {
   store = new RoomStore(":memory:");
 });
@@ -113,8 +116,21 @@ describe("playing", () => {
   });
 
   it("gives Swish for a basket, once, however many go in", () => {
-    expect(rules.onBasket(coop).map((b) => b.code)).toEqual(["swish"]);
-    expect(rules.onBasket(coop)).toEqual([]);
+    expect(rules.onBasket(coop, LAY_UP).map((b) => b.code)).toEqual(["swish"]);
+    expect(rules.onBasket(coop, LAY_UP)).toEqual([]);
+  });
+
+  it("gives Off the Board and Full Court only for the shot that was taken", () => {
+    expect(codes(rules.onBasket(coop, { banked: true, far: false }))).toEqual(
+      expect.arrayContaining(["swish", "off-the-board"]),
+    );
+    expect(codes(rules.onBasket(coop, { banked: true, far: false }))).toEqual([]);
+    expect(codes(rules.onBasket(guest, { banked: false, far: true }))).toEqual(
+      expect.arrayContaining(["swish", "full-court"]),
+    );
+    // A lay-up afterwards is still just a lay-up: neither is a tally, and
+    // neither is handed over by having sunk a basket of another kind.
+    expect(codes(rules.onBasket(guest, LAY_UP))).toEqual([]);
   });
 
   it("gives Played the Lot for every machine that is actually in a lobby", () => {
@@ -139,11 +155,31 @@ describe("the locals", () => {
     expect(codes(rules.onMingle(coop, "doc"))).toContain("ticket-raised");
   });
 
+  it("gives Ran Him Down for a catch, which standing beside him is not", () => {
+    // Cluck is walking up to him; this is keeping up once he is running.
+    expect(codes(rules.onMingle(coop, "michael"))).toContain("cluck");
+    expect(codes(rules.onCaught(coop))).toEqual(["ran-him-down"]);
+    expect(codes(rules.onCaught(coop))).toEqual([]);
+  });
+
   it("gives Knows Everybody on the last resident", () => {
     const ids = CAST_RESIDENTS.map((r) => r.id);
     expect(ids).toHaveLength(RESIDENT_COUNT);
     const earned = ids.flatMap((id) => codes(rules.onMingle(coop, id)));
     expect(earned.filter((code) => code === "knows-everybody")).toHaveLength(1);
+  });
+});
+
+describe("getting about, out of doors", () => {
+  it("gives one badge for the wood and another for the wilderness", () => {
+    expect(codes(rules.onOutdoors(coop, "wood"))).toEqual(["into-the-woods"]);
+    expect(codes(rules.onOutdoors(coop, "wood"))).toEqual([]);
+    expect(codes(rules.onOutdoors(coop, "wilderness"))).toEqual(["out-in-the-wild"]);
+  });
+
+  it("gives Right of Way once, however many cars go through", () => {
+    expect(codes(rules.onRunThrough(coop))).toEqual(["right-of-way"]);
+    expect(codes(rules.onRunThrough(coop))).toEqual([]);
   });
 });
 
@@ -218,6 +254,17 @@ describe("the catalogue", () => {
     }
   });
 
+  it("tells somebody who has not got it where to go", () => {
+    // The card shows `hint` and nothing else does, so a missing one is a
+    // badge whose card is the row again — which is the thing the card was
+    // added instead of. A sentence, and not the description said twice.
+    for (const badge of BADGES) {
+      expect(badge.hint.trim().length).toBeGreaterThan(20);
+      expect(badge.hint.trim()).toMatch(/\.$/);
+      expect(badge.hint.toLowerCase()).not.toBe(badge.description.toLowerCase());
+    }
+  });
+
   it("lists no group with nothing in it", () => {
     for (const group of BADGE_GROUPS) {
       expect(BADGES.some((b) => b.group === group.id)).toBe(true);
@@ -250,7 +297,11 @@ describe("the catalogue", () => {
     take(rules.onMeetingJoined(someone));
     take(rules.onWhiteboard(someone));
     take(rules.onPingPong([someone]));
-    take(rules.onBasket(someone));
+    take(rules.onBasket(someone, { banked: true, far: true }));
+    take(rules.onCaught(someone));
+    take(rules.onOutdoors(someone, "wood"));
+    take(rules.onOutdoors(someone, "wilderness"));
+    take(rules.onRunThrough(someone));
     take(rules.onEggLaid(someone));
     for (const kind of EGG_KINDS) take(rules.onEggFound(someone, kind.id));
     for (const machine of rules.SCORED_MACHINES) take(rules.onScore(someone, machine, true));

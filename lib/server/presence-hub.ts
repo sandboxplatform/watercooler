@@ -274,6 +274,33 @@ export class PresenceHub {
   }
 
   /**
+   * Which people are standing inside a rectangle, by connection.
+   *
+   * The fourth of these and the only one that is not about a distance: a
+   * car is a box rather than a radius, and what is being asked is whether
+   * one is driving through somebody. Written like `peopleNear` and for the
+   * same reasons — no allocation until there is somebody to name, which
+   * out on an empty road is nearly always, and people only, because what
+   * it feeds is a badge and a local holds none.
+   *
+   * Their position rather than their feet or their picture: a person is
+   * the middle of their frame, which is about chest height, and a car is
+   * eighty-eight pixels of picture through the same patch of road. There
+   * is nothing to be exact about here — nothing collides, nothing moves,
+   * and the answer is a badge.
+   */
+  peopleIn(box: { x: number; y: number; width: number; height: number }): readonly string[] {
+    let inside: string[] | null = null;
+    for (const player of this.players.values()) {
+      if (player.resident || player.hidden) continue;
+      if (player.x < box.x || player.x > box.x + box.width) continue;
+      if (player.y < box.y || player.y > box.y + box.height) continue;
+      (inside ??= []).push(player.id);
+    }
+    return inside ?? NOBODY;
+  }
+
+  /**
    * Apply a movement update. Positions are clamped to what sprinting could
    * cover since the player's last move — over a bounded window, so a modified
    * client cannot save up a teleport by standing still — which is what stops

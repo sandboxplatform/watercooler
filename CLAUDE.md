@@ -609,9 +609,14 @@ dropped without a word.
 
 ### Badges
 
-Twenty-six of them (`lib/badges.ts`), in six groups — Getting about,
+Thirty-two of them (`lib/badges.ts`), in six groups — Getting about,
 Playing, Together, The locals, Eggs, Curios. Three rules run through the
 catalogue, and the last two are what the one before it got wrong.
+
+Each carries a `hint` beside its `description`: the past tense in a list
+row, and the sentence saying **where to go** on the card. Both, because a
+row has space for one of them and a card is opened by somebody asking the
+other.
 
 **A badge is a place you went or a thing you did, never a tally.** Nothing
 here is earned by doing anything a hundredth time. Each keys on a moment,
@@ -644,25 +649,61 @@ board and pressing E is a fine thing to do in this world and there is
 deliberately **no badge for it**: the only way to know would be to let the
 page say so, and a badge a client can claim is worth nothing.
 
+The nearest thing to an exception is the handful that key on **where
+somebody is standing** — the wood, the wilderness, and the three that want
+a resident beside you. A position does arrive in a `move`, but `hub.move`
+clamps every one against the sprint, so the only way to be somewhere is to
+have walked there. A browser can say what it likes and still cannot
+arrive.
+
+Same argument, one step further out, for the basketball's two new ones:
+the server holds the ball, ran the flight, took the throw's origin off the
+room's own record of where the thrower stood, and is the one that saw the
+pane struck. `Shot` (`lib/server/basketball.ts`) is what it hands the rule
+— `banked` and `far`, both settled over the whole flight rather than in
+the tick the ball goes in, because the board is usually struck a tick or
+two before the rim is crossed and where it left the hand stopped being
+knowable the moment it did.
+
 Where each rule is called from:
 
-| Rule                            | Fired by                                  | In                   |
-| ------------------------------- | ----------------------------------------- | -------------------- |
-| `onArrival`                     | Every `join`                              | `presence-socket`    |
-| `onAlone`                       | The online list coming down to one person | `broadcastOnline`    |
-| `onRoomFull`, `onMeetingJoined` | A join that fills a room / walks into one | `presence-socket`    |
-| `onMicOn`, `onMeetingCalled`    | `mic` and `meeting` messages              | `presence-socket`    |
-| `onWhiteboard`, `onPingPong`    | A finished stroke, a relayed rally        | `presence-socket`    |
-| `onMingle`                      | Somebody coming to stand beside a local   | `ResidentSimulation` |
-| `onScore`                       | The two high score routes                 | `machine-badges.ts`  |
-| `onBasket`                      | A thrown ball falling through a rim       | `stepBasketball`     |
-| `onEggFound`                    | An egg taken out of the grass             | `presence-socket`    |
-| `onEggLaid`                     | A fright that left one behind             | The socket's `laid`  |
+| Rule                            | Fired by                                  | In                     |
+| ------------------------------- | ----------------------------------------- | ---------------------- |
+| `onArrival`                     | Every `join`                              | `presence-socket`      |
+| `onAlone`                       | The online list coming down to one person | `broadcastOnline`      |
+| `onRoomFull`, `onMeetingJoined` | A join that fills a room / walks into one | `presence-socket`      |
+| `onMicOn`, `onMeetingCalled`    | `mic` and `meeting` messages              | `presence-socket`      |
+| `onWhiteboard`, `onPingPong`    | A finished stroke, a relayed rally        | `presence-socket`      |
+| `onMingle`                      | Somebody coming to stand beside a local   | `ResidentSimulation`   |
+| `onCaught`                      | Getting a hand on a resident mid-bolt     | The socket's `caught`  |
+| `onScore`                       | The two high score routes                 | `machine-badges.ts`    |
+| `onBasket`                      | A thrown ball falling through a rim       | `stepBasketball`       |
+| `onOutdoors`                    | A `move` into the wood or the wilderness  | The socket's `wentTo`  |
+| `onRunThrough`                  | A car's box covering somebody             | The socket's `runOver` |
+| `onEggFound`                    | An egg taken out of the grass             | `presence-socket`      |
+| `onEggLaid`                     | A fright that left one behind             | The socket's `laid`    |
 
-Four of those would otherwise write to the database far too often — a
-rally sends a message a frame, and the online list refreshes on a timer —
-so `once(person, code)` in the socket settles each one per run before the
-store is asked at all.
+Six of those would otherwise write to the database far too often — a rally
+sends a message a frame, a move arrives twenty times a second and the
+online list refreshes on a timer — so `once(person, code)` in the socket
+settles each one per run before the store is asked at all.
+
+**The three newest are the three places the world grew.** The map tripled
+in width and gained a wood, the court gained a backboard, and the chicken
+gained a bolt fast enough to be worth chasing, and the catalogue said
+nothing about any of it:
+
+| Badge                            | Keys on                             | Why it is not covered already                                                           |
+| -------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- |
+| Into the Woods / Out in the Wild | A position on the world map         | Neither is a room, so there is no `join` to hang it on                                  |
+| Off the Board / Full Court       | `Shot` on the basket                | A lay-up and a bank shot were the same Swish                                            |
+| Ran Him Down                     | A catch inside a fright             | Cluck is walking up to him, which a pursuer never stops doing                           |
+| Right of Way                     | A car's rectangle covering somebody | Nothing collides with the traffic, so noticing is the only thing there is to do with it |
+
+The shops in the west have **no badge of their own** and want none: all
+four are organisations, so the Grand Tour already walks you out there and
+in through every one of their doors. A badge for a place the catalogue
+already sends you is a second badge for the same afternoon.
 
 **`mark` is the set behind the counting badges.** `badge_marks` holds one
 row per distinct thing done — `org:mettara`, `machine:pinball`,
@@ -698,6 +739,27 @@ ordinary `said`, so the room draws it the way it draws a resident's remark.
 Your own browser does not, because a room's bubbles are everybody else's —
 which is the right way round, since you have the toast and the people
 around you have the moment.
+
+**And a badge opens a card.** `components/hud/BadgeCard.tsx`, off
+`open-badge` on the bus: the icon on a plinth, whether it is yours and
+when, the one line saying how to get it, who has it in the order they got
+there, and the rest of its group to read along. Mounted in `app/page.tsx`
+beside `Profile` and `EggCard` and for the same reason — it is opened from
+the column, and the HUD is behind the column.
+
+Three things open it, and the third is most of why it exists:
+
+| Where         | Because                                                                                         |
+| ------------- | ----------------------------------------------------------------------------------------------- |
+| `BadgesPanel` | A row has space for a title and a line; the rest of what a badge knows had nowhere to go        |
+| `Profile`     | The locked half of a shelf is a wall of grey icons, which is where "how do I get that" is asked |
+| `BadgeToast`  | The badge you were _just told about_, in the middle of playing, six seconds before it goes      |
+
+All of it used to be a `title` attribute, which is a tooltip: nothing on a
+touchscreen and nothing at all while somebody is walking about. The three
+windows share one set of CSS rules — `.entry-card` in `hud.css`, which was
+`.egg-card` until the badges wanted the same shape — because a second set
+for the same card is two things to keep looking alike.
 
 ### The cast, and profiles
 

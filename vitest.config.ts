@@ -33,6 +33,10 @@ const SLOW = [
   "**/lib/server/__tests__/presence-identity.test.ts",
   "**/lib/server/__tests__/voice-reach.test.ts",
   "**/lib/server/__tests__/basketball-socket.test.ts",
+  // Real sockets, and most of its two seconds is spent waiting on purpose:
+  // what it is driving is the move clamp, which is a budget per unit of
+  // time, so the walk into the wood has to be taken at a walk.
+  "**/lib/server/__tests__/place-badges.test.ts",
   "**/lib/pinball/__tests__/stuck.test.ts",
 ];
 

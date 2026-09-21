@@ -46,7 +46,7 @@ import EggMark from "./EggMark";
 function Holders({ tallies, onPick }: { tallies: readonly EggTally[]; onPick: () => void }) {
   if (tallies.length === 0) {
     return (
-      <p className="egg-card__none">
+      <p className="entry-card__none">
         Nobody in this world has found one. Go and startle the chicken.
       </p>
     );
@@ -117,9 +117,9 @@ export default function EggCard() {
   const others = EGG_KINDS.filter((other) => other.id !== kind.id);
 
   return (
-    <div className="egg-card" role="dialog" aria-label={kind.name}>
-      <div className="egg-card__scrim" onClick={close} />
-      <div className="pixel-panel egg-card__panel">
+    <div className="entry-card" role="dialog" aria-label={kind.name}>
+      <div className="entry-card__scrim" onClick={close} />
+      <div className="pixel-panel entry-card__panel">
         <button type="button" className="profile__close" onClick={close} aria-label="Close">
           <X size={14} />
         </button>
@@ -127,21 +127,21 @@ export default function EggCard() {
         {/* The egg itself, on the one dark field in the app that is nothing
             but a backdrop for it — the same job the concept sheet does at
             the top of a profile. */}
-        <div className="egg-card__plinth">
-          <div className="egg-card__egg">
+        <div className="entry-card__plinth">
+          <div className="entry-card__object">
             <EggMark kind={kind} size={196} />
           </div>
         </div>
 
-        <div className="egg-card__body">
-          <div className="egg-card__head">
-            <div className="egg-card__name">{kind.name}</div>
-            <div className="egg-card__chips">
-              <span className="egg-card__chip egg-card__chip--odds">1 in {oneIn(kind.id)}</span>
-              <span className="egg-card__chip">
+        <div className="entry-card__body">
+          <div className="entry-card__head">
+            <div className="entry-card__name">{kind.name}</div>
+            <div className="entry-card__chips">
+              <span className="entry-card__chip entry-card__chip--key">1 in {oneIn(kind.id)}</span>
+              <span className="entry-card__chip">
                 {at} of {EGG_KINDS.length} on the ladder
               </span>
-              <span className="egg-card__chip">
+              <span className="entry-card__chip">
                 {/* The share to a whole number of per cent, which is the only
                     precision anybody wants of it. */}
                 {Math.round(shareOf(kind.id) * 100)}% of every egg laid
@@ -149,36 +149,36 @@ export default function EggCard() {
             </div>
           </div>
 
-          <p className="egg-card__note">{kind.note}.</p>
-          <p className="egg-card__lore">{kind.lore}</p>
+          <p className="entry-card__note">{kind.note}.</p>
+          <p className="entry-card__lore">{kind.lore}</p>
 
-          <div className="egg-card__yours">
+          <div className="entry-card__yours">
             {mine === 0
               ? "None in your basket."
               : `${mine} in your basket${mine > 1 ? " — you have a small pile" : ""}.`}
-            <span className="egg-card__world">
+            <span className="entry-card__world">
               {found === 0 ? "none found anywhere" : `${found} found in this world`}
             </span>
           </div>
 
-          <div className="egg-card__shelf">
+          <div className="entry-card__shelf">
             <div className="profile__shelf-name">Who has one</div>
             <Holders tallies={holders} onPick={close} />
           </div>
 
-          <div className="egg-card__shelf">
+          <div className="entry-card__shelf">
             <div className="profile__shelf-name">The rest of the ladder</div>
-            <div className="egg-card__ladder">
+            <div className="entry-card__row">
               {others.map((other) => (
                 <button
                   key={other.id}
                   type="button"
-                  className="egg-card__rung"
+                  className="entry-card__rung"
                   onClick={() => setTier(other.id)}
                   title={`${other.name} — 1 in ${oneIn(other.id)}`}
                 >
                   <EggMark kind={other} size={30} />
-                  <span className="egg-card__rung-odds">1 in {oneIn(other.id)}</span>
+                  <span className="entry-card__rung-note">1 in {oneIn(other.id)}</span>
                 </button>
               ))}
             </div>

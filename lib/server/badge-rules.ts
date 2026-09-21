@@ -15,11 +15,14 @@
  * store keeping a history nobody reads.
  *
  * Cheap on purpose. `onArrival` runs on every join, which is every door in
- * the world, and `onMingle` runs whenever somebody first stands next to a
- * resident.
+ * the world, `onMingle` runs whenever somebody first stands next to a
+ * resident, and `onOutdoors` is asked of every `move` message on the world
+ * map — so the socket settles each of those with its own `once` before the
+ * store is asked at all.
  */
 
 import { getRoomStore } from "./room-store";
+import type { Shot } from "./basketball";
 import { badgeFor, type EarnedBadge } from "../badges";
 import { RESIDENT_COUNT } from "../world/cast";
 import { EGG_TIER_COUNT } from "../world/eggs";
@@ -205,14 +208,22 @@ export function onPingPong(holders: readonly Holder[]): EarnedBadge[] {
 /**
  * A throw went through a hoop on the court in the park.
  *
- * The server watched it happen: it holds the ball, it ran the flight, and
- * it is the one that saw the ball cross the rim on the way down. There is
- * deliberately no count kept — one basket is the badge, and a hundred is
- * the same badge, which is the catalogue's own rule.
+ * The server watched the whole of it: it holds the ball, it ran the
+ * flight, it took the throw's origin off the room's own record of where
+ * the thrower stood, and it is the one that saw the pane struck and the
+ * rim crossed on the way down. A browser could claim any of the three.
+ *
+ * Three badges off one basket, and none of them a count of baskets: a
+ * hundred lay-ups are the same Swish, which is the catalogue's rule. What
+ * the other two key on are the two things the court has that a lay-up is
+ * not — the backboard, which is a second way into the hole, and the far
+ * end, which is where the throw meter tops out.
  */
-export function onBasket(holder: Holder): EarnedBadge[] {
+export function onBasket(holder: Holder, shot: Shot): EarnedBadge[] {
   const earned: EarnedBadge[] = [];
   grant(holder, "swish", earned);
+  if (shot.banked) grant(holder, "off-the-board", earned);
+  if (shot.far) grant(holder, "full-court", earned);
   return earned;
 }
 
@@ -232,6 +243,51 @@ export function onScore(holder: Holder, machine: string, first: boolean): Earned
       grant(holder, "played-the-lot", earned);
     }
   }
+  return earned;
+}
+
+/**
+ * The two parts of the world map nobody has any business in.
+ *
+ * Every other place badge is a room joined, which the server decides.
+ * These two are a position on the world map, and the position they are
+ * asked of is the one the hub kept rather than the one the message
+ * carried — `move` clamps a step against the sprint, so crossing the map
+ * takes crossing the map. The same footing the three resident badges
+ * already stand on, since standing beside Michael is a distance between
+ * two positions the hub is holding.
+ *
+ * Which is why neither of them is anywhere the map already rewards. The
+ * shops in the west are four organisations, so the Grand Tour walks you in
+ * through all four of their doors; the wood and the wilderness have no door
+ * in them at all, and going there is a thing somebody decides to do rather
+ * than a thing they pass through.
+ */
+export type Outdoors = "wood" | "wilderness";
+
+const OUTDOOR_BADGE: Record<Outdoors, string> = {
+  wood: "into-the-woods",
+  wilderness: "out-in-the-wild",
+};
+
+export function onOutdoors(holder: Holder, where: Outdoors): EarnedBadge[] {
+  const earned: EarnedBadge[] = [];
+  grant(holder, OUTDOOR_BADGE[where], earned);
+  return earned;
+}
+
+/**
+ * A car on the highway drove straight through somebody standing in it.
+ *
+ * Nothing collides with the traffic, on purpose — the road is at the far
+ * edge of a map with nothing on the other side of it, and a lane somebody
+ * can be pinned in by scenery they never heard coming is a worse road than
+ * one you can stand in. So the one thing to do with that is notice it, and
+ * the server is the only side that can: it is the one driving the cars.
+ */
+export function onRunThrough(holder: Holder): EarnedBadge[] {
+  const earned: EarnedBadge[] = [];
+  grant(holder, "right-of-way", earned);
   return earned;
 }
 
@@ -271,6 +327,22 @@ export function onEggFound(holder: Holder, tier: string): EarnedBadge[] {
 export function onEggLaid(holder: Holder): EarnedBadge[] {
   const earned: EarnedBadge[] = [];
   grant(holder, "ruffled-feathers", earned);
+  return earned;
+}
+
+/**
+ * Somebody got a hand on Michael while he was still running.
+ *
+ * Not the same thing as startling him, which is Cluck and asks only that
+ * you walk up to him: he bolts at half again a sprint, so being inside
+ * arm's length of a chicken who is already running means the corner was
+ * cut rather than the ground made up. The simulation is what can tell the
+ * two apart — a catch is a fresh fright inside a fright, which is the one
+ * thing its edge-triggered greeting cannot express on its own.
+ */
+export function onCaught(holder: Holder): EarnedBadge[] {
+  const earned: EarnedBadge[] = [];
+  grant(holder, "ran-him-down", earned);
   return earned;
 }
 

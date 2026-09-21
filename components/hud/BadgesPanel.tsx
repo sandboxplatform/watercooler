@@ -19,6 +19,16 @@ import type { EarnedBadge } from "@/lib/badges";
  * So every badge is listed whether or not anybody has it, and the names
  * under it are the ones who have. A badge nobody holds is the interesting
  * row on the page.
+ *
+ * **A row opens the badge**, the way a row in the Eggs panel opens an egg
+ * and a name in People opens a profile. A list row has space for a title
+ * and a line, and the line it carries is the past tense — what somebody
+ * did. What to go and do is in `BadgeCard`, with who got there first, and
+ * until that existed the whole of it was a `title` attribute, which is a
+ * tooltip and so is nothing at all on a handset.
+ *
+ * The holders stay pressable and still open a profile: they are buttons
+ * inside the row rather than part of it, so the two do not fight.
  */
 
 function when(at: string): string {
@@ -89,8 +99,14 @@ export default function BadgesPanel() {
                 >
                   <span className="badges__icon">{badge.icon}</span>
                   <div className="badges__body">
-                    <div className="badges__title">{badge.title}</div>
-                    <div className="badges__detail">{badge.description}</div>
+                    <button
+                      type="button"
+                      className="badges__open"
+                      onClick={() => gameEvents.emit("open-badge", badge.code)}
+                    >
+                      <span className="badges__title">{badge.title}</span>
+                      <span className="badges__detail">{badge.description}</span>
+                    </button>
                     <Holders earned={earned} />
                   </div>
                 </div>

@@ -17,6 +17,7 @@
 import {
   ballAtRest,
   carriedAt,
+  fromTheFarEnd,
   onCourt,
   stepBall,
   throwVelocity,
@@ -54,11 +55,27 @@ export interface Carrier {
   facing: Facing;
 }
 
+/**
+ * What a basket was.
+ *
+ * Both of these are the shot rather than the ball, so they are settled
+ * here and not in `stepBall`: a flight is a dozen ticks and the two facts
+ * belong to the whole of it — the board is usually struck a tick or two
+ * before the ball comes down through the rim, and where it was thrown from
+ * stopped being knowable the moment it left the hand.
+ */
+export interface Shot {
+  /** It went in off the backboard, which is the court's second way in. */
+  banked: boolean;
+  /** It was thrown from the far end, which is the top of the meter. */
+  far: boolean;
+}
+
 /** What a tick came to, for the socket to pass on. */
 export interface BasketballTick {
   ball: BallState;
-  /** The hoop it fell through, and who threw it, when it just went in. */
-  scored: { hoop: Hoop; by: string } | null;
+  /** The hoop it fell through, who threw it and what kind of shot it was. */
+  scored: { hoop: Hoop; by: string; shot: Shot } | null;
   /** Whether anything moved, so a ball lying still costs the room nothing. */
   live: boolean;
 }
@@ -75,6 +92,17 @@ export class Basketball {
    * threw it and to nobody at all before that.
    */
   private thrower: string | null = null;
+  /**
+   * Where the ball left the hand, and whether it has touched a board since.
+   *
+   * Both are facts about the throw rather than about the ball, so neither
+   * can be read off it once it is in the air: by the time it drops through
+   * a rim it is several ticks past the pane it came off and it has no
+   * memory of where it set out from. Kept beside `thrower` and cleared
+   * with it, which is what makes them the same shot's.
+   */
+  private thrownFrom: { x: number; y: number } | null = null;
+  private bankedInFlight = false;
   /** How long it has lain where it is, for `ABANDONED_MS`. */
   private idleMs = 0;
 
@@ -100,7 +128,7 @@ export class Basketball {
     if (this.ball.heldBy) return false;
     if (!withinReach(this.ball, at)) return false;
     this.ball = { ...this.ball, ...carriedAt(at, at.facing), vx: 0, vy: 0, vz: 0, heldBy: id };
-    this.thrower = null;
+    this.forgetShot();
     return true;
   }
 
@@ -117,6 +145,11 @@ export class Basketball {
     const from = carriedAt(at, at.facing);
     this.ball = { ...from, ...throwVelocity(at.facing, power), heldBy: null };
     this.thrower = id;
+    // Where it left the hand rather than where the thrower is standing: a
+    // person is a tall picture and a ball is a point, and it is the ball's
+    // journey the badge is about.
+    this.thrownFrom = { x: from.x, y: from.y };
+    this.bankedInFlight = false;
     return true;
   }
 
@@ -132,7 +165,14 @@ export class Basketball {
     if (this.ball.heldBy !== id) return;
     const where = at ? carriedAt(at, at.facing) : { x: this.ball.x, y: this.ball.y, z: 0 };
     this.ball = { ...where, z: 0, vx: 0, vy: 0, vz: 0, heldBy: null };
+    this.forgetShot();
+  }
+
+  /** No shot in the air: nobody threw this one and nothing came off a board. */
+  private forgetShot(): void {
     this.thrower = null;
+    this.thrownFrom = null;
+    this.bankedInFlight = false;
   }
 
   /**
@@ -155,8 +195,12 @@ export class Basketball {
       return { ball: this.ball, scored: null, live: true };
     }
 
-    const { ball, scored, live } = stepBall(this.ball, dtMs, worldSolids());
+    const { ball, scored, banked, live } = stepBall(this.ball, dtMs, worldSolids());
     this.ball = ball;
+    // A pane struck now and a rim crossed three ticks later are the same
+    // shot, so this is remembered across the flight rather than reported
+    // with the basket it is not in the same tick as.
+    if (banked) this.bankedInFlight = true;
 
     // Lying still, and a long way from where it belongs.
     if (live) this.idleMs = 0;
@@ -173,10 +217,14 @@ export class Basketball {
     if (!scored || !this.thrower) return { ball, scored: null, live };
 
     const by = this.thrower;
+    const shot: Shot = {
+      banked: this.bankedInFlight,
+      far: this.thrownFrom ? fromTheFarEnd(this.thrownFrom, scored) : false,
+    };
     // One basket per throw: the ball is on its way down out of the net and
     // must not be judged again on the way to the ground.
-    this.thrower = null;
+    this.forgetShot();
     log.info(`a basket at the ${scored.side} hoop`);
-    return { ball, scored: { hoop: scored, by }, live };
+    return { ball, scored: { hoop: scored, by, shot }, live };
   }
 }

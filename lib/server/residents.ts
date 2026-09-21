@@ -228,6 +228,23 @@ export interface ResidentHost {
    * it, and the simulations in the tests want the fright and not the egg.
    */
   laid?(residentId: string, room: string, at: Point, startledBy: string | null): void;
+  /**
+   * Somebody got a hand on a resident who was already running.
+   *
+   * A different thing from `met`, which is the edge of walking up to
+   * somebody: the pursuer never leaves that radius, so nothing about
+   * arriving can express keeping up. He bolts at half again a sprint, so
+   * being inside arm's length of him mid-run means a corner was cut, and
+   * that is the only reason this is worth telling anybody about.
+   *
+   * The connection rather than the person, like `startledBy` above, and
+   * only ever a person: a resident who blunders into him startles him the
+   * same and is credited with nothing, for the reason a local earns no
+   * badges.
+   *
+   * Optional like the other two. The fright works without it.
+   */
+  caught?(residentId: string, connectionId: string): void;
 }
 
 export interface ResidentOptions {
@@ -596,6 +613,12 @@ export class ResidentSimulation {
     if (this.spooked(state, now)) {
       if (now - state.greetedAt < CAUGHT_QUIET_MS) return;
       if (!hub.someoneNear({ x: state.x, y: state.y }, GREET_PX, me)) return;
+      // Told before the fresh fright rather than after it: `cluck` picks
+      // a new person to run away from and may find a different one, and
+      // whoever is being credited with the catch is whoever is on top of
+      // him *now*.
+      const by = hub.nearestNeighbour({ x: state.x, y: state.y }, GREET_PX, me);
+      if (by && !by.resident) this.host.caught?.call(this.host, state.resident.id, by.id);
       this.cluck(state, now, hub, GREET_PX, me);
       return;
     }

@@ -27,18 +27,24 @@ import { Basketball } from "./basketball";
 import { Nest } from "./eggs";
 import { Traffic } from "./traffic";
 import { eggSpot, type EggTier } from "../world/eggs";
+import { inTheWood } from "../world/wood";
+import { inTheWilderness } from "../world/wilderness";
+import { carBox } from "../world/traffic";
 import {
   onArrival,
   onAlone,
   onBasket,
+  onCaught,
   onEggFound,
   onEggLaid,
   onMeetingCalled,
   onMeetingJoined,
   onMicOn,
   onMingle,
+  onOutdoors,
   onPingPong,
   onRoomFull,
+  onRunThrough,
   onWhiteboard,
   type Holder,
 } from "./badge-rules";
@@ -420,6 +426,46 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   };
 
   /**
+   * Two corners of the world map that are worth having got to.
+   *
+   * Off a `move` rather than a join, because neither is a room: the wood
+   * and the wilderness are stretches of the one outdoor room, so the only
+   * thing that says somebody is standing in either is a position — and
+   * the position it is asked of is **the one the hub kept**, not the one
+   * the message carried. `move` clamps a step against the sprint, so the
+   * difference between the two is exactly a teleport.
+   *
+   * What that does not close, and neither does anything else here, is a
+   * client that lies about where it *arrived*: a join is placed where it
+   * says it is, because that is how walking out of a door works. Every
+   * positional badge in the catalogue has stood on that same footing
+   * since `onMingle`, and closing it means the server placing arrivals,
+   * which is a different change.
+   *
+   * Runs on every move of everybody on the map, so it is written to cost
+   * nothing in the ordinary case: two comparisons against a rectangle,
+   * and `once` settles each badge per run before the store is asked.
+   */
+  const wentTo = (slug: string, id: string, at: { x: number; y: number }) => {
+    if (slug !== WORLD_ROOM_SLUG) return;
+    const wood = inTheWood(at);
+    const wild = inTheWilderness(at);
+    // Both, where both are true: the wood runs along the top of all three
+    // stretches, so the north-east corner of the map is up among the trees
+    // *and* well past the last of the town. Asking them one at a time is
+    // what stops the corner quietly swallowing one of the two.
+    if (!wood && !wild) return;
+    const holder = holderOf(id);
+    if (!holder) return;
+    if (wood && once(holder.person, "into-the-woods")) {
+      announce(slug, onOutdoors(holder, "wood"));
+    }
+    if (wild && once(holder.person, "out-in-the-wild")) {
+      announce(slug, onOutdoors(holder, "wilderness"));
+    }
+  };
+
+  /**
    * Whose badge shelf a connection writes to.
    *
    * The identity from the cookie, which is the person; the name from the
@@ -697,7 +743,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
       publishBall({ side: scored.hoop.side, by: player?.name ?? "Someone" });
       ballWasLive = true;
       const holder = holderOf(scored.by);
-      if (holder) announce(WORLD_ROOM_SLUG, onBasket(holder));
+      if (holder) announce(WORLD_ROOM_SLUG, onBasket(holder, scored.shot));
       return;
     }
     // A ball nobody has touched is published once and then left alone.
@@ -717,9 +763,37 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
    * instant before the first arrival makes it visible anyway.
    */
   const stepTraffic = () => {
-    if (!rooms.has(WORLD_ROOM_SLUG)) return;
-    if (!traffic.step(TICK_MS, Date.now())) return;
+    const room = rooms.get(WORLD_ROOM_SLUG);
+    if (!room) return;
+    const news = traffic.step(TICK_MS, Date.now());
+    runOver(room.hub);
+    if (!news) return;
     broadcast(WORLD_ROOM_SLUG, { type: "traffic", cars: traffic.onTheRoad });
+  };
+
+  /**
+   * Anybody a car is currently driving through.
+   *
+   * Nothing collides with the traffic and nothing should — see
+   * `onRunThrough` — so this changes nothing about the road or the person.
+   * It only notices, which is the only thing left to do with a car that
+   * goes straight through you.
+   *
+   * Every tick, and cheap on purpose: almost always no cars at all and at
+   * most three, against however many people are out on the map, and the
+   * whole of it is skipped the moment the one badge is settled for
+   * everybody standing there. It has to be a tick rather than a move,
+   * because the person standing still in the road is exactly the case —
+   * the car is what does the moving.
+   */
+  const runOver = (hub: PresenceHub) => {
+    for (const car of traffic.onTheRoad) {
+      for (const id of hub.peopleIn(carBox(car))) {
+        const holder = holderOf(id);
+        if (!holder || !once(holder.person, "right-of-way")) continue;
+        announce(WORLD_ROOM_SLUG, onRunThrough(holder));
+      }
+    }
   };
 
   // ── The eggs ──────────────────────────────────────────
@@ -1336,12 +1410,20 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         }
 
         if (parsed.type === "move") {
-          room.hub.move(id, {
+          // Where the hub *put* them, not where the message said. The two
+          // differ by exactly the thing that makes a place badge worth
+          // anything: `move` clamps a step against the sprint, so a
+          // browser claiming to be up in the wood is pulled back to a
+          // stride from where it was — and reading the claim instead
+          // would have handed the badge over on the strength of one
+          // message. See `wentTo`.
+          const moved = room.hub.move(id, {
             x: coerceNumber(parsed.x),
             y: coerceNumber(parsed.y),
             facing: coerceFacing(parsed.facing),
             moving: parsed.moving === true,
           });
+          if (moved) wentTo(slug, id, moved);
         }
       });
 
@@ -1375,6 +1457,17 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
        * was matters — Michael's cluck and finding Doc are each their own
        * badge, and standing beside all seven is a third.
        */
+      /**
+       * Somebody ran one of them down.
+       *
+       * Only Michael bolts, so only Michael can be caught — but the
+       * simulation reports whoever it was rather than naming him here,
+       * since what makes it a catch is the fright rather than the bird.
+       */
+      caught: (_residentId, connectionId) => {
+        const holder = holderOf(connectionId);
+        if (holder) announce(roomOf.get(connectionId) ?? "", onCaught(holder));
+      },
       met: (residentId, connectionIds) => {
         for (const id of connectionIds) {
           const holder = holderOf(id);

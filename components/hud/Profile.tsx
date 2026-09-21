@@ -79,6 +79,21 @@ export default function Profile() {
 
   const close = useCallback(() => setPerson(null), []);
 
+  /**
+   * Hands over to the badge rather than stacking on top of it, which is
+   * the arrangement the eggs below are already under. It earns its keep
+   * most on the locked half of the shelf: that is a wall of grey icons
+   * with a `title` apiece, and the card is where "still out there" turns
+   * into somewhere to go.
+   */
+  const openBadge = useCallback(
+    (code: string) => {
+      close();
+      gameEvents.emit("open-badge", code);
+    },
+    [close],
+  );
+
   useEffect(() => {
     if (!person) return;
     const onKey = (event: KeyboardEvent) => {
@@ -204,10 +219,16 @@ export default function Profile() {
                   <div className="profile__group-name">{group.title}</div>
                   <div className="profile__badges">
                     {mine.map((badge) => (
-                      <div key={badge!.code} className="profile__badge" title={badge!.description}>
+                      <button
+                        key={badge!.code}
+                        type="button"
+                        className="profile__badge"
+                        title={badge!.description}
+                        onClick={() => openBadge(badge!.code)}
+                      >
                         <span className="profile__badge-icon">{badge!.icon}</span>
                         <span className="profile__badge-title">{badge!.title}</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -225,14 +246,16 @@ export default function Profile() {
                 </div>
                 <div className="profile__badges">
                   {BADGES.filter((badge) => !earnedCodes.has(badge.code)).map((badge) => (
-                    <div
+                    <button
                       key={badge.code}
+                      type="button"
                       className="profile__badge profile__badge--locked"
                       title={badge.description}
+                      onClick={() => openBadge(badge.code)}
                     >
                       <span className="profile__badge-icon">{badge.icon}</span>
                       <span className="profile__badge-title">{badge.title}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </>

@@ -153,6 +153,38 @@ export const HOOPS: readonly Hoop[] = [
   },
 ];
 
+/**
+ * The length of the court as a shot measures it: one rim to the other.
+ *
+ * The same span the throw meter tops out at, and read off the hoops rather
+ * than written down, so a court laid out at another size carries both with
+ * it.
+ */
+export const RIM_TO_RIM = Math.abs(HOOPS[1].rim.x - HOOPS[0].rim.x);
+
+/**
+ * How much of that a basket has to have come from to be a long one.
+ *
+ * Three quarters rather than all of it: the top of the meter is the whole
+ * span exactly, so insisting on the whole span would leave one shot on the
+ * court that earns it — taken from under your own rim, along the centre
+ * line, at a power the meter passes through in a frame. Three quarters is
+ * the far third of the tarmac and any of its corners, which is a shot
+ * somebody can set out to take twice.
+ */
+const FAR_END_SHARE = 0.75;
+
+/**
+ * Whether a basket was thrown from the far end of the court.
+ *
+ * Asked of where the ball left the hand and the rim it fell through, which
+ * are both the server's: the thrower's own position comes off the room's
+ * record of them, never off the message.
+ */
+export function fromTheFarEnd(from: { x: number; y: number }, hoop: Hoop): boolean {
+  return Math.hypot(from.x - hoop.rim.x, from.y - hoop.rim.y) >= RIM_TO_RIM * FAR_END_SHARE;
+}
+
 /** Whether a point is on the tarmac. */
 export function onCourt(at: { x: number; y: number }): boolean {
   return (
@@ -387,6 +419,17 @@ export interface BallStep {
   ball: BallState;
   /** The hoop it just fell through, if it did. */
   scored: Hoop | null;
+  /**
+   * Whether this step took the ball off a backboard.
+   *
+   * Reported rather than kept, because a step is the wrong place to hold
+   * it: the bounce and the basket are usually two different ticks, so it
+   * is whoever is running the flight that has to remember the pane was
+   * struck on the way in. The board is a second way into the hole and the
+   * only thing that could ever have known is the arithmetic that put it
+   * there.
+   */
+  banked: boolean;
   /** Whether anything moved, so a ball lying still costs the room nothing. */
   live: boolean;
 }
@@ -405,11 +448,11 @@ export interface BallStep {
 export function stepBall(ball: BallState, dtMs: number, blocked: readonly Rect[]): BallStep {
   // Somebody is carrying it. Where it is is a question about where they are,
   // which is the caller's to answer, not this.
-  if (ball.heldBy) return { ball, scored: null, live: true };
+  if (ball.heldBy) return { ball, scored: null, banked: false, live: true };
 
   const dt = Math.min(dtMs, 100) / 1000;
   const moving = ball.z > 0 || ball.vz !== 0 || Math.hypot(ball.vx, ball.vy) > REST_SPEED;
-  if (dt <= 0 || !moving) return { ball, scored: null, live: false };
+  if (dt <= 0 || !moving) return { ball, scored: null, banked: false, live: false };
 
   const next: BallState = { ...ball };
 
@@ -526,5 +569,5 @@ export function stepBall(ball: BallState, dtMs: number, blocked: readonly Rect[]
     }
   }
 
-  return { ball: next, scored, live: true };
+  return { ball: next, scored, banked: bank !== null, live: true };
 }

@@ -8,6 +8,7 @@ import { castMember } from "@/lib/world/cast";
 
 interface Toast {
   id: number;
+  code: string;
   icon: string;
   title: string;
   who: string;
@@ -31,6 +32,16 @@ const VISIBLE_MS = 6000;
  * because the room on the message is the room you were standing in; and it
  * has to, because the toast is the only thing that tells you. The bubble
  * the server puts over your head is drawn on every screen but your own.
+ *
+ * **And it can be pressed.** Six seconds of a title and a line was the
+ * whole of what anybody was ever told about a badge while they were
+ * playing: the catalogue is in a column that is shut, and reading it
+ * means stopping. Pressing the toast opens the badge itself — what it is,
+ * who else has it, and what the rest of its group are.
+ *
+ * It keeps its own six seconds either way. A notice that waited to be
+ * dismissed would be a modal, which is the thing the paragraph above says
+ * it is not.
  */
 export default function BadgeToast() {
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -43,6 +54,7 @@ export default function BadgeToast() {
       if (earned.room !== currentRoom()) return;
       const toast: Toast = {
         id: nextId++,
+        code: badge.code,
         icon: badge.icon,
         title: badge.title,
         who: castMember(earned.person)?.name ?? earned.name,
@@ -60,7 +72,13 @@ export default function BadgeToast() {
   return (
     <div className="badge-toasts" aria-live="polite">
       {toasts.map((toast) => (
-        <div key={toast.id} className="pixel-panel badge-toast">
+        <button
+          key={toast.id}
+          type="button"
+          className="pixel-panel badge-toast"
+          onClick={() => gameEvents.emit("open-badge", toast.code)}
+          title={`${toast.title} — what it is, and who else has it`}
+        >
           <span className="badge-toast__icon">{toast.icon}</span>
           <span className="badge-toast__words">
             <span className="badge-toast__title">
@@ -68,7 +86,7 @@ export default function BadgeToast() {
             </span>
             <span className="badge-toast__detail">{toast.description}</span>
           </span>
-        </div>
+        </button>
       ))}
     </div>
   );

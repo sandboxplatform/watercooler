@@ -1956,6 +1956,45 @@
   min-width: 0;
 }
 
+/* The title and the line under it, as one press.
+
+   A button rather than the row, because the row already has buttons in it
+   — the holders, each of which opens a profile — and a button inside a
+   button is neither. It takes the whole width so the target is the line
+   rather than the words on it, which is what a list read with a thumb
+   needs; everything else about it is the plain text it replaced. */
+.badges__open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.badges__open:hover .badges__title,
+.badges__open:focus-visible .badges__title {
+  color: var(--pixel-accent);
+  outline: none;
+}
+
+.badges__open:focus-visible {
+  outline: 1px solid var(--pixel-accent);
+  outline-offset: 2px;
+  border-radius: var(--pixel-radius-sm);
+}
+
+.badges__title {
+  display: block;
+}
+
+.badges__detail {
+  display: block;
+}
+
 /* Nobody has it yet: shown, and plainly nobody's.
 
    It was 0.45, which took the muted detail text to about 2:1 against the
@@ -2162,6 +2201,9 @@
   pointer-events: none;
 }
 
+/* Pressable, which opens the badge. The one moment anybody wants to know
+   what a badge is, is the moment they are told they have one — and it is
+   over in six seconds, so the notice itself has to be the way in. */
 .badge-toast {
   display: flex;
   align-items: center;
@@ -2169,6 +2211,14 @@
   padding: 8px 14px;
   min-width: 260px;
   border-color: var(--pixel-accent);
+  text-align: left;
+  cursor: pointer;
+}
+
+.badge-toast:hover,
+.badge-toast:focus-visible {
+  border-color: var(--pixel-accent-hover);
+  outline: none;
 }
 
 .badge-toast__icon {
@@ -2408,6 +2458,10 @@
 /* A badge as a tile rather than a row: a shelf is meant to be looked at,
    and the line of prose that explains one belongs in the tooltip and in
    the catalogue panel next door. */
+/* A button now, so the two lines below it are doing what a button needs
+   and the rest is what the chip always looked like: a `font` of its own,
+   because a button does not inherit one, and a left edge, because it does
+   not inherit that either. */
 .profile__badge {
   display: flex;
   align-items: center;
@@ -2416,7 +2470,28 @@
   border: 1px solid var(--pixel-accent);
   border-radius: var(--pixel-radius-sm);
   background: rgba(201, 162, 39, 0.1);
+  color: inherit;
+  font-family: inherit;
   font-size: var(--fs-2xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile__badge:hover,
+.profile__badge:focus-visible {
+  border-color: var(--pixel-accent-hover);
+  background: rgba(201, 162, 39, 0.2);
+  outline: none;
+}
+
+/* The locked half is the half most worth pressing — it is where the line
+   saying what to go and do lives — so it lights up rather than staying
+   grey under the cursor. */
+.profile__badge--locked:hover,
+.profile__badge--locked:focus-visible {
+  border-color: var(--pixel-border-light);
+  background: rgba(255, 255, 255, 0.05);
+  opacity: 1;
 }
 
 .profile__badge--locked {
@@ -2467,12 +2542,16 @@
   outline: none;
 }
 
-/* ── One kind of egg, at the size it deserves ──────────
-   Built on the profile's window rather than beside it: the two answer the
-   same three questions — what it looks like, what is known about it, and
-   who has one — and a second set of rules for the same shape of card is
-   two things to keep looking alike. */
-.egg-card {
+/* ── One entry out of a catalogue, at the size it deserves ──
+   One kind of egg, or one badge. Built on the profile's window rather than
+   beside it: all three answer the same three questions — what it is, what
+   is known about it, and who has one — and a second set of rules for the
+   same shape of card is two things to keep looking alike.
+
+   It was `.egg-card`, which stopped being the name of it the moment the
+   badges wanted the same window. Only two things are still either one's
+   own: the shadow under an egg, and the plate a badge's icon stands on. */
+.entry-card {
   position: fixed;
   inset: 0;
   /* The profile's own layer, because the two are never up together: each
@@ -2486,13 +2565,13 @@
   pointer-events: auto;
 }
 
-.egg-card__scrim {
+.entry-card__scrim {
   position: absolute;
   inset: 0;
   background: rgba(10, 9, 7, 0.82);
 }
 
-.egg-card__panel {
+.entry-card__panel {
   /* The reading sizes of the column, as the profile takes them. */
   --fs-3xs: 9px;
   --fs-2xs: 10px;
@@ -2520,7 +2599,7 @@
    overflow with them: at this width nothing reaches for it, but a short
    window is still a window and the alternative is a card with its ladder
    cut off. The plinth stays put either way. */
-.egg-card__body {
+.entry-card__body {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2532,7 +2611,7 @@
 /* The one dark field in the app that is nothing but a backdrop for a
    single object — the job the concept sheet does at the top of a profile.
    The wash behind it is lit from the top left, the way the shell is. */
-.egg-card__plinth {
+.entry-card__plinth {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2546,30 +2625,30 @@
 /* A shadow under it, so it is standing on the plinth rather than floating
    over it — the sprite in the grass has one baked in and this is the same
    egg. */
-.egg-card__egg {
+.entry-card__object {
   position: relative;
   filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.55));
 }
 
-.egg-card__head {
+.entry-card__head {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 0 14px;
 }
 
-.egg-card__name {
+.entry-card__name {
   font-size: var(--fs-xl);
   color: var(--pixel-accent);
 }
 
-.egg-card__chips {
+.entry-card__chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
 
-.egg-card__chip {
+.entry-card__chip {
   padding: 2px 6px;
   border: 1px solid var(--pixel-border-light);
   border-radius: var(--pixel-radius-sm);
@@ -2578,12 +2657,12 @@
 }
 
 /* The one number anybody came for. */
-.egg-card__chip--odds {
+.entry-card__chip--key {
   border-color: var(--pixel-accent);
   color: var(--pixel-accent);
 }
 
-.egg-card__note {
+.entry-card__note {
   margin: 0;
   padding: 0 14px;
   font-size: var(--fs-sm);
@@ -2591,7 +2670,7 @@
   color: var(--pixel-text);
 }
 
-.egg-card__lore {
+.entry-card__lore {
   margin: 0;
   padding: 0 14px;
   font-size: var(--fs-xs);
@@ -2599,7 +2678,7 @@
   color: var(--pixel-muted);
 }
 
-.egg-card__yours {
+.entry-card__yours {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -2612,19 +2691,19 @@
   font-size: var(--fs-xs);
 }
 
-.egg-card__world {
+.entry-card__world {
   color: var(--pixel-muted);
   font-size: var(--fs-2xs);
 }
 
-.egg-card__shelf {
+.entry-card__shelf {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 0 14px;
 }
 
-.egg-card__none {
+.entry-card__none {
   margin: 0;
   font-size: var(--fs-2xs);
   line-height: 1.7;
@@ -2634,13 +2713,13 @@
 /* The rest of the ladder, so a card is a place in a collection rather than
    an isolated fact — and so somebody can walk along it without going back
    to the list between each one. */
-.egg-card__ladder {
+.entry-card__row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.egg-card__rung {
+.entry-card__rung {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2650,18 +2729,90 @@
   border-radius: var(--pixel-radius-sm);
   background: rgba(0, 0, 0, 0.18);
   color: inherit;
+  font-family: inherit;
+  /* The egg's rung draws its own mark at 30px; a badge's is a character,
+     so it takes the size from here or it comes out at the panel's 10px —
+     which is the icon rendered smaller than the name under it. */
+  font-size: var(--fs-lg);
+  line-height: 1.2;
   cursor: pointer;
 }
 
-.egg-card__rung:hover,
-.egg-card__rung:focus-visible {
+.entry-card__rung:hover,
+.entry-card__rung:focus-visible {
   border-color: var(--pixel-accent);
   outline: none;
 }
 
-.egg-card__rung-odds {
+.entry-card__rung-note {
   font-size: var(--fs-3xs);
   color: var(--pixel-muted);
+  text-align: center;
+}
+
+/* A rung nobody has reached yet: the badges' row is the rest of its group,
+   and half of that group is usually still out there. Dimmed rather than
+   left out, because what is still to be had is the half worth showing. */
+.entry-card__rung--locked {
+  opacity: 0.45;
+}
+
+/* ── The two things that are one card's own ──────────── */
+
+/* A badge's icon is an emoji rather than a drawing, so it needs something
+   to stand on or it is a symbol floating in a dark rectangle. The egg
+   needs no such thing: it is lit and shadowed already. */
+.entry-card__emblem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 168px;
+  height: 168px;
+  border: 2px solid var(--pixel-border-light);
+  border-radius: var(--pixel-radius-sm);
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 84px;
+  line-height: 1;
+}
+
+/* Not yet earned: the plate goes quiet and the icon with it, which is the
+   same distinction the panel draws down the column. */
+.entry-card__emblem--locked {
+  border-color: var(--pixel-border);
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+
+/* Earned, and the one fact anybody opened the card for. */
+.entry-card__chip--got {
+  border-color: var(--pixel-green);
+  color: var(--pixel-green);
+}
+
+/* The line that says what to go and do. It reads as instructions rather
+   than as description, so it is set apart from the sentence above it the
+   way the egg's basket line is. */
+.entry-card__hint {
+  display: flex;
+  gap: 8px;
+  margin: 0 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--pixel-border);
+  border-left: 3px solid var(--pixel-accent);
+  border-radius: var(--pixel-radius-sm);
+  background: rgba(0, 0, 0, 0.22);
+  font-size: var(--fs-xs);
+  line-height: 1.8;
+  color: var(--pixel-text);
+}
+
+.entry-card__hint-name {
+  flex: none;
+  color: var(--pixel-muted);
+  font-size: var(--fs-3xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-top: 2px;
 }
 
 @media (max-width: 760px) {
@@ -2672,18 +2823,24 @@
   /* No room for a rail beside the words, so the two go back to being
      stacked — and the card goes back to scrolling, which on a handset is
      what every panel does anyway. */
-  .egg-card__panel {
+  .entry-card__panel {
     grid-template-columns: minmax(0, 1fr);
     overflow-y: auto;
   }
 
-  .egg-card__plinth {
+  .entry-card__plinth {
     padding: 22px 0 18px;
     border-right: 0;
     border-bottom: 2px solid var(--pixel-border);
   }
 
-  .egg-card__body {
+  .entry-card__emblem {
+    width: 128px;
+    height: 128px;
+    font-size: 64px;
+  }
+
+  .entry-card__body {
     padding: 10px 0 16px;
     overflow: visible;
   }

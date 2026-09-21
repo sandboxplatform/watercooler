@@ -44,6 +44,20 @@ import { TILE, TOWN_COLUMNS, TOWN_LEFT, WOOD_ROWS, WORLD_COLUMNS, type Rect } fr
  */
 const TOWN = TOWN_LEFT / TILE;
 
+/**
+ * Whether somebody is standing up in the wood.
+ *
+ * The whole band along the top of the map rather than the trees in it: the
+ * wood runs the map's full width and the town begins under it at
+ * `TOWN_TOP`, so everything above that row is up there — the trails, the
+ * bank of the river and the clearings between the trunks alike. A test
+ * against the planting would be a test of where the scatter happened to
+ * put a tree, which is not the place anybody walked to.
+ */
+export function inTheWood(at: { x: number; y: number }): boolean {
+  return at.y < WOOD_ROWS * TILE;
+}
+
 /** A point on the river's centreline, in tiles. */
 export interface Bend {
   x: number;

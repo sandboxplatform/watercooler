@@ -83,10 +83,11 @@ export const CAST: readonly CastMember[] = [
     spriteKey: "character_rob",
     art: art("Rob"),
     backstory:
-      "Turned up in mirrored sunglasses and has never explained them. The trophy on the " +
-      "shelf behind him is for something he will only describe as a previous engagement. " +
-      "He rides every lift in the world too, which makes the pair of them insufferable " +
-      "on the third floor.",
+      "Co-founded the place with Coop, and wears the mirrored sunglasses indoors, at the " +
+      "desk and in every photograph anybody has of him. The trophy on the shelf behind him " +
+      "is for something he did before all this, and he will tell you the whole story if you " +
+      "ask him about it. Holds the keys to every lift on the map, which is what comes of " +
+      "having helped put the buildings up.",
   },
   {
     id: "hunter",
@@ -111,10 +112,11 @@ export const CAST: readonly CastMember[] = [
     spriteKey: "character_nathan",
     art: art("Nathan"),
     backstory:
-      "Writes the software, and dresses like the person who signs off the budget for it: " +
-      "navy suit, navy tie, a city skyline through the window and a small gold globe on " +
-      "the shelf, none of which he will admit to having chosen himself. Rides one lift, " +
-      "and rides it beautifully.",
+      "Writes the software, in a navy suit and tie that nobody else in the building has " +
+      "ever attempted — and it suits him, which is the annoying part. Behind him a city " +
+      "skyline through the window and a small gold globe on the shelf, both of them his " +
+      "own choice. Rides Sandbox ERP's lift and no other, on the grounds that he has " +
+      "never needed another one.",
   },
   {
     id: "sara",
@@ -125,10 +127,11 @@ export const CAST: readonly CastMember[] = [
     spriteKey: "character_sara",
     art: art("Sara"),
     backstory:
-      "Spent her first months here as one of the residents, walking a fixed round of the " +
-      "building at the server's say-so. Then somebody gave her a code, and she has gone " +
-      "wherever she likes ever since — usually straight to the org chart on the wall " +
-      "behind her, to move something on it.",
+      "Co-founder, and the one who keeps the org chart on the wall behind her true to the " +
+      "company rather than the other way round — it moves most weeks, and she moves it. " +
+      "Knows what everybody is working on without looking it up, which is a different " +
+      "thing from having written it down. Rides Sandbox ERP's lift all day and is rarely " +
+      "on the floor you were told she was on.",
   },
   {
     id: "andrew",

@@ -149,6 +149,18 @@ export interface GameEventMap {
    * is the other's parent. `null` closes it.
    */
   "open-egg": [tier: string | null];
+  /**
+   * Show one badge: what it is, the one line saying how to get it, who
+   * holds it, and the rest of its group.
+   *
+   * The third window of this shape and on the bus for the same reason as
+   * the other two, with one caller the others do not have: the toast over
+   * the office. A badge announces itself for six seconds and then goes,
+   * which is the one moment somebody is most likely to want to know what
+   * it was — so the toast is pressable and this is what it presses.
+   * `null` closes it.
+   */
+  "open-badge": [code: string | null];
   /** Someone said something out loud: show it over their character. */
   /**
    * The player walked into a doorway. `target` names the room it leads to;
