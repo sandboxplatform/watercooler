@@ -1625,13 +1625,21 @@ centre circle 1.8 in radius, the arc 6.75 from the basket, clamped so a
 plain semicircle does not come out on the sideline and read as a second
 boundary. `courtLines(tilesW, tilesH)` in `scripts/make-world-art.mjs`.
 
-**The top of the meter had to go up with it.** A full-power throw covered
-453px, which crosses a nine-tile court and falls well short of a sixteen —
-so the length of the court would have been a length nobody could throw and
-the top third of the swing a part of it nothing used. `THROW_MAX_SPEED` and
-`THROW_MAX_LIFT` now carry the ball from one end line to the far rim; the
-minima are untouched, since the bottom of the meter is a lay-up at either
-size.
+**The top of the meter is one rim to the other** — the length of the court,
+taken from under your own hoop, which is the longest shot the court has in
+it. The end line a stride behind it is deliberately out of range: a throw
+from off the back of the court is not a shot anybody was aiming.
+
+It has been wrong in both directions. At the nine-tile court's 453px a full
+throw crossed a sixteen-tile one nowhere near, so the length of the court was
+a length nobody could throw and the top third of the swing was a part of it
+nothing used; wound up to reach the far rim from the far _end line_ it went
+the other way, to 808px against the 668 between the two rims — a ball fired
+out of the park, with the top of the swing spent overshooting whatever it was
+pointed at. `THROW_MAX_SPEED` is the one that came down. `THROW_MAX_LIFT`
+stayed, because the same lift over a shorter throw is the loftier arc, which
+is the shape a shot at a hoop has; the minima are untouched, since the bottom
+of the meter is a lay-up at any size.
 
 **And the flight had to be the parabola it is solved as.** `throwReach` is
 the analytic answer and `stepBall` was integrating `vz -= g·dt` and then
@@ -1738,11 +1746,13 @@ in `scripts/make-world-art.mjs`. A pane reaching past its own picture is a
 rebound out of clear air. Two honest ways past it fall out of that: under it,
 through the gap between the hole and the foot of the board, and over the top.
 
-It also means **the longest throws on the meter cannot be swished from the
-centre line**, because a perfect shot at full power is taken from behind the
-far hoop — where that hoop's own board is in the way, from the back. Which
-is right, and is the reason the power sweep in the tests stops at the court's
-own edge.
+It is also what **stops a shot taken from off the back of the court**: the
+shooter's own board is between them and the far hoop, and the ball meets it
+from behind exactly as it would from the front. That used to be the top of
+the meter's own story — a full-power swish was thrown from eight hundred
+pixels out, which on the centre line is behind the other hoop — and it is an
+edge case now that the meter tops out at the distance between the two rims.
+Every power the meter has can be swished from somewhere on the tarmac.
 
 **A ball left off the court finds its own way back.** A throw at full
 stretch carries it clean over the end line and the avenue beyond, and there

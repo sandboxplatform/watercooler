@@ -190,15 +190,25 @@ const REST_SPEED = 8;
  * The slowest and the fastest throw, in px/s across the ground, and how
  * hard it is thrown upward — which is what makes the arc an arc.
  *
- * The top of the meter has to carry the ball from one end line to the far
- * rim, or the length of the court is a length nobody can throw and the top
- * third of the swing is a part of it nothing uses. So the two maxima went up
- * with the court: 520 and 420 covered 453px, which crossed a nine-tile
- * court and falls well short of a sixteen-tile one. The minima are
- * untouched — the bottom of the meter is a lay-up at either size.
+ * **The top of the meter carries the ball from one rim to the other** — the
+ * length of the court, taken from under your own hoop. That is the longest
+ * shot the court has in it and it is what the meter is scaled to: the end
+ * line a stride behind it is deliberately out of range, since a throw from
+ * off the back of the court is not a shot anybody was aiming.
+ *
+ * It used to be that end line to the far rim, which is the same throw with a
+ * hoop's depth added on top: 700 covered 808px against the 668 between the
+ * two rims, so a full throw was a ball fired out of the park and the top of
+ * the swing was spent overshooting whatever it was pointed at.
+ *
+ * Only the speed came down. The lift is what makes the arc an arc, and the
+ * same lift over a shorter throw is the loftier one — which is the shape a
+ * shot at a hoop has, and was the other half of what was wrong: the ball
+ * left flat and arrived flat. The minima are untouched — the bottom of the
+ * meter is a lay-up at either size.
  */
 const THROW_MIN_SPEED = 180;
-const THROW_MAX_SPEED = 700;
+const THROW_MAX_SPEED = 580;
 const THROW_MIN_LIFT = 260;
 const THROW_MAX_LIFT = 540;
 

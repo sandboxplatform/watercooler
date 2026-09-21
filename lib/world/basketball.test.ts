@@ -152,14 +152,21 @@ describe("a throw", () => {
     }
   });
 
-  it("can reach a rim from anywhere on the court, and not from the next county", () => {
-    const [, east] = HOOPS;
-    // Standing on the far end line, which is the longest shot the court has.
-    const longest = east.rim.x - COURT_PX.x;
-    expect(throwReach(1)).toBeGreaterThan(longest);
-    // And the shortest throw is a lay-up rather than a drop at the feet.
+  it("reaches the far rim from under your own hoop, and not from behind it", () => {
+    const [west, east] = HOOPS;
+    // Standing under your own basket: the length of the court, which is the
+    // longest shot it has in it. Measured from the hand rather than from the
+    // feet, since that is where a throw actually leaves.
+    const own = carriedAt(standingOn(west.rim), "right");
+    expect(own.x + throwReach(1)).toBeGreaterThan(east.rim.x);
+    // And a stride further back is out of range, on purpose: a throw taken
+    // from off the end of the court is not a shot anybody was aiming.
+    const line = carriedAt(standingOn({ x: COURT_PX.x, y: east.rim.y }), "right");
+    expect(line.x + throwReach(1)).toBeLessThan(east.rim.x);
+    // The shortest throw is a lay-up rather than a drop at the feet.
     expect(throwReach(0)).toBeGreaterThan(TILE);
-    expect(throwReach(1)).toBeLessThan(COURT_PX.width * 1.5);
+    // And the hardest is the court's own length, not half as much again.
+    expect(throwReach(1)).toBeLessThan(COURT_PX.width);
   });
 
   it("comes to rest, and not on the other side of a wall", () => {
@@ -256,11 +263,11 @@ describe("a basket", () => {
     // more often the harder it is thrown, and indistinguishable on screen
     // from having missed.
     //
-    // The top of the meter is left out because there is nowhere on the
-    // court to take it from: a perfect shot at full power is thrown from
-    // eight hundred pixels out, which on the centre line is behind the
-    // other hoop and its board. That is the board doing its job rather
-    // than the rim failing at it, and it is asserted as such below.
+    // Every power the meter has, the top of it included: a full throw is
+    // taken from under the other hoop now rather than from off the back of
+    // the court, so there is somewhere on the tarmac to take all of them
+    // from. The guard stays because it is the court that decides that, and
+    // the court is allowed to change size.
     const [, east] = HOOPS;
     let taken = 0;
     for (let power = 0; power <= 1.0001; power += 0.05) {
@@ -452,21 +459,34 @@ describe("the backboard", () => {
     // Plenty of board hits come straight back out: too high on the pane and
     // the rebound clears the rim on the way down, which is a miss with the
     // board in plain sight to explain it.
+    //
+    // Swept over the near ranges rather than taken from one of them. The
+    // band of shots that are on the pane and still too high narrows as the
+    // range grows — from a few hundred pixels out, anything that meets the
+    // board at all comes off it into the hole — so one hand-picked distance
+    // is a test of how hard the meter happens to throw rather than of the
+    // rule, and that is what it turned into the first time the meter was
+    // wound down.
     let hitAndMissed = 0;
-    for (let power = 0; power <= 1.0001; power += 0.025) {
-      const { scored, banked } = outcome(150, power);
-      if (banked && !scored) hitAndMissed++;
+    for (const from of [100, 150, 200]) {
+      for (let power = 0; power <= 1.0001; power += 0.01) {
+        const { scored, banked } = outcome(from, power);
+        if (banked && !scored) hitAndMissed++;
+      }
     }
     expect(hitAndMissed).toBeGreaterThan(2);
   });
 
   it("stops a shot taken from behind the other hoop", () => {
-    // The longest throws on the meter are taken from off the court, and on
-    // the centre line that is behind the far board — which the ball meets
-    // from the back, exactly as it would from the front.
-    const behind = standingOn({ x: west.board.x - 120, y: east.rim.y });
-    const { scored } = settle(thrown(behind, "right", 1));
+    // A pane is a wall from either side. Somebody lining up from off the
+    // back of the court is shooting through their own board first, and it
+    // comes back at them rather than letting the shot through.
+    const behind = standingOn({ x: west.board.x - 90, y: east.rim.y });
+    const { ball, scored } = settle(thrown(behind, "right", 1));
     expect(scored).toBe(0);
+    // Back on its own side of the board, which is what says the board was
+    // what stopped it rather than the throw falling short by itself.
+    expect(ball.x).toBeLessThan(west.board.x);
   });
 });
 

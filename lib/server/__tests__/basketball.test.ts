@@ -114,10 +114,17 @@ describe("a basket", () => {
     // the same person a clean shot does.
     const ball = new Basketball();
     const [, east] = HOOPS;
-    // Too long for the hole from here, which is what the board is for.
-    const at = standingOn({ x: east.rim.x - 300, y: east.rim.y }, "right");
+    // Standing too close for the power, which is what puts the ball on the
+    // board rather than through the hole: a throw carrying this far past the
+    // rim meets the pane behind it and drops in off that. Taken off
+    // `throwReach` rather than written as a distance, since how hard the
+    // meter throws is allowed to be retuned and a fixed pair of numbers is a
+    // bank shot that quietly becomes a miss when it is.
+    const power = 0.55;
+    const past = 40;
+    const at = standingOn({ x: east.rim.x - (throwReach(power) - past), y: east.rim.y }, "right");
     ball.take("coop", onIt);
-    ball.release("coop", at, 0.5);
+    ball.release("coop", at, power);
     let scored = null;
     for (let i = 0; i < 200 && !scored; i++) scored = ball.step(TICK, nobody).scored;
     expect(scored?.by).toBe("coop");
