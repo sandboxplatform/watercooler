@@ -140,6 +140,15 @@ export interface GameEventMap {
    * parent. `null` closes it.
    */
   "open-profile": [person: string | null];
+  /**
+   * Show one kind of egg at a size worth looking at: the shell, how rare it
+   * is, what is known about it, and who has found one.
+   *
+   * On the bus for the reason a profile is — it is opened from the Eggs
+   * panel in the column and drawn over the whole app, and neither of those
+   * is the other's parent. `null` closes it.
+   */
+  "open-egg": [tier: string | null];
   /** Someone said something out loud: show it over their character. */
   /**
    * The player walked into a doorway. `target` names the room it leads to;

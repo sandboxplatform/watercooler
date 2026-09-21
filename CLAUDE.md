@@ -1764,12 +1764,12 @@ empty court until somebody touched it.
 
 ### The eggs
 
-Startle Michael and one cluck in a hundred — `EGG_CHANCE` — he leaves an
-egg in the grass where he was standing before he bolts. Anybody out on the
+Startle Michael and three clucks in a hundred — `EGG_CHANCE` — he leaves
+an egg in the grass where he was standing before he bolts. Anybody out on the
 map can walk up to it and press E, and it goes in their basket, which hangs
 on their profile beside their badges and stays there.
 
-**Odds, not every hundredth cluck**, and the two are nothing alike to
+**Odds, not every thirty-third cluck**, and the two are nothing alike to
 play: the draw is fresh on every fright and nothing anywhere counts them,
 so a hundred may pass with nothing to show and two may come one after the
 other. A counter would be a rhythm somebody could learn, and then walking
@@ -1781,20 +1781,27 @@ counter swallowing the other ninety-nine.
 **There is a ladder, and rarity is one number written once.** Six kinds
 (`EGG_KINDS` in `lib/world/eggs.ts`), each declaring a `weight`, and
 everything else is read off it — the share of eggs that come out that kind,
-the "1 in 50" the panel prints, the order the ladder is shown in, and the
+the "1 in 100" the panel prints, the order the ladder is shown in, and the
 target of the badge for finding one of each. A second field saying "rare"
 is a second thing to be wrong the next time a weight moves.
 
 | Kind         | Weight | Which is |
 | ------------ | ------ | -------- |
-| Hen's Egg    | 1000   | 1 in 2   |
-| Speckled Egg | 500    | 1 in 4   |
-| Copper Egg   | 250    | 1 in 8   |
-| Jade Egg     | 120    | 1 in 17  |
-| Gilded Egg   | 90     | 1 in 22  |
-| Rainbow Egg  | 40     | 1 in 50  |
+| Hen's Egg    | 5450   | 1 in 2   |
+| Speckled Egg | 2500   | 1 in 4   |
+| Copper Egg   | 1250   | 1 in 8   |
+| Jade Egg     | 500    | 1 in 20  |
+| Gilded Egg   | 200    | 1 in 50  |
+| Rainbow Egg  | 100    | 1 in 100 |
 
-So a rainbow is one cluck in five thousand, which is the world's rarity
+The weights total ten thousand, so the rare end is exact — five hundred
+is one in twenty, two hundred is one in fifty, a hundred is one in a
+hundred — and the common end takes what is left over, which is why a
+hen's egg is 5450 rather than a round number. A rarity somebody crossed
+the park for is worth being exact about; the one they were going to find
+anyway is not.
+
+So a rainbow is one cluck in ten thousand, which is the world's rarity
 rather than anybody's goal — and The Whole Clutch, the badge for one of
 every kind, is the long one in the catalogue on purpose. Both numbers are
 meant to be read as "there may be one of these in this world", not as
@@ -1866,6 +1873,28 @@ already under. The panel draws its own from those tones rather than
 slicing the atlas, so the HUD never has to know where in a generated sheet
 an egg sits. The frame is **centred on the ground the egg lies on** and
 padded below, so no scene has to know where in the frame the ground is.
+
+**A colour is not a kind, and that was the whole fault.** Both drawings
+were an ovoid in three tones of one light, which at fourteen pixels tall in
+the grass and thirteen in the panel is one egg printed six times — and a
+ladder whose bottom rung is meant to be worth crossing the park for cannot
+be told apart from its top. So every kind carries a **marking** as well as
+its tones, drawn twice like the tones are: freckles, hammered metal with
+two highlights, a veined stone lit from inside, gold leaf in panels, and
+the whole spectrum wound diagonally round the shell. `mark` in the script
+is one half and `Marking` in `components/hud/EggMark.tsx` is the other.
+The sprite is half as tall again into the bargain, and the panel's is an
+SVG at whatever size it is asked for rather than a box of a fixed number of
+pixels — which is what lets the same egg be a list row and the card below.
+
+**And a rung opens a card.** `components/hud/EggCard.tsx`, off `open-egg`
+on the bus: the shell at two hundred pixels on a dark plinth, how rare it
+is, the `lore` paragraph behind the one-line `note`, how many are in your
+basket, who else has found one, and the rest of the ladder to step along.
+Mounted in `app/page.tsx` beside `Profile` and for its reason — it is
+opened from the column, and the HUD is behind the column. The two are
+**never up together**: each closes itself on the way to opening the other,
+which is why they share a z-index rather than arguing over one.
 
 ### Fixtures
 
@@ -2626,15 +2655,59 @@ rather than each browser inventing its own.
 Everywhere else a resident wanders inside **bounds** (`WANDER_AREAS`), a patch
 of open floor picked so a random point in it is never solid. The world map is
 too big and too built-up for that, so it has **places** instead:
-`WORLD_WANDER_SPOTS`, twenty points on doorsteps, promenades, avenues, the
-plaza and the dock. A wanderer picks one they are not standing on and walks
-there, and since nothing collides them the route is the only thing keeping them
+`worldWanderSpots()`. A wanderer picks one they are not standing on and
+walks there, and since nothing collides them the route is the only thing keeping them
 out of the walls — `routeAcross` (`lib/world/route.ts`) plans it over
 `worldSolids()` on the same coarse grid `allReachable` checks the map with, and
 hands back corners rather than cells. `residents.test.ts` holds every spot to
 being clear of the buildings, the props and the sea, and reachable from every
 other; the simulation's own tests walk Michael for twelve minutes and assert he
 never crosses a solid.
+
+**The list is in two halves, and the second is swept off the map.**
+
+| Half             | What it is                                                                                                                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PLACES`         | Written down: the doorsteps, the two promenades, the avenues, the plaza, the car park, the dock, and the walk along the bank up in the wood. Somewhere the map already means people to stand |
+| `roamingSpots()` | Everywhere else: a lattice over the whole map, keeping what is reachable, clear to stand on, and twelve tiles from anything kept already                                                     |
+
+The first half was the whole of it and could not say what it needed to say.
+Doorsteps and promenades are exactly right for the town and exactly what the
+shops' wood, the meadow and the far side of the wilderness have none of —
+so when the map grew to three times its width, two fifths of the ground a
+person can walk on ended up more than twelve tiles from anywhere Michael was
+ever sent, the whole eastern quarter included. He was not wandering the
+world, he was wandering the town, and nothing on screen said so, because a
+chicken on a promenade looks like a chicken doing what chickens do here.
+A count of thirty-six was the test, and it passed throughout.
+
+Three rules in the sweep, and the first two are what keep it honest:
+standing room, because nothing collides a resident and a point in a tree is
+a chicken in a tree; reachable from the spawn, off the one flood
+`reachedFrom` now hands back for `allReachable` as well; and twelve tiles
+from everything kept, or the meadow alone would be three hundred points.
+
+The first of those is `clearToStand`'s question asked of `standingRoom()` —
+the frames, the pictures and the solids as one kept list — through
+`coversPoint`, which buckets it. `clearToStand` itself walks the lot, and
+the lot is five thousand rectangles once the wood is planted; a few
+thousand candidates of that is a fifth of a second. Same arrangement the
+basketball is already under, for the same reason.
+A lattice point that lands in a tree looks for the gap beside it, out to
+two tiles in a ring — which never fires in the meadow and is the whole
+difference in the wood, where the canopy is most of the map and the
+clearings are what is left between the trunks.
+
+It is read off the map rather than listed, so a building put up in the
+meadow or a trail cut through the wood changes where he goes without
+anybody coming back here. **A function and not a constant**, worked out on
+the first call and kept: a `const` would sweep the moment the module is
+imported, and this module is in the browser's bundle — the scenes read the
+cast out of it — so a quarter of a second of flooding the map, to answer a
+question only the server asks, would be a quarter of a second of a page
+that has not painted. `residents.test.ts` asks for **a place in every
+part of the map** now, in six boxes, rather than for a number: a count is
+what was true of the old list while the world grew around it.
 
 **A route is planned against a grid, not against the list.** Asking "is this
 cell blocked?" by testing every solid is the obvious way and it is what
@@ -2734,6 +2807,17 @@ walked up. Three rules keep one word from becoming a stuck horn, all in
 | `GREET_CLEAR_PX` | Wider than `GREET_PX`, so somebody hovering on the boundary does not cross it twice a second    |
 | `GREET_QUIET_MS` | A floor under the gap between two of them, so a queue of arrivals is one cluck rather than five |
 
+**A fright that has run its course is a fresh arrival.** Edge-triggered is
+the right rule for somebody leaning on a counter and the wrong one for
+somebody who chased the chicken and kept up: they never left
+`GREET_CLEAR_PX`, so `greeted` stayed set, and what they got for catching
+him was a bird standing there in silence until they walked away and came
+back. `greet` clears the flag the tick the fright expires, so whoever is
+still over him is clucked at again — which is the whole of Catch the
+Chicken. `GREET_QUIET_MS` is therefore **exactly `SPOOK_MS`**, not the
+eight seconds it was: a quiet period outlasting the fright by three would
+put the re-cluck back where it started.
+
 **And then he bolts, away from whoever startled him.** A cluck is a fright,
 so saying it sets `spookedUntil` five seconds ahead (`SPOOK_MS`) and off he
 goes at `SPOOK_SPEED_PX_S` — dashes one after another, each aimed into a
@@ -2743,11 +2827,15 @@ said spooks him: the quiet period above returns before the say, so a second
 person walking up inside it gets neither.
 
 **The pace is measured against the sprint, not written down.**
-`SPOOK_SPEED_PX_S` is `SPRINT_SPEED_PX_S * 1.2`, because the only thing
+`SPOOK_SPEED_PX_S` is `SPRINT_SPEED_PX_S * 1.5`, because the only thing
 that matters about it is that it is faster than whoever startled him. It
 was 150 — under half a sprint — so anybody who ran after him caught him
 inside a second, and a fright you can keep up with at a jog is not a
-fright. It is well inside what the hub will carry: `move` clamps against
+fright. A fifth again was the next try and was still not enough: a sprinter
+loses a pixel and a half in ten to a chicken who keeps turning, so he was
+caught anyway and the chase had no shape to it. At half again he is gone,
+and catching him means cutting a corner rather than out-running him. It is
+well inside what the hub will carry: `move` clamps against
 the sprint times `SPEED_TOLERANCE`, which is two and a half of them.
 `SPOOK_DASH_PX` went up with it, since 70 to 160 is a fifth of a second
 apiece at this pace — a chicken shaking rather than a chicken running.
@@ -2768,18 +2856,33 @@ Five things in it, and the first is the one that would go wrong quietly:
 | Away from where they _were_               | `spookedFrom` is a point taken at the cluck, not a person read each dash. Re-reading it would be a chase, and one a person could steer by walking round him      |
 | The cone gives way before the wall does   | A chicken in a corner has no way out that is also away. Tries past `SPOOK_TRIES` open out to the whole circle, or he would stand still in the middle of a fright |
 
-It asks the room's hub rather than the simulation, because only a **person**
-counts as somebody walking up: `personNear` skips the residents — who are
-sent to places nobody is standing in anyway — and skips anyone hidden in a
-lift. It answers without allocating, for the reason `get` does not use
-`snapshot()`: this is asked of a room on every tick.
+It asks the room's hub rather than the simulation, because the hub is where
+everybody standing in the room is — and **a resident coming round the corner
+startles him exactly as a person does.** `someoneNear` used to be
+`personNear` and skipped the locals, on the reasoning that they are sent to
+places nobody is standing in anyway; that is true of where they are _sent_
+and says nothing about the walk between two places, which crosses whatever
+is in the way because nothing collides a resident. So Michael could be
+walked up to by one kind of thing and stood beside by another, which is not
+a fact about chickens. It skips anyone hidden in a lift, and it skips the
+asker, or he would spend his life fleeing his own company. It answers
+without allocating, for the reason `get` does not use `snapshot()`: this is
+asked of a room on every tick.
 
-**`nearestPerson` is the second question and it is asked far less often.**
-The tick check above wants a yes or a no and stops at the first person it
-finds; a bolt wants a point to run away from, which means scanning the room
-and building one. So it is asked only on the tick something is actually
-said — and for the nearest rather than for any, since a chicken with two
-people around him should put the near one behind him.
+`peopleNear` is still people-only and stays that way, because what it feeds
+is a badge and a local holds none.
+
+**`nearestNeighbour` is the second question and it is asked far less often.**
+The tick check above wants a yes or a no and stops at the first it finds; a
+bolt wants a point to run away from, which means scanning the room and
+building one. So it is asked only on the tick something is actually said —
+and for the nearest rather than for any, since a chicken with two people
+around him should put the near one behind him.
+
+It hands back whether that body is a resident, because **the fright is the
+same whoever caused it and the credit is not**: an egg is a thing somebody
+is given, so a chicken startled by Doc still lays and the egg lies in the
+grass for whoever comes along.
 
 One thing that looks like tidiness and is not: `greetedAt` is 0 for _never_,
 the way `heldSince` is 0 for nobody in the way. A plain `now - greetedAt`

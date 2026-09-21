@@ -37,6 +37,15 @@ export interface EggKind {
   /** A line for the panel — what it looks like, not how rare it is. */
   note: string;
   /**
+   * The rest of it, for the card that opens when one is pressed.
+   *
+   * A rung of the ladder is a thing somebody went looking for, and a list
+   * row has room for a phrase. This is the paragraph behind the phrase —
+   * what it is like to hold, where the world thinks it came from, and what
+   * Michael has to say about it, which is never very much.
+   */
+  lore: string;
+  /**
    * The shell's three tones, for the HUD.
    *
    * The same colours are drawn into the sprite by
@@ -50,53 +59,85 @@ export interface EggKind {
 /**
  * The ladder, commonest first.
  *
- * Six rungs, each about half the one above it until the top two, which are
- * pulled apart a little further: the point of a ladder is that the last
- * step is worth telling somebody about. The weights total two thousand, so
- * a share reads straight off — a rainbow is forty of them, which is one
- * egg in fifty and, at `EGG_CHANCE`, one cluck in five thousand.
+ * Six rungs. The common end halves — a hen's egg, one in four, one in
+ * eight — and then the ladder pulls apart: the point of one is that the
+ * last step is worth telling somebody about, and six rungs each half the
+ * one above it is a ladder anybody finishes in an afternoon.
+ *
+ * The weights total ten thousand, so the rare end is exact and reads
+ * straight off — five hundred is one in twenty, two hundred is one in
+ * fifty, a hundred is one in a hundred, which at `EGG_CHANCE` is about
+ * one cluck in three thousand. The common end takes what is left over,
+ * which is why a hen's egg is 5450 rather than a round number: a
+ * rarity somebody crossed the park for is worth being exact about, and
+ * the one they were going to find anyway is not.
  */
 export const EGG_KINDS: readonly EggKind[] = [
   {
     id: "plain",
     name: "Hen's Egg",
-    weight: 1000,
+    weight: 5450,
     note: "An ordinary egg, warm, from an ordinary chicken in a necktie",
+    lore:
+      "The one Michael means to lay. Warm through, a little heavier than it looks, and the " +
+      "exact colour of the inside of a paper bag. Half the eggs in this world are this egg, " +
+      "which is the only thing ordinary about finding one in a municipal park.",
     shell: { base: "#e8dcc0", shade: "#c2b191", lit: "#f6f0de" },
   },
   {
     id: "speckled",
     name: "Speckled Egg",
-    weight: 500,
+    weight: 2500,
     note: "Freckled all over, as though it had been left out in the rain",
+    lore:
+      "Freckled end to end in a brown so settled it must have been there before the shell " +
+      "was. Two of them found in the same week have the same freckles in the same places, " +
+      "which nobody has satisfactorily explained and Michael will not be drawn on.",
     shell: { base: "#ddd0ae", shade: "#8a6f4a", lit: "#efe6cc" },
   },
   {
     id: "copper",
     name: "Copper Egg",
-    weight: 250,
+    weight: 1250,
     note: "Heavier than it ought to be, and warm on the side you are not holding",
+    lore:
+      "Beaten copper, dimpled the way a kettle is, with a sheen down one side and the light " +
+      "of the park bounced back along the other. It is warm on the side you are not holding, " +
+      "and it stays warm, which is a property of no egg and no kettle either.",
     shell: { base: "#c07a44", shade: "#8e5326", lit: "#e2a46e" },
   },
   {
     id: "jade",
     name: "Jade Egg",
-    weight: 120,
+    weight: 500,
     note: "Cool, green, and faintly lit from the inside",
+    lore:
+      "Cool to the hand however long you carry it, veined through like the stone it is named " +
+      "for, and lit from somewhere in the middle of itself. Held up, the light does not come " +
+      "out the other side — it stops, somewhere in there, and waits.",
     shell: { base: "#6fae9a", shade: "#48796c", lit: "#a2d6c2" },
   },
   {
     id: "gilded",
     name: "Gilded Egg",
-    weight: 90,
+    weight: 200,
     note: "Gold leaf, apparently laid on rather than laid",
+    lore:
+      "Gold leaf, in panels, with the seams between them still showing where the sheets were " +
+      "pressed down. Which is to say it looks laid on rather than laid, and nobody has yet " +
+      "caught Michael at either.",
     shell: { base: "#e0b870", shade: "#b08c3e", lit: "#f7e3a8" },
   },
   {
     id: "rainbow",
     name: "Rainbow Egg",
-    weight: 40,
+    weight: 100,
     note: "Nobody has a good explanation for this one, Michael least of all",
+    lore:
+      "Six colours wound round the shell in bands, and it twinkles, which eggs do not. One " +
+      "cluck in a few thousand ends with one of these lying in the grass. Nobody has a good " +
+      "explanation for it, Michael least of all, and he has the look of a bird who would " +
+      "rather not be asked again.",
     shell: { base: "#7aa8e0", shade: "#b45ea8", lit: "#f2e07a" },
   },
 ];
@@ -157,13 +198,13 @@ export function tierFromRoll(roll: number): EggTier {
 }
 
 /**
- * How often a fright leaves an egg behind: one cluck in a hundred.
+ * How often a fright leaves an egg behind: three clucks in a hundred.
  *
  * **Odds, not a count.** It is drawn afresh on every cluck
  * (`this.random() >= EGG_CHANCE` in `lib/server/residents.ts`) and
- * nothing anywhere counts clucks — so a hundred of them may pass with
+ * nothing anywhere counts clucks — so thirty of them may pass with
  * nothing to show, and two eggs in a row is a thing that happens. An egg
- * on every hundredth fright would be a rhythm somebody could learn, and
+ * on every thirty-third fright would be a rhythm somebody could learn, and
  * then walking up to Michael would be a chore with a payout at the end of
  * it rather than a chance.
  *
@@ -171,7 +212,7 @@ export function tierFromRoll(roll: number): EggTier {
  * number is here beside the ladder it feeds. It is rolled where the
  * fright is, because that is where the seeded randomness lives.
  */
-export const EGG_CHANCE = 1 / 100;
+export const EGG_CHANCE = 3 / 100;
 
 /**
  * How close you have to be standing to pick one up.

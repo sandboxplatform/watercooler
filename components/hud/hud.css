@@ -2029,21 +2029,36 @@
   margin-bottom: 10px;
 }
 
+/* Six across where the column is wide enough and fewer where it is not,
+   rather than six however narrow it gets: an egg squeezed into a sixth of
+   a dragged-in sidebar is the thing the bigger pictures are meant to fix. */
 .eggs__slots {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
   gap: 4px;
   margin-bottom: 6px;
 }
 
+/* A slot is a door as well as a shelf: pressing it opens the kind's own
+   card, which is where an egg is big enough to be worth having. */
 .eggs__slot {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 5px 0 4px;
+  gap: 3px;
+  padding: 6px 0 5px;
   border: 1px solid var(--pixel-border);
   border-radius: var(--pixel-radius-sm);
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  cursor: pointer;
+}
+
+.eggs__slot:hover,
+.eggs__slot:focus-visible {
+  border-color: var(--pixel-accent);
+  background: rgba(201, 162, 39, 0.1);
+  outline: none;
 }
 
 /* One you have not found. Dimmed rather than hidden: half the point of
@@ -2063,8 +2078,18 @@
   color: var(--pixel-muted);
 }
 
-/* The row's picture sits where a badge's emoji does, so the two panels
-   line up down the left-hand edge. */
+/* The row's picture is the one thing in this panel worth looking at, so
+   it gets a column of its own rather than a badge's emoji slot.
+
+   The badges row leaves 22px for an emoji, which is right for a letter
+   and squeezed a drawn egg to a smear — the ladder's whole argument is
+   that the bottom rung is worth crossing the park for, and it was being
+   made at the size of a bullet point. */
+.eggs .badges__row {
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+}
+
 .eggs__icon {
   display: inline-flex;
   align-items: center;
@@ -2082,19 +2107,47 @@
   font-size: var(--fs-3xs);
 }
 
-/* The egg itself: a shell drawn in CSS, from the same three tones the
-   sprite is drawn from. An ovoid rather than a circle — the corner radii
-   are the whole difference between an egg and a bead. */
-.egg-mark {
-  display: inline-block;
-  width: 13px;
-  height: 17px;
-  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+/* The way in to a kind's card, from the row's picture and from its name.
+   Both, because the picture is what somebody looks at and the name is what
+   they read — and neither is obviously a button until it is hovered. */
+.eggs__open,
+.eggs__name {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
+.eggs__open:hover,
+.eggs__open:focus-visible,
+.eggs__name:hover,
+.eggs__name:focus-visible {
+  color: var(--pixel-accent);
+  outline: none;
+}
+
+.eggs__open:hover .egg-mark,
+.eggs__open:focus-visible .egg-mark {
+  transform: scale(1.12);
+}
+
+/* The egg itself: an SVG shell with its own markings on it, drawn at
+   whatever size it is asked for. It was a rounded box in a gradient, which
+   made six kinds into one shape in six shades. */
+.egg-mark {
+  display: inline-flex;
+  line-height: 0;
+  transition: transform 120ms ease-out;
+}
+
+/* A slot you have not filled. Faded and taken down a little in colour
+   rather than greyed out: even in an empty slot the shell should still say
+   which one is missing, which was the whole complaint about the old marks. */
 .egg-mark--dim {
-  filter: grayscale(0.85);
+  opacity: 0.5;
+  filter: saturate(0.4);
 }
 
 /* ── A badge, announced ───────────────────────────────── */
@@ -2402,12 +2455,237 @@
   padding: 4px 8px;
   border: 1px solid var(--pixel-border-light);
   border-radius: var(--pixel-radius-sm);
+  background: none;
+  color: inherit;
   font-size: var(--fs-2xs);
+  cursor: pointer;
+}
+
+.profile__egg:hover,
+.profile__egg:focus-visible {
+  border-color: var(--pixel-accent);
+  outline: none;
+}
+
+/* ── One kind of egg, at the size it deserves ──────────
+   Built on the profile's window rather than beside it: the two answer the
+   same three questions — what it looks like, what is known about it, and
+   who has one — and a second set of rules for the same shape of card is
+   two things to keep looking alike. */
+.egg-card {
+  position: fixed;
+  inset: 0;
+  /* The profile's own layer, because the two are never up together: each
+     shuts itself on the way to opening the other. Stacking them would be a
+     card behind a card with no way of telling which is which. */
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  pointer-events: auto;
+}
+
+.egg-card__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 9, 7, 0.82);
+}
+
+.egg-card__panel {
+  /* The reading sizes of the column, as the profile takes them. */
+  --fs-3xs: 9px;
+  --fs-2xs: 10px;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+
+  position: relative;
+  /* Two columns: the plinth is a rail down the left and everything that is
+     words is beside it. Stacked they were taller than a laptop, and the
+     card came up with a scroll bar — a window you have to scroll to the
+     bottom of is a list again, which is the thing this exists instead of. */
+  display: grid;
+  grid-template-columns: 296px minmax(0, 1fr);
+  width: min(840px, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  padding: 0;
+  color: var(--pixel-text);
+}
+
+/* Everything that is words. It carries the gaps the panel used to, and the
+   overflow with them: at this width nothing reaches for it, but a short
+   window is still a window and the alternative is a card with its ladder
+   cut off. The plinth stays put either way. */
+.egg-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px 0;
+  overflow-y: auto;
+}
+
+/* The one dark field in the app that is nothing but a backdrop for a
+   single object — the job the concept sheet does at the top of a profile.
+   The wash behind it is lit from the top left, the way the shell is. */
+.egg-card__plinth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 26px 18px;
+  border-right: 2px solid var(--pixel-border);
+  background:
+    radial-gradient(circle at 42% 38%, rgba(255, 255, 255, 0.1), transparent 62%),
+    linear-gradient(180deg, #17161f 0%, #0a0a0e 100%);
+}
+
+/* A shadow under it, so it is standing on the plinth rather than floating
+   over it — the sprite in the grass has one baked in and this is the same
+   egg. */
+.egg-card__egg {
+  position: relative;
+  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.55));
+}
+
+.egg-card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 14px;
+}
+
+.egg-card__name {
+  font-size: var(--fs-xl);
+  color: var(--pixel-accent);
+}
+
+.egg-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.egg-card__chip {
+  padding: 2px 6px;
+  border: 1px solid var(--pixel-border-light);
+  border-radius: var(--pixel-radius-sm);
+  font-size: var(--fs-3xs);
+  color: var(--pixel-muted);
+}
+
+/* The one number anybody came for. */
+.egg-card__chip--odds {
+  border-color: var(--pixel-accent);
+  color: var(--pixel-accent);
+}
+
+.egg-card__note {
+  margin: 0;
+  padding: 0 14px;
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  color: var(--pixel-text);
+}
+
+.egg-card__lore {
+  margin: 0;
+  padding: 0 14px;
+  font-size: var(--fs-xs);
+  line-height: 1.9;
+  color: var(--pixel-muted);
+}
+
+.egg-card__yours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  margin: 0 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-sm);
+  background: rgba(0, 0, 0, 0.22);
+  font-size: var(--fs-xs);
+}
+
+.egg-card__world {
+  color: var(--pixel-muted);
+  font-size: var(--fs-2xs);
+}
+
+.egg-card__shelf {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 14px;
+}
+
+.egg-card__none {
+  margin: 0;
+  font-size: var(--fs-2xs);
+  line-height: 1.7;
+  color: var(--pixel-muted);
+}
+
+/* The rest of the ladder, so a card is a place in a collection rather than
+   an isolated fact — and so somebody can walk along it without going back
+   to the list between each one. */
+.egg-card__ladder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.egg-card__rung {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--pixel-border);
+  border-radius: var(--pixel-radius-sm);
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  cursor: pointer;
+}
+
+.egg-card__rung:hover,
+.egg-card__rung:focus-visible {
+  border-color: var(--pixel-accent);
+  outline: none;
+}
+
+.egg-card__rung-odds {
+  font-size: var(--fs-3xs);
+  color: var(--pixel-muted);
 }
 
 @media (max-width: 760px) {
   .profile {
     padding: 12px 8px;
+  }
+
+  /* No room for a rail beside the words, so the two go back to being
+     stacked — and the card goes back to scrolling, which on a handset is
+     what every panel does anyway. */
+  .egg-card__panel {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .egg-card__plinth {
+    padding: 22px 0 18px;
+    border-right: 0;
+    border-bottom: 2px solid var(--pixel-border);
+  }
+
+  .egg-card__body {
+    padding: 10px 0 16px;
+    overflow: visible;
   }
 }
 

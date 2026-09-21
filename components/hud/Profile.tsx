@@ -258,13 +258,25 @@ export default function Profile() {
                 const count = basket.find((t) => t.tier === kind.id)?.count ?? 0;
                 if (count === 0) return null;
                 return (
-                  <div key={kind.id} className="profile__egg" title={kind.note}>
-                    <EggMark kind={kind} />
+                  <button
+                    key={kind.id}
+                    type="button"
+                    className="profile__egg"
+                    title={kind.note}
+                    onClick={() => {
+                      // Hands over rather than stacking: the egg card is a
+                      // window over the same whole app, and one of them at a
+                      // time is what "over everything" can mean.
+                      close();
+                      gameEvents.emit("open-egg", kind.id);
+                    }}
+                  >
+                    <EggMark kind={kind} size={26} />
                     <span className="profile__badge-title">
                       {kind.name}
                       {count > 1 && <span className="eggs__many">×{count}</span>}
                     </span>
-                  </div>
+                  </button>
                 );
               })}
             </div>

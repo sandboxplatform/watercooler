@@ -179,19 +179,28 @@ export class PresenceHub {
   }
 
   /**
-   * Whether a person is standing within `range` of a point.
+   * Whether anybody at all is standing within `range` of a point, other
+   * than `except` — a connection that is asking about itself.
    *
-   * People only: a resident is not somebody to be walked up to, and one out
-   * of sight — in the lift — is not standing anywhere anybody can see.
+   * **Residents count here, and they are the only query where they do.** A
+   * chicken is startled by whatever comes round the corner, and on a map
+   * the locals cross all day half of what comes round it is one of them.
+   * Asking this people-only made Michael a bird who could be walked up to
+   * by exactly one kind of thing, which is not a fact about chickens.
+   * `peopleNear` is still people-only, because what it feeds is a badge and
+   * a resident holds none.
+   *
+   * Out of sight — in the lift — is nobody: there is nothing on the screen
+   * to have come round a corner.
    *
    * It takes no allocation for the same reason `get` does not: this is
    * asked of a room on every tick of the simulation, and `snapshot().some(…)`
    * would build the whole room to answer it each time.
    */
-  personNear(at: { x: number; y: number }, range: number): boolean {
+  someoneNear(at: { x: number; y: number }, range: number, except?: string): boolean {
     const limit = range * range;
     for (const player of this.players.values()) {
-      if (player.resident || player.hidden) continue;
+      if (player.hidden || player.id === except) continue;
       const dx = player.x - at.x;
       const dy = player.y - at.y;
       if (dx * dx + dy * dy <= limit) return true;
@@ -200,38 +209,40 @@ export class PresenceHub {
   }
 
   /**
-   * Where the nearest person within `range` is standing, or null for nobody.
+   * Who is standing nearest within `range`, other than `except`, or null.
    *
    * The third of these, and the narrowest caller: a resident who has just
    * been walked up to needs somewhere to run *away* from, which is a point
-   * rather than a yes or a list of ids. `personNear` stays the tick check,
-   * because it stops at the first person it finds and allocates nothing;
-   * this scans the room and hands back a point, and is asked only on the
-   * tick somebody actually says something.
+   * rather than a yes or a list of ids. `someoneNear` stays the tick check,
+   * because it stops at the first it finds and allocates nothing; this
+   * scans the room and hands back a point, and is asked only on the tick
+   * somebody actually says something.
    *
    * The nearest rather than the first, because a chicken with two people
    * around him should put the near one behind him.
    *
-   * Their connection comes back with the point, because two things want
-   * this answer and they want different halves of it: the bolt wants
-   * somewhere to run away from, and the egg a fright may leave behind is
-   * credited to whoever caused the fright. One scan of the room for both,
-   * since it is the same person.
+   * Their connection comes back with the point, and whether they are a
+   * resident with it, because two things want this answer and they want
+   * different halves of it: the bolt wants somewhere to run away from,
+   * whoever it is, and the egg a fright may leave behind is credited to
+   * whoever caused it — which a resident cannot be, since a local holds
+   * nothing. One scan of the room for both, since it is the same body.
    */
-  nearestPerson(
+  nearestNeighbour(
     at: { x: number; y: number },
     range: number,
-  ): { id: string; x: number; y: number } | null {
+    except?: string,
+  ): { id: string; x: number; y: number; resident: boolean } | null {
     let best = range * range;
-    let found: { id: string; x: number; y: number } | null = null;
+    let found: { id: string; x: number; y: number; resident: boolean } | null = null;
     for (const player of this.players.values()) {
-      if (player.resident || player.hidden) continue;
+      if (player.hidden || player.id === except) continue;
       const dx = player.x - at.x;
       const dy = player.y - at.y;
       const d2 = dx * dx + dy * dy;
       if (d2 > best) continue;
       best = d2;
-      found = { id: player.id, x: player.x, y: player.y };
+      found = { id: player.id, x: player.x, y: player.y, resident: Boolean(player.resident) };
     }
     return found;
   }
@@ -239,12 +250,16 @@ export class PresenceHub {
   /**
    * Which people are standing within `range` of a point, by connection.
    *
-   * `personNear` answers whether anybody is, which is all a resident needs
+   * `someoneNear` answers whether anybody is, which is all a resident needs
    * to decide whether to speak. This answers who, which is what a badge for
    * having stood beside somebody needs — and it is the one caller, so it
    * hands back the shared empty array rather than a fresh one whenever the
    * answer is nobody, which in a world of mostly empty rooms is nearly
    * always.
+   *
+   * People only, unlike the two above: what this feeds is a badge, and two
+   * residents meeting on the green is the simulation rather than anybody
+   * having met anybody.
    */
   peopleNear(at: { x: number; y: number }, range: number): readonly string[] {
     const limit = range * range;

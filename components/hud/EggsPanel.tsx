@@ -60,14 +60,16 @@ function Basket({ mine }: { mine: EggTally[] }) {
         {EGG_KINDS.map((kind) => {
           const count = held.get(kind.id) ?? 0;
           return (
-            <div
+            <button
               key={kind.id}
+              type="button"
               className={`eggs__slot${count === 0 ? " eggs__slot--empty" : ""}`}
+              onClick={() => gameEvents.emit("open-egg", kind.id)}
               title={count === 0 ? `${kind.name} — not found yet` : `${kind.name} ×${count}`}
             >
-              <EggMark kind={kind} dim={count === 0} />
+              <EggMark kind={kind} size={52} dim={count === 0} />
               <span className="eggs__slot-count">{count || "—"}</span>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -110,18 +112,37 @@ export default function EggsPanel() {
         <div className="badges__group-name">Every kind there is</div>
         {EGG_KINDS.map((kind: EggKind) => {
           const holders = byTier.get(kind.id) ?? [];
-          const found = holders.reduce((sum, t) => sum + t.count, 0);
+          // Never dimmed, unlike a badge nobody has earned and unlike the
+          // slot up in the basket: this is the shop window. A kind nobody in
+          // the world has found is the row somebody is meant to look at and
+          // then go outside about, and a greyed-out silhouette of it says
+          // only that it is missing — which the empty line of holders
+          // underneath already says, and better.
           return (
-            <div
-              key={kind.id}
-              className={`badges__row${found === 0 ? " badges__row--locked" : ""}`}
-            >
-              <span className="badges__icon eggs__icon">
-                <EggMark kind={kind} dim={found === 0} />
-              </span>
+            <div key={kind.id} className="badges__row">
+              {/*
+                The picture is the way in to the card, and so is the name —
+                but the row itself is not a button, because it holds the
+                holders, and a button inside a button is not a thing the DOM
+                allows.
+              */}
+              <button
+                type="button"
+                className="badges__icon eggs__icon eggs__open"
+                onClick={() => gameEvents.emit("open-egg", kind.id)}
+                aria-label={`${kind.name} — look closer`}
+              >
+                <EggMark kind={kind} size={72} />
+              </button>
               <div className="badges__body">
                 <div className="badges__title">
-                  {kind.name}
+                  <button
+                    type="button"
+                    className="eggs__name"
+                    onClick={() => gameEvents.emit("open-egg", kind.id)}
+                  >
+                    {kind.name}
+                  </button>
                   {/* Read off the weight rather than written beside it, so
                       a kind made rarer says so here without being edited. */}
                   <span className="eggs__odds">1 in {oneIn(kind.id)}</span>

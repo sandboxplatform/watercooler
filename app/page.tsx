@@ -8,6 +8,7 @@ import { GameErrorBoundary } from "@/components/game/GameErrorBoundary";
 import GameHud from "@/components/hud/GameHud";
 import Sidebar, { type SidebarTab } from "@/components/hud/Sidebar";
 import Profile from "@/components/hud/Profile";
+import EggCard from "@/components/hud/EggCard";
 import CharacterStudio from "@/components/hud/CharacterStudio";
 import { loadSidebarWidth } from "@/lib/persistence";
 import { useBackToClose } from "@/lib/hooks/useBackToClose";
@@ -150,6 +151,14 @@ export default function Page() {
             the column and leads with a picture too big to read behind one.
           */}
           <Profile />
+
+          {/*
+            And one kind of egg, big enough to be worth collecting. Opened
+            from the Eggs panel in the column, so it belongs here with the
+            profile rather than in the HUD behind it — and it opens profiles
+            of its own, off the same bus.
+          */}
+          <EggCard />
 
           {/*
             The character picker, for the same reason and opened from the same

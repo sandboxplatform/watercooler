@@ -988,21 +988,66 @@ slot("ball", 20, 20, (set, d) => {
  * or the egg in the grass and the egg in the panel stop being the same egg.
  *
  * **The frame is centred on the ground the egg lies on**, not on the egg:
- * it is fourteen rows of egg with its base on the middle row, and thirteen
- * empty rows under that. An egg drawn hard against the top of its frame
- * would need the scene to know where in the frame the ground was, which is
- * a number to keep in step in two places for the sake of half a kilobyte.
+ * the egg's base sits on the middle row and the rest of the frame is empty
+ * under it. An egg drawn hard against the top of its frame would need the
+ * scene to know where in the frame the ground was, which is a number to
+ * keep in step in two places for the sake of half a kilobyte.
+ *
+ * **A colour is not a kind.** Six ovoids in six shades of one light read as
+ * one egg printed six times, and half the point of the ladder is that the
+ * rare ones are worth crossing the park for. So every kind carries a `mark`
+ * as well as its three tones — freckles, hammered metal, a veined stone lit
+ * from the inside, gold leaf, bands of the whole spectrum — and the mark is
+ * what somebody sees in the grass from the far side of the meadow. Drawn at
+ * the size that difference can be seen at, which is half as tall again as
+ * they were.
  */
 const EGGS = [
-  { id: "plain", base: [232, 220, 192], shade: [194, 177, 145], lit: [246, 240, 222] },
-  { id: "speckled", base: [221, 208, 174], shade: [138, 111, 74], lit: [239, 230, 204] },
-  { id: "copper", base: [192, 122, 68], shade: [142, 83, 38], lit: [226, 164, 110] },
-  { id: "jade", base: [111, 174, 154], shade: [72, 121, 108], lit: [162, 214, 194] },
-  { id: "gilded", base: [224, 184, 112], shade: [176, 140, 62], lit: [247, 227, 168] },
-  { id: "rainbow", base: [122, 168, 224], shade: [180, 94, 168], lit: [242, 224, 122] },
+  {
+    id: "plain",
+    mark: "smooth",
+    base: [232, 220, 192],
+    shade: [194, 177, 145],
+    lit: [246, 240, 222],
+  },
+  {
+    id: "speckled",
+    mark: "freckled",
+    base: [221, 208, 174],
+    shade: [138, 111, 74],
+    lit: [239, 230, 204],
+  },
+  {
+    id: "copper",
+    mark: "hammered",
+    base: [192, 122, 68],
+    shade: [142, 83, 38],
+    lit: [226, 164, 110],
+  },
+  {
+    id: "jade",
+    mark: "veined",
+    base: [111, 174, 154],
+    shade: [72, 121, 108],
+    lit: [162, 214, 194],
+  },
+  {
+    id: "gilded",
+    mark: "leafed",
+    base: [224, 184, 112],
+    shade: [176, 140, 62],
+    lit: [247, 227, 168],
+  },
+  {
+    id: "rainbow",
+    mark: "banded",
+    base: [122, 168, 224],
+    shade: [180, 94, 168],
+    lit: [242, 224, 122],
+  },
 ];
 
-/** The bands on the one egg nobody can account for, top to bottom. */
+/** The bands on the one egg nobody can account for, crown to base. */
 const RAINBOW = [
   [226, 106, 106],
   [232, 160, 92],
@@ -1012,25 +1057,160 @@ const RAINBOW = [
   [172, 124, 214],
 ];
 
-const EGG_W = 16;
-const EGG_H = 28;
+const EGG_W = 22;
+const EGG_H = 44;
 /** The row the egg's base sits on, which is the middle of the frame. */
-const EGG_BASE = 14;
+const EGG_BASE = 22;
 /** How tall the egg itself is, and how wide at its widest. */
-const EGG_TALL = 14;
-const EGG_WIDE = 5.4;
+const EGG_TALL = 22;
+const EGG_WIDE = 9;
+
+/**
+ * A tone stepped toward white or black, for a marking drawn off a shell.
+ *
+ * Markings are derived rather than declared so that a shell recoloured in
+ * lib/world/eggs.ts carries its freckles, its veins and its gold leaf with
+ * it: a fourth and fifth colour per kind would be two more numbers to keep
+ * in step with a file this one cannot read.
+ */
+function tint(colour, amount) {
+  const to = amount > 0 ? 255 : 0;
+  const k = Math.abs(amount);
+  return colour.map((v) => Math.round(v + (to - v) * k));
+}
 
 /**
  * Half the egg's width at a row, in the ovoid's own coordinates.
  *
  * An ellipse taken in at the top: `v` runs -1 at the crown to 1 at the
  * base, the ellipse gives the round part, and the taper is what makes it
- * an egg rather than a bead. A plain ellipse reads as a pebble at this
- * size, which is the whole difficulty of drawing one in fourteen rows.
+ * an egg rather than a bead. A plain ellipse reads as a pebble, which is
+ * the whole difficulty of drawing one this small — and too shy a taper
+ * reads as a potato, which is the other way of getting it wrong. Two
+ * thirds to one at the crown puts the widest part of the shell below the
+ * middle, where an egg's is.
  */
 function eggHalf(v) {
   const round = Math.sqrt(Math.max(0, 1 - v * v));
-  return EGG_WIDE * round * (0.78 + 0.22 * ((v + 1) / 2));
+  return EGG_WIDE * round * (0.66 + 0.34 * ((v + 1) / 2));
+}
+
+/** A modulo that behaves at negative x, which every marking below wants. */
+const wrap = (n, m) => ((n % m) + m) % m;
+
+/**
+ * What colour a pixel of the shell is.
+ *
+ * `u` runs -1 at the left edge of the row to 1 at the right, so a marking
+ * written in it winds round the curve of the shell rather than sliding off
+ * the side of it; `rim` is how many pixels in from the outline it is.
+ *
+ * The one rule every kind shares is the light: top left, with the shadow
+ * hugging the right-hand edge and widening along the bottom. A boundary
+ * drawn anywhere further in comes out as a seam, because at eight pixels
+ * of half-width there is no room for a gradient to be anything else.
+ */
+function shellTone(egg, x, y, u, v, rim) {
+  const shaded = (x > 0 && rim <= 2) || (v > 0.55 && rim <= 3);
+  switch (egg.mark) {
+    // Freckles: mostly single pixels with the odd pair, rather than the
+    // blotches a hashed two-by-two cell gives — a freckled egg covered in
+    // two-pixel patches reads as a muddy one. Settled rather than random,
+    // so every speckled egg in the world is the same egg and two lying side
+    // by side are not two different kinds.
+    case "freckled": {
+      const fleck = hash(x * 3 + 17, y * 7 + 5) < 0.15;
+      const pair = hash(x + 40, Math.floor((y + 12) / 2) + 9) < 0.07;
+      if ((fleck || pair) && rim >= 2) return tint(egg.shade, -0.08);
+      return shaded ? egg.shade : egg.base;
+    }
+    // Metal, which is two highlights rather than one: a hard sheen down the
+    // lit side and a band of bounced light along the shadowed edge. One
+    // highlight on a curved thing reads as plastic, and it is the second
+    // that says the surface is polished. The sheen is pinched at both ends
+    // rather than run down as a stripe of even width, because a stripe is
+    // a painted line and a sheen is the shape of what it is reflecting.
+    // The mottle under both is the hammering — a coarse cell rather than
+    // per-pixel noise, or it reads as dirt on an ordinary egg.
+    case "hammered": {
+      if (x > 0 && rim === 1 && v > -0.5 && v < 0.8) return tint(egg.base, 0.3);
+      const along = (v + 0.72) / 1.3;
+      if (along > 0 && along < 1) {
+        const wide = 0.2 * Math.sin(along * Math.PI);
+        if (u > -0.58 - wide && u < -0.34 + wide) return tint(egg.lit, 0.16);
+      }
+      const beaten = hash(Math.round(x / 3) + 9, Math.round(y / 3) + 4);
+      return tint(shaded ? egg.shade : egg.base, beaten < 0.34 ? -0.13 : beaten > 0.8 ? 0.1 : 0);
+    }
+    // A stone: lit from somewhere inside it, with the veins of the quarry
+    // still in it. The glow is a soft core low in the shell rather than a
+    // highlight on the surface, which is what makes it read as coming
+    // through the jade instead of off it.
+    case "veined": {
+      const seam = wrap(x * 1.35 + 3.1 * Math.sin(y * 0.5 + 1.1), 7);
+      if (seam < 1.2 && rim >= 2) return tint(egg.lit, 0.1);
+      const glow = Math.hypot(x * 1.05, (y - 3) * 0.8);
+      if (glow < 2) return egg.lit;
+      if (glow < 3.6 && !shaded) return tint(egg.base, 0.25);
+      return shaded ? egg.shade : egg.base;
+    }
+    // Gold leaf: laid on in panels, so what says leaf rather than paint is
+    // the seams between them and each panel taking the light a little
+    // differently. Two sets of straight lines at opposing angles, and the
+    // panel's own tone off which side of each it falls.
+    //
+    // The slopes are fractions rather than whole steps, which is the whole
+    // of whether this reads as leaf: `x * 2 - y` taken modulo an integer
+    // lands on one pixel every other row and comes out as a scatter of
+    // dots, where half a step per row is a line somebody can follow.
+    case "leafed": {
+      const a = x - y * 0.5;
+      const b = x + y * 0.45;
+      if (wrap(a, 5.5) < 0.8 || wrap(b, 6.5) < 0.8) return tint(egg.shade, -0.1);
+      const panel = (Math.floor(a / 5.5) + Math.floor(b / 6.5)) % 2 === 0;
+      return shaded ? egg.shade : panel ? tint(egg.base, 0.16) : egg.base;
+    }
+    // The whole spectrum, wound round the shell. Diagonal rather than
+    // stacked — bands straight across the middle read as a beach ball — and
+    // taken in `u` rather than in x, so they follow the curve instead of
+    // running off the side of it. The shading is the band's own colour
+    // darkened, or the shadowed edge would be one grey stripe through six
+    // coloured ones.
+    case "banded": {
+      const t = ((v + 1) / 2) * 0.74 + ((u + 1) / 2) * 0.26;
+      const at = Math.min(RAINBOW.length - 1, Math.max(0, Math.floor(t * RAINBOW.length)));
+      const band = RAINBOW[at];
+      if (x < 0 && rim === 1 && v < 0.6) return tint(band, 0.28);
+      return shaded ? tint(band, -0.26) : band;
+    }
+    default:
+      return shaded ? egg.shade : egg.base;
+  }
+}
+
+/**
+ * A four-pointed twinkle, for the two kinds with any business twinkling.
+ *
+ * Arms rather than a blob: a bright pixel on a bright shell is nothing, and
+ * a plus sign is the smallest thing that reads as a glint. Three across and
+ * no more — the arms went out to two and what came out was a white cross
+ * painted over a third of the shell.
+ */
+function sparkle(set, cx, cy, at, inside) {
+  const arms = [
+    [0, 0],
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+  for (const [dx, dy] of arms) {
+    const x = at[0] + dx;
+    const y = at[1] + dy;
+    if (!inside(x, y)) continue;
+    const tip = dx !== 0 || dy !== 0;
+    set(cx + x, cy + y, tip ? [255, 250, 228, 190] : [255, 255, 255, 255]);
+  }
 }
 
 for (const egg of EGGS) {
@@ -1038,54 +1218,58 @@ for (const egg of EGGS) {
     const cx = EGG_W / 2;
     const ry = EGG_TALL / 2;
     const cy = EGG_BASE - ry;
-    // The shadow it casts on whatever it is lying on, baked in: an egg
-    // does not move, so unlike the ball's there is nothing for the scene
-    // to keep in step. Wider than the egg, or it is hidden behind it.
-    d.ellipse(cx, EGG_BASE, 7, 2, P.shadow);
+    /** Whether a point is in the shell with the outline clear of it. */
+    const inside = (x, y) => Math.abs(y) < ry && Math.abs(x) < Math.round(eggHalf(y / ry));
+    // The shadow it casts on whatever it is lying on, baked in: an egg does
+    // not move, so unlike the ball's there is nothing for the scene to keep
+    // in step. Wider than the egg, or it is hidden behind it.
+    // Two rows rather than an ellipse: a flat ellipse comes to a point, and
+    // at this height its last row is the one pixel at the middle — which
+    // reads as a spike growing out of the bottom of the egg.
+    d.rect(cx - 7, EGG_BASE - 1, cx + 8, EGG_BASE + 1, P.shadow);
+    d.rect(cx - 4, EGG_BASE + 1, cx + 5, EGG_BASE + 2, P.shadow);
+    /** What the shell is at a point, before the gloss goes over it. */
+    const tone = (x, y) => {
+      const half = Math.round(eggHalf(y / ry));
+      return shellTone(egg, x, y, x / half, y / ry, half - Math.abs(x));
+    };
     for (let y = -ry; y <= ry; y++) {
-      const v = y / ry;
-      const half = Math.round(eggHalf(v));
+      const half = Math.round(eggHalf(y / ry));
       if (half < 1) continue;
       for (let x = -half; x <= half; x++) {
         const row = cy + y;
-        if (Math.abs(x) >= half) {
-          set(cx + x, row, P.ink);
-          continue;
-        }
-        // The rainbow is banded across the shell; every other kind is one
-        // colour with the light on one side of it.
-        const band =
-          RAINBOW[Math.min(RAINBOW.length - 1, Math.floor(((v + 1) / 2) * RAINBOW.length))];
-        // Shading that hugs the edge rather than splitting the egg down
-        // the middle: a rim a pixel deep on the right, widening along the
-        // bottom, which is the one kind of shading that reads as round at
-        // this size. A boundary anywhere inside the body comes out as a
-        // seam, because at six pixels of half-width there is no room for
-        // a gradient to be anything else.
-        const rim = half - Math.abs(x);
-        const shaded = (x > 0 && rim <= 1) || (v > 0.5 && rim <= 2);
-        const colour = egg.id === "rainbow" ? band : shaded ? egg.shade : egg.base;
-        set(cx + x, row, [...colour, 255]);
+        if (Math.abs(x) >= half) set(cx + x, row, P.ink);
+        else set(cx + x, row, [...tone(x, y), 255]);
       }
     }
-    // The highlight, up on the narrow end where the light would catch it.
-    // Two pixels by three: one is a speck, and a proper ellipse at this
-    // size is most of the shell.
-    for (let y = -4; y <= -2; y++)
-      for (let x = -2; x <= -1; x++) {
-        set(cx + x, cy + y, [...egg.lit, 255]);
+    // The gloss, up on the narrow end where the light would catch it.
+    //
+    // It **lightens what is underneath** rather than being painted on in
+    // the shell's own pale tone, which is the difference between a shine
+    // and a hole: a flat patch of cream over the rainbow's bands wiped out
+    // three of the six, and over the gold leaf it read as a spill. Clipped
+    // to the body rather than trusted to fit, the crown being the narrowest
+    // part of the egg.
+    for (let y = -8; y <= -2; y++)
+      for (let x = -5; x <= -1; x++) {
+        if (!inside(x, y)) continue;
+        const r = Math.hypot((x + 3) / 2.1, (y + 5) / 3.1);
+        if (r > 1) continue;
+        set(cx + x, cy + y, [...tint(tone(x, y), r > 0.55 ? 0.3 : 0.62), 255]);
       }
-    // Freckles, for the one kind that has them: a settled scatter rather
-    // than a random one, so every speckled egg in the world is the same
-    // egg and two lying side by side do not read as two different kinds.
-    if (egg.id === "speckled") {
-      for (let y = -ry + 2; y < ry - 1; y++) {
-        const half = Math.round(eggHalf(y / ry)) - 2;
-        for (let x = -half; x <= half; x++) {
-          if (hash(x + 40, y + 40) < 0.16) set(cx + x, cy + y, [...egg.shade, 255]);
-        }
-      }
-    }
+    // And a glint on the two that have earned one.
+    if (egg.id === "gilded")
+      for (const at of [
+        [3, -3],
+        [-2, 5],
+      ])
+        sparkle(set, cx, cy, at, inside);
+    if (egg.id === "rainbow")
+      for (const at of [
+        [4, -1],
+        [-3, 4],
+      ])
+        sparkle(set, cx, cy, at, inside);
   });
 }
 

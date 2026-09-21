@@ -15,7 +15,7 @@ import {
   PERSONAL_SPACE_PX,
   RESIDENTS,
   WANDER_AREAS,
-  WORLD_WANDER_SPOTS,
+  worldWanderSpots,
   deskSpot,
   doorstepOf,
   doorwayFor,
@@ -28,7 +28,7 @@ import {
 } from "../../world/residents";
 import { worldSolids } from "../../world/scenery";
 import { EGG_CHANCE } from "../../world/eggs";
-import { routeAcross, type Point } from "../../world/route";
+import { openGround, routeAcross, type Point } from "../../world/route";
 import { WORLD_HEIGHT, WORLD_WIDTH, operationsRoomCount, tenantFor } from "../../world/tenants";
 import { WORLD_ROOM_SLUG } from "../../rooms";
 import { TILE } from "../../map/office";
@@ -228,7 +228,7 @@ describe("a wanderer's day", () => {
 
   it("starts on one of the twenty places", () => {
     const { been } = walkFor(1);
-    expect(WORLD_WANDER_SPOTS).toContainEqual(been[0]);
+    expect(worldWanderSpots()).toContainEqual(been[0]);
   });
 
   /**
@@ -243,7 +243,7 @@ describe("a wanderer's day", () => {
 
   it("reaches several different places", () => {
     const { been } = walkFor(6000);
-    const visited = WORLD_WANDER_SPOTS.filter((spot) =>
+    const visited = worldWanderSpots().filter((spot) =>
       been.some((p) => Math.hypot(p.x - spot.x, p.y - spot.y) < 1),
     );
     expect(visited.length).toBeGreaterThanOrEqual(3);
@@ -603,15 +603,41 @@ describe("what a resident says when you walk up", () => {
     const heard = listening();
     const { sim, hub } = outside(() => clock);
     person(hub, whereIsHe(sim));
-    for (let i = 0; i < 40; i++) {
+    // For the length of the fright, which is the window the rule below
+    // says nothing about: a chicken in the middle of running away does not
+    // stop to cluck again however close anybody is.
+    while (clock < SPOOK_MS - 240) {
       clock += 120;
       sim.tick(clock);
       // Follow him about, so it is the same visit throughout rather than
       // him wandering out of earshot and back into it.
       hub.place("visitor", { ...whereIsHe(sim), facing: "down" });
     }
-    expect(clock).toBeLessThan(GREET_QUIET_MS);
     expect(clucks(heard)).toBe(1);
+    setRoomBroadcast(null);
+  });
+
+  /**
+   * **Catching him is the point of catching him.**
+   *
+   * Edge-triggered is right for somebody leaning on a counter and wrong for
+   * somebody who ran the chicken down: they never left the wider radius, so
+   * the flag stayed set, and the reward for keeping up was a bird who stood
+   * there in silence until they walked away and came back. The fright
+   * running out is a fresh arrival for whoever is still standing there.
+   */
+  it("clucks again the moment the fright wears off, at whoever kept up", () => {
+    let clock = 0;
+    const heard = listening();
+    const { sim, hub } = outside(() => clock);
+    person(hub, whereIsHe(sim));
+    while (clock < SPOOK_MS * 2) {
+      clock += 120;
+      sim.tick(clock);
+      // Keep pace with him, never once leaving `GREET_CLEAR_PX`.
+      hub.place("visitor", { ...whereIsHe(sim), facing: "down" });
+    }
+    expect(clucks(heard)).toBe(2);
     setRoomBroadcast(null);
   });
 
@@ -638,8 +664,17 @@ describe("what a resident says when you walk up", () => {
     setRoomBroadcast(null);
   });
 
-  /** The others out taking the air are the simulation, not company. */
-  it("is not set off by the other residents", () => {
+  /**
+   * A local coming round the corner startles him exactly as a person does.
+   *
+   * It used to be the other way, on the reasoning that the others out
+   * taking the air are the simulation rather than company. That is true of
+   * where they are *sent* and says nothing about the walk between two
+   * places, which crosses whatever is in the way because nothing collides a
+   * resident — so Michael could be walked up to by one kind of thing and
+   * stood beside by another, which is not a fact about chickens.
+   */
+  it("is set off by the other residents too", () => {
     let clock = 0;
     const heard = listening();
     const { sim, hub } = outside(() => clock);
@@ -653,6 +688,25 @@ describe("what a resident says when you walk up", () => {
       resident: true,
     });
     for (let i = 0; i < 20; i++) {
+      clock += 120;
+      sim.tick(clock);
+    }
+    expect(clucks(heard)).toBe(1);
+    setRoomBroadcast(null);
+  });
+
+  /**
+   * And never by himself, which is the one thing that would have made the
+   * rule above unliveable: he is in the room's hub like anybody else, so a
+   * check that took whoever is nearest without excepting the asker would
+   * find him standing exactly where he is standing and leave him fleeing
+   * his own company for the rest of the afternoon.
+   */
+  it("is not set off by himself", () => {
+    let clock = 0;
+    const heard = listening();
+    const { sim } = outside(() => clock);
+    for (let i = 0; i < 40; i++) {
       clock += 120;
       sim.tick(clock);
     }
@@ -740,16 +794,27 @@ describe("what a resident says when you walk up", () => {
     listening();
     const { sim, hub } = outside(() => clock, rolls(7));
     const start = whereIsHe(sim);
+    // Which way there is room to run, asked of the map rather than
+    // assumed. A bolt only ever lands somewhere he could have wandered to,
+    // and the swept spots reach the coast — where one side of him is the
+    // sea — so a test that took open country either side would be testing
+    // where the seed happened to put him.
+    const bounds = { width: WORLD_WIDTH, height: WORLD_HEIGHT };
+    const east = openGround(bounds, worldSolids(), { x: start.x + 200, y: start.y });
+    const open = east ? 1 : -1;
     const stand = (id: string, x: number) =>
       hub.join(id, { name: id, spriteKey: "character_boss", x, y: start.y, facing: "down" });
-    stand("far", start.x - (GREET_PX - 6));
-    stand("near", start.x + 20);
+    // The far one on the open side and joined first, so a rule that took
+    // whoever it came across first would send him the other way; the near
+    // one behind him, standing almost on top of him.
+    stand("far", start.x + (GREET_PX - 6) * open);
+    stand("near", start.x - 20 * open);
     while (clock < SPOOK_MS) {
       clock += 120;
       sim.tick(clock);
     }
     // Away from the near one, which is past the far one rather than from it.
-    expect(whereIsHe(sim).x).toBeLessThan(start.x);
+    expect(Math.sign(whereIsHe(sim).x - start.x)).toBe(open);
     setRoomBroadcast(null);
   });
 
@@ -897,16 +962,20 @@ describe("keeping out of each other", () => {
   });
 
   /**
-   * Nobody jumps. A resident's position may only change by what a walk
-   * covers in a tick, for as long as they stay in one place — the hub
-   * clamps a *reported* move to walking speed, so this is asked of the
-   * simulation's own idea of where everybody is, which nothing clamps.
+   * Nobody jumps. A resident's position may only change by what their own
+   * top speed covers in a tick, for as long as they stay in one place —
+   * the hub clamps a *reported* move, so this is asked of the simulation's
+   * own idea of where everybody is, which nothing clamps.
    *
-   * A bolt is quicker than a walk, and there is nobody in these rooms to
-   * set one off: a day with no people in it is walking pace throughout.
+   * **A bolt is the top speed for anybody who can be startled**, which
+   * used to mean nobody here: a day with no people in it was walking pace
+   * throughout. It is not any more — a local coming round the corner
+   * startles Michael exactly as a person does, and the others cross the
+   * map all day — so the ceiling is the one that belongs to each of them.
    */
-  it("moves nobody further in a tick than a walk covers", () => {
-    const stride = (WANDER_SPEED_PX_S * 120) / 1000;
+  it("moves nobody further in a tick than their own pace covers", () => {
+    const walk = (WANDER_SPEED_PX_S * 120) / 1000;
+    const bolt = (SPOOK_SPEED_PX_S * 120) / 1000;
     const frames = aDay(3000);
     for (let tick = 1; tick < frames.length; tick++) {
       for (const [i, now] of frames[tick].entries()) {
@@ -914,8 +983,9 @@ describe("keeping out of each other", () => {
         // A change of room is a door, not a step across the ground.
         if (before.room !== now.room) continue;
         const step = Math.hypot(now.spot!.x - before.spot!.x, now.spot!.y - before.spot!.y);
+        const most = residentById(now.id)?.greeting ? bolt : walk;
         expect(step, `${now.name} in ${now.room} at tick ${tick}`).toBeLessThanOrEqual(
-          stride + 0.001,
+          most + 0.001,
         );
       }
     }
@@ -1089,12 +1159,14 @@ describe("the egg a fright leaves behind", () => {
       () => EGG_CHANCE / 2,
     );
     walkUp(hub, whereIsHe(sim));
-    for (let i = 0; i < 40; i++) {
+    // For the length of the fright: past it, standing over him is a fresh
+    // arrival and worth another cluck, which is a different rule and has a
+    // test of its own.
+    while (clock < SPOOK_MS - 240) {
       clock += 120;
       sim.tick(clock);
       hub.place("visitor", { ...whereIsHe(sim), facing: "down" });
     }
-    expect(clock).toBeLessThan(GREET_QUIET_MS);
     expect(laid).toHaveLength(1);
     setRoomBroadcast(null);
   });

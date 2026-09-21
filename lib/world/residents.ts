@@ -20,6 +20,7 @@ import {
   TOWN_TOP,
   WORLD_SPAWN,
   WORLD_WIDTH,
+  WORLD_HEIGHT,
   TILE as WORLD_TILE,
   hasCampus,
   hasFloors,
@@ -37,8 +38,12 @@ import {
   SOUTH_ROAD,
   WEST_AVENUE,
   clearToStand,
+  reachedFrom,
+  standingRoom,
+  worldSolids,
 } from "./scenery";
 import { WILD_FROM } from "./wilderness";
+import { coversPoint } from "./route";
 import { TILE, WIDTH as LOBBY_COLS } from "../map/office";
 import { opsSupportPost } from "../map/floor";
 import { standingSpot } from "./desks";
@@ -393,7 +398,7 @@ const onAvenue = onRoad;
 const front = (org: string) => BUILDINGS.find((b) => b.org.slug === org)?.outside ?? WORLD_SPAWN;
 
 /**
- * The twenty places a wanderer walks between, by the feet, in world pixels.
+ * The places the map means people to stand, by the feet, in world pixels.
  *
  * A rectangle was the wrong shape for this. It began as one — a strip of road
  * a few tiles long, because nothing collides a wanderer and bounds were the
@@ -409,8 +414,12 @@ const front = (org: string) => BUILDINGS.find((b) => b.org.slug === org)?.outsid
  * buildings, the props and the sea, and reachable from the spawn. The car
  * park's spot is the strip in front of the vans rather than the middle of it,
  * because the vans wall off everything behind them.
+ *
+ * These are the spine of `worldWanderSpots()` rather than the whole of it:
+ * the open country either side of the town has no doorsteps and no
+ * promenades to be written down, and is filled in below.
  */
-export const WORLD_WANDER_SPOTS: readonly { x: number; y: number }[] = [
+const PLACES: readonly { x: number; y: number }[] = [
   // The doorsteps, west to east.
   front("targetts"),
   front("masstown"),
@@ -463,6 +472,123 @@ export const WORLD_WANDER_SPOTS: readonly { x: number; y: number }[] = [
   ...WOOD_WANDER_SPOTS,
 ];
 
+/**
+ * How near a place has to be to count as covered by it.
+ *
+ * Twelve tiles: near enough that a wanderer walking to the place passes
+ * through this ground on the way, so it is somewhere that gets seen.
+ */
+const COVERED_PX = 12 * WORLD_TILE;
+
+/** How finely the rest of the map is swept for somewhere to stand. */
+const LATTICE_PX = 6 * WORLD_TILE;
+
+/**
+ * The rest of the map, on a lattice — the open country the town's own list
+ * of places cannot describe.
+ *
+ * **A wanderer has to be able to turn up anywhere, and the hand-written
+ * places could not say so.** They are doorsteps, promenades, avenues and
+ * the dock, which is exactly right for the town and exactly what the
+ * shops' wood, the meadow and the far side of the wilderness have none of.
+ * Measured against the ground a person can actually reach, two fifths of
+ * the map was more than twelve tiles from anywhere Michael was ever sent:
+ * the whole eastern quarter, and the wood over the shops from end to end.
+ * He was not wandering the world, he was wandering the town — and nothing
+ * on screen said so, because a chicken on a promenade looks like a chicken
+ * doing what chickens do here.
+ *
+ * So the gaps are swept rather than written down. Three rules, and the
+ * first two are the ones that keep this honest:
+ *
+ * | Rule | Why |
+ * | ---- | --- |
+ * | `clearToStand` | Nothing collides a resident, so a point in a tree is a chicken in a tree. It is the picture rather than the footprint, which is the same question the plaza's row of residents is held to |
+ * | Reachable from the spawn | One flood, shared with `allReachable`. A spot nobody can walk to is a spot a wanderer stands still at, and the far bank of the river is full of ground that looks fine and is not |
+ * | Twelve tiles from everything kept | Otherwise the meadow alone would be three hundred points, and the town — which is already covered — would be swept into a lattice on top of its own doorsteps |
+ *
+ * **A lattice point that lands in a tree looks for the gap beside it**, out
+ * to `NUDGE_PX` in a ring. In the meadow this never fires, because open
+ * ground is nearly all of it; in the wood it is the whole difference, since
+ * there the canopy is most of the map and the clearings are what is left
+ * between the trunks. Without it the sweep found nothing at all over the
+ * shops — a wood a wanderer can walk through and is never sent into.
+ *
+ * Read off the map at load rather than listed, so a building put up in the
+ * meadow or a trail cut through the wood changes where he goes without
+ * anybody remembering to come back here. The cost is one flood and a few
+ * thousand `clearToStand`s, once, on a module that is already read for the
+ * cast.
+ */
+function roamingSpots(): { x: number; y: number }[] {
+  const bounds = { width: WORLD_WIDTH, height: WORLD_HEIGHT };
+  const { cols, seen } = reachedFrom(bounds, worldSolids(), WORLD_SPAWN, REACH_CELL);
+  const room = standingRoom();
+  const kept: { x: number; y: number }[] = [...PLACES];
+  const found: { x: number; y: number }[] = [];
+  const covered = (at: { x: number; y: number }) =>
+    kept.some((s) => Math.hypot(s.x - at.x, s.y - at.y) < COVERED_PX);
+  // `clearToStand` asks the same question and asks it of the whole list,
+  // which is five thousand rectangles once the wood is planted — a few
+  // thousand candidates of that is two hundred milliseconds, on a module
+  // every world test file pulls in. `coversPoint` is the same answer
+  // bucketed, kept against the list it was built from, which is what the
+  // basketball already does with the same lists for the same reason.
+  const standable = (at: { x: number; y: number }) =>
+    at.x > 0 &&
+    at.y > 0 &&
+    at.x < WORLD_WIDTH &&
+    at.y < WORLD_HEIGHT &&
+    seen.has(Math.floor(at.y / REACH_CELL) * cols + Math.floor(at.x / REACH_CELL)) &&
+    !coversPoint(room, at.x, at.y);
+
+  for (let y = LATTICE_PX; y < WORLD_HEIGHT; y += LATTICE_PX) {
+    for (let x = LATTICE_PX; x < WORLD_WIDTH; x += LATTICE_PX) {
+      if (covered({ x, y })) continue;
+      const at = NUDGES.map((n) => ({ x: x + n.x, y: y + n.y })).find(standable);
+      if (!at) continue;
+      kept.push(at);
+      found.push(at);
+    }
+  }
+  return found;
+}
+
+/** How far a lattice point may look for a clearing: two tiles, in eight directions. */
+const NUDGE_PX = 2 * WORLD_TILE;
+
+/** The point itself first, then the ring around it, nearest out. */
+const NUDGES: readonly { x: number; y: number }[] = [
+  { x: 0, y: 0 },
+  ...[NUDGE_PX / 2, NUDGE_PX].flatMap((r) =>
+    [0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({
+      x: Math.round(Math.cos((i * Math.PI) / 4) * r),
+      y: Math.round(Math.sin((i * Math.PI) / 4) * r),
+    })),
+  ),
+];
+
+/** The cell the reachability flood walks on; `allReachable`'s own default. */
+const REACH_CELL = 24;
+
+let everywhere: readonly { x: number; y: number }[] | null = null;
+
+/**
+ * Everywhere a wanderer walks between: the places the map lays on, and the
+ * open country between them.
+ *
+ * **A function rather than a constant, because the second half is swept.**
+ * A `const` would run the sweep the moment this module is first imported,
+ * and this module is in the browser's bundle — the scenes read the cast
+ * out of it. A quarter of a second of flooding the map on the main thread,
+ * to answer a question only the server ever asks, is a quarter of a second
+ * of a page that has not painted yet. Worked out on the first call and
+ * kept, so the simulation, which asks on every wander, pays for it once.
+ */
+export function worldWanderSpots(): readonly { x: number; y: number }[] {
+  return (everywhere ??= [...PLACES, ...roamingSpots()]);
+}
+
 export const WANDER_AREAS: Record<Exclude<Area, "world">, Rect> = {
   // The wide part of the lobby: inside the walls with a margin, below the
   // top wall's furniture, and clear of the lift in the bottom corner.
@@ -503,7 +629,7 @@ export function wanderArea(haunt: Haunt, resident?: Resident): Rect | null {
  * too built-up to wander by bounds. Only the world map has them.
  */
 export function wanderSpots(haunt: Haunt): readonly { x: number; y: number }[] | null {
-  return haunt.kind === "room" && haunt.area === "world" ? WORLD_WANDER_SPOTS : null;
+  return haunt.kind === "room" && haunt.area === "world" ? worldWanderSpots() : null;
 }
 
 /** The paved yard of a campus, in campus pixels, as bounds for the feet: well inside its edges. */

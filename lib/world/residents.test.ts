@@ -17,7 +17,7 @@ import {
   wanderArea,
   wanderSpots,
   yardArea,
-  WORLD_WANDER_SPOTS,
+  worldWanderSpots,
 } from "./residents";
 import { parseFloorRoomSlug, roomFromLocation } from "../rooms";
 import { CUTOUT, TILE, WIDTH } from "../map/office";
@@ -28,7 +28,6 @@ import {
   opsSupportRoom,
 } from "../map/floor";
 import {
-  SHORE_ROW,
   TENANTS,
   WORLD_HEIGHT,
   WORLD_WIDTH,
@@ -36,7 +35,7 @@ import {
   organisationFor,
   tenantFor,
 } from "./tenants";
-import { SCENERY, clearToStand, worldSolids } from "./scenery";
+import { SCENERY, WATER, clearToStand, worldSolids } from "./scenery";
 import { routeAcross } from "./route";
 import { CAMPUSES } from "./campus";
 import { WORKER_SPRITES } from "../../components/game/config/animations";
@@ -113,30 +112,66 @@ describe("wandering mode", () => {
   it("gives them places to walk between rather than a patch of ground", () => {
     const haunt = hauntsOf(wanderer)[0];
     expect(wanderArea(haunt)).toBeNull();
-    expect(wanderSpots(haunt)).toBe(WORLD_WANDER_SPOTS);
+    expect(wanderSpots(haunt)).toBe(worldWanderSpots());
   });
 
-  // Twenty in the town and five more up in the wood, which is the point of
-  // counting them at all: a map that grows a place and forgets to give a
-  // wanderer anywhere in it is a place nobody is ever seen walking. The
-  // wood has five rather than eight because the far bank of the river has
-  // no crossing, so there is nowhere over there to be sent.
+  /**
+   * A count was the wrong assertion and said so the moment the map grew:
+   * thirty-six of them was true, and all but two were in the town, so it
+   * passed while the whole eastern third of the world had nobody ever sent
+   * to it. What matters is that every part of the map has somewhere in it
+   * — which is what the swept half of the list is for, and what would fail
+   * here if the sweep stopped finding ground.
+   *
+   * Six boxes: the three stretches, each split into the wood above and the
+   * built world below. Coarse on purpose — this is about a map that grows
+   * a place and forgets to put anybody in it, not about the spacing.
+   */
   it("has a place in every part of the map", () => {
-    expect(WORLD_WANDER_SPOTS).toHaveLength(36);
+    expect(worldWanderSpots().length).toBeGreaterThan(40);
+    for (let column = 0; column < 3; column++) {
+      for (let row = 0; row < 2; row++) {
+        const from = { x: (column * WORLD_WIDTH) / 3, y: (row * WORLD_HEIGHT) / 2 };
+        const to = { x: ((column + 1) * WORLD_WIDTH) / 3, y: ((row + 1) * WORLD_HEIGHT) / 2 };
+        const inside = worldWanderSpots().filter(
+          (s) => s.x >= from.x && s.x < to.x && s.y >= from.y && s.y < to.y,
+        );
+        expect(inside.length, `nothing in ${column},${row}`).toBeGreaterThan(0);
+      }
+    }
   });
 
   it("spreads them over the whole map rather than one corner of it", () => {
-    const xs = WORLD_WANDER_SPOTS.map((s) => s.x);
-    const ys = WORLD_WANDER_SPOTS.map((s) => s.y);
+    const xs = worldWanderSpots().map((s) => s.x);
+    const ys = worldWanderSpots().map((s) => s.y);
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(WORLD_WIDTH * 0.75);
     expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(WORLD_HEIGHT * 0.4);
   });
 
-  it("keeps every one of them on dry land", () => {
-    for (const spot of WORLD_WANDER_SPOTS) {
-      expect(spot.y, `${spot.x},${spot.y}`).toBeLessThan(SHORE_ROW * TILE);
+  /**
+   * Asked of the water rather than of a row.
+   *
+   * It used to be `y < SHORE_ROW * TILE`, which was the same question while
+   * the sea was one rectangle the width of the map. It is not one any more
+   * — the coast steps south twice as it runs east and leaves the map before
+   * the highway does — so a row is the shoreline in the town and a hundred
+   * tiles inland of it out east, and there is real dry ground below it that
+   * a wanderer is right to be sent to.
+   */
+  it("keeps every one of them out of the water", () => {
+    for (const spot of worldWanderSpots()) {
+      const wet = WATER.find(
+        (w) =>
+          spot.x >= w.x * TILE &&
+          spot.x < (w.x + w.width) * TILE &&
+          spot.y >= w.y * TILE &&
+          spot.y < (w.y + w.height) * TILE,
+      );
+      expect(wet, `${spot.x},${spot.y} is in the water`).toBeUndefined();
       expect(spot.x).toBeGreaterThan(0);
       expect(spot.x).toBeLessThan(WORLD_WIDTH);
+      expect(spot.y).toBeGreaterThan(0);
+      expect(spot.y).toBeLessThan(WORLD_HEIGHT);
     }
   });
 
@@ -147,7 +182,7 @@ describe("wandering mode", () => {
    */
   it("stands none of them in a building, a prop or a sign", () => {
     const solids = worldSolids();
-    for (const spot of WORLD_WANDER_SPOTS) {
+    for (const spot of worldWanderSpots()) {
       const inside = solids.find(
         (s) =>
           spot.x >= s.x && spot.x <= s.x + s.width && spot.y >= s.y && spot.y <= s.y + s.height,
@@ -170,9 +205,9 @@ describe("wandering mode", () => {
   it("can walk from any one of them to any other", () => {
     const bounds = { width: WORLD_WIDTH, height: WORLD_HEIGHT };
     const solids = worldSolids();
-    for (let i = 1; i < WORLD_WANDER_SPOTS.length; i++) {
-      const from = WORLD_WANDER_SPOTS[i - 1];
-      const to = WORLD_WANDER_SPOTS[i];
+    for (let i = 1; i < worldWanderSpots().length; i++) {
+      const from = worldWanderSpots()[i - 1];
+      const to = worldWanderSpots()[i];
       expect(
         routeAcross(bounds, solids, from, to),
         `${from.x},${from.y} to ${to.x},${to.y}`,
@@ -260,7 +295,7 @@ describe("working a station", () => {
     expect(wanderArea({ kind: "station" }, { ...doc, station: undefined })).toBeNull();
     // A station is somewhere to pace, never somewhere to plan a route across.
     expect(wanderSpots({ kind: "station" })).toBeNull();
-    expect(wanderSpots(hauntsOf(doc)[1])).toBe(WORLD_WANDER_SPOTS);
+    expect(wanderSpots(hauntsOf(doc)[1])).toBe(worldWanderSpots());
   });
 
   /**
@@ -464,7 +499,7 @@ describe("the routine", () => {
 
   /** A wanderer's places are held to it too: Michael stands on these. */
   it("never puts a wander spot behind a building or a prop", () => {
-    for (const [i, spot] of WORLD_WANDER_SPOTS.entries()) {
+    for (const [i, spot] of worldWanderSpots().entries()) {
       expect(clearToStand(spot), `spot ${i} at ${spot.x},${spot.y}`).toBe(true);
     }
   });

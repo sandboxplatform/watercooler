@@ -102,14 +102,6 @@ export const GREET_PX = 72;
  */
 export const GREET_CLEAR_PX = 120;
 /**
- * The least time between two of them, however many people walk up.
- *
- * A bubble is a few seconds long, so a second greeting inside that window
- * lands on top of the first — and a row of people arriving one after another
- * would otherwise set a resident off once each.
- */
-export const GREET_QUIET_MS = 8000;
-/**
  * How long a fright lasts.
  *
  * A resident who says something to whoever walked up to them bolts for this
@@ -119,19 +111,37 @@ export const GREET_QUIET_MS = 8000;
  */
 export const SPOOK_MS = 5000;
 /**
- * How fast a bolt is: a fifth again as fast as a person can sprint.
+ * The least time between two of them, however many people walk up — which
+ * is exactly as long as a fright, and that is the whole of the rule.
+ *
+ * It is here because a bubble is a few seconds long, so a second greeting
+ * inside that window lands on top of the first, and a row of people
+ * arriving one after another would otherwise set a resident off once each.
+ * Eight seconds bought that and cost the chase: it outlasted the fright by
+ * three, so somebody who kept pace with Michael and was standing over him
+ * when he stopped running got silence, and had to walk away and come back
+ * to get another cluck out of him. A chicken who has finished running is a
+ * chicken who can be startled again — see `greet`.
+ */
+export const GREET_QUIET_MS = SPOOK_MS;
+/**
+ * How fast a bolt is: half again as fast as a person can sprint.
  *
  * Measured against the sprint rather than written down, because the only
  * thing that matters about it is that it is faster than whoever startled
  * him. He used to bolt at 150, which is under half a sprint — so a person
  * who ran after him caught him inside a second, and a fright you can keep
- * up with at a jog is not a fright. Anybody chasing him now watches him go.
+ * up with at a jog is not a fright.
+ *
+ * A fifth again was the next try and it was still not enough: a sprinter
+ * loses a pixel and a half in ten to a chicken who keeps turning, so he was
+ * caught anyway and the chase had no shape to it. At half again he is gone,
+ * and catching him means cutting a corner rather than out-running him.
  *
  * Well inside what the hub will carry: `move` clamps against the sprint
- * times `SPEED_TOLERANCE`, which is two and a half of them, so a resident
- * at 1.2 of one is nowhere near being hauled backwards.
+ * times `SPEED_TOLERANCE`, which is two and a half of them.
  */
-export const SPOOK_SPEED_PX_S = Math.round(SPRINT_SPEED_PX_S * 1.2);
+export const SPOOK_SPEED_PX_S = Math.round(SPRINT_SPEED_PX_S * 1.5);
 /**
  * How far one dash of a bolt goes before the next one turns somewhere else.
  *
@@ -183,9 +193,10 @@ export interface ResidentHost {
    * becomes of it, because the ladder and the field of eggs are its. The
    * chicken does not choose what he lays.
    *
-   * `startledBy` is the connection that walked up, or null for somebody
-   * who has stepped away inside the tick. Whoever caused it gets the
-   * credit for it, which is a badge they cannot claim for themselves.
+   * `startledBy` is the connection that walked up, or null — for somebody
+   * who has stepped away inside the tick, and for a fright another
+   * resident caused, since a local holds nothing. Whoever caused it gets
+   * the credit for it, which is a badge they cannot claim for themselves.
    *
    * Optional like `met`: nothing about the world stops working without
    * it, and the simulations in the tests want the fright and not the egg.
@@ -493,16 +504,41 @@ export class ResidentSimulation {
    * a quiet period besides — between them, walking to and fro at the edge of
    * a chicken's hearing cannot make him cluck like a metronome.
    *
-   * It is asked of the hub rather than of the other residents, because only
-   * a person walks up to anybody: the residents are sent to places nobody is
-   * standing in, and two of them meeting is the simulation, not company.
+   * It is asked of the hub rather than of the other residents because the
+   * hub is where everybody standing in the room is, whichever they are —
+   * and **a resident coming round the corner startles him exactly as a
+   * person does.** It was people-only, on the reasoning that the residents
+   * are sent to places nobody is standing in; that is true of where they
+   * are *sent* and says nothing about the walk between two of them, which
+   * crosses whatever is in the way because nothing collides a resident. So
+   * Michael could be walked up to by one kind of thing and stood beside by
+   * another, which is not a fact about chickens.
+   *
+   * Himself excepted, or he would spend his life fleeing his own company.
    */
   private greet(state: State, now: number) {
     const greeting = state.resident.greeting;
     if (!greeting || !state.room) return;
+    // **A fright that has run its course is a fresh arrival**, for anybody
+    // still standing over him when it does.
+    //
+    // Edge-triggered is the right rule for somebody leaning on a counter
+    // and the wrong one for somebody who chased the chicken and kept up:
+    // they never left the wider radius, so `greeted` stayed set, and what
+    // they got for catching him was a chicken who stood there saying
+    // nothing until they walked away and came back. Clearing it here is
+    // what makes catching him the point of catching him. Nobody near is
+    // the ordinary case and costs nothing — he has bolted a long way by
+    // now, and the radius check below would have cleared it anyway.
+    if (state.spookedUntil && now >= state.spookedUntil) {
+      state.spookedUntil = 0;
+      state.spookedFrom = null;
+      state.greeted = false;
+    }
     const { hub } = this.host.roomFor(state.room);
+    const me = presenceIdFor(state.resident);
     const reach = state.greeted ? GREET_CLEAR_PX : GREET_PX;
-    if (!hub.personNear({ x: state.x, y: state.y }, reach)) {
+    if (!hub.someoneNear({ x: state.x, y: state.y }, reach, me)) {
       state.greeted = false;
       return;
     }
@@ -515,17 +551,21 @@ export class ResidentSimulation {
     // yes or no and this wants somewhere to run away from. Nobody by the
     // time it is asked is possible — somebody can walk off inside a tick —
     // and a bolt in no particular direction is the right answer to that.
-    const startled = hub.nearestPerson({ x: state.x, y: state.y }, reach);
+    const startled = hub.nearestNeighbour({ x: state.x, y: state.y }, reach, me);
     this.spook(state, now, startled);
-    this.layEgg(state, startled?.id ?? null);
+    // The fright is the same whoever caused it; the credit is not. An egg
+    // is a thing somebody is given, and a resident holds nothing — so a
+    // chicken startled by Doc still lays, and the egg lies in the grass
+    // for whoever comes along.
+    this.layEgg(state, startled && !startled.resident ? startled.id : null);
   }
 
   /**
-   * The one thing a fright leaves behind, one time in a hundred.
+   * The one thing a fright leaves behind, three times in a hundred.
    *
    * Odds rather than a count: the draw below is fresh on every cluck and
-   * nothing counts them, so a hundred frights may pass with nothing to
-   * show and two eggs may come one after the other.
+   * nothing counts them, so thirty frights may pass with nothing to show
+   * and two eggs may come one after the other.
    *
    * Rolled here rather than by whoever is told about it, because this is
    * where the seeded randomness is: `residents.test.ts` drives the

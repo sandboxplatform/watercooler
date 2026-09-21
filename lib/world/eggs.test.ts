@@ -75,7 +75,7 @@ describe("the ladder", () => {
    */
   it("leaves a fright worth waiting for, and not one worth farming", () => {
     expect(EGG_CHANCE).toBeGreaterThan(0);
-    expect(EGG_CHANCE).toBeLessThanOrEqual(0.01);
+    expect(EGG_CHANCE).toBeLessThanOrEqual(0.05);
   });
 });
 

@@ -784,17 +784,22 @@ export function propBody(p: PlacedProp): Rect | null {
 // ── Can you still get everywhere? ──────────────────────
 
 /**
- * Whether a person can walk from `from` to every one of `targets` with the
- * solids in the way. Coarse: a grid of cells the size of a person's feet,
- * a cell blocked if any solid touches it.
+ * Every cell a person can walk to from `from`, as indexes into a grid
+ * `cols` wide. Coarse: cells the size of a person's feet, a cell blocked if
+ * any solid touches it.
+ *
+ * Handed back rather than kept private because two questions want the same
+ * flood and they want different things out of it: `allReachable` asks
+ * whether a handful of places are in it, and `worldWanderSpots()` asks
+ * which of a lattice of candidates are — and a second flood for the second
+ * question is fifty thousand cells walked twice.
  */
-export function allReachable(
+export function reachedFrom(
   bounds: { width: number; height: number },
-  solids: Rect[],
+  solids: readonly Rect[],
   from: { x: number; y: number },
-  targets: { x: number; y: number }[],
   cell = 24,
-): boolean {
+): { cols: number; rows: number; seen: Set<number> } {
   const cols = Math.ceil(bounds.width / cell);
   const rows = Math.ceil(bounds.height / cell);
   // Painted once rather than asked per cell, which is the route planner's
@@ -804,7 +809,6 @@ export function allReachable(
   // second or so a call, and this is called several times over in the
   // tests that hold the map together.
   const cells = blockedCells(solids, cols, rows, cell);
-  const blocked = (cx: number, cy: number) => cells[cy * cols + cx] === 1;
   const key = (cx: number, cy: number) => cy * cols + cx;
   const start = { cx: Math.floor(from.x / cell), cy: Math.floor(from.y / cell) };
   const seen = new Set<number>([key(start.cx, start.cy)]);
@@ -820,12 +824,30 @@ export function allReachable(
       const nx = cx + dx;
       const ny = cy + dy;
       if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-      if (seen.has(key(nx, ny)) || blocked(nx, ny)) continue;
+      if (seen.has(key(nx, ny)) || blocked(cells, cols, nx, ny)) continue;
       seen.add(key(nx, ny));
       queue.push({ cx: nx, cy: ny });
     }
   }
-  return targets.every((t) => seen.has(key(Math.floor(t.x / cell), Math.floor(t.y / cell))));
+  return { cols, rows, seen };
+}
+
+const blocked = (cells: Uint8Array, cols: number, cx: number, cy: number) =>
+  cells[cy * cols + cx] === 1;
+
+/**
+ * Whether a person can walk from `from` to every one of `targets` with the
+ * solids in the way.
+ */
+export function allReachable(
+  bounds: { width: number; height: number },
+  solids: Rect[],
+  from: { x: number; y: number },
+  targets: { x: number; y: number }[],
+  cell = 24,
+): boolean {
+  const { cols, seen } = reachedFrom(bounds, solids, from, cell);
+  return targets.every((t) => seen.has(Math.floor(t.y / cell) * cols + Math.floor(t.x / cell)));
 }
 
 /**
@@ -887,6 +909,26 @@ export function clearToStand(at: { x: number; y: number }): boolean {
   if (BUILDINGS.some((b) => holds(b.frame))) return false;
   if (SCENERY.some((p) => holds(propPicture(p)))) return false;
   return !worldSolids().some(holds);
+}
+
+let standing: Rect[] | null = null;
+
+/**
+ * Everything `clearToStand` asks about, as one list: the building frames,
+ * the prop pictures and the solids.
+ *
+ * Kept, like `worldSolids`, so it can be painted into a grid — the wood
+ * plants a couple of thousand trees and asking one point against the lot
+ * is a thousand rectangle tests. Somewhere that sweeps the map for
+ * standing room does it a few thousand times over.
+ */
+export function standingRoom(): Rect[] {
+  if (standing) return standing;
+  return (standing = [
+    ...BUILDINGS.map((b) => b.frame),
+    ...SCENERY.map(propPicture),
+    ...worldSolids(),
+  ]);
 }
 
 /** Whether every building's door on the world map can be reached from the spawn. */

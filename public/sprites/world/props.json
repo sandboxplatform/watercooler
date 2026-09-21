@@ -93,71 +93,71 @@
   "egg-plain": {
     "x": 1372,
     "y": 0,
-    "width": 16,
-    "height": 28
+    "width": 22,
+    "height": 44
   },
   "egg-speckled": {
-    "x": 1396,
+    "x": 1402,
     "y": 0,
-    "width": 16,
-    "height": 28
+    "width": 22,
+    "height": 44
   },
   "egg-copper": {
-    "x": 1420,
+    "x": 1432,
     "y": 0,
-    "width": 16,
-    "height": 28
+    "width": 22,
+    "height": 44
   },
   "egg-jade": {
-    "x": 1444,
+    "x": 1462,
     "y": 0,
-    "width": 16,
-    "height": 28
+    "width": 22,
+    "height": 44
   },
   "egg-gilded": {
-    "x": 1468,
-    "y": 0,
-    "width": 16,
-    "height": 28
-  },
-  "egg-rainbow": {
     "x": 1492,
     "y": 0,
-    "width": 16,
-    "height": 28
+    "width": 22,
+    "height": 44
+  },
+  "egg-rainbow": {
+    "x": 1522,
+    "y": 0,
+    "width": 22,
+    "height": 44
   },
   "car-red-north": {
-    "x": 1516,
+    "x": 1552,
     "y": 0,
     "width": 44,
     "height": 88
   },
   "car-red-south": {
-    "x": 1568,
+    "x": 1604,
     "y": 0,
     "width": 44,
     "height": 88
   },
   "car-blue-north": {
-    "x": 1620,
+    "x": 1656,
     "y": 0,
     "width": 44,
     "height": 88
   },
   "car-blue-south": {
-    "x": 1672,
+    "x": 1708,
     "y": 0,
     "width": 44,
     "height": 88
   },
   "car-pale-north": {
-    "x": 1724,
+    "x": 1760,
     "y": 0,
     "width": 44,
     "height": 88
   },
   "car-pale-south": {
-    "x": 1776,
+    "x": 1812,
     "y": 0,
     "width": 44,
     "height": 88
