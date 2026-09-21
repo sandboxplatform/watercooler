@@ -129,6 +129,65 @@ export function countRoadblocks(board: BoardView): number {
   return blocked;
 }
 
+/**
+ * What a board calls work that has gone out.
+ *
+ * The other end of the pipeline from a roadblock, and the same kind of
+ * fact: the five bays on the wall are the stages work is spread over, and
+ * a card that has shipped has left all five of them. So it is counted the
+ * same way — off the whole board, by the label on the card or the list it
+ * is parked in, however the board spells it.
+ *
+ * Matched on the folded name, like a roadblock, and for the same reason:
+ * no two boards agree on the word. Sandbox ERP's own three are the case in
+ * point — Hammer Time and the Reports App each keep a **Deployed** list,
+ * and the board named after the building itself calls the identical thing
+ * **Production**. One feature that only knew the first word would have
+ * drawn a bare corner in the building's own Operations room while
+ * fifty-odd shipped cards sat on the board behind the wall.
+ *
+ * Deliberately not "Done": that is the stage before this one, it is on
+ * two of those three boards as a counted lane, and a bay on the wall
+ * already says so. Bare "Ship" is out too — a list called Ship is as often
+ * the queue of things to send as the record of what was sent.
+ */
+export function isDeployed(name: string): boolean {
+  return /^(deploy(s|ed|ing|ment|ments)?|release[sd]?|shipp(ed|ing)|prod(uction)?|live)$/.test(
+    name.toLowerCase().replace(/[^a-z]+/g, ""),
+  );
+}
+
+/**
+ * Cards on the board that have gone out, however the board says so.
+ *
+ * The whole board, like the roadblocks — a card that shipped is not
+ * standing in any of the five stages any more, which is the whole reason
+ * this cannot be a sixth bay on the plate.
+ *
+ * **A list the wall already counts is never one of these**, and that guard
+ * is what makes the wider net above safe. The words differ from board to
+ * board, so the alternative was writing down which of them are despatches
+ * and which are working stages — and there is no such list: "Production"
+ * is where finished work sits on one board and could be where work is
+ * being made on another. The building has already answered the question by
+ * declaring its five stages, so a list it counts on the wall is a stage
+ * whatever it is called, and only the lists it left out can be despatches.
+ *
+ * A label is read whatever list the card is standing in, which is the
+ * roadblock's rule: a label is somebody saying so about that card.
+ */
+export function countDeployed(board: BoardView, lanes: readonly string[] = []): number {
+  const counted = new Set(lanes.map((name) => name.trim().toLowerCase()));
+  let out = 0;
+  for (const column of board.columns) {
+    const shipped = isDeployed(column.name) && !counted.has(column.name.trim().toLowerCase());
+    for (const card of column.cards) {
+      if (shipped || card.labels.some((label) => isDeployed(label.name))) out += 1;
+    }
+  }
+  return out;
+}
+
 export interface FlowLane {
   id: string;
   /** The Trello list this counts, named as the building declared it. */
@@ -171,6 +230,18 @@ export interface Flow {
    * the pipeline is where work is, and this is work that has stopped.
    */
   blocked: number;
+  /**
+   * Cards on the board that have been deployed — see `countDeployed`.
+   *
+   * Counted off the whole board — less the lists the wall itself counts,
+   * which are stages whatever they are called — for the same reason
+   * `blocked` is, and off the plate for the opposite one: a roadblocked card is standing in a
+   * stage and a deployed one has left them all, so neither is a share of
+   * `total` and neither belongs among the five. It is the stack of crates
+   * in the far corner of the room instead — work that is finished with,
+   * out of the way, which is where finished work goes.
+   */
+  deployed: number;
   /** The board's other lists, counted but not on the wall. */
   others: FlowOther[];
 }
@@ -229,6 +300,7 @@ export function toFlow(board: BoardView, lanes: readonly string[]): Flow {
     lanes: flowLanes,
     total: flowLanes.reduce((sum, lane) => sum + (lane.missing ? 0 : lane.count), 0),
     blocked: countRoadblocks(board),
+    deployed: countDeployed(board, lanes),
     others,
   };
 }

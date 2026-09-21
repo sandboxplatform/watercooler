@@ -1773,6 +1773,11 @@
   color: #faa53d;
 }
 
+/* Shipped: the green the flow plate's last bay and the crates are lit in. */
+.pulse-legend--shipped strong {
+  color: #4bce97;
+}
+
 /* ── People: everyone in the world, online first ── */
 .people {
   padding: 10px 12px;

@@ -35,6 +35,7 @@ import {
   SUPPORT_BOARD,
   opsProjectFlow,
   opsProjectSign,
+  opsDeployed,
   opsRoadblock,
   opsSign,
   opsSupportPulse,
@@ -44,7 +45,9 @@ import {
 } from "@/lib/map/floor";
 import { DeskWeek, SupportPulse } from "../systems/SupportPulse";
 import { ProjectFlow } from "../systems/ProjectFlow";
-import { Roadblock } from "../systems/Roadblock";
+import { DEPLOYED } from "../systems/Deployed";
+import { FloorMarker } from "../systems/FloorMarker";
+import { ROADBLOCK } from "../systems/Roadblock";
 import { legible } from "../systems/legible";
 import {
   hasCampus,
@@ -753,10 +756,14 @@ export class OfficeScene extends Phaser.Scene {
    * whatever the office picked, and a room with PROJECT BOARD written over
    * a project board says less than the sign already hanging on it.
    *
-   * And a roadblock on the floor of any room with work stuck in it, which
-   * is the one thing the plate on the wall cannot say — see
-   * `systems/Roadblock`. It reads the same answer as the counts beside it
-   * (`systems/room-flow`), so a room with both in it is still one request.
+   * And two things standing on the floor, which are the two things the
+   * plate on the wall cannot say: a roadblock in the middle of any room
+   * with work stuck in it, and the crates in the far corner of any room
+   * that has shipped something. A stuck card is still standing in a stage
+   * and a shipped one has left them all, so neither is a sixth bay — see
+   * `systems/FloorMarker`. Both read the same answer as the counts beside
+   * them (`systems/room-flow`), so a room with all three in it is still
+   * one request.
    *
    * Hands back one teardown for every plate and every marker, since each
    * keeps a timer.
@@ -770,12 +777,14 @@ export class OfficeScene extends Phaser.Scene {
       if (board.board) this.addProjectSign(rooms, slot, board.board);
       if (board.lanes.length === 0) return [];
       const at = opsProjectFlow(rooms, slot);
-      const marker = opsRoadblock(rooms, slot);
+      const stuck = opsRoadblock(rooms, slot);
+      const shipped = opsDeployed(rooms, slot);
       return [
         ...(at ? [new ProjectFlow(this).place(at, TILE, slot)] : []),
-        // The same read as the counts beside it, and nothing drawn until
-        // there is something stuck — see `systems/Roadblock`.
-        ...(marker ? [new Roadblock(this).place(marker, TILE, slot)] : []),
+        // The same read as the counts beside them, and neither drawn until
+        // there is something to say — see `systems/FloorMarker`.
+        ...(stuck ? [new FloorMarker(this, ROADBLOCK).place(stuck, TILE, slot)] : []),
+        ...(shipped ? [new FloorMarker(this, DEPLOYED).place(shipped, TILE, slot)] : []),
       ];
     });
     if (!stops.length) return null;

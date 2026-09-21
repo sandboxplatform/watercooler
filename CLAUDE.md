@@ -1109,7 +1109,7 @@ lobby("sandbox-erp", "sandbox-erp", {
   game: "pinball", helpDesk: true,                     // the lobby
   operations: ["trello", "zoho"], projects: 5,         // the floor above
   boards: [                                            // a project board per room
-    { board: "Sandbox Main App", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"] },
+    { board: "Sandbox ERP", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"] },
     { board: "Hammer Time", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Done"] },
     { board: "Reports App", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"] },
   ],
@@ -1544,6 +1544,60 @@ boards are: the figure on it is live, and a picture with a number baked
 into it is a second, wrong copy of the number. The stripes are laid a
 pixel row at a time, which is both the clipping and the staircase a
 forty-five degree diagonal is in pixel art.
+
+**And crates in the far corner, for the work that has gone out.** The
+roadblock's opposite number, and it exists for the opposite half of the
+same silence: the five bays say where the work in flight is standing, so a
+board that shipped nine things this month and one that shipped none draw
+the same five bars. A card that has shipped is not standing in any stage
+at all, which is why this is no more a sixth bay than the barrier is.
+
+Where it stands is half of what it says. The barrier is in the **middle**
+of the floor because being in the way is the whole fact about it; the
+crates are in the **far corner** — two columns in from the right-hand
+wall, on the room's last row — because being finished with is the whole
+fact about them. So a room reads left to right and front to back: the work
+on the wall, the trouble in the middle of the floor, the crates in the
+corner across from the board it all came off. Green, because the last bay
+of the flow plate is green: the end of the pipeline is lit the same colour
+on the wall and on the floor.
+
+| Where                     | What                                                                        |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `countDeployed` in `flow` | What counts as gone out. Pure, over the board `readBoard` already holds     |
+| `opsDeployed` in `floor`  | Where it stands, read off the room so a longer corridor carries it          |
+| `systems/Deployed`        | The pallet, the two crates, and the word stencilled on the lower one        |
+| `systems/FloorMarker`     | The plate, the figure, the timer, the beat when it moves — for both of them |
+
+Four decisions in it, and the first is the one that would have shipped a
+feature nobody could see:
+
+- **The word is folded, and the net is wider than one word.** Sandbox
+  ERP's own three boards spell it two ways between them: Hammer Time and
+  the Reports App keep a **Deployed** list, and the board named after the
+  building itself calls the identical thing **Production**. Matching the
+  first word only would have drawn a bare corner in the building's own
+  Operations room with fifty-odd shipped cards on the board behind the
+  wall.
+- **A list the wall already counts is never a despatch**, and that guard
+  is what makes the wider net safe. There is no writing down which words
+  are despatches and which are working stages — "Production" is where
+  finished work sits on one board and could be where work is _made_ on
+  another — but the building has already answered by declaring its five,
+  so a list it counts is a stage whatever it is called. Deliberately not
+  **Done** either: that is the stage before this one and two of those
+  three boards hang it on the wall.
+- **Nothing is up when nothing has gone out**, which is the barrier's rule.
+  A board with no such list and a board with an empty one are the same
+  bare corner — and unlike a bay on the wall there is no dash to draw, since
+  a thing either stands in a room or it does not.
+- **The plate is shared, the picture is not.** `FloorMarker` is the plate,
+  the figure and the sizes it falls back through, the read on the room's
+  one timer, the flash when the number moves and the teardown a lift ride
+  needs; `Roadblock` and `Deployed` are the two pictures over it. The
+  second of these was written by copying the first, which is the shape of
+  duplication this codebase has been bitten by twice — see `CountBoard`,
+  one storey up, which is the same arrangement.
 
 **Which stages, and off which board, is the building's** — `boards` in
 `lib/world/tenants.ts`, one entry per project room, each naming its Trello

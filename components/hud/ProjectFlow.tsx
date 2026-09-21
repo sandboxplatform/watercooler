@@ -202,13 +202,35 @@ export default function ProjectFlow() {
                   the list they are parked in.
                 </p>
               )}
+              {flow.deployed > 0 && (
+                /*
+                 * The other thing the five bars cannot say, from the other
+                 * end: a card that has shipped is not standing in any
+                 * stage, so the bank above is the same picture whether the
+                 * board has sent nine things out or none. It is the crates
+                 * in the corner of the room, said in words.
+                 */
+                <p className="pulse-legend pulse-legend--shipped">
+                  <strong>
+                    {flow.deployed} card{flow.deployed === 1 ? " has" : "s have"} been deployed
+                  </strong>{" "}
+                  off this board — counted the same way, by the label on the card or the list they
+                  are parked in.
+                </p>
+              )}
               <p className="pulse-legend">
                 Each bar is that stage&rsquo;s share of the work in flight, so the five compare with
                 each other. Nothing here is a percentage of the whole board.
                 {flow.others.length > 0 && (
                   <>
                     {" "}
-                    Not counted:{" "}
+                    {/*
+                     * "not a stage", not "not counted": the despatches
+                     * above are read off one of these lists, so a line
+                     * calling them uncounted would contradict the line
+                     * above it.
+                     */}
+                    Not a stage on this wall:{" "}
                     {flow.others.map((other) => `${other.name} (${other.count})`).join(", ")}.
                   </>
                 )}

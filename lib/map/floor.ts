@@ -751,6 +751,42 @@ export function opsRoadblock(rooms: number, slot: number) {
 }
 
 /**
+ * Where a project room stacks what has shipped, in tiles: the far corner
+ * of the floor, two columns in from the right-hand wall and standing on
+ * the room's last row.
+ *
+ * The roadblock's opposite number, and placed as its opposite. Work that
+ * has stopped stands in the **middle** because it is in the way, which is
+ * the one thing there is to say about it; work that has gone out is
+ * finished with, so it is stacked **out of the way** — and the corner it
+ * is stacked in is the one diagonally across the room from the board it
+ * came off. The board hangs in the left-hand corner of the wall, so a room
+ * reads left to right and front to back: the work on the wall, the trouble
+ * in the middle of the floor, the crates in the far corner.
+ *
+ * Two columns in rather than hard into the corner: the stack is two tiles
+ * wide and drawn centred on the point, so this leaves a clear column
+ * between it and the wall — without which the crates read as having been
+ * shoved through it. The row is the room's last, so they stand against the
+ * back wall, which is where a pallet of finished goods ends up.
+ *
+ * It is clear of both ranks' doorways by construction: the lower rank's is
+ * cut at `BOARD_WALL.door`, well to the left of this, and the upper rank's
+ * is further left again.
+ *
+ * Null where the floor has no such room, as the roadblock and the counts
+ * are.
+ */
+export function opsDeployed(rooms: number, slot: number) {
+  const room = opsProjectRooms(rooms, slot)[slot - 1];
+  if (!room) return null;
+  return {
+    tx: room.x + ROOM_COLS - 2,
+    ty: room.y + ROOM_ROWS - 1,
+  } as const;
+}
+
+/**
  * Doc's post in Support, and the floor he paces at it.
  *
  * A band across the middle of the room rather than a spot against a wall:

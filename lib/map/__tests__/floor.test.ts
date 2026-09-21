@@ -11,6 +11,7 @@ import {
   type OpsRoom,
   opsBoardroom,
   opsBoardroomTable,
+  opsDeployed,
   opsElevator,
   opsProjectFlow,
   opsProjectRooms,
@@ -435,6 +436,34 @@ describe("an Operations floor", () => {
         expect(at.ty).toBeLessThan(room.y + 7);
       }
       expect(opsRoadblock(6, 9)).toBeNull();
+    });
+
+    /**
+     * What has shipped is stacked in the far corner of the room.
+     *
+     * The barrier's opposite number and placed as its opposite: the
+     * middle of the floor is where a thing in the way stands, and the
+     * corner across the room from the board is where finished work goes.
+     * Two columns in, so the two-tile stack keeps a clear column between
+     * itself and the wall rather than reading as shoved through it.
+     */
+    it("stacks what has shipped in the far corner", () => {
+      for (const slot of [1, 2, 3]) {
+        const at = opsDeployed(6, slot)!;
+        const room = opsProjectRooms(6, slot)[slot - 1];
+        expect(at.tx).toBe(room.x + ROOM_COLS - 2);
+        expect(at.ty).toBe(room.y + 6);
+        // The picture is two tiles wide and drawn centred on the point, so
+        // a clear column either side of it and inside the room's own rows.
+        expect(at.tx - 1).toBeGreaterThan(room.x);
+        expect(at.tx + 1).toBeLessThan(room.x + ROOM_COLS);
+        expect(at.ty).toBeLessThan(room.y + 7);
+        // And nowhere near the barrier, which has the middle of the floor.
+        const stuck = opsRoadblock(6, slot)!;
+        expect(at.tx - stuck.tx).toBeGreaterThan(2);
+        expect(at.ty).toBeGreaterThan(stuck.ty);
+      }
+      expect(opsDeployed(6, 9)).toBeNull();
     });
 
     it("runs the counts to Support's right-hand corner", () => {

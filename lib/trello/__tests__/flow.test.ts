@@ -4,10 +4,12 @@ import {
   DEFAULT_FLOW_LANES,
   FLOW_COLOURS,
   NO_LANE,
+  countDeployed,
   countRoadblocks,
   flowBars,
   flowFigure,
   flowRows,
+  isDeployed,
   isRoadblock,
   laneId,
   laneShort,
@@ -170,30 +172,30 @@ describe("the rows on the plate", () => {
   });
 });
 
+/** A board whose cards carry labels, and whose lists may be named anything. */
+function labelled(lists: Record<string, string[][]>): BoardView {
+  return {
+    id: "b1",
+    name: "Sandbox ERP",
+    url: "https://trello.com/b/b1",
+    columns: Object.entries(lists).map(([name, cards], i) => ({
+      id: `l${i}`,
+      name,
+      cards: cards.map((labels, c) => ({
+        id: `c${i}-${c}`,
+        labels: labels.map((label) => ({ name: label, colour: "#f87168" })),
+      })),
+    })),
+    cardCount: Object.values(lists).reduce((a, b) => a + b.length, 0),
+  } as unknown as BoardView;
+}
+
 /**
  * Work that has stopped, which is the one thing the five bars cannot say:
  * a stuck card is still standing in a stage, so a board in trouble and a
  * board getting on with it draw the same picture.
  */
 describe("counting a board's roadblocks", () => {
-  /** A board whose cards carry labels, and whose lists may be named anything. */
-  function labelled(lists: Record<string, string[][]>): BoardView {
-    return {
-      id: "b1",
-      name: "Sandbox ERP",
-      url: "https://trello.com/b/b1",
-      columns: Object.entries(lists).map(([name, cards], i) => ({
-        id: `l${i}`,
-        name,
-        cards: cards.map((labels, c) => ({
-          id: `c${i}-${c}`,
-          labels: labels.map((label) => ({ name: label, colour: "#f87168" })),
-        })),
-      })),
-      cardCount: Object.values(lists).reduce((a, b) => a + b.length, 0),
-    } as unknown as BoardView;
-  }
-
   it("reads the word however the board spells it", () => {
     for (const name of ["Roadblock", "Roadblocked", "BLOCKED", "blocker", " Road Block "])
       expect(isRoadblock(name)).toBe(true);
@@ -230,5 +232,98 @@ describe("counting a board's roadblocks", () => {
 
   it("says none where nothing is stuck", () => {
     expect(toFlow(board({ Backlog: 4, Testing: 2 }), LANES).blocked).toBe(0);
+  });
+});
+
+/**
+ * Work that has gone out, which is the other thing the five bars cannot
+ * say: a card that shipped is not standing in any stage, so a board that
+ * sent nine things out this month and one that sent none draw the same
+ * five bars.
+ */
+describe("counting what a board has deployed", () => {
+  it("reads the word however the board spells it", () => {
+    // Sandbox ERP's own three boards spell it two ways between them, which
+    // is the whole argument for folding the word rather than naming it.
+    for (const name of [
+      "Deployed",
+      "Deploy",
+      "DEPLOYMENT",
+      "released",
+      "Shipped",
+      " De-ployed ",
+      "Production",
+      "Live",
+    ])
+      expect(isDeployed(name)).toBe(true);
+    // Done is the stage before this one and the wall counts it; "Ship" alone
+    // is as often the queue of things to send as the record of what was sent.
+    for (const name of ["Done", "Ship", "Ready to Deploy", "Undeployed", ""])
+      expect(isDeployed(name)).toBe(false);
+  });
+
+  it("counts a card carrying the label, wherever it is standing", () => {
+    const view = labelled({
+      Testing: [["Deployed"], [], ["bug"]],
+      "In Review": [["deployed"], []],
+    });
+    expect(countDeployed(view)).toBe(2);
+  });
+
+  it("counts a card parked in a list of that name", () => {
+    expect(countDeployed(labelled({ Backlog: [[], []], Deployed: [[], [], []] }))).toBe(3);
+  });
+
+  /** The count is of cards, not of the ways the board found to say so. */
+  it("counts a card once when it is both", () => {
+    expect(countDeployed(labelled({ Released: [["Shipped"], []] }))).toBe(2);
+  });
+
+  /**
+   * The guard that makes the wider net safe: the building has already said
+   * which of its lists are stages by declaring them, so one it counts on
+   * the wall is a stage whatever it is called. Otherwise a board whose
+   * Production list is where work is *made* would report its whole working
+   * middle as despatched.
+   */
+  it("never counts a list the wall itself counts", () => {
+    const view = labelled({ Backlog: [[]], Production: [[], [], []] });
+    expect(countDeployed(view, ["Backlog", "Production"])).toBe(0);
+    expect(countDeployed(view, ["Backlog"])).toBe(3);
+    // A label is somebody saying so about that card, wherever it stands.
+    const flagged = labelled({ Production: [["Deployed"], []] });
+    expect(countDeployed(flagged, ["Production"])).toBe(1);
+  });
+
+  it("counts them off the whole board, and out of what the bars share", () => {
+    const view = labelled({
+      Backlog: [[]],
+      Deployed: [[], [], []],
+    });
+    const flow = toFlow(view, ["Backlog"]);
+    expect(flow.deployed).toBe(3);
+    // Not a stage, so not part of what each bar is a share of.
+    expect(flow.total).toBe(1);
+  });
+
+  /** A Done bay is the wall's; it is the stage before a despatch. */
+  it("leaves a counted Done lane where it is", () => {
+    const flow = toFlow(board({ Backlog: 2, Done: 5 }), ["Backlog", "Done"]);
+    expect(flow.deployed).toBe(0);
+    expect(flow.total).toBe(7);
+  });
+
+  /** Sandbox ERP's own two shapes, which is what this was written against. */
+  it("reads both of the building's own boards", () => {
+    const hammer = toFlow(board({ Backlog: 4, Done: 0, Deployed: 9 }), ["Backlog", "Done"]);
+    expect(hammer.deployed).toBe(9);
+    const main = toFlow(board({ Backlog: 10, Testing: 1, Production: 57 }), ["Backlog", "Testing"]);
+    expect(main.deployed).toBe(57);
+    // Neither is part of what the bars are a share of.
+    expect([hammer.total, main.total]).toEqual([4, 11]);
+  });
+
+  it("says none where nothing has gone out", () => {
+    expect(toFlow(board({ Backlog: 4, Testing: 2 }), LANES).deployed).toBe(0);
   });
 });
