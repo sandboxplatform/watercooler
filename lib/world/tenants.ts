@@ -210,7 +210,7 @@ export const TENANTS: readonly Tenant[] = [
     // to Testing.
     boards: [
       {
-        board: "Sandbox Main App",
+        board: "Sandbox ERP",
         lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"],
       },
       { board: "Hammer Time", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Done"] },

@@ -354,7 +354,7 @@ describe("the Operations floor", () => {
    */
   it("gives every named board a room, and an unnamed building one", () => {
     expect(projectBoards(erp).map((board) => board.board)).toEqual([
-      "Sandbox Main App",
+      "Sandbox ERP",
       "Hammer Time",
       "Reports App",
     ]);
