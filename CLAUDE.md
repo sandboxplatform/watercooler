@@ -1765,9 +1765,20 @@ empty court until somebody touched it.
 ### The eggs
 
 Startle Michael and three clucks in a hundred — `EGG_CHANCE` — he leaves
-an egg in the grass where he was standing before he bolts. Anybody out on the
-map can walk up to it and press E, and it goes in their basket, which hangs
-on their profile beside their badges and stays there.
+an egg in the grass **where the bolt ends**, not where it began. Anybody out
+on the map can walk up to it and press E, and it goes in their basket, which
+hangs on their profile beside their badges and stays there.
+
+**Whether is settled at the cluck and where at the end of the run.** The roll
+belongs to the moment of the fright, which is where the seeded randomness is;
+the spot belongs to where it left him. Dropped as he turned to run, the egg
+was at the feet of whoever startled him — they had only to stand still and
+stoop, and the chase the whole fright exists for never happened. Laid where
+he finally stops, it is a field away and going to get it is the point.
+`laying` on the resident's state is the half-second of bookkeeping that
+costs, and it is **one egg to a run**: a fright that is already carrying one
+does not roll again, so running him down over and over is worth another
+cluck and not another egg.
 
 **Odds, not every thirty-third cluck**, and the two are nothing alike to
 play: the draw is fresh on every fright and nothing anywhere counts them,
@@ -1801,7 +1812,7 @@ hen's egg is 5450 rather than a round number. A rarity somebody crossed
 the park for is worth being exact about; the one they were going to find
 anyway is not.
 
-So a rainbow is one cluck in ten thousand, which is the world's rarity
+So a rainbow is three clucks in ten thousand, which is the world's rarity
 rather than anybody's goal — and The Whole Clutch, the badge for one of
 every kind, is the long one in the catalogue on purpose. Both numbers are
 meant to be read as "there may be one of these in this world", not as
@@ -1820,9 +1831,11 @@ Five decisions in it:
 - **Whether is the simulation's and what kind is the field's.** The chicken
   does not choose what he lays. `ResidentSimulation` holds the fright and
   the seeded randomness the tests drive, so it rolls the chance and calls
-  `laid` on its host; the tier is rolled on the other side of that call,
-  where the ladder is. Both halves take a roll rather than a random
-  function, so a cluck can be replayed.
+  `laid` on its host **when the fright wears off**; the tier is rolled on
+  the other side of that call, where the ladder is. Both halves take a roll
+  rather than a random function, so a cluck can be replayed. The credit
+  survives the run with it, so somebody who walks away between the cluck
+  and the laying still gets the badge — only a disconnect loses it.
 - **It is a mode, not a chicken.** `lays: true` on a resident
   (`lib/world/residents.ts`), beside `wanders`. Only ever alongside a
   `greeting`, since the egg comes of the fright and the fright comes of the
@@ -2798,25 +2811,38 @@ their own account, and a greeting is an answer to somebody walking up.
 
 It is the server's, like every other thing a resident does, so the bubble is
 over his head on everyone's screen and not only on the screen of whoever
-walked up. Three rules keep one word from becoming a stuck horn, all in
+walked up. Four rules keep one word from becoming a stuck horn, all in
 `lib/server/residents.ts`:
 
-| Rule             | What it does                                                                                    |
-| ---------------- | ----------------------------------------------------------------------------------------------- |
-| Edge-triggered   | Once for an arrival, not once a tick for as long as somebody stands there                       |
-| `GREET_CLEAR_PX` | Wider than `GREET_PX`, so somebody hovering on the boundary does not cross it twice a second    |
-| `GREET_QUIET_MS` | A floor under the gap between two of them, so a queue of arrivals is one cluck rather than five |
+| Rule              | What it does                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| Edge-triggered    | Once for an arrival, not once a tick for as long as somebody stands there                       |
+| `GREET_CLEAR_PX`  | Wider than `GREET_PX`, so somebody hovering on the boundary does not cross it twice a second    |
+| `GREET_QUIET_MS`  | A floor under the gap between two of them, so a queue of arrivals is one cluck rather than five |
+| `CAUGHT_QUIET_MS` | The floor when the second is a catch — a second, because a catch is not an arrival              |
 
-**A fright that has run its course is a fresh arrival.** Edge-triggered is
-the right rule for somebody leaning on a counter and the wrong one for
+**Being caught is not the same as being walked up to, and that is the
+fourth rule.** Somebody inside `GREET_PX` of a chicken who is _already_
+running has run him down: they never left the radius for the edge to fire
+on again, so nothing above can express it. It used to be that catching him
+counted only if you happened to still be within arm's length on the exact
+tick the fright ran out — and at half again a sprint that is a stride he
+does not often lose, so a pursuer who cut a corner, got on top of him at
+three seconds and was a step behind at five got nothing for it and nothing
+on screen to say why. A catch is now a fresh fright of its own, held to
+`CAUGHT_QUIET_MS` rather than to the length of a run: a second, because the
+queue of arrivals the longer floor exists for cannot reach him at all.
+
+**And a fright that has run its course is a fresh arrival.** Edge-triggered
+is the right rule for somebody leaning on a counter and the wrong one for
 somebody who chased the chicken and kept up: they never left
 `GREET_CLEAR_PX`, so `greeted` stayed set, and what they got for catching
 him was a bird standing there in silence until they walked away and came
-back. `greet` clears the flag the tick the fright expires, so whoever is
-still over him is clucked at again — which is the whole of Catch the
-Chicken. `GREET_QUIET_MS` is therefore **exactly `SPOOK_MS`**, not the
-eight seconds it was: a quiet period outlasting the fright by three would
-put the re-cluck back where it started.
+back. `settle` clears the flag the tick the fright expires — and lays the
+egg the run won, which is the other reason the end of a run is a moment
+rather than a clock running out. `GREET_QUIET_MS` is therefore **exactly
+`SPOOK_MS`**, not the eight seconds it was: a quiet period outlasting the
+fright by three would put the re-cluck back where it started.
 
 **And then he bolts, away from whoever startled him.** A cluck is a fright,
 so saying it sets `spookedUntil` five seconds ahead (`SPOOK_MS`) and off he

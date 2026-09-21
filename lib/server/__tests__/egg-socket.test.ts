@@ -16,8 +16,9 @@ import type { EggsBroadcast } from "../../presence-types";
  * park with no eggs in it looks like.
  *
  * **What is deliberately not driven here is the laying.** An egg comes of
- * Michael being startled, one cluck in a hundred, with eight seconds of quiet
- * between clucks — so waiting for one is minutes rather than milliseconds,
+ * Michael being startled, three clucks in a hundred, with a second of quiet
+ * between clucks at best and a whole fright's worth of running before it is
+ * dropped — so waiting for one is minutes rather than milliseconds,
  * and the chance is the simulation's own randomness. The two halves of it
  * are covered where they can be made to happen on demand: the roll and the
  * spot in `residents.test.ts`, which drives the simulation with a random

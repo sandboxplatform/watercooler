@@ -125,6 +125,25 @@ export const SPOOK_MS = 5000;
  */
 export const GREET_QUIET_MS = SPOOK_MS;
 /**
+ * And the floor under two of them when the second is a *catch*.
+ *
+ * Being inside arm's length of a chicken who is already running is not
+ * somebody arriving, it is somebody who has run him down — which is the
+ * whole point of a chase, and the one thing the rule above had no way of
+ * saying. It held every cluck to the length of a fright, so catching him
+ * counted only if you were still within `GREET_PX` on the exact tick the
+ * fright ran out: a pursuer who cut a corner, got on top of him at three
+ * seconds and was a stride behind again at five got nothing for it, and
+ * nothing on screen to say why.
+ *
+ * A second, because a catch is a moment and the queue of arrivals the
+ * longer floor exists for cannot reach him at all — he is at half again a
+ * sprint, so anybody inside `GREET_PX` while he is bolting has earned the
+ * cluck. Short enough to read as an answer to being caught, long enough
+ * that a chicken pinned in a corner clucks rather than rattles.
+ */
+export const CAUGHT_QUIET_MS = 1000;
+/**
  * How fast a bolt is: half again as fast as a person can sprint.
  *
  * Measured against the sprint rather than written down, because the only
@@ -193,8 +212,15 @@ export interface ResidentHost {
    * becomes of it, because the ladder and the field of eggs are its. The
    * chicken does not choose what he lays.
    *
+   * `at` is where the run ended, not where it began: the roll is taken at
+   * the cluck and the egg is dropped when the fright wears off, a field
+   * away from whoever startled him. Dropped where he was standing it was
+   * at their feet, and an egg you stoop for without moving is not worth
+   * chasing a chicken over.
+   *
    * `startledBy` is the connection that walked up, or null — for somebody
-   * who has stepped away inside the tick, and for a fright another
+   * who has stepped away inside the tick, for somebody who has gone
+   * altogether before the run ends, and for a fright another
    * resident caused, since a local holds nothing. Whoever caused it gets
    * the credit for it, which is a badge they cannot claim for themselves.
    *
@@ -263,8 +289,32 @@ interface State {
    * that a person could steer by walking round him. Running from the spot
    * he was startled at is what a startled animal does, and it comes out as
    * a line away rather than a circle.
+   *
+   * A catch reads it afresh, which is not the same thing: that is a second
+   * fright at a second spot, not a dash re-aimed at somebody standing
+   * still. Whoever has run him down is on top of him, and running from
+   * where they were a moment ago would run him into them.
    */
   spookedFrom: Point | null;
+  /**
+   * An egg this fright has won but not yet dropped, and who is to be
+   * credited with it. Null when the roll missed, or when there is no
+   * fright on.
+   *
+   * **Whether is settled at the cluck and where is settled at the end of
+   * the run**, which is the whole of this field. The roll belongs to the
+   * moment of the fright, where the seeded randomness is; the spot belongs
+   * to where it left him, because an egg dropped as he turns to run is an
+   * egg at the feet of whoever startled him — they have only to stand
+   * still and stoop, and the chase the fright exists for never happens.
+   * Laid where he finally stops, it is a field away, and going to get it
+   * is the point.
+   *
+   * One to a fright, however many times he is caught in it: a second catch
+   * that found one already pending would be a second egg out of the same
+   * run, and a chicken cornered against a wall would be a basket.
+   */
+  laying: { by: string | null } | null;
   /**
    * Who is standing beside them right now, by connection.
    *
@@ -319,6 +369,7 @@ export class ResidentSimulation {
         greetedAt: 0,
         spookedUntil: 0,
         spookedFrom: null,
+        laying: null,
         beside: new Set<string>(),
       };
       this.states.set(resident.id, state);
@@ -358,6 +409,11 @@ export class ResidentSimulation {
   /** One step of everyone's day. */
   tick(now: number) {
     for (const state of this.states.values()) {
+      // Before anything else this tick, because a fright that has run its
+      // course is a fact about where they are standing *now* — the end of
+      // the run, which is where the egg goes and where whoever is still
+      // over them counts as having arrived again.
+      this.settle(state, now);
       if (state.leavingFor) this.goIfAtTheDoor(state, now);
       else if (now >= state.until) this.moveOn(state, now);
       this.walk(state, now);
@@ -443,6 +499,11 @@ export class ResidentSimulation {
     state.greeted = false;
     state.spookedUntil = 0;
     state.spookedFrom = null;
+    // A fright abandoned by going somewhere else drops what it had won: an
+    // egg is laid on the map it was won on, and the run it belonged to is
+    // over. Nobody who lays has anywhere else to be today, so this is a
+    // rule rather than a case.
+    state.laying = null;
     state.pauseUntil = now + ARRIVAL_PAUSE_MS;
     const doorway = doorwayFor(state.resident, haunt);
     const area = wanderArea(haunt, state.resident);
@@ -519,24 +580,25 @@ export class ResidentSimulation {
   private greet(state: State, now: number) {
     const greeting = state.resident.greeting;
     if (!greeting || !state.room) return;
-    // **A fright that has run its course is a fresh arrival**, for anybody
-    // still standing over him when it does.
-    //
-    // Edge-triggered is the right rule for somebody leaning on a counter
-    // and the wrong one for somebody who chased the chicken and kept up:
-    // they never left the wider radius, so `greeted` stayed set, and what
-    // they got for catching him was a chicken who stood there saying
-    // nothing until they walked away and came back. Clearing it here is
-    // what makes catching him the point of catching him. Nobody near is
-    // the ordinary case and costs nothing — he has bolted a long way by
-    // now, and the radius check below would have cleared it anyway.
-    if (state.spookedUntil && now >= state.spookedUntil) {
-      state.spookedUntil = 0;
-      state.spookedFrom = null;
-      state.greeted = false;
-    }
     const { hub } = this.host.roomFor(state.room);
     const me = presenceIdFor(state.resident);
+    // **Caught.** Somebody inside arm's length of a chicken who is already
+    // running has run him down, which is a second fright rather than the
+    // same one — and the one thing the edge below cannot express, since
+    // they never left the radius for it to trigger on again.
+    //
+    // It used to be that a catch counted only if the pursuer happened to
+    // still be within `GREET_PX` on the exact tick the fright ran out, and
+    // at half again a sprint that is a stride he does not often lose. So
+    // the reward for cutting a corner and getting on top of him was a bird
+    // who said nothing, which reads as the chase being broken rather than
+    // as a rule about frights.
+    if (this.spooked(state, now)) {
+      if (now - state.greetedAt < CAUGHT_QUIET_MS) return;
+      if (!hub.someoneNear({ x: state.x, y: state.y }, GREET_PX, me)) return;
+      this.cluck(state, now, hub, GREET_PX, me);
+      return;
+    }
     const reach = state.greeted ? GREET_CLEAR_PX : GREET_PX;
     if (!hub.someoneNear({ x: state.x, y: state.y }, reach, me)) {
       state.greeted = false;
@@ -545,19 +607,59 @@ export class ResidentSimulation {
     if (state.greeted) return;
     state.greeted = true;
     if (state.greetedAt && now - state.greetedAt < GREET_QUIET_MS) return;
+    this.cluck(state, now, hub, reach, me);
+  }
+
+  /**
+   * The cluck itself: the word, the fright, and the egg it may win.
+   *
+   * Both ways of setting him off end here — somebody walking up to him,
+   * and somebody catching him in the middle of a run — because the two
+   * differ in what makes them happen and in nothing that happens after.
+   */
+  private cluck(state: State, now: number, hub: PresenceHub, reach: number, me: string) {
+    state.greeted = true;
     state.greetedAt = now;
-    this.say(state, greeting);
-    // Asked for a second time, and only here: the tick check above wants a
-    // yes or no and this wants somewhere to run away from. Nobody by the
-    // time it is asked is possible — somebody can walk off inside a tick —
-    // and a bolt in no particular direction is the right answer to that.
+    this.say(state, state.resident.greeting!);
+    // Asked for a second time, and only here: the tick check wants a yes
+    // or no and this wants somewhere to run away from. Nobody by the time
+    // it is asked is possible — somebody can walk off inside a tick — and
+    // a bolt in no particular direction is the right answer to that.
     const startled = hub.nearestNeighbour({ x: state.x, y: state.y }, reach, me);
     this.spook(state, now, startled);
     // The fright is the same whoever caused it; the credit is not. An egg
     // is a thing somebody is given, and a resident holds nothing — so a
     // chicken startled by Doc still lays, and the egg lies in the grass
     // for whoever comes along.
-    this.layEgg(state, startled && !startled.resident ? startled.id : null);
+    this.winEgg(state, startled && !startled.resident ? startled.id : null);
+  }
+
+  /**
+   * The fright is over: he stops running, and whatever it won is dropped
+   * where it left him.
+   *
+   * This is also a fresh arrival for anybody still standing over him.
+   * Edge-triggered is the right rule for somebody leaning on a counter and
+   * the wrong one for somebody who chased the chicken down: they never
+   * left the wider radius, so `greeted` stayed set, and what they got for
+   * keeping up was a bird who stood there in silence until they walked
+   * away and came back.
+   */
+  private settle(state: State, now: number) {
+    if (!state.spookedUntil || now < state.spookedUntil) return;
+    state.spookedUntil = 0;
+    state.spookedFrom = null;
+    state.greeted = false;
+    const won = state.laying;
+    state.laying = null;
+    if (!won || !state.room) return;
+    this.host.laid?.call(
+      this.host,
+      state.resident.id,
+      state.room,
+      { x: state.x, y: state.y },
+      won.by,
+    );
   }
 
   /**
@@ -574,19 +676,22 @@ export class ResidentSimulation {
    * that could not be replayed. What kind of egg it is stays the host's —
    * see `laid`.
    *
-   * Where he was standing, not where he is: it is dropped as he turns to
-   * run, and by the time anybody walks over he is a field away.
+   * Won here and laid by `settle`, at the end of the run rather than at
+   * the start of it: an egg dropped as he turns to run is an egg at the
+   * feet of whoever startled him, and stooping where you stand is not a
+   * chase. One to a fright, so catching him again is worth another cluck
+   * and not another egg.
    */
-  private layEgg(state: State, startledBy: string | null) {
+  private winEgg(state: State, startledBy: string | null) {
     // Nobody to tell, or nothing to tell them: asked before the roll
     // rather than after, so a simulation with no host for this draws no
     // random number at all. `laid` is optional and most of the tests do
     // without it — a draw taken here would shift every roll after it and
     // change where he runs to, in tests that are about the running.
-    const laid = this.host.laid;
-    if (!laid || !state.resident.lays || !state.room) return;
+    if (state.laying) return;
+    if (!this.host.laid || !state.resident.lays || !state.room) return;
     if (this.random() >= EGG_CHANCE) return;
-    laid.call(this.host, state.resident.id, state.room, { x: state.x, y: state.y }, startledBy);
+    state.laying = { by: startledBy };
   }
 
   /**

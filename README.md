@@ -267,10 +267,16 @@ centre spot.
 ### Michael's eggs
 
 Michael is a chicken in a necktie who wanders the world map, and if you walk
-up to him he clucks and bolts. Rarely — one cluck in a hundred — the
-fright leaves an **egg** in the grass where he was standing. It is a
-chance rather than a countdown: there is nothing to work through, so an
-egg is something you come across rather than something you earn.
+up to him he clucks and bolts. Rarely — three clucks in a hundred — the
+fright leaves an **egg** in the grass, dropped where the bolt ends rather
+than where it began, so getting it means following him. It is a chance
+rather than a countdown: there is nothing to work through, so an egg is
+something you come across rather than something you earn.
+
+He runs at half again a sprint, so you will not simply out-run him — but
+**catch him mid-bolt and he clucks again**, which is a fresh fright and a
+fresh chance, and only one egg comes out of any one run however many times
+you run him down. Let him go and he drops it where he stops.
 
 It stays where it fell for ten minutes, and it belongs to whoever gets there
 first: walk up and press E. There are six kinds, and which one you have got
@@ -281,11 +287,11 @@ is luck rather than skill:
 | Hen's Egg    | one in two   |
 | Speckled Egg | one in four  |
 | Copper Egg   | one in eight |
-| Jade Egg     | one in 17    |
-| Gilded Egg   | one in 22    |
-| Rainbow Egg  | one in 50    |
+| Jade Egg     | one in 20    |
+| Gilded Egg   | one in 50    |
+| Rainbow Egg  | one in 100   |
 
-A rainbow is one cluck in five thousand, so there may only ever be one in a
+A rainbow is three clucks in ten thousand, so there may only ever be one in a
 world, if that. Anything better than a speckled one is called out over the grass
 for everyone on the map to see.
 

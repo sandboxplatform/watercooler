@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PresenceHub } from "../presence-hub";
 import {
+  CAUGHT_QUIET_MS,
   GREET_CLEAR_PX,
   GREET_PX,
   GREET_QUIET_MS,
@@ -603,10 +604,10 @@ describe("what a resident says when you walk up", () => {
     const heard = listening();
     const { sim, hub } = outside(() => clock);
     person(hub, whereIsHe(sim));
-    // For the length of the fright, which is the window the rule below
-    // says nothing about: a chicken in the middle of running away does not
-    // stop to cluck again however close anybody is.
-    while (clock < SPOOK_MS - 240) {
+    // Inside the floor under a catch, which is the only thing that would
+    // honestly set him off again — so what is being ruled out here is a
+    // cluck a tick, and nothing else.
+    while (clock < CAUGHT_QUIET_MS - 240) {
       clock += 120;
       sim.tick(clock);
       // Follow him about, so it is the same visit throughout rather than
@@ -622,21 +623,56 @@ describe("what a resident says when you walk up", () => {
    *
    * Edge-triggered is right for somebody leaning on a counter and wrong for
    * somebody who ran the chicken down: they never left the wider radius, so
-   * the flag stayed set, and the reward for keeping up was a bird who stood
-   * there in silence until they walked away and came back. The fright
-   * running out is a fresh arrival for whoever is still standing there.
+   * the flag stayed set and the reward for keeping up was silence. Being
+   * inside arm's length of a chicken who is already running is not an
+   * arrival, it is a catch, and a catch is a fresh fright.
    */
-  it("clucks again the moment the fright wears off, at whoever kept up", () => {
+  it("clucks again at whoever runs him down, and no faster than that", () => {
     let clock = 0;
     const heard = listening();
-    const { sim, hub } = outside(() => clock);
+    const { sim, hub } = outside(() => clock, rolls(5));
     person(hub, whereIsHe(sim));
-    while (clock < SPOOK_MS * 2) {
+    const at: number[] = [];
+    while (clock < CAUGHT_QUIET_MS * 5) {
       clock += 120;
+      const before = clucks(heard);
       sim.tick(clock);
-      // Keep pace with him, never once leaving `GREET_CLEAR_PX`.
+      if (clucks(heard) > before) at.push(clock);
+      // Keep pace with him, which at half again a sprint is the whole of
+      // the chase and the thing the fright used to have no answer to.
       hub.place("visitor", { ...whereIsHe(sim), facing: "down" });
     }
+    expect(at.length).toBeGreaterThan(1);
+    for (let i = 1; i < at.length; i++) {
+      expect(at[i] - at[i - 1]).toBeGreaterThanOrEqual(CAUGHT_QUIET_MS);
+    }
+    setRoomBroadcast(null);
+  });
+
+  /**
+   * And the end of a fright is an arrival in its own right, for somebody
+   * who never once caught him: what makes a greeting edge-triggered is
+   * cleared when he stops running, or whoever is standing over him as he
+   * does would have to walk away and come back to get a word out of him.
+   */
+  it("clucks again when the fright wears off under somebody's feet", () => {
+    let clock = 0;
+    const heard = listening();
+    const { sim, hub } = outside(() => clock, rolls(5));
+    person(hub, whereIsHe(sim));
+    clock += 120;
+    sim.tick(clock);
+    expect(clucks(heard)).toBe(1);
+    // Nobody follows, so he bolts a field away and is caught by nothing.
+    const over = clock + SPOOK_MS;
+    while (clock < over) {
+      clock += 120;
+      sim.tick(clock);
+    }
+    expect(clucks(heard)).toBe(1);
+    hub.place("visitor", { ...whereIsHe(sim), facing: "down" });
+    clock += 120;
+    sim.tick(clock);
     expect(clucks(heard)).toBe(2);
     setRoomBroadcast(null);
   });
@@ -677,7 +713,10 @@ describe("what a resident says when you walk up", () => {
   it("is set off by the other residents too", () => {
     let clock = 0;
     const heard = listening();
-    const { sim, hub } = outside(() => clock);
+    // A varied roll, so the bolt actually carries him out of reach of the
+    // one standing there: a constant one sends every dash the same way and
+    // he can come back over them, which is a catch and another cluck.
+    const { sim, hub } = outside(() => clock, rolls(5));
     const him = whereIsHe(sim);
     hub.join("resident:someone-else", {
       name: "Bud",
@@ -871,17 +910,20 @@ describe("what a resident says when you walk up", () => {
     listening();
     const { sim, hub } = outside(() => clock);
     person(hub, whereIsHe(sim));
-    while (clock < SPOOK_MS) {
+    clock += 120;
+    sim.tick(clock);
+    // And whoever gave him the fright goes away, there and then: catching
+    // him again is a fresh five seconds, which is the rule above working
+    // rather than this one failing.
+    hub.leave("visitor");
+    const over = clock + SPOOK_MS;
+    while (clock < over) {
       clock += 120;
       sim.tick(clock);
     }
     // The bolt's own pace, for comparison: it is quicker than the walk that
     // follows it, which is the whole of `spooked` being over.
     expect(SPOOK_SPEED_PX_S).toBeGreaterThan(WANDER_SPEED_PX_S);
-    // And whoever gave him the fright goes away, or the quiet period runs
-    // out while he is being watched and he is off again — which is the rule
-    // above working rather than this one failing.
-    hub.leave("visitor");
     let last = whereIsHe(sim);
     let furthest = 0;
     for (let i = 0; i < 200; i++) {
@@ -1096,7 +1138,7 @@ describe("the egg a fright leaves behind", () => {
     hub.join(id, { name: "Coop", spriteKey: "character_boss", x: at.x, y: at.y, facing: "down" });
   }
 
-  it("leaves one where he was standing when the roll pays out", () => {
+  it("leaves one where the run ended when the roll pays out", () => {
     let clock = 0;
     setRoomBroadcast(() => {});
     const { sim, hub, laid } = outside(
@@ -1107,13 +1149,24 @@ describe("the egg a fright leaves behind", () => {
     walkUp(hub, start);
     clock += 120;
     sim.tick(clock);
+    // Won at the cluck and dropped at the end of the run, so there is
+    // nothing in the grass while he is still running.
+    expect(laid).toEqual([]);
+    hub.leave("visitor");
+    let where = whereIsHe(sim);
+    while (laid.length === 0 && clock < SPOOK_MS * 2) {
+      where = whereIsHe(sim);
+      clock += 120;
+      sim.tick(clock);
+    }
     expect(laid).toHaveLength(1);
     expect(laid[0].id).toBe(michael.id);
     expect(laid[0].room).toBe(WORLD_ROOM_SLUG);
-    // Where he *was*, not where the bolt has taken him: the egg is dropped
-    // as he turns to run, and by the time anybody walks over he is a field
-    // away.
-    expect(laid[0].at).toEqual({ x: start.x, y: start.y });
+    // Where the bolt left him, not at the feet of whoever startled him: an
+    // egg you stoop for without moving is not worth chasing a chicken over,
+    // and the chase is the whole of what the fright is for.
+    expect(laid[0].at).toEqual({ x: where.x, y: where.y });
+    expect(Math.hypot(where.x - start.x, where.y - start.y)).toBeGreaterThan(GREET_PX);
     setRoomBroadcast(null);
   });
 
@@ -1142,16 +1195,26 @@ describe("the egg a fright leaves behind", () => {
     walkUp(hub, whereIsHe(sim), "somebody");
     clock += 120;
     sim.tick(clock);
+    hub.leave("somebody");
+    // Whoever the fright was of is remembered until it is over, since that
+    // is when the egg is dropped and they are long gone by then.
+    while (laid.length === 0 && clock < SPOOK_MS * 2) {
+      clock += 120;
+      sim.tick(clock);
+    }
     expect(laid[0].by).toBe("somebody");
     setRoomBroadcast(null);
   });
 
   /**
-   * One per cluck, and a cluck is one per arrival — so standing there does
-   * not fill a basket. The quiet period is the other half of it and is the
-   * reason a queue of people is one egg rather than five.
+   * **One to a run, however many times he is caught in it.**
+   *
+   * The roll is taken at every cluck, but a fright already carrying an egg
+   * does not take another — so running him down again and again is worth
+   * another cluck and not another egg, and a chicken cornered against a
+   * wall is not a basket. Letting him go is what drops it.
    */
-  it("leaves one for the arrival, not one a tick for as long as they stay", () => {
+  it("leaves one for the whole run, however often he is caught in it", () => {
     let clock = 0;
     setRoomBroadcast(() => {});
     const { sim, hub, laid } = outside(
@@ -1159,13 +1222,19 @@ describe("the egg a fright leaves behind", () => {
       () => EGG_CHANCE / 2,
     );
     walkUp(hub, whereIsHe(sim));
-    // For the length of the fright: past it, standing over him is a fresh
-    // arrival and worth another cluck, which is a different rule and has a
-    // test of its own.
-    while (clock < SPOOK_MS - 240) {
+    // Three frights' worth of keeping up with him, which is a catch and
+    // another cluck about every second.
+    while (clock < SPOOK_MS * 3) {
       clock += 120;
       sim.tick(clock);
       hub.place("visitor", { ...whereIsHe(sim), facing: "down" });
+    }
+    expect(laid).toEqual([]);
+    hub.leave("visitor");
+    const until = clock + SPOOK_MS + 240;
+    while (clock < until) {
+      clock += 120;
+      sim.tick(clock);
     }
     expect(laid).toHaveLength(1);
     setRoomBroadcast(null);
