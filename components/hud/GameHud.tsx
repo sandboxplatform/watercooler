@@ -23,6 +23,7 @@ import Pinball from "./Pinball";
 import ProjectBoard from "./ProjectBoard";
 import ProjectFlow from "./ProjectFlow";
 import HelpDesk from "./HelpDesk";
+import DocChat from "./DocChat";
 import SupportPulse from "./SupportPulse";
 import Boardroom from "./Boardroom";
 import Arcade from "./Arcade";
@@ -110,6 +111,7 @@ export default function GameHud({
       <ProjectBoard />
       <ProjectFlow />
       <HelpDesk />
+      <DocChat />
       <SupportPulse />
       <Boardroom />
       <Arcade />

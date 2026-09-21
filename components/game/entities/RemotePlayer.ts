@@ -114,6 +114,20 @@ export class RemotePlayer {
    * reason `Player.board` stops it: they walked in, so the cycle would
    * otherwise be resumed mid-stride.
    */
+  /**
+   * Where this character is **drawn**, which is deliberately not where the
+   * server last said they are: the sprite eases toward that, so the two are
+   * a fraction of a second apart whenever somebody is walking. Anything
+   * hung over their head has to use this one, or it leads them across the
+   * floor by the width of the lag.
+   *
+   * Null while they are out of sight, which is the same answer as not
+   * being here: there is nothing to hang anything on.
+   */
+  drawnAt(): { x: number; y: number } | null {
+    return this.hidden ? null : { x: this.sprite.x, y: this.sprite.y };
+  }
+
   board(inside: boolean) {
     if (inside === this.hidden) return;
     this.hidden = inside;

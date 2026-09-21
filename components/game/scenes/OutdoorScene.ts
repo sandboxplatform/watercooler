@@ -4,6 +4,7 @@ import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
 import { CameraController } from "../systems/CameraController";
 import { attachPresence, type ScenePresence } from "../systems/scene-presence";
+import { TalkTo } from "../systems/TalkTo";
 import { dialogOpen } from "@/lib/gamepad/dialogs";
 import { Pathfinder } from "../utils/Pathfinder";
 import { ensureSheet } from "../utils/sheets";
@@ -125,15 +126,22 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
   protected arrival = new ArrivalWalk();
   /** The other people out here, from the room socket. */
   protected presence: ScenePresence | null = null;
+  /**
+   * The people out here worth walking up to — Doc, when he is off duty and
+   * taking the air. A fixture anchored to somebody who moves, so it reads
+   * the roster rather than the map; see `systems/TalkTo`.
+   */
+  private talk: TalkTo | null = null;
   protected cameraController!: CameraController;
   /** Whatever this place runs each frame of its own; see `OutdoorExtra`. */
   private extras: readonly OutdoorExtra[] = [];
   /**
    * E, for walking up to something out here and using it.
    *
-   * Indoors this is the fixture registry's; out of doors there are no
-   * panels to open, so the key is read here and handed to whatever the
-   * place put in `extras`. Null where the browser gives the scene no
+   * Indoors this is the fixture registry's; out of doors it is read here
+   * and handed to whatever the place put in `extras` — and to the one
+   * fixture that follows a person about, since Doc takes the air out here
+   * as readily as he works upstairs. Null where the browser gives the scene no
    * keyboard at all, which is what the guard in `create` is about.
    */
   private eKey: Phaser.Input.Keyboard.Key | null = null;
@@ -243,6 +251,9 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     this.presence = attachPresence(this, place.spawn, {
       ownVoice: (inChat, speaking) => this.player?.setVoice(inChat, speaking),
     });
+    // Built after presence, for the roster it reads every frame.
+    this.talk?.destroy();
+    this.talk = new TalkTo(this, () => this.presence);
     // A new look chosen out here is put on at once, as it is indoors.
     const unsubLook = gameEvents.on("player-sprite-chosen", (spriteKey, spritePath) => {
       ensureSheet(this, spriteKey, spritePath, (ok) => {
@@ -264,6 +275,8 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
       this.extras = [];
       this.presence?.detach();
       this.presence = null;
+      this.talk?.destroy();
+      this.talk = null;
     };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, letGo);
     this.events.once(Phaser.Scenes.Events.DESTROY, letGo);
@@ -349,9 +362,13 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
    * unless something of theirs is within arm's length.
    */
   private runExtras(delta: number, pressed: boolean) {
-    if (this.extras.length === 0) return;
     const at = { x: this.player.sprite.x, y: this.player.sprite.y, facing: this.player.direction };
-    for (const extra of this.extras) extra.update(delta, at, pressed);
+    // Doc first, because he is somebody rather than something: a press
+    // within arm's length of a person is meant for the person. Whatever he
+    // does not take goes on to the ball and the eggs unchanged, which is
+    // the rule the sentence above describes.
+    const took = this.talk?.update(at, pressed) ?? false;
+    for (const extra of this.extras) extra.update(delta, at, pressed && !took);
   }
 
   /** Sort against the props by where the feet are. */
@@ -383,6 +400,19 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
       // Still drawn while the arrival walk has the keys — the ball is on
       // the court whether or not anybody can steer yet — but no press is
       // taken, since the keys are not theirs to press with.
+      this.runExtras(delta, false);
+      return;
+    }
+
+    // A panel opened by walking up to somebody is up: the keys belong to
+    // it and the character stands still underneath, which is what
+    // `fixtures.anyOpen()` does indoors. Deliberately not `dialogOpen()`,
+    // which is every window in the HUD — reading a badge card while
+    // crossing the plaza has never stopped anybody and should not start.
+    if (this.talk?.anyOpen()) {
+      this.player.drive({ vx: 0, vy: 0 });
+      this.sortByFeet();
+      this.reportPosition();
       this.runExtras(delta, false);
       return;
     }

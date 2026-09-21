@@ -32,6 +32,7 @@ import {
   TABLE_INTERACT_DISTANCE,
 } from "./constants";
 import { TILE } from "./map/office";
+import { residentPresenceId } from "./presence-types";
 import { arcadeGame } from "./arcade";
 import { arcadeGameIn } from "./world/tenants";
 
@@ -57,7 +58,8 @@ export type FixtureId =
   | "project-flow"
   | "help-desk"
   | "support-pulse"
-  | "boardroom";
+  | "boardroom"
+  | "doc-chat";
 
 /**
  * An event that carries nothing, which every fixture's close event is.
@@ -99,8 +101,31 @@ export interface FixtureSpec {
    * `Project board 2` is the second room along the corridor — and the
    * group is optional, so the same pattern matches an unnumbered point in
    * a building that hangs a single board.
+   *
+   * Absent for a fixture anchored to a person instead — see `person`.
+   * Exactly one of the two, which `fixtures.test.ts` insists on: a
+   * fixture with neither is a prompt that can never appear, and one with
+   * both is two places at once.
    */
-  match: RegExp;
+  match?: RegExp;
+  /**
+   * Somebody in the room rather than a point on the map, by the presence
+   * id their roster entry carries.
+   *
+   * Everything else here stands still and is read off the tilemap, so
+   * `FixtureManager` finds it once when the room is built. A person walks
+   * about, and where they are is the roster's to say — so these are
+   * `systems/TalkTo`'s rather than the manager's, and they are looked up
+   * fresh every frame.
+   *
+   * They are in this registry all the same, because everything that makes
+   * a fixture a fixture is true of them: one query parameter nobody else
+   * claims, an open event paired with a close, a panel that stops the
+   * character walking about underneath it, and `usePanel` on the other
+   * side of the bus. A second registry for the moving ones would be the
+   * same six hand-written copies this file exists to have replaced.
+   */
+  person?: string;
   /**
    * Whether every match counts or only the first. A lobby hangs several
    * boards and they all open the one shared canvas; there is one cauldron.
@@ -318,6 +343,33 @@ export const FIXTURES: readonly FixtureSpec[] = [
     // numbers, so `systems/SupportPulse` draws the board and keeps it
     // current, and the board letters its own five headings. A static image
     // here would be a second, wrong copy of it underneath.
+  },
+  {
+    /**
+     * Doc, who is hooked up to Mettara — the first fixture that is a
+     * person, and the first that is not in the room's tiles.
+     *
+     * He is at his post in Support most of the time and out on the world
+     * map the rest of it, and the prompt follows him to both: a resident
+     * you can only talk to in one of the two places he goes is one you
+     * would meet and find nothing to do with. `systems/TalkTo` is what
+     * anchors it, in the office and outdoors alike.
+     *
+     * No art and no sign, for a reason the counting boards only half
+     * share: he draws himself, and a sign over a person is a label on
+     * somebody who already has a name tag.
+     */
+    id: "doc-chat",
+    person: residentPresenceId("doc"),
+    opens: "open-doc-chat",
+    closes: "doc-chat-closed",
+    param: "doc",
+    prompt: "Press E to talk to Doc",
+    radius: BOSS_INTERACT_DISTANCE,
+    // Above his head rather than above his feet: the anchor is the middle
+    // of a 96px frame, so his hair is around 20 above it and the bubble he
+    // clucks his line into hangs at 58. This sits in the gap between them.
+    promptLift: 40,
   },
 ];
 

@@ -125,6 +125,19 @@ export interface GameEventMap {
   "open-boardroom": [subject?: string | null];
   /** The boardroom was closed, so the office takes input again. */
   "boardroom-closed": [];
+  /**
+   * Somebody walked up to Doc and pressed E.
+   *
+   * The subject is the conversation's URL, which is how the panel comes up
+   * already pointed somewhere: the scene has asked the server for it
+   * before it would show a prompt at all, so making the panel ask again
+   * would be a second round trip in front of an iframe that could have
+   * started loading. Null where the panel was opened by `?doc=1`, which
+   * names nothing and does its own asking.
+   */
+  "open-doc-chat": [subject?: string | null];
+  /** Doc's conversation was closed, so the world takes input again. */
+  "doc-chat-closed": [];
   /** Somebody walked up to the arcade cabinet and pressed E. */
   "open-arcade": [subject?: string | null];
   /** The arcade was closed, so the office takes input again. */

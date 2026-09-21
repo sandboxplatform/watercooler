@@ -27,7 +27,7 @@
 
 import type { PresenceHub } from "./presence-hub";
 import { currentBroadcast } from "./room-broadcast";
-import { SPRINT_SPEED_PX_S, type Facing } from "../presence-types";
+import { SPRINT_SPEED_PX_S, residentPresenceId, type Facing } from "../presence-types";
 import {
   PERSONAL_SPACE_PX,
   RESIDENTS,
@@ -348,7 +348,15 @@ function firstHaunt(resident: Resident, kind?: PlaceKind): Haunt {
   return haunts.find((h) => h.kind === kind) ?? haunts[0];
 }
 
-export const presenceIdFor = (resident: Resident) => `resident:${resident.id}`;
+/**
+ * How this resident appears on the wire.
+ *
+ * The format itself is in `lib/presence-types`, with the rest of the wire,
+ * because the browser recognises one too: a fixture anchored to a person
+ * finds Doc by this exact string. This is the reading of it that takes a
+ * resident, which is what every call site here already has.
+ */
+export const presenceIdFor = (resident: Resident) => residentPresenceId(resident.id);
 
 export class ResidentSimulation {
   private states = new Map<string, State>();

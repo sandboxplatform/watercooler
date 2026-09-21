@@ -33,6 +33,17 @@ export interface ScenePresence {
    * to say about a person, which is the office announcing an achievement.
    */
   say(id: string, text: string): void;
+  /**
+   * Where somebody is drawn right now, or null if they are not here or are
+   * out of sight.
+   *
+   * For the things anchored to a person rather than to the map — the
+   * prompt over Doc's head, which has to follow him about the floor. It is
+   * the **drawn** position rather than the roster's on purpose: a remote
+   * character eases toward the position the server reported, so anything
+   * hung off the roster runs ahead of the person it is about.
+   */
+  drawnAt(id: string): { x: number; y: number } | null;
   /** Take everyone down and stop listening; call when the scene goes. */
   detach(): void;
 }
@@ -140,6 +151,7 @@ export function attachPresence(
   return {
     update: (deltaMs) => manager.update(deltaMs),
     say: (id, text) => live() && manager.say(id, text),
+    drawnAt: (id) => (live() ? manager.drawnAt(id) : null),
     detach: () => {
       for (const off of offs) off();
       manager.destroyAll();

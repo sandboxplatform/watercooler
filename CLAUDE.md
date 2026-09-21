@@ -2133,6 +2133,98 @@ and it existed to give work out. It is gone with the work, and so is the
 menu that opened when you walked up to a worker: a worker has nothing to be
 asked for, and a prompt that opens an empty menu is worse than no prompt.
 
+### Doc, and the conversation he is hooked up to
+
+Walk up to Doc and press E, and a Mettara conversation opens in a window
+over the room. He is the first thing in this world you interact with that
+is a **person** rather than a board, a machine or a table — and the first
+that is somebody else's site rather than something this app draws.
+
+**He is in the fixture registry like everything else**, and only his anchor
+differs. A `FixtureSpec` says where it is in one of two ways now: `match`,
+a point of interest in the room's tiles, or `person`, the presence id of
+somebody the roster is putting down somewhere new every frame. Exactly one
+of the two, which `fixtures.test.ts` insists on — neither is a prompt that
+can never appear, and both is two places at once.
+
+Everything that makes a fixture a fixture is true of him, which is why a
+second registry for the moving ones would have been the six hand-written
+copies `lib/fixtures.ts` exists to have replaced: one query parameter
+nobody else claims, an open event paired with a close, `usePanel` on the
+far side of the bus, and a panel that stops the character walking about
+underneath it.
+
+| Where                    | Which fixtures                                                       |
+| ------------------------ | -------------------------------------------------------------------- |
+| `systems/FixtureManager` | The ones in the tiles. It reads the map once, when the room is built |
+| `systems/TalkTo`         | The ones that are people. It reads presence, every frame             |
+
+`TalkTo` is a system rather than a branch inside the manager because the
+office is not the only place it has to work: Doc is at his post in Support
+most of the day and out on the world map the rest of it, so `OfficeScene`
+and `OutdoorScene` both run one. A resident you can only talk to at his
+desk is one you would meet on the plaza and find nothing to do with.
+
+Outdoors that meant a rule the map had never needed: a panel opened by
+walking up to somebody holds the keys, the way `fixtures.anyOpen()` does
+in a room. Deliberately **not** `dialogOpen()`, which is every window in
+the HUD — reading a badge card while crossing the plaza has never stopped
+anybody and should not start.
+
+**The prompt hangs on where he is drawn, not on where he is.** A remote
+character eases toward the position the server reported rather than
+snapping to it, so the two are a fraction of a second apart whenever
+anybody is walking — about half a tile for a resident pacing a floor. Hung
+off the roster the label ran ahead of the man it was about and sat over
+whoever happened to be standing there, which is why `ScenePresence.drawnAt`
+exists and answers null for somebody hidden or not here.
+
+**Whose conversation it is is the server's answer, and it is the whole of
+the prompt.** `docConversationFor` (`lib/server/mettara.ts`) hands back a
+URL or null, `/api/mettara` is the one reading of it, and a browser given
+null shows no prompt at all: Doc says his line and that is that.
+
+`MAY_TALK` is who — Coop, Rob and Andrew today — and it is a list rather
+than a name because the question is "is this person on it", so somebody
+joining is an entry rather than a rewritten condition. **One conversation
+between them, not one each**: a group chat is a place several people are
+in, and handing them a conversation apiece would look identical from any
+one screen while being three rooms nobody else is in. The test says so,
+since nothing about the app running would notice.
+
+Two things follow, and the second is the more interesting:
+
+- **The conversation id never reaches anybody else's browser.** Written
+  into `lib/world/residents.ts` beside his lines it would read better — it
+  is a fact about Doc — and it would also ship in the bundle to every
+  visitor who ever loads the world, since the scenes read the cast out of
+  that module.
+- **What this settles is the world, not a secret.** It is a link: anybody
+  holding it can open it in their own browser, and Mettara decides for
+  itself who may read it. What the gate decides is who finds that Doc has
+  anything to say.
+
+**Framing somebody else's site is two policies agreeing.** `frame-src` in
+`next.config.ts` names `METTARA_ORIGIN`, read from `lib/mettara.ts` so the
+policy and the URL cannot stop naming the same host — a frame the policy
+does not name is not refused loudly, it comes up blank with a line in the
+console. The far end has the other half and the last word: a site says who
+may embed it with `X-Frame-Options` and `frame-ancestors`, and nothing set
+here overrides a refusal. Mettara has to send `frame-ancestors` naming this
+host and no `X-Frame-Options: DENY`; the day it stops, the window is white
+and nothing in this app will be able to say why.
+
+`METTARA_DOC_CONVO` moves the conversation without a deploy. **The id
+only, never a URL** — a URL out of the environment could name a host the
+policy has never heard of, and a blank frame looks exactly like the app
+being broken.
+
+**The frame goes when the panel goes.** Closed, it is unmounted rather than
+hidden, so a third party's page is not left running and connected behind
+the office for the rest of the session. Pressing E again loads the
+conversation afresh, which is the right way round: a page nobody is looking
+at should not be a page still open.
+
 ### Storage
 
 Two SQLite databases (`node:sqlite`), deliberately separate:
@@ -2231,10 +2323,12 @@ lib/
   badges.ts                        the catalogue, and who a badge belongs to
   camera.ts legible.ts            how far out the camera stands, and how big lettering is drawn
   fixtures.ts                      what you walk up to and press E at, read by both layers
+  mettara.ts                       where Mettara is served from, for the CSP and the URL alike
   room-travel.ts                   every room change, none of them a page load
   server/                          server-only: room store, presence hub/socket, residents, access
   server/room-broadcast.ts         the way anything server-side speaks into a room
   server/badge-rules.ts            when a badge is earned — server-observed, never claimed
+  server/mettara.ts                whose conversation Doc is hooked up to, and which
   server/traffic.ts                which cars are on the highway, and when one sets off
   map/ world/                      map generation and world layout
   world/cast.ts                    who the world is of: roles, concept art, backstories
@@ -3411,6 +3505,7 @@ From `CONTRIBUTING.md`, and worth holding to when adding anything:
 | `ROOM_DB_PATH` / `ERP_DB_PATH`                                                                    | `.data/watercooler.sqlite` / `.data/erp.sqlite` | Where the two databases live                                             |
 | `ZOHO_PULSE_STATUSES`                                                                             | `New,Queue,In Progress`                         | The three standing statuses on Support's wall, in the order they hang    |
 | `ZOHO_TIMEZONE`                                                                                   | asked of the desk                               | Which clock "today" runs on; otherwise the org's, else its agents'       |
+| `METTARA_DOC_CONVO`                                                                               | a written-down id                               | Which Mettara conversation Doc is hooked up to; the id only, never a URL |
 | `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`                                       | —                                               | Auth.js sign-in; off when absent                                         |
 | `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                                              | —                                               | TURN relay for voice behind strict NAT; **build time**, not run time     |
 | `CSP_CONNECT_SRC`                                                                                 | —                                               | Extra `connect-src` origins                                              |

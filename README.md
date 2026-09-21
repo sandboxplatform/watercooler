@@ -166,6 +166,7 @@ For that, configure sign-in (below) — it layers on top.
 - **One basketball:** There is a court in the park with a ball on it, and it is the same ball for everybody. Pick it up and the world watches you carry it; sink one and the world is told.
 - **A world to cross:** Six building supply stores along the west road, the head offices and the plaza in the middle, the campus gate east of that — and past it a third of the map with nothing built on it at all, with a highway down the far side and a car on it now and then.
 - **Eggs to collect:** Michael the chicken drops one in the grass now and then when somebody startles him — six kinds, from an ordinary hen's egg to a rainbow one nobody can account for. Anybody out on the map can walk up and pocket it.
+- **Somebody to talk to:** Doc works the support desk, and he is the one person you walk up to and press E at. His conversation on Mettara opens in a window over the room.
 - **Workers at their desks:** Idle workers roam the office — whiteboards, printers, sofas, bookshelves — and the seat manager sets their names, roles and sprites.
 
 ## How it works
@@ -431,6 +432,26 @@ than the whole desk; the panel lists the departments it can see.
 The refresh token is the valuable one, so it stays on the server: the
 browser asks this app, this app asks Zoho, and no credential reaches the
 page or a log.
+
+### Talking to Doc
+
+Doc works the support desk, and he is the one person in this world you can
+walk up to and press E at. Everything else that opens a panel is a thing —
+a board, a cabinet, a table. He is not, so his prompt follows him about:
+`Press E to talk to Doc`, over his head, whether he is pacing behind the
+support queue on Sandbox ERP's third floor or out on the plaza taking the
+air.
+
+Pressing it opens the conversation he is hooked up to on
+[Mettara](https://app.mettara.ai), in a window over the room. It is
+Mettara's page, signed in as whoever is signed in to Mettara, and nothing
+in the office reads a word of it — the window is closed and the page goes
+with it, rather than being left running behind the office.
+
+Who is in it is answered per person, by the server: today that is Coop,
+Rob and Andrew, and it is the one group chat between the three of them
+rather than a conversation each. Walk up to Doc without it and he is a
+resident like any other — he says his line and goes back to work.
 
 ### Playing together
 

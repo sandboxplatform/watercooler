@@ -48,6 +48,11 @@ export class RemotePlayerManager {
     }
   }
 
+  /** Where somebody is drawn, for anything hung over their head. */
+  drawnAt(id: string): { x: number; y: number } | null {
+    return this.players.get(id)?.drawnAt() ?? null;
+  }
+
   /** Put a remark above the right person's head. */
   say(id: string, text: string) {
     this.players.get(id)?.say(text);

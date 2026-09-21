@@ -64,6 +64,7 @@ import { TapNavigator, isTap } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
 import { dialogOpen, typingInAField } from "@/lib/gamepad/dialogs";
 import { attachPresence, type ScenePresence } from "../systems/scene-presence";
+import { TalkTo } from "../systems/TalkTo";
 import { DoorManager } from "../systems/DoorManager";
 import { FixtureManager } from "../systems/FixtureManager";
 import { addSign } from "../utils/signs";
@@ -116,6 +117,8 @@ export class OfficeScene extends Phaser.Scene {
   private doorManager!: DoorManager;
   /** Everything in the room you walk up to and press E at. */
   private fixtures!: FixtureManager;
+  /** The people in the room worth walking up to, which is Doc and his conversation. */
+  private talk: TalkTo | null = null;
   private cleanupEventBridge: (() => void) | null = null;
 
   constructor() {
@@ -275,6 +278,12 @@ export class OfficeScene extends Phaser.Scene {
         depth: "flat",
       },
     );
+    // Doc is a fixture who walks about, so his prompt comes off the roster
+    // rather than off the map. Built after presence for the roster it reads,
+    // and taken down with it: a lift ride restarts this scene.
+    this.talk?.destroy();
+    this.talk = new TalkTo(this, () => this.presence);
+
     this.physics.add.collider(this.player.sprite, collisionGroup);
 
     // Upstairs, everyone with a desk gets one, with their name on it.
@@ -856,6 +865,9 @@ export class OfficeScene extends Phaser.Scene {
     this.presence?.detach();
     this.presence = null;
 
+    this.talk?.destroy();
+    this.talk = null;
+
     this.workerManager?.destroyAll();
   }
 
@@ -1029,7 +1041,13 @@ export class OfficeScene extends Phaser.Scene {
 
     // A dialog is up: the HUD's controller driver has the pad, the keys
     // belong to the dialog, and the character stands still under it.
-    if (this.elevatorOpen || this.fixtures.anyOpen() || dialogOpen() || typingInAField()) {
+    if (
+      this.elevatorOpen ||
+      this.fixtures.anyOpen() ||
+      this.talk?.anyOpen() ||
+      dialogOpen() ||
+      typingInAField()
+    ) {
       this.workerManager.updateAll();
       this.doorManager.updateDoors();
       return;
@@ -1074,6 +1092,12 @@ export class OfficeScene extends Phaser.Scene {
     // Everything you walk up to and press E at: the boards, the games,
     // the support queue. One loop over config/fixtures.ts, which is where
     // the distances, the prompts and the panels each one opens live.
-    this.fixtures.update(this.player.sprite, interactPressed);
+    const took = this.fixtures.update(this.player.sprite, interactPressed);
+
+    // And the one fixture that is a person. Offered the press only if
+    // nothing on the wall took it: somebody standing at the support queue
+    // with Doc beside them is within reach of both, and one press of E is
+    // one thing opened.
+    this.talk?.update(this.player.sprite, interactPressed && !took);
   }
 }

@@ -61,9 +61,11 @@ const EVERY_ID: Record<FixtureId, true> = {
   "help-desk": true,
   "support-pulse": true,
   boardroom: true,
+  "doc-chat": true,
 };
 
-const claimants = (name: string) => FIXTURES.filter((f) => f.match.test(name)).map((f) => f.id);
+const claimants = (name: string) =>
+  FIXTURES.filter((f) => f.match?.test(name) ?? false).map((f) => f.id);
 
 describe("the fixture registry", () => {
   it("gives every fixture its own id", () => {
@@ -164,6 +166,34 @@ describe("what each fixture claims off the map", () => {
     expect(sign(null)).toBe("ARCADE");
   });
 
+  /**
+   * A fixture is somewhere, and there are two ways of being somewhere: a
+   * point of interest in the room's tiles, or a person the roster puts
+   * down somewhere new every frame. Neither is a prompt that can never
+   * appear; both is two places at once, and the second would be read by
+   * `FixtureManager` and by `systems/TalkTo` alike — two prompts on one
+   * fixture, each hiding the other's.
+   */
+  it("anchors every fixture to a point or to a person, and to just one", () => {
+    for (const f of FIXTURES) {
+      expect(Boolean(f.match) !== Boolean(f.person), f.id).toBe(true);
+    }
+  });
+
+  it("gives a person-anchored fixture nothing to stand on the map", () => {
+    // It is drawn by being a character walking about, so art or a sign
+    // here would be a second copy of somebody standing still.
+    for (const f of FIXTURES) {
+      if (!f.person) continue;
+      expect(f.art, f.id).toBeUndefined();
+      expect(f.sign, f.id).toBeUndefined();
+      expect(f.many, f.id).toBeUndefined();
+      // And nothing the maps carry is it, which is what keeps the two
+      // halves from both claiming one fixture.
+      for (const name of POI_NAMES) expect(f.match?.test(name) ?? false, name).toBe(false);
+    }
+  });
+
   it("writes every other sign down, since every other sign is fixed", () => {
     for (const f of FIXTURES) {
       if (!f.sign || f.id === "arcade") continue;
@@ -194,6 +224,7 @@ describe("what each fixture claims off the map", () => {
    */
   it("captures which point it was, for the fixtures whose points differ", () => {
     for (const f of FIXTURES) {
+      if (!f.match) continue;
       const groups = new RegExp(`${f.match.source}|`).exec("")!.length - 1;
       if (f.id === "project-board" || f.id === "project-flow") {
         expect(groups, f.id).toBe(1);

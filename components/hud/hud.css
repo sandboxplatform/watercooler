@@ -1361,6 +1361,17 @@
   overflow: hidden;
 }
 
+/* Doc's conversation: somebody else's site, filling the body it is given.
+   A white page inside a pixel frame, which is what an outside window looks
+   like and is not worth pretending otherwise about. */
+.doc-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
 .board-columns {
   display: flex;
   gap: 10px;

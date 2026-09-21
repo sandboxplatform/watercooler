@@ -78,7 +78,13 @@ export class FixtureManager {
    */
   place(pois: POIDef[], room: string | null = null) {
     this.placed = FIXTURES.map((spec) => {
-      const found = pois.filter((poi) => spec.match.test(poi.name));
+      // A fixture anchored to a person is in the registry for its panel
+      // rather than for its place: nothing on the map is it, and where
+      // they are standing is the roster's to say from one frame to the
+      // next. `systems/TalkTo` is what follows those; this is the half
+      // that reads the tiles, so it leaves them with no zones, which is
+      // enough to keep them out of the prompts and out of `update`.
+      const found = spec.match ? pois.filter((poi) => spec.match!.test(poi.name)) : [];
       // Every match, or only the first: a lobby hangs several boards and
       // they all open the one shared canvas; there is one cauldron.
       const zones = (spec.many ? found : found.slice(0, 1)).map((poi) => ({
@@ -86,7 +92,7 @@ export class FixtureManager {
         y: poi.y,
         // Whatever the match captured, which is what tells one of these
         // points from another where they are different things.
-        subject: spec.match.exec(poi.name)?.[1] ?? null,
+        subject: spec.match?.exec(poi.name)?.[1] ?? null,
       }));
       for (const zone of zones) this.furnish(spec, zone, room);
       return { spec, zones, prompt: null };

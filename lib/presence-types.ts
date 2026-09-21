@@ -92,6 +92,17 @@ export const SPEED_TOLERANCE = 2.5;
  */
 export const MOVE_BUDGET_WINDOW_MS = MOVE_SEND_MS * 5;
 
+/**
+ * How a resident appears on the wire: the id every roster knows them by.
+ *
+ * It lives here rather than beside the simulation that walks them because
+ * the browser has to recognise one too — a fixture anchored to a person
+ * (see lib/fixtures.ts) finds Doc by exactly this string — and the
+ * simulation is server-only. The format is a wire fact, so it belongs with
+ * the rest of the wire.
+ */
+export const residentPresenceId = (residentId: string) => `resident:${residentId}`;
+
 export type Facing = "up" | "down" | "left" | "right";
 
 export interface PresencePlayer {

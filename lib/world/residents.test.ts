@@ -20,6 +20,8 @@ import {
   worldWanderSpots,
 } from "./residents";
 import { parseFloorRoomSlug, roomFromLocation } from "../rooms";
+import { fixture } from "../fixtures";
+import { residentPresenceId } from "../presence-types";
 import { CUTOUT, TILE, WIDTH } from "../map/office";
 import {
   HEIGHT as FLOOR_ROWS,
@@ -503,5 +505,25 @@ describe("the routine", () => {
     for (const [i, spot] of worldWanderSpots().entries()) {
       expect(clearToStand(spot), `spot ${i} at ${spot.x},${spot.y}`).toBe(true);
     }
+  });
+});
+
+/**
+ * A fixture anchored to a person finds them by the id their roster entry
+ * carries, which is a string in two files that have no reason to be read
+ * together. Rename the resident and the prompt does not break — it simply
+ * never appears, over a character standing right there.
+ */
+describe("the resident you can walk up to and talk to", () => {
+  it("anchors Doc's conversation to Doc", () => {
+    const spec = fixture("doc-chat");
+    expect(spec.person).toBeTruthy();
+    const who = RESIDENTS.find((r) => residentPresenceId(r.id) === spec.person);
+    expect(who?.id, `nobody in the cast is ${spec.person}`).toBe("doc");
+  });
+
+  it("names him in the prompt, since a prompt over a person is about them", () => {
+    const doc = residentById("doc")!;
+    expect(fixture("doc-chat").prompt).toContain(doc.name);
   });
 });

@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 import { iceUrls } from "./lib/voice/ice";
+import { METTARA_ORIGIN } from "./lib/mettara";
 
 const extraConnectSrc = process.env.CSP_CONNECT_SRC ?? "";
 
@@ -28,6 +29,15 @@ const securityHeaders = [
         .filter(Boolean)
         .join(" "),
       "media-src 'self'",
+      // The one thing this app frames: the Mettara conversation Doc is
+      // hooked up to. `frame-src` falls back to `default-src`, which is
+      // `'self'`, so a site it does not name is not refused loudly — the
+      // frame simply comes up blank with a line in the console. Read from
+      // `lib/mettara`, the same constant the URL is built from, so the
+      // policy cannot stop naming the site the page is pointed at.
+      `frame-src 'self' ${METTARA_ORIGIN}`,
+      // The other direction, and unrelated to the line above: nobody
+      // frames *us*.
       "frame-ancestors 'none'",
     ].join("; "),
   },
