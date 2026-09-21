@@ -171,10 +171,38 @@ describe("what each fixture claims off the map", () => {
     }
   });
 
+  /**
+   * Three fixtures have several points in a room and they mean two
+   * different things by it: a lobby's boards are several ways into one
+   * shared canvas, and the project boards are three rooms holding three
+   * different boards. Only the second kind needs telling apart, which is
+   * what the capture in its `match` is for.
+   */
   it("hangs several boards but only one of everything else", () => {
+    const several = ["whiteboard", "project-board", "project-flow"];
     for (const f of FIXTURES) {
-      if (f.id === "whiteboard") expect(f.many).toBe(true);
+      if (several.includes(f.id)) expect(f.many, f.id).toBe(true);
       else expect(f.many, f.id).toBeUndefined();
+    }
+  });
+
+  /**
+   * A fixture whose points differ has to say which was pressed, and the
+   * subject is the capture in its own `match` — so a pattern with several
+   * groups, or with none where the points differ, is a panel opened onto
+   * the wrong thing.
+   */
+  it("captures which point it was, for the fixtures whose points differ", () => {
+    for (const f of FIXTURES) {
+      const groups = new RegExp(`${f.match.source}|`).exec("")!.length - 1;
+      if (f.id === "project-board" || f.id === "project-flow") {
+        expect(groups, f.id).toBe(1);
+        expect(f.match.exec("Project board 2")?.[1] ?? f.match.exec("Project flow 2")?.[1]).toBe(
+          "2",
+        );
+      } else {
+        expect(groups, f.id).toBe(0);
+      }
     }
   });
 });

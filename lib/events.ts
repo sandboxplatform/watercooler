@@ -84,40 +84,55 @@ export interface GameEventMap {
    * no keyboard, and walking up to something is only half of using it.
    */
   "interact-pressed": [];
+  /**
+   * Every fixture's open event carries which of its points was pressed, or
+   * nothing where it has only one.
+   *
+   * A fixture is usually one thing in a room, and where it is several they
+   * are several ways into the same panel — a lobby's boards are one shared
+   * canvas. An Operations floor broke that: three project boards in three
+   * rooms are three different boards, and pressing one has to say which.
+   *
+   * The subject is the capture in the fixture's own `match` (see
+   * `lib/fixtures.ts`), so it is whatever the point of interest is
+   * numbered — `"2"` off `Project board 2`. A slot rather than a board
+   * name, because the map is shared by every building with this many boards
+   * and only the building knows what hangs in each room.
+   */
   /** Somebody walked up to the water bucket and pressed E. */
-  "open-pingpong": [];
+  "open-pingpong": [subject?: string | null];
   /** The ping pong table was closed, so the office takes input again. */
   "pingpong-closed": [];
   /** Somebody walked up to the cauldron and pressed E. */
-  "open-pinball": [];
+  "open-pinball": [subject?: string | null];
   /** Somebody walked up to the help desk board and pressed E. */
-  "open-help-desk": [];
+  "open-help-desk": [subject?: string | null];
   /** The help desk was closed, so the office takes input again. */
   "help-desk-closed": [];
   /** Somebody walked up to the project board on an Operations floor and pressed E. */
-  "open-project-board": [];
+  "open-project-board": [subject?: string | null];
   /** The project board was closed, so the office takes input again. */
   "project-board-closed": [];
   /** Somebody walked up to the stage counts beside the project board and pressed E. */
-  "open-project-flow": [];
+  "open-project-flow": [subject?: string | null];
   /** The stage counts were closed, so the office takes input again. */
   "project-flow-closed": [];
   /** Somebody walked up to the five counts on Support's wall and pressed E. */
-  "open-support-pulse": [];
+  "open-support-pulse": [subject?: string | null];
   /** The counts were closed, so the office takes input again. */
   "support-pulse-closed": [];
   /** Somebody walked up to the boardroom table and pressed E. */
-  "open-boardroom": [];
+  "open-boardroom": [subject?: string | null];
   /** The boardroom was closed, so the office takes input again. */
   "boardroom-closed": [];
   /** Somebody walked up to the arcade cabinet and pressed E. */
-  "open-arcade": [];
+  "open-arcade": [subject?: string | null];
   /** The arcade was closed, so the office takes input again. */
   "arcade-closed": [];
   /** The cauldron was closed, so the office takes input again. */
   "pinball-closed": [];
   /** Somebody walked up to a board and pressed E. */
-  "open-whiteboard": [];
+  "open-whiteboard": [subject?: string | null];
   /** The board was closed, so the office takes input again. */
   "whiteboard-closed": [];
   /** Somebody just earned a badge, somewhere in the world. */

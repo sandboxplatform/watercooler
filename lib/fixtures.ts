@@ -60,7 +60,7 @@ export type FixtureId =
   | "boardroom";
 
 /**
- * An event that carries nothing — which every fixture's pair of events is.
+ * An event that carries nothing, which every fixture's close event is.
  * Derived from the bus rather than written out, so a typo in an entry is a
  * type error rather than a listener that never fires.
  */
@@ -68,17 +68,49 @@ type NoArgEvent = {
   [K in keyof GameEventMap]: GameEventMap[K] extends [] ? K : never;
 }[keyof GameEventMap];
 
+/**
+ * An event that carries which of a fixture's points was pressed, which
+ * every fixture's open event is.
+ *
+ * Derived the same way and for the same reason. Every one of them takes the
+ * subject whether or not it has anything to say — one type for the lot
+ * beats a union the emitter has to narrow, and a fixture with a single
+ * point simply passes nothing.
+ */
+type SubjectEvent = {
+  // Both ways round, and both halves earn their place: the subject has to
+  // be optional, or every event carrying one required argument would count,
+  // and it has to take a subject, or every event carrying none would.
+  [K in keyof GameEventMap]: [] extends GameEventMap[K]
+    ? [subject: string | null] extends GameEventMap[K]
+      ? K
+      : never
+    : never;
+}[keyof GameEventMap];
+
 export interface FixtureSpec {
   id: FixtureId;
-  /** Which points of interest on the map are this fixture. */
+  /**
+   * Which points of interest on the map are this fixture.
+   *
+   * A capture group, where it has one, is the **subject**: what tells one
+   * of this fixture's points from another, carried on the open event so the
+   * panel knows which it is looking at. Only the project boards have one —
+   * `Project board 2` is the second room along the corridor — and the
+   * group is optional, so the same pattern matches an unnumbered point in
+   * a building that hangs a single board.
+   */
   match: RegExp;
   /**
    * Whether every match counts or only the first. A lobby hangs several
    * boards and they all open the one shared canvas; there is one cauldron.
    */
   many?: boolean;
-  /** Emitted when somebody standing close enough presses E. */
-  opens: NoArgEvent;
+  /**
+   * Emitted when somebody standing close enough presses E, carrying which
+   * point it was where the fixture has several that differ — see `match`.
+   */
+  opens: SubjectEvent;
   /** The panel says it has closed with this, and the character walks again. */
   closes: NoArgEvent;
   /**
@@ -200,7 +232,11 @@ export const FIXTURES: readonly FixtureSpec[] = [
   },
   {
     id: "project-board",
-    match: /project board/i,
+    // Numbered where a building hangs several: one to a room, and each a
+    // different board, so every match counts and the number rides along as
+    // the subject. Anchored, or "project flow" would match this too.
+    match: /^project board(?: (\d+))?$/i,
+    many: true,
     opens: "open-project-board",
     closes: "project-board-closed",
     param: "project",
@@ -217,7 +253,8 @@ export const FIXTURES: readonly FixtureSpec[] = [
     // desk's: it is one thing in one room, and a loose match is how a
     // picture ends up drawn over another one.
     id: "project-flow",
-    match: /^project flow$/i,
+    match: /^project flow(?: (\d+))?$/i,
+    many: true,
     opens: "open-project-flow",
     closes: "project-flow-closed",
     param: "flow",

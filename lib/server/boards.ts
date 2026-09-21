@@ -21,7 +21,7 @@ import {
 import type { BoardSummary, BoardView } from "../trello/board";
 import { toFlow, type Flow } from "../trello/flow";
 import { tenantInRoom } from "../world/floors";
-import { projectFlow } from "../world/tenants";
+import { projectBoardAt } from "../world/tenants";
 import {
   DESK_CACHE_MS,
   PULSE_CACHE_MS,
@@ -172,26 +172,62 @@ export async function readBoard(asked?: string | null): Promise<BoardAnswer> {
 }
 
 /**
- * The stage counts on the wall beside the project board.
+ * Which board hangs in a given room of a building's Operations floor.
+ *
+ * The room's own, and nothing else. A floor used to hang one project board
+ * and the wall carried a picker, so the answer was "whatever the office
+ * last chose" with the building's declaration as a fallback underneath it.
+ * Three boards in three rooms make that the wrong way round: a room that
+ * deferred to an office-wide choice would be the one switching wall again,
+ * wearing three doors. So a named board wins over `TRELLO_BOARD_ID` and
+ * over anything picked, and the pick is only consulted where the building
+ * names nothing — which is a building with one board and a picker on it.
+ *
+ * Null where this room holds no board: a slot past the end, a room on a
+ * floor with none. A stale link asks for exactly that.
+ */
+function boardInRoom(room: string | null | undefined, slot: number): string | null {
+  const spec = projectBoardAt(tenantInRoom(room), slot);
+  if (!spec) return null;
+  if (spec.board) return spec.board;
+  return readTrelloConfig()?.boardId ?? officeBoard();
+}
+
+/**
+ * The project board on a room's wall, by the slot the map gave it.
+ *
+ * The browser presses a point of interest and says which — `2` — rather
+ * than naming a board, for the reason it never names the room it is
+ * standing in: which board hangs where is the building's business, and a
+ * request that named one could name any board the token can see.
+ */
+export async function readBoardIn(
+  room: string | null | undefined,
+  slot: number,
+): Promise<BoardAnswer> {
+  const wanted = boardInRoom(room, slot);
+  // No board declared and nothing picked: the wall offers the list, which
+  // is what `readBoard` answers when it is asked for nothing.
+  return readBoard(wanted);
+}
+
+/**
+ * The stage counts on the wall beside a room's project board.
  *
  * No fetch and no cache of its own: it counts the board `readBoard` already
- * holds, which is the board hanging next to it on the same wall. So the
+ * holds, which is the board hanging beside it on the same wall. So the
  * numbers and the cards cannot disagree about what is on it, and a floor of
  * people reading both is still one request to Trello.
  *
- * Which board, in order: one named in the environment, then one picked on
- * the wall, then the building's own. The building's is last because a board
- * chosen in the office is the board on the wall, and the numbers are a
- * second reading of *that* — the declaration is what makes the wall work
- * before anybody has picked anything.
+ * Which board, and which lanes, are the room's — see `boardInRoom`.
  */
-export async function readFlow(room: string | null | undefined): Promise<FlowAnswer> {
+export async function readFlow(room: string | null | undefined, slot = 1): Promise<FlowAnswer> {
   const config = readTrelloConfig();
-  const spec = projectFlow(tenantInRoom(room));
-  if (!spec) return { configured: config !== null, counts: false };
+  const spec = projectBoardAt(tenantInRoom(room), slot);
+  if (!spec || spec.lanes.length === 0) return { configured: config !== null, counts: false };
   if (!config) return { configured: false, counts: true };
 
-  const answer = await readBoard(config.boardId ?? officeBoard() ?? spec.board);
+  const answer = await readBoard(boardInRoom(room, slot));
   if (!answer.board) {
     return {
       configured: true,

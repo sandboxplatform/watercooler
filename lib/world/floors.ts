@@ -25,7 +25,7 @@ import {
   furnishedLobby,
   hasFloors,
   hasOperationsFloor,
-  hasProjectFlow,
+  projectBoards,
   operationsBoards,
   operationsRoomCount,
   tenantFor,
@@ -223,13 +223,28 @@ export function elevatorStops(address: Address, occupancy: Occupancy): ElevatorS
  * writes the files this names, and the scene asks for them by the same
  * rule.
  *
- * `flow` is whether the counts hang beside the project board, and it is in
- * the name for the same reason the room count is: it is a point of interest
- * on the wall, so two buildings that differ only in that are different
- * floors and sharing a file would give one of them a board nobody can read.
+ * `flow` is how many project boards hang, each in its own room with its own
+ * stage counts, and it is in the name for the same reason the room count
+ * is: those are points of interest on the walls, so two buildings that
+ * differ only in that are different floors and sharing a file would give
+ * one of them boards nobody can read. Zero for a building that names none,
+ * which hangs one unnamed board and counts nothing — and leaves the name as
+ * it always was, so Castle Atlantic's map did not move.
  */
-export function operationsMapFile(boards: readonly string[], rooms: number, flow = false): string {
-  return `/maps/floor-ops-${[...boards].join("-")}-${rooms}${flow ? "-flow" : ""}.json`;
+export function operationsMapFile(boards: readonly string[], rooms: number, flow = 0): string {
+  return `/maps/floor-ops-${[...boards].join("-")}-${rooms}${flow ? `-flow${flow}` : ""}.json`;
+}
+
+/**
+ * How many of a building's project boards count their stages, which is how
+ * many rooms on its floor carry the five-tile plate.
+ *
+ * Every declared board does today; the distinction is kept because a
+ * building can hang one unnamed board with no lanes at all, and that floor
+ * is a different shape of map from one with a plate on the wall.
+ */
+function countedBoards(tenant: Parameters<typeof projectBoards>[0]): number {
+  return projectBoards(tenant).filter((board) => board.lanes.length > 0).length;
 }
 
 export function mapFileFor(address: Address | null): string {
@@ -241,7 +256,7 @@ export function mapFileFor(address: Address | null): string {
     return operationsMapFile(
       operationsBoards(address.tenant),
       operationsRoomCount(address.tenant),
-      hasProjectFlow(address.tenant),
+      countedBoards(address.tenant),
     );
   }
   if (!hasFloors(address.tenant)) return `/maps/room-${address.tenant.slug}.json`;

@@ -11,7 +11,10 @@ import {
   type OpsRoom,
   opsBoardroom,
   opsBoardroomTable,
+  opsElevator,
   opsProjectFlow,
+  opsProjectRooms,
+  opsProjectSign,
   opsRooms,
   opsSign,
   opsSupportRoom,
@@ -23,7 +26,9 @@ import {
   opsWidth,
   PLAYER_START,
   PROJECT_BOARD,
+  NAME_COLS,
   PROJECT_FLOW,
+  ROOM_COLS,
   SUPPORT_PULSE,
   WIDTH,
 } from "../floor";
@@ -304,10 +309,10 @@ describe("an Operations floor", () => {
     const named = (name: string) => long.pois.find((p) => p.name === name)!;
     /** A board's own room: its columns, and the wall of its own rank. */
     const inRoom = (poi: { tx: number; ty: number }, room: OpsRoom) =>
-      poi.tx >= room.x && poi.tx < room.x + 14 && poi.ty === room.wallRow + 2;
+      poi.tx >= room.x && poi.tx < room.x + ROOM_COLS && poi.ty === room.wallRow + 2;
 
     it("hangs the project board in Operations and the queue and counts in Support", () => {
-      expect(inRoom(named("Project board"), operations)).toBe(true);
+      expect(inRoom(named("Project board 1"), operations)).toBe(true);
       // The support queue is what makes a room Support, so it hangs there
       // and not on the Operations wall it used to share with the board.
       expect(inRoom(named("Help desk"), support)).toBe(true);
@@ -324,12 +329,13 @@ describe("an Operations floor", () => {
     });
 
     /**
-     * The point of moving it: four clear tiles in the middle of Support's
-     * wall for the room's name, which the scene letters at the size every
-     * other name in the world is drawn at. A name across a picture labels
-     * the picture, so the gap is what this holds down.
+     * A clear stretch beside the board for the room's name, which the scene
+     * letters at the size every other name in the world is drawn at. A name
+     * across a picture labels the picture, so the gap is what this holds
+     * down — and beside the board rather than in the middle of the wall,
+     * because in a project room what is lettered is the board's own name.
      */
-    it("leaves the middle of Support's wall clear for its name", () => {
+    it("leaves room beside the board for the name", () => {
       const queue = named("Help desk").tx;
       const counts = named("Support pulse").tx;
       const sign = opsSupportSign(6).tx;
@@ -337,17 +343,56 @@ describe("an Operations floor", () => {
       // spec the map was generated off.
       const queueRight = queue + Math.ceil(HELP_DESK.region.sw / 2);
       const countsLeft = counts - Math.floor(SUPPORT_PULSE.region.sw / 2);
-      expect(countsLeft - queueRight).toBeGreaterThanOrEqual(4);
       expect(sign).toBeGreaterThan(queueRight);
       expect(sign).toBeLessThan(countsLeft);
-      // The middle of the wall, which is also the middle of that gap.
-      expect(sign).toBe(support.x + 7);
-      expect(sign - queueRight).toBe(countsLeft - sign);
+      // Four tiles of name, hard against the board and clear of it.
+      expect(sign - NAME_COLS / 2).toBeGreaterThanOrEqual(queueRight);
+      expect(sign + NAME_COLS / 2).toBeLessThanOrEqual(countsLeft);
+      expect(sign - NAME_COLS / 2).toBe(support.x + HELP_DESK.region.sw);
+    });
+
+    /**
+     * The doorway is a hole in the same wall the lower rank hangs its
+     * boards on — the upper rank's boards are on the map's top wall and its
+     * doorway is cut through another wall entirely. So downstairs the wall
+     * has four things wanting a share of it, and the one that breaks is
+     * silent: the plate draws fine over a gap, and only walking in shows
+     * the counts hanging across a doorway.
+     */
+    it("keeps everything on a lower room's wall clear of its doorway", () => {
+      const spec = buildFloorSpec(source, {
+        boards: ["trello", "zoho"],
+        rooms: 6,
+        projects: [{ counts: true }, { counts: true }, { counts: true }],
+      });
+      const widths: Record<string, number> = {
+        "Project board": PROJECT_BOARD.region.sw,
+        "Project flow": PROJECT_FLOW.region.sw,
+      };
+      for (const room of opsRooms(6).filter((r) => r.rank === "lower")) {
+        const onThisWall = spec.pois.filter(
+          (poi) => poi.ty === room.wallRow + 2 && poi.tx > room.x && poi.tx < room.x + ROOM_COLS,
+        );
+        for (const poi of onThisWall) {
+          const sw = widths[poi.name.replace(/ d+$/, "")] ?? 1;
+          const left = poi.tx - Math.floor(sw / 2);
+          const right = poi.tx + Math.ceil(sw / 2);
+          expect(
+            right <= room.door.from || left >= room.door.to,
+            `${poi.name} runs through the doorway`,
+          ).toBe(true);
+        }
+        // And the name between them, which is drawn rather than a point.
+        const sign = opsProjectSign(6, 2);
+        if (sign && sign.tx > room.x && sign.tx < room.x + ROOM_COLS) {
+          expect(sign.tx + NAME_COLS / 2).toBeLessThanOrEqual(room.door.from);
+        }
+      }
     });
 
     it("runs the counts to Support's right-hand corner", () => {
       const counts = named("Support pulse").tx + Math.ceil(SUPPORT_PULSE.region.sw / 2);
-      expect(counts).toBe(support.x + 14);
+      expect(counts).toBe(support.x + ROOM_COLS);
     });
   });
 
@@ -371,11 +416,15 @@ describe("an Operations floor", () => {
 
     it("splits the wall at every doorway through it", () => {
       const runs = opsWallRuns(rooms);
+      // One run to the left of each upper doorway and one past the last,
+      // read off the rooms rather than written down — the wall is as wide
+      // as the floor and the floor grows with ROOM_COLS.
+      const upper = opsRooms(rooms).filter((room) => room.rank === "upper");
       expect(runs).toEqual([
-        { from: 0, to: 5 },
-        { from: 7, to: 20 },
-        { from: 22, to: 35 },
-        { from: 37, to: 46 },
+        { from: 0, to: upper[0].door.from },
+        { from: upper[0].door.to, to: upper[1].door.from },
+        { from: upper[1].door.to, to: upper[2].door.from },
+        { from: upper[2].door.to, to: opsWidth(rooms) },
       ]);
       // Every run is wall, and between them is the way into a room.
       for (const run of runs) expect(run.to).toBeGreaterThan(run.from);
@@ -409,7 +458,8 @@ describe("an Operations floor", () => {
       const week = opsWeekCounts(rooms)!;
       const run = opsWallRun(rooms, opsSupportRoom(rooms));
       expect(week.ty).toBe(opsSign(rooms).ty);
-      expect(week.tx).toEqual([25.25, 31.75]);
+      const width = run.to - run.from;
+      expect(week.tx).toEqual([run.from + width / 4, run.from + (width * 3) / 4]);
       for (const tx of week.tx) {
         expect(tx).toBeGreaterThan(run.from);
         expect(tx).toBeLessThan(run.to);
@@ -427,7 +477,8 @@ describe("an Operations floor", () => {
      */
     it("letters the net at the middle of the two it is taken from", () => {
       const week = opsWeekCounts(rooms)!;
-      expect(week.net).toBe(28.5);
+      const run = opsWallRun(rooms, opsSupportRoom(rooms));
+      expect(week.net).toBe((run.from + run.to) / 2);
       expect(clear(week.net)).toBe(true);
       for (let count = 3; count <= 12; count++) {
         const at = opsWeekCounts(count);
@@ -476,38 +527,121 @@ describe("an Operations floor", () => {
   });
 
   /**
-   * The stage counts: the same arrangement one room along, and only where
-   * the building asked for them.
+   * A project board to a room, its stage counts beside it, and the name of
+   * the board in the middle of the wall between them.
    */
-  describe("counting the project board's stages", () => {
-    const withFlow = buildFloorSpec(source, { boards: ["trello", "zoho"], rooms: 6, flow: true });
+  describe("a room per project board", () => {
+    const one = [{ counts: true }];
+    const three = [{ counts: true }, { counts: true }, { counts: true }];
+    const withFlow = buildFloorSpec(source, {
+      boards: ["trello", "zoho"],
+      rooms: 6,
+      projects: one,
+    });
+    const many = buildFloorSpec(source, { boards: ["trello", "zoho"], rooms: 6, projects: three });
     const without = buildFloorSpec(source, { boards: ["trello", "zoho"], rooms: 6 });
     const [operations] = opsRooms(6);
     const named = (spec: RoomSpec, name: string) => spec.pois.find((p) => p.name === name);
 
-    it("hangs them in Operations, beside the board they count", () => {
-      const flow = named(withFlow, "Project flow")!;
+    it("hangs the counts beside the board they count, in the same room", () => {
+      const flow = named(withFlow, "Project flow 1")!;
       expect(flow.ty).toBe(operations.wallRow + 2);
-      expect(flow.tx).toBeGreaterThan(named(withFlow, "Project board")!.tx);
+      expect(flow.tx).toBeGreaterThan(named(withFlow, "Project board 1")!.tx);
       // And where the scene draws its picture is the footprint the map made
       // solid, which is the only way the two agree.
-      const box = opsProjectFlow(6);
-      expect(box.tx).toBe(operations.x + 14 - PROJECT_FLOW.region.sw);
+      const box = opsProjectFlow(6, 1)!;
+      expect(box.tx).toBe(operations.x + ROOM_COLS - PROJECT_FLOW.region.sw);
       expect(flow.tx).toBe(box.tx + Math.floor(PROJECT_FLOW.region.sw / 2));
     });
 
     it("runs them to the room's right-hand corner, clear of the board", () => {
-      const flow = named(withFlow, "Project flow")!;
-      const board = named(withFlow, "Project board")!;
+      const flow = named(withFlow, "Project flow 1")!;
+      const board = named(withFlow, "Project board 1")!;
       const flowLeft = flow.tx - Math.floor(PROJECT_FLOW.region.sw / 2);
       const boardRight = board.tx + Math.ceil(PROJECT_BOARD.region.sw / 2);
-      expect(flow.tx + Math.ceil(PROJECT_FLOW.region.sw / 2)).toBe(operations.x + 14);
+      expect(flow.tx + Math.ceil(PROJECT_FLOW.region.sw / 2)).toBe(operations.x + ROOM_COLS);
       expect(flowLeft).toBeGreaterThanOrEqual(boardRight);
     });
 
     it("leaves that wall bare in a building that counts none", () => {
-      expect(named(without, "Project flow")).toBeUndefined();
-      expect(named(without, "Project board")).toBeDefined();
+      expect(named(without, "Project flow 1")).toBeUndefined();
+      expect(named(without, "Project board 1")).toBeDefined();
+    });
+
+    /**
+     * Three boards is three rooms: the first above the lift and the rest
+     * along the lower rank. The whole point of the arrangement, so it is
+     * asserted as rooms rather than as coordinates.
+     */
+    it("gives each board a room of its own, Operations first then the lower rank", () => {
+      const rooms = opsProjectRooms(6, 3);
+      expect(rooms).toHaveLength(3);
+      expect(rooms[0]).toEqual(operations);
+      expect(rooms.slice(1).map((r) => r.rank)).toEqual(["lower", "lower"]);
+      expect(rooms[2].x).toBeGreaterThan(rooms[1].x);
+      for (const [i, room] of rooms.entries()) {
+        const board = named(many, `Project board ${i + 1}`)!;
+        const flow = named(many, `Project flow ${i + 1}`)!;
+        expect(board.tx).toBeGreaterThanOrEqual(room.x);
+        expect(board.tx).toBeLessThan(room.x + ROOM_COLS);
+        expect(board.ty).toBe(room.wallRow + 2);
+        expect(flow.ty).toBe(room.wallRow + 2);
+      }
+    });
+
+    /** No two boards may share a room, or one is hung over the other. */
+    it("keeps the project rooms clear of Support, the whiteboard and the table", () => {
+      const rooms = opsProjectRooms(6, 3);
+      const taken = new Set(rooms.map((r) => `${r.rank}:${r.x}`));
+      expect(taken.size).toBe(3);
+      const support = opsSupportRoom(6);
+      expect(taken.has(`${support.rank}:${support.x}`)).toBe(false);
+      const whiteboard = opsWhiteboardRoom(6);
+      expect(taken.has(`${whiteboard.rank}:${whiteboard.x}`)).toBe(false);
+    });
+
+    /**
+     * The name goes between the two, which is the one stretch of that wall
+     * nothing else wants — and is where Support letters its own name, so
+     * the two kinds of working room read alike from the corridor.
+     */
+    it("letters the board's name between the board and its counts", () => {
+      for (let slot = 1; slot <= 3; slot++) {
+        const sign = opsProjectSign(6, slot)!;
+        const board = named(many, `Project board ${slot}`)!;
+        const flow = named(many, `Project flow ${slot}`)!;
+        expect(sign.ty).toBe(board.ty - 2);
+        expect(sign.tx).toBeGreaterThan(board.tx + PROJECT_BOARD.region.sw / 2);
+        expect(sign.tx).toBeLessThan(flow.tx - PROJECT_FLOW.region.sw / 2);
+      }
+      // Exactly where Support's own name hangs, one room over.
+      expect(opsProjectSign(6, 1)!.tx - opsRooms(6)[0].x).toBe(
+        opsSupportSign(6).tx - opsSupportRoom(6).x,
+      );
+    });
+
+    it("asks for no more rooms than the floor has", () => {
+      // A floor of two rooms has Operations and the lift's room, and the
+      // lift's room hangs nothing — so a second board has nowhere to go.
+      expect(opsProjectRooms(2, 3)).toHaveLength(1);
+      expect(opsProjectFlow(2, 2)).toBeNull();
+      expect(opsProjectSign(2, 2)).toBeNull();
+    });
+
+    /**
+     * The lift is three tiles of car hanging a tile below the cap of the
+     * lower wall, which is the first lower room's own wall face — so a
+     * board on the left of it would be a board with a lift drawn across
+     * the end. Nothing else on the floor would notice: the map generates,
+     * the room walks and the panel opens.
+     */
+    it("keeps the boards off the wall the lift is set into", () => {
+      const lift = opsElevator(6);
+      for (const room of opsProjectRooms(6, 3)) {
+        if (room.rank !== "lower") continue;
+        const left = room.x + 2;
+        expect(lift.tx + lift.tw <= left || lift.tx >= room.x + ROOM_COLS).toBe(true);
+      }
     });
   });
 });
@@ -532,14 +666,15 @@ describe("the boardroom table", () => {
 
   it("is centred in it, with clear floor on every side", () => {
     expect(table.tx).toBeGreaterThan(room.x);
-    expect(table.tx + table.tw).toBeLessThan(room.x + 14);
+    expect(table.tx + table.tw).toBeLessThan(room.x + ROOM_COLS);
     expect(table.ty).toBeGreaterThan(room.y);
     expect(table.ty + table.th).toBeLessThan(room.y + 7);
     // Dead centre down the room; across it, as near as five tiles can sit
-    // in fourteen — a tile of the odd one over, not a table against a wall.
+    // in a room of seventeen — a tile of the odd one over where it does not
+    // divide, not a table against a wall.
     expect(table.ty - room.y).toBe(room.y + 7 - (table.ty + table.th));
     const left = table.tx - room.x;
-    const right = room.x + 14 - (table.tx + table.tw);
+    const right = room.x + ROOM_COLS - (table.tx + table.tw);
     expect(Math.abs(left - right)).toBeLessThanOrEqual(1);
   });
 
@@ -581,7 +716,7 @@ describe("the boardroom table", () => {
       const here = opsBoardroomTable(rooms);
       const its = opsBoardroom(rooms);
       expect(here.tx, `${rooms} rooms`).toBeGreaterThanOrEqual(its.x);
-      expect(here.tx + here.tw, `${rooms} rooms`).toBeLessThanOrEqual(its.x + 14);
+      expect(here.tx + here.tw, `${rooms} rooms`).toBeLessThanOrEqual(its.x + ROOM_COLS);
     }
   });
 

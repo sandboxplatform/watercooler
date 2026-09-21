@@ -28,10 +28,24 @@ const FIXTURE_DEPTH = 4;
 /** Prompts float over everything; the same depth the terminal's uses. */
 const PROMPT_DEPTH = 20;
 
+/**
+ * One of a fixture's points in this room: where it is, and which one it is.
+ *
+ * `subject` is the capture in the fixture's `match` — the number off
+ * `Project board 2` — and null for a fixture whose points are all the same
+ * thing, which is every one but the project boards. It rides out on the
+ * open event so the panel knows which board it was walked up to.
+ */
+interface Zone {
+  x: number;
+  y: number;
+  subject: string | null;
+}
+
 interface Placed {
   spec: FixtureSpec;
   /** Where this fixture is in this room — empty if the room has none. */
-  zones: { x: number; y: number }[];
+  zones: Zone[];
   prompt: Phaser.GameObjects.Text | null;
 }
 
@@ -67,14 +81,20 @@ export class FixtureManager {
       const found = pois.filter((poi) => spec.match.test(poi.name));
       // Every match, or only the first: a lobby hangs several boards and
       // they all open the one shared canvas; there is one cauldron.
-      const zones = (spec.many ? found : found.slice(0, 1)).map((poi) => ({ x: poi.x, y: poi.y }));
+      const zones = (spec.many ? found : found.slice(0, 1)).map((poi) => ({
+        x: poi.x,
+        y: poi.y,
+        // Whatever the match captured, which is what tells one of these
+        // points from another where they are different things.
+        subject: spec.match.exec(poi.name)?.[1] ?? null,
+      }));
       for (const zone of zones) this.furnish(spec, zone, room);
       return { spec, zones, prompt: null };
     });
   }
 
   /** Stand the art on a point and hang its sign over whatever that covers. */
-  private furnish(spec: FixtureSpec, zone: { x: number; y: number }, room: string | null) {
+  private furnish(spec: FixtureSpec, zone: Zone, room: string | null) {
     // With no art of its own — the whiteboard, which the map draws — the
     // sign is measured from the point itself.
     let edge = zone.y - (spec.sign?.lift ?? 0);
@@ -150,9 +170,11 @@ export class FixtureManager {
         entry.prompt?.setPosition(nearest.zone.x, nearest.zone.y - entry.spec.promptLift);
       }
 
-      if (near && interactPressed) {
+      if (near && nearest && interactPressed) {
         entry.prompt?.setVisible(false);
-        gameEvents.emit(entry.spec.opens);
+        // Which point, not just which fixture: three project boards in
+        // three rooms open the same panel onto three different boards.
+        gameEvents.emit(entry.spec.opens, nearest.zone.subject);
         return true;
       }
     }
@@ -161,9 +183,9 @@ export class FixtureManager {
 
   private nearest(
     at: { x: number; y: number },
-    zones: { x: number; y: number }[],
-  ): { zone: { x: number; y: number }; distance: number } | null {
-    let best: { zone: { x: number; y: number }; distance: number } | null = null;
+    zones: Zone[],
+  ): { zone: Zone; distance: number } | null {
+    let best: { zone: Zone; distance: number } | null = null;
     for (const zone of zones) {
       const distance = Phaser.Math.Distance.Between(at.x, at.y, zone.x, zone.y);
       if (!best || distance < best.distance) best = { zone, distance };

@@ -34,6 +34,7 @@ import { HELP_COUNTER, TILE } from "@/lib/map/office";
 import {
   SUPPORT_BOARD,
   opsProjectFlow,
+  opsProjectSign,
   opsSign,
   opsSupportPulse,
   opsSupportSign,
@@ -45,9 +46,9 @@ import { legible } from "../systems/legible";
 import {
   hasCampus,
   hasFloors,
-  hasProjectFlow,
   operationsBoards,
   operationsRoomCount,
+  projectBoards,
   tenantFor,
 } from "@/lib/world/tenants";
 import { GARAGE_BAYS } from "@/lib/map/premises";
@@ -369,7 +370,7 @@ export class OfficeScene extends Phaser.Scene {
     if (address) this.addSupportSign(address);
     const stopPulse = address ? this.addSupportPulse(address) : null;
     const stopWeek = address ? this.addDeskWeek(address) : null;
-    const stopFlow = address ? this.addProjectFlow(address) : null;
+    const stopFlow = address ? this.addProjectRooms(address) : null;
 
     this.input.keyboard?.disableGlobalCapture();
     this.initTapToWalk();
@@ -717,11 +718,61 @@ export class OfficeScene extends Phaser.Scene {
     return new DeskWeek(this).place(at, TILE);
   }
 
-  private addProjectFlow(address: Address): (() => void) | null {
+  /**
+   * A project room apiece: the board's name lettered in the middle of its
+   * wall, and its five stage counts running to the right-hand corner.
+   *
+   * One room to a board is the whole point of the arrangement — walking the
+   * corridor and looking in says what is on the go, where one wall with a
+   * picker on it said only what somebody last chose. So the name is not
+   * decoration: it is the only thing telling you which of the three rooms
+   * you are standing in.
+   *
+   * Lettered where Support letters its own, at the size the building's name
+   * is drawn downstairs, because they are the same kind of thing — the name
+   * of the room you are in, on the wall you are looking at.
+   *
+   * A building that names no board letters nothing: there is one board,
+   * whatever the office picked, and a room with PROJECT BOARD written over
+   * a project board says less than the sign already hanging on it.
+   *
+   * Hands back one teardown for every plate, since each keeps a timer.
+   */
+  private addProjectRooms(address: Address): (() => void) | null {
     const ops = address.floor.kind === "floor" && address.floor.level === 3;
-    if (!ops || !hasProjectFlow(address.tenant)) return null;
-    const board = new ProjectFlow(this);
-    return board.place(opsProjectFlow(operationsRoomCount(address.tenant)), TILE);
+    if (!ops) return null;
+    const rooms = operationsRoomCount(address.tenant);
+    const stops = projectBoards(address.tenant).flatMap((board, i) => {
+      const slot = i + 1;
+      if (board.board) this.addProjectSign(rooms, slot, board.board);
+      if (board.lanes.length === 0) return [];
+      const at = opsProjectFlow(rooms, slot);
+      return at ? [new ProjectFlow(this).place(at, TILE, slot)] : [];
+    });
+    if (!stops.length) return null;
+    return () => {
+      for (const stop of stops) stop();
+    };
+  }
+
+  /** The board's name, painted on the middle of its own room's wall. */
+  private addProjectSign(rooms: number, slot: number, name: string) {
+    const at = opsProjectSign(rooms, slot);
+    if (!at) return;
+    const text = this.add
+      .text(at.tx * TILE, 0, name.toUpperCase(), {
+        fontFamily: '"Press Start 2P", monospace',
+        fontSize: "16px",
+        color: "#3a3a50",
+        align: "center",
+        // Two rooms of wall is what there is between the board and the
+        // counts, so a long board name wraps rather than being lettered
+        // across the pictures either side of it.
+        wordWrap: { width: 4 * TILE },
+      })
+      .setDepth(3)
+      .setResolution(2);
+    letterOnWall(at.ty * TILE, [text]);
   }
 
   private addWallSign(address: Address) {

@@ -10,6 +10,11 @@ const log = createLogger("ProjectFlow");
 /**
  * The five stage counts, lit up beside the project board they count.
  *
+ * One of these to a project room, and `slot` is which — the number the map
+ * lettered onto its point of interest. The board a room counts is the
+ * building's business, so nothing here names one: the slot goes to the
+ * server and the numbers come back.
+ *
  * The plate, the bays and the timer are `systems/CountBoard`, the same as
  * the support desk's counts across the corridor. What is particular to this
  * one is where the numbers come from — the building's own board, asked for
@@ -35,11 +40,15 @@ export class ProjectFlow {
    * from doing so, and it also carries the board's own teardown once there
    * is one.
    */
-  place(box: { tx: number; ty: number; tw: number; th: number }, tile: number): () => void {
+  place(
+    box: { tx: number; ty: number; tw: number; th: number },
+    tile: number,
+    slot = 1,
+  ): () => void {
     let stop: (() => void) | null = null;
     let stopped = false;
 
-    void fetchFlow().then((flow) => {
+    void fetchFlow(slot).then((flow) => {
       // Nothing to letter the bays with: an unconfigured Trello, a board
       // that could not be read, a room that counts nothing. The wall stays
       // bare rather than showing five headings with dashes under them,
@@ -55,7 +64,7 @@ export class ProjectFlow {
         // One bank wrapped over two rows, so no line: the five compare with
         // each other and a line across the middle would say they do not.
         divider: false,
-        read: async () => reading(await fetchFlow()),
+        read: async () => reading(await fetchFlow(slot)),
         every: PULSE_REFRESH_MS,
         what: "the board",
       });
@@ -70,10 +79,12 @@ export class ProjectFlow {
 }
 
 /** The stages, from the room's own server. Null where there are none to show. */
-async function fetchFlow(): Promise<Flow | null> {
+async function fetchFlow(slot: number): Promise<Flow | null> {
   try {
     const room = encodeURIComponent(currentRoom());
-    const response = await fetch(`/api/trello/flow?room=${room}`, { cache: "no-store" });
+    const response = await fetch(`/api/trello/flow?room=${room}&slot=${slot}`, {
+      cache: "no-store",
+    });
     const answer = (await response.json()) as { flow?: Flow };
     return answer.flow ?? null;
   } catch (err) {

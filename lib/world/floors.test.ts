@@ -32,7 +32,8 @@ import {
   lobbyFurnishing,
   operationsBoards,
   operationsRoomCount,
-  projectFlow,
+  projectBoardAt,
+  projectBoards,
   tenantFor,
 } from "./tenants";
 import { roomFromLocation } from "../rooms";
@@ -318,27 +319,50 @@ describe("the Operations floor", () => {
   it("draws the floor the boards and the room count make", () => {
     const erpFile = mapFileFor({ tenant: erp, floor: OPERATIONS_FLOOR });
     const castleFile = mapFileFor({ tenant: castle, floor: OPERATIONS_FLOOR });
-    // Sandbox ERP counts its board's stages, which is a point of interest on
-    // the wall and so part of the floor's shape.
-    expect(erpFile).toBe(`/maps/floor-ops-trello-zoho-${operationsRoomCount(erp)}-flow.json`);
+    // Sandbox ERP runs three boards, each in a room with a plate on its
+    // wall — points of interest, and so part of the floor's shape.
+    expect(erpFile).toBe(
+      `/maps/floor-ops-trello-zoho-${operationsRoomCount(erp)}-flow${projectBoards(erp).length}.json`,
+    );
     expect(castleFile).toBe(`/maps/floor-ops-trello-${operationsRoomCount(castle)}.json`);
     expect(erpFile).not.toBe(castleFile);
   });
 
   /**
-   * The stage counts hang on the wall, so a floor with them is not the floor
-   * without them: sharing a file would give one building a board nobody can
-   * read, or the other a plate with nothing behind it.
+   * Each project board takes a room and hangs a plate on its wall, so a
+   * floor with three is not a floor with one: sharing a file would give one
+   * building boards nobody can read, or the other plates with nothing
+   * behind them.
    */
-  it("draws a different floor for a building that counts its stages", () => {
+  it("draws a different floor for each number of project boards", () => {
     expect(hasProjectFlow(erp)).toBe(true);
     expect(hasProjectFlow(castle)).toBe(false);
-    expect(operationsMapFile(["trello"], 4, true)).not.toBe(operationsMapFile(["trello"], 4));
+    expect(operationsMapFile(["trello"], 4, 1)).not.toBe(operationsMapFile(["trello"], 4));
+    expect(operationsMapFile(["trello"], 4, 3)).not.toBe(operationsMapFile(["trello"], 4, 1));
     // Which stages is read when the numbers are fetched, not when the map is
     // drawn — so the lanes a building names are none of the file name's
     // business.
-    expect(projectFlow(erp)?.lanes.length).toBe(5);
-    expect(projectFlow(castle)).toBeNull();
+    expect(projectBoardAt(erp, 1)?.lanes.length).toBe(5);
+    expect(projectBoardAt(erp, 3)?.lanes.length).toBe(5);
+    expect(projectBoardAt(erp, 4)).toBeNull();
+  });
+
+  /**
+   * A board is a room. Castle Atlantic names none and still hangs one — the
+   * office's pick, on the Operations wall, which is the wall as it was
+   * before boards had rooms of their own.
+   */
+  it("gives every named board a room, and an unnamed building one", () => {
+    expect(projectBoards(erp).map((board) => board.board)).toEqual([
+      "Sandbox Main App",
+      "Hammer Time",
+      "Reports App",
+    ]);
+    expect(projectBoards(castle)).toHaveLength(1);
+    expect(projectBoards(castle)[0].board).toBe("");
+    // And the floor grew to fit them: three boards want Operations and two
+    // rooms of the lower rank, so four rooms at the least.
+    expect(operationsRoomCount(erp)).toBeGreaterThanOrEqual(4);
   });
 
   /**

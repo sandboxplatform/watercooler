@@ -19,7 +19,7 @@ import {
   TENANTS,
   furnishedLobby,
   hasFloors,
-  hasProjectFlow,
+  projectBoards,
   lobbyFurnishing,
   operationsBoards,
   operationsRoomCount,
@@ -91,18 +91,22 @@ const operationsFloors = [
     TENANTS.filter((t) => operationsBoards(t).length > 0).map(
       (t) =>
         [
-          operationsMapFile(operationsBoards(t), operationsRoomCount(t), hasProjectFlow(t)),
+          operationsMapFile(
+            operationsBoards(t),
+            operationsRoomCount(t),
+            projectBoards(t).filter((board) => board.lanes.length > 0).length,
+          ),
           {
             boards: operationsBoards(t),
             rooms: operationsRoomCount(t),
-            flow: hasProjectFlow(t),
+            projects: projectBoards(t).map((board) => ({ counts: board.lanes.length > 0 })),
           },
         ] as const,
     ),
   ),
-].map(([path, { boards, rooms, flow }]) => {
+].map(([path, { boards, rooms, projects }]) => {
   const file = path.replace("/maps/", "");
-  return [file, (src: SourceMap) => buildFloorSpec(src, { boards, rooms, flow })] as const;
+  return [file, (src: SourceMap) => buildFloorSpec(src, { boards, rooms, projects })] as const;
 });
 
 for (const [file, build] of [

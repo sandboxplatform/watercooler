@@ -1108,8 +1108,11 @@ what makes one is naming the boards that hang on its wall:
 lobby("sandbox-erp", "sandbox-erp", {
   game: "pinball", helpDesk: true,                     // the lobby
   operations: ["trello", "zoho"], projects: 5,         // the floor above
-  flow: { board: "Sandbox ERP",                        // and the numbers on its wall
-          lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"] },
+  boards: [                                            // a project board per room
+    { board: "Sandbox Main App", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"] },
+    { board: "Hammer Time", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Done"] },
+    { board: "Reports App", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"] },
+  ],
 }),
 lobby("castle-atlantic", "castle-atlantic", { game: "pong", operations: ["trello"], projects: 3 }),
 ```
@@ -1125,24 +1128,80 @@ support queue, and nothing had to be special-cased to arrange it.
 rooms is two bays and ten is five. The floor **grows sideways**: `opsWidth`
 and `opsRooms` in `lib/map/floor.ts` take a room count, the height never
 changes, and a company with more projects on the go gets a longer corridor
-rather than a redrawn floor. Sandbox ERP's is 46 tiles wide, Castle
-Atlantic's 31.
+rather than a redrawn floor. Sandbox ERP's is 55 tiles wide, Castle
+Atlantic's 37.
+
+**A room is seventeen tiles wide, and the three it gained were the lower
+rank's doorway.** Upstairs a room hangs its boards on the map's top wall and
+its doorway is cut through another wall entirely, so the two never meet.
+Downstairs they share one: the doorway is a hole in the same run the board,
+the name and the counts want. At fourteen there was no room for all four and
+the counts ran straight through it — five tiles starting at nine, a doorway
+at eight — which draws perfectly and is only visible from inside the room.
+Three more tiles is exactly what `BOARD_WALL` needs to put a clear tile
+either side of the doorway, and the corridor is that much longer per bay,
+which is the floor doing what it is built to do. `floor.test.ts` holds
+everything on a lower room's wall to being clear of that room's doorway.
 
 How many is per building: `projects` on the tenant (`lib/world/tenants.ts`),
 counting the rooms besides Operations itself. **That number is in the map's
-file name** — `floor-ops-trello-zoho-6-flow.json` — because the boards alone
+file name** — `floor-ops-trello-zoho-6-flow3.json` — because the boards alone
 no longer identify a floor: two buildings with the same boards and different
 numbers of projects are different floors, and sharing a file would give one
-of them the wrong corridor. The `-flow` on the end is the same argument
-about the stage counts below: they are a point of interest on the wall, so a
-floor with them is not the floor without them.
+of them the wrong corridor. The `-flow3` on the end is the same argument
+about the project rooms below: each hangs a board and a plate of counts, so
+a floor with three of them is not a floor with one.
+
+**A project board is a room, not a choice.** `boards` on the tenant names
+them in the order their rooms run: the first has **Operations**, the room
+above the lift and the one you step out facing, and the rest take the lower
+rank left to right. Each room gets the board in the left-hand corner of its
+wall, **the board's name lettered in the middle** and its five stage counts running to
+the right-hand corner — the same arrangement as Support's, which is what
+makes the corridor readable: the work on the left of every doorway and the
+numbers on the right of it, whichever room you look into.
+
+It replaced a single wall with a picker on it. One board could be shown at
+a time, whichever the office had last chosen, and choosing chose for
+everybody — so "what is on the go" was a question you answered by standing
+at one wall and cycling. Three of them in three rooms is the same
+information laid out as a place, which is what this app does with
+everything else.
+
+Three things follow, and the first is the one that would go wrong quietly:
+
+- **The room's own board wins**, over `TRELLO_BOARD_ID` and over anything
+  picked on a wall (`boardInRoom` in `lib/server/boards.ts`). A room that
+  deferred to an office-wide choice would be the one switching wall again,
+  wearing three doors. The pick is only consulted where a building names no
+  board at all, which is Castle Atlantic — one unnamed board, a picker on
+  it, and nothing counted beside it, exactly as every floor was before.
+- **The lift's room hangs nothing.** The car is three tiles tall and hangs a
+  tile below the cap of the lower wall, which is the first lower room's own
+  wall face — so a board on the left of it is a board with a lift drawn
+  across the end. It is skipped for the same reason it is not Support, and
+  `opsProjectRooms` asks `opsElevator` rather than writing down "not the
+  first lower room". Which is why three boards want six rooms, and why
+  `operationsRoomCount` grows the floor to fit rather than leaving a board
+  with no wall.
+- **The browser never names a board.** The map letters its points of
+  interest `Project board 2` / `Project flow 2`; the number is the
+  **subject**, captured by the fixture's own `match` and carried on its open
+  event (see **Fixtures**), and the panel asks `?room=…&slot=2`. A slot is
+  geometry — the map is shared by every building with this many boards —
+  where a board name is the tenant's, and a request that named one could
+  name any board the token can see.
 
 **The lift is set into the lower wall, directly beneath the door to
 Operations**, not at the end of the corridor. The ride has to land you
 somewhere that says where you are, and Operations is the room the floor is
-named after — so you step out facing its door. That is why the two doorways
-in a bay are offset: the lower rank's door has to stay clear of the wall the
-lift occupies, and a test asserts it does.
+named after — so you step out facing its door. The two doorways in a bay are
+at different offsets, and it is the walls rather than the look of it that
+decides them: the upper rank's is a hole in a wall with nothing else on it,
+so it sits where it always did; the lower rank's goes where `BOARD_WALL`
+leaves room, between the board's name and the counts. They come out far
+enough apart that two rooms facing each other do not line their doors up
+into what reads as one wide gap, and the lower one never lands on the lift.
 
 **The floor's name is centred on the stretch of wall it is written on.**
 The corridor's upper wall is the one face anybody on this floor sees a
@@ -1192,7 +1251,8 @@ tickets that would pull it down, and the wall would letter a confident
 **Lettering painted on a wall is centred on the wall.** `letterOnWall` in
 `components/game/utils/wall-lettering.ts` is the one rule, and every
 painted thing goes through it: the building's name and the line under it,
-`SUPPORT`, and the week's three headings and figures. Each used to hang off
+`SUPPORT`, the name of the board in each project room, and the week's three
+headings and figures. Each used to hang off
 a fixed pair of offsets — a bottom edge at 92 and a top edge at 100 — which
 put the block a good twenty pixels low in a band of a hundred and
 forty-four, and on the corridor wall, where the paint is the only thing on
@@ -1221,21 +1281,45 @@ a job somebody does rather than a project everybody watches. Support is the
 second working room, the one Doc works in, and the queue and its counts have
 that wall: `opsSupportRoom` and `SUPPORT_BOARD` in `lib/map/floor.ts`.
 
-That room is the only one lettered — `SUPPORT`, on its own wall
-(`opsSupportSign`, drawn by `addSupportSign`). Nothing else on the floor is
-named and nothing else needs to be: a project room is whichever project is
-on the board in it. A building running no support queue has no such room and
-gets no sign, which is Castle Atlantic.
+That room is lettered `SUPPORT`, on its own wall (`opsSupportSign`, drawn
+by `addSupportSign`), and every project room is lettered with the name of
+the board hanging in it (`opsProjectSign`, drawn by `addProjectRooms`).
+Nothing else on the floor is named and nothing else needs to be. A building
+running no support queue has no such room and gets no sign, which is Castle
+Atlantic — and one naming no board letters nothing either, since PROJECT
+BOARD over a project board says less than the sign already on it.
 
 **Fourteen tiles of wall, three things on it, and the layout written down
-once** — `SUPPORT_WALL` in `lib/map/floor.ts`. The queue takes the left, the
-five counts run to the right-hand corner, and the name has the four tiles in
-the middle: the middle of the wall is where a room's own name reads as the
-room's, and it is the only stretch nothing else wants. Drawn at the size the
-building's name is drawn downstairs, because it now has the room to be.
+once** — `BOARD_WALL` in `lib/map/floor.ts`, for **both** kinds of working
+room, because Support and a project room are the same arrangement. **Both
+pictures go hard into their corners** — the board into the left, the five
+counts running to the right — and the room's own name has what is left
+between them, drawn at the size the building's name is drawn downstairs.
 
-**The whiteboard is next door** — `opsWhiteboardRoom`, centred on that room's
-wall, since it is the one thing in it. It used to have Support's wall too,
+Flush rather than a couple of tiles in, because two tiles of clear wall to
+the left of a board is not a margin, it is a gap: from the corridor the eye
+has the doorway's edge to compare it against, and a board that starts short
+of the corner reads as having drifted off the end of its wall. Flush, every
+working room along the floor opens at the same place.
+
+And the name is the middle of **what is left**, not the middle of the wall.
+Those were the same tile while the board started two in, which is why one
+number stood for both; with the board in the corner the clear stretch runs
+from tile 3 to tile 9 and its middle is a tile to the left of the wall's.
+The gap's middle is the one that matters — a name is only the room's if it
+is lettered on wall rather than across a picture — and centred on the wall
+it would have crowded the counts. It was two layouts saying the same thing in two constants
+(`SUPPORT_WALL` and `OPS_WALL`), which is how one of them would have come
+to disagree with the other about a wall the corridor sees both of.
+
+**The whiteboard is next door** — `opsWhiteboardRoom`, in the **left-hand
+corner** of that room's wall, where every other board on this floor starts
+(`BOARD_WALL.board`). Nothing else is on that wall to force it
+anywhere, which is the argument for putting it where the eye already looks:
+centred, it was the one thing along the corridor that lined up with neither
+the doorway before it nor the one after, and it shares the room with the
+boardroom table, so a board floating in the middle of a bare wall above a
+table gave the room two centres. It used to have Support's wall too,
 which left the name two tiles and twelve pixels to fit them, and a letter of
 it behind the board's frame. It is also the only board on the floor that
 stands for nothing in particular, so of the four things wanting that wall it
@@ -1341,7 +1425,7 @@ Two things differ between them, and only one is worth remembering:
 |            | Support's counts                                        | The project board's                                  |
 | ---------- | ------------------------------------------------------- | ---------------------------------------------------- |
 | Banks      | Two, with a line between: standing, and today's traffic | One, wrapped over two rows — five stages of one flow |
-| Comes with | The `zoho` board, wherever the queue hangs              | `flow` on the tenant, which is per building          |
+| Comes with | The `zoho` board, wherever the queue hangs              | One per entry in `boards` on the tenant              |
 
 The bank is the whole of it. Three standing counts and two day counters are
 scaled separately because a standing total against a day's flow is not a
@@ -1349,14 +1433,16 @@ comparison; Backlog through Testing _are_ each other's comparison, so one
 scale and no dividing line. `divider` on the spec is that decision and
 nothing else.
 
-**Which stages, and off which board, is the building's** — `flow` in
-`lib/world/tenants.ts`, naming the Trello lists in the order they run. Read
-when the numbers are fetched rather than when the map is drawn, so renaming
-a lane is not a `build:map`; the map only carries the five tiles and the
-point of interest. The board is a **fallback**: `TRELLO_BOARD_ID` wins, then
-whatever was picked on the wall, then the building's own — so the numbers
-always count the board hanging beside them, and the declaration is what
-makes the wall work before anybody has picked anything.
+**Which stages, and off which board, is the building's** — `boards` in
+`lib/world/tenants.ts`, one entry per project room, each naming its Trello
+board and the lists it counts in the order they run. Read when the numbers
+are fetched rather than when the map is drawn, so renaming a board or a lane
+is not a `build:map`; the map only carries the five tiles and the point of
+interest, and those are the same tiles whatever anything is called. The
+board is **not** a fallback: a room's own board wins over `TRELLO_BOARD_ID`
+and over anything picked on a wall, because the whole point of a room per
+board is that the numbers count the board lettered above them. See **A
+project board is a room, not a choice** under Floors.
 
 The arithmetic is `lib/trello/flow.ts`, pure, over the board `readBoard`
 already holds — no second fetch, so a floor of people reading both is still
@@ -1489,13 +1575,16 @@ Each board keeps its own place along the wall whether or not the others are
 there, so a building with one has a gap rather than a board in the wrong
 spot. The map is named by the boards rather than the building —
 `operationsMapFile` in `lib/world/floors.ts`, giving
-`floor-ops-trello.json` and `floor-ops-trello-zoho.json` — so two buildings
-running off the same boards share one map and a third needs no new file.
+`floor-ops-trello-4.json` and `floor-ops-trello-zoho-6-flow3.json` — so two
+buildings running off the same boards, with the same number of rooms and
+project boards, share one map and a third needs no new file.
 `pnpm build:map` writes one per set actually in use, read off `TENANTS`.
 
-The `?project=1` and `?desk=1` query parameters open either panel from
+The `?project=1`, `?flow=1` and `?desk=1` query parameters open a panel from
 anywhere, which is a development shortcut rather than a way into the room:
-what is on the wall is what the floor's map carries.
+what is on the wall is what the floor's map carries. A link names no point of
+interest, so the two project panels open on the first room's board — the
+building's own, in Operations.
 
 ### Asset URLs
 
@@ -1601,12 +1690,12 @@ will overwrite anything you change by hand.
 **Every per-building map comes off `TENANTS`**, so adding a building is a
 line there and a `pnpm build:map`:
 
-| Map                             | Written for                                                                  | From                                 |
-| ------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------ |
-| `lobby-<slug>.json`             | A lobby with anything in it                                                  | `furnishedLobby` + `lobbyFurnishing` |
-| `lobby.json`                    | Every lobby with nothing in it, between them                                 | —                                    |
-| `room-<slug>.json`              | Each store, warehouse and garage                                             | `kind`                               |
-| `floor-ops-<boards>-<n>[-flow]` | One per set of boards, number of projects, and whether the stage counts hang | `operations` + `projects` + `flow`   |
+| Map                              | Written for                                                                 | From                                 |
+| -------------------------------- | --------------------------------------------------------------------------- | ------------------------------------ |
+| `lobby-<slug>.json`              | A lobby with anything in it                                                 | `furnishedLobby` + `lobbyFurnishing` |
+| `lobby.json`                     | Every lobby with nothing in it, between them                                | —                                    |
+| `room-<slug>.json`               | Each store, warehouse and garage                                            | `kind`                               |
+| `floor-ops-<boards>-<n>[-flowN]` | One per set of boards, number of projects, and how many project boards hang | `operations` + `projects` + `boards` |
 
 The lobbies were the last thing here still hand-listed, each hand-wired in
 the build script with its own `{ game, helpDesk }` while `mapFileFor`
@@ -2001,6 +2090,17 @@ that is the point — neither side writes down what the other emits:
 Adding something to walk up to is an entry there, its two events in
 `lib/events.ts`, and a panel in `components/hud/` that calls
 `usePanel("<id>")`. Nothing in `OfficeScene` changes.
+
+**A fixture with several points says which one was pressed.** Usually it has
+one, and where it has several they are several ways into the same panel — a
+lobby's boards are one shared canvas, so it never mattered. An Operations
+floor broke that: three project boards in three rooms are three different
+boards. So every fixture's open event carries an optional **subject**, and
+the subject is the **capture in the fixture's own `match`** — `"2"` off
+`Project board 2` — which is one line in `FixtureManager` and no new
+concept. `usePanel` hands it back beside `open`, set before the flag so a
+panel's first render is already about the right thing. Null everywhere else,
+including for a panel opened by its `?<param>=1` link, which names no point.
 
 It was six hand-written copies of all of that — roughly 90 lines apiece
 spread over four files — and the cost showed twice. The whiteboard and the

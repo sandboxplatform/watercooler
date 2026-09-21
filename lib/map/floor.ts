@@ -53,7 +53,7 @@ export const PROJECT_BOARD = {
 /**
  * The help desk board: the support queue, first along Support's own wall,
  * with the room's name lettered in the middle and the five counts running
- * to the right-hand corner. The offsets are `SUPPORT_WALL`; what is here is
+ * to the right-hand corner. The offsets are `BOARD_WALL`; what is here is
  * the footprint and the point of interest, as the project board's is.
  */
 export const HELP_DESK = {
@@ -247,9 +247,42 @@ export function opsBoardroom(rooms: number): OpsRoom {
  *   rows 20-26    the lower rank
  *   row  27       the bottom wall
  */
-const ROOM_COLS = 14;
+/**
+ * How wide a room is, which is how wide its wall is.
+ *
+ * Seventeen rather than the fourteen it was, because the lower rank's wall
+ * has to carry four things and fourteen fits three. Upstairs a room hangs
+ * its boards on the map's top wall and its doorway is cut through a
+ * different wall altogether; downstairs they share one, so the doorway is a
+ * hole in the middle of the same run the board, the name and the counts
+ * want. At fourteen the counts ran through it — five tiles starting at nine,
+ * a doorway at eight — and the plate was drawn across a gap in the wall it
+ * was supposed to be hanging on.
+ *
+ * Three tiles of growth is what `BOARD_WALL` needs and no more: it puts a
+ * clear tile either side of the doorway. The corridor is that much longer
+ * per bay, which is the floor doing what it is built to do.
+ */
+export const ROOM_COLS = 17;
 const ROOM_ROWS = 7;
 const CORRIDOR_ROWS = 4;
+
+/**
+ * A doorway off the corridor, and where each rank cuts one.
+ *
+ * The upper rank's is a hole in a wall with nothing else on it — a room up
+ * here hangs its boards on the map's top wall — so it sits where it always
+ * did, a few tiles in from the room's left edge. The lower rank's is a hole
+ * in the wall its own boards hang on, so it goes where `BOARD_WALL` leaves
+ * room for it, which is what `DOOR_AT` works out.
+ *
+ * The two are far enough apart that two rooms facing each other across the
+ * corridor do not line their doors up into what reads as one wide gap — and
+ * the lower one never lands on the lift, which is set into that wall
+ * beneath the first upper door.
+ */
+const DOOR_COLS = 2;
+const UPPER_DOOR_AT = 4;
 
 /** The first walkable row of each band, worked out once so nothing drifts. */
 const UPPER_TOP = WALL_ROWS;
@@ -283,50 +316,69 @@ const BETWEEN_ROOMS = {
 } as const;
 
 /**
- * Where each thing hangs along Support's wall, in tiles from its left edge.
+ * Where each thing hangs along a working room's wall, in tiles from its
+ * left edge.
  *
  * Fourteen tiles of wall and three things wanting some of it, so the layout
- * is written down once here rather than worked out in three places. The
- * queue takes the left, the counts run to the right-hand corner, and the
- * room's name has the middle — which is the stretch nothing else wants,
- * and the only place a name reads as the room's rather than as a caption
- * on whatever picture it is lettered across.
+ * is written down once here rather than worked out in several places — and
+ * once for both kinds of room, because Support and a project room are the
+ * same arrangement: the board in the left-hand corner, the room's own name
+ * in the middle, and the counts running to the right-hand corner. That is what
+ * makes the corridor readable rather than merely tidy — the work on the
+ * left of every doorway and the numbers on the right of it, whichever room
+ * you are looking into.
  *
- * The whiteboard had the left of it until lately, with the name squeezed
- * into the two tiles before that — seven letters wanting nearer three, at
- * the one size in the world nothing else is drawn at. So the board went to
- * the empty room next door (see `opsWhiteboardRoom`), the queue took its
- * place, and the name got the middle.
+ * Both pictures go **hard into their corners** and the name has whatever is
+ * left between them. Two tiles of clear wall to the left of the board is
+ * not a margin, it is a gap: a board that starts a couple of tiles in
+ * reads as having drifted off the end of its wall, and from the corridor
+ * the eye has the doorway's edge to compare it against. Flush, the three
+ * rooms line up with each other and with Support.
+ *
+ * The name is the middle of **what is left**, not the middle of the wall.
+ * They were the same tile while the board started two in, which is why one
+ * number stood for both; with the board in the corner the clear stretch
+ * runs from tile 3 to tile 9 and its middle is a tile to the left of the
+ * wall's. The middle of the gap is the one that matters — a name is only
+ * the room's if it is lettered on wall rather than across a picture — and
+ * centred on the wall it would have crowded the counts.
  */
-const SUPPORT_WALL = {
-  queue: 2,
-  sign: ROOM_COLS / 2,
-  pulse: ROOM_COLS - SUPPORT_PULSE.region.sw,
+/** How wide a name is drawn, which is what `OfficeScene` wraps it to. */
+export const NAME_COLS = 4;
+
+const BOARD_AT = 0;
+const NAME_AT = BOARD_AT + PROJECT_BOARD.region.sw;
+const COUNTS_AT = ROOM_COLS - SUPPORT_PULSE.region.sw;
+/** Centred in what the name and the counts leave, to the nearest tile. */
+const DOOR_AT = Math.round((NAME_AT + NAME_COLS + COUNTS_AT - DOOR_COLS) / 2);
+
+const BOARD_WALL = {
+  board: BOARD_AT,
+  sign: NAME_AT + NAME_COLS / 2,
+  door: DOOR_AT,
+  counts: COUNTS_AT,
 } as const;
 
 /**
- * Where each thing hangs along the Operations room's wall.
+ * Where the whiteboard hangs on whichever wall it has: the left end of it,
+ * where every other board on this floor starts.
  *
- * The same two ends as Support's: the board on the left, where it always
- * hung, and the counts running to the right-hand corner — so the two rooms
- * read alike from the corridor, the work on the left and the numbers on the
- * right. Four clear tiles between them, which is the gap that keeps the one
- * from reading as a caption on the other.
- */
-const OPS_WALL = {
-  board: 2,
-  flow: ROOM_COLS - PROJECT_FLOW.region.sw,
-} as const;
-
-/**
- * Where the whiteboard hangs on whichever wall it has: the middle of it.
+ * It is the one thing in its room, so nothing forces it anywhere — which is
+ * the argument for putting it where the eye already looks. Every working
+ * room on this floor opens with a board two tiles in (`BOARD_WALL.board`:
+ * the project boards, the support queue), so a whiteboard in the middle of
+ * its own wall was the one thing on the corridor that did not line up with
+ * the doorway before it or the one after.
  *
- * It is the one thing in its room, so the middle is where it belongs —
- * nothing else on that wall for it to keep out of the way of. Its point of
- * interest is the board's right-hand tile, the same as in a lobby, which is
- * why the sign over it carries a nudge of half a tile (`lib/fixtures.ts`).
+ * Centred is what it was, and it read as centred rather than as placed —
+ * the room has a table in it too, and a board floating in the middle of a
+ * bare wall above a table is a room with two centres.
+ *
+ * Its point of interest is the board's right-hand tile, the same as in a
+ * lobby, which is why the sign over it carries a nudge of half a tile
+ * (`lib/fixtures.ts`).
  */
-const WHITEBOARD_AT = (ROOM_COLS - WHITEBOARD.region.sw) / 2;
+const WHITEBOARD_AT = BOARD_WALL.board;
 
 /** How many bays a given number of rooms needs: two rooms to a bay. */
 export const opsBays = (rooms: number) => Math.max(1, Math.ceil(rooms / 2));
@@ -481,7 +533,7 @@ export function opsWeekCounts(rooms: number) {
  */
 export function opsSupportSign(rooms: number) {
   const room = opsSupportRoom(rooms);
-  return { tx: room.x + SUPPORT_WALL.sign, ty: room.wallRow } as const;
+  return { tx: room.x + BOARD_WALL.sign, ty: room.wallRow } as const;
 }
 
 /**
@@ -494,7 +546,7 @@ export function opsSupportSign(rooms: number) {
 export function opsSupportPulse(rooms: number) {
   const room = opsSupportRoom(rooms);
   return {
-    tx: room.x + SUPPORT_WALL.pulse,
+    tx: room.x + BOARD_WALL.counts,
     ty: room.wallRow + SUPPORT_PULSE.region.dy,
     tw: SUPPORT_PULSE.region.sw,
     th: SUPPORT_PULSE.region.sh,
@@ -502,19 +554,70 @@ export function opsSupportPulse(rooms: number) {
 }
 
 /**
- * Where the five stage counts hang, in tiles, for the scene that draws
- * them.
+ * The rooms the project boards hang in, in the order the boards were
+ * declared.
  *
- * Off the first room — Operations, the one the project board hangs in —
- * and off the same layout the map is generated from, so the picture the
- * scene draws lands on the footprint the map made solid. The same
- * arrangement as `opsSupportPulse`, one room along.
+ * The first is Operations — the room above the lift, which is what you step
+ * out facing, so the building's own board is the one you walk into. The
+ * rest take the lower rank left to right, **except the room the lift is set
+ * into**: those are the rooms nothing else wants, and they line the far
+ * side of the corridor, so three boards read as three doorways rather than
+ * as one wall with three things on it.
+ *
+ * The lift's room is skipped for the same reason it is not Support. The car
+ * is three tiles tall and hangs a tile below the wall's cap, which is the
+ * room's own wall face — so a board on the left of that wall is a board
+ * with a lift drawn across the end of it. Asked of `opsElevator` rather
+ * than written down as "not the first lower room", because where the lift
+ * stands is a fact about the floor and has moved once already.
+ *
+ * Shorter than `count` where the floor has not the rooms for it, which
+ * cannot happen from a tenant — `operationsRoomCount` grows the floor to
+ * fit — but can from a hand-built spec, and a board with no wall is better
+ * left off than hung in somebody else's room.
  */
-export function opsProjectFlow(rooms: number) {
-  const [operations] = opsRooms(rooms);
+export function opsProjectRooms(rooms: number, count: number): OpsRoom[] {
+  const list = opsRooms(rooms);
+  const lift = opsElevator(rooms);
+  const clearOfLift = (room: OpsRoom) =>
+    lift.tx >= room.x + BOARD_WALL.counts || lift.tx + lift.tw <= room.x + BOARD_WALL.board;
+  const lower = list.filter((room) => room.rank === "lower" && clearOfLift(room));
+  return [list[0], ...lower].slice(0, count).filter(Boolean);
+}
+
+/**
+ * Where a project room letters the name of the board hanging in it: the
+ * middle of its own wall, between the board on the left and the counts
+ * running to the right-hand corner.
+ *
+ * Exactly where Support letters its own name, and that is the point: the
+ * two kinds of working room are the same wall, so what changes from one
+ * doorway to the next is the words rather than the arrangement. `slot` is
+ * one-based, as the points of interest are lettered.
+ *
+ * Null where the floor has no such room, which a stale slot asks for.
+ */
+export function opsProjectSign(rooms: number, slot: number) {
+  const room = opsProjectRooms(rooms, slot)[slot - 1];
+  if (!room) return null;
+  return { tx: room.x + BOARD_WALL.sign, ty: room.wallRow } as const;
+}
+
+/**
+ * Where a project room's five stage counts hang, in tiles, for the scene
+ * that draws them.
+ *
+ * Off the room rather than written down, so a longer corridor carries them
+ * with it — and off the same layout the map is generated from, so the
+ * picture the scene draws lands on the footprint the map made solid. The
+ * same arrangement as `opsSupportPulse`, in whichever room the board is.
+ */
+export function opsProjectFlow(rooms: number, slot = 1) {
+  const room = opsProjectRooms(rooms, slot)[slot - 1];
+  if (!room) return null;
   return {
-    tx: operations.x + OPS_WALL.flow,
-    ty: operations.wallRow + PROJECT_FLOW.region.dy,
+    tx: room.x + BOARD_WALL.counts,
+    ty: room.wallRow + PROJECT_FLOW.region.dy,
     tw: PROJECT_FLOW.region.sw,
     th: PROJECT_FLOW.region.sh,
   } as const;
@@ -533,8 +636,13 @@ export function opsSupportPost(rooms: number) {
   const room = opsSupportRoom(rooms);
   const left = room.x * TILE;
   return {
-    post: { x: left + 7 * TILE, y: (room.y + 3) * TILE },
-    paces: { x: left + 2 * TILE, y: (room.y + 2) * TILE, width: 10 * TILE, height: 2 * TILE },
+    post: { x: left + (ROOM_COLS / 2) * TILE, y: (room.y + 3) * TILE },
+    paces: {
+      x: left + 2 * TILE,
+      y: (room.y + 2) * TILE,
+      width: (ROOM_COLS - 4) * TILE,
+      height: 2 * TILE,
+    },
   } as const;
 }
 
@@ -593,16 +701,15 @@ export function opsRooms(count: number): OpsRoom[] {
     const bay = Math.floor(i / 2);
     const upper = i % 2 === 0;
     const x = 1 + bay * (ROOM_COLS + 1);
-    // Offset the two doors in a bay so they do not line up into what reads
-    // as one wide gap — and so the lower rank's door never lands on the
-    // lift, which is set into that wall beneath the first upper door.
-    const doorFrom = x + (upper ? 4 : ROOM_COLS - 6);
+    // Each rank cuts its doorway where its own wall has room — see
+    // DOOR_COLS above for why the two offsets are not the same number.
+    const doorFrom = x + (upper ? UPPER_DOOR_AT : BOARD_WALL.door);
     rooms.push({
       rank: upper ? "upper" : "lower",
       x,
       y: upper ? UPPER_TOP : LOWER_TOP,
       wallRow: upper ? 0 : LOWER_WALL,
-      door: { from: doorFrom, to: doorFrom + 2 },
+      door: { from: doorFrom, to: doorFrom + DOOR_COLS },
     });
   }
   return rooms;
@@ -623,15 +730,20 @@ export interface FloorOptions {
    */
   rooms?: number;
   /**
-   * Whether the five stage counts hang beside the project board.
+   * The project boards hanging on this floor, one to a room: for each,
+   * whether the five stage counts hang beside it.
    *
-   * Only whether, not which: the stages a building runs are named in
-   * `lib/world/tenants.ts` and read at the moment the numbers are fetched,
-   * so renaming one is not a map to regenerate. What the map carries is a
-   * footprint and a point of interest, and those are the same five tiles
-   * whatever the stages are called.
+   * Only how many and whether, not which board or which stages: those are
+   * named in `lib/world/tenants.ts` and read at the moment the numbers are
+   * fetched, so renaming a board or a lane is not a map to regenerate. What
+   * the map carries is a footprint and a point of interest per room, and
+   * those are the same tiles whatever the board is called.
+   *
+   * Empty means the one unnamed board on the Operations wall with nothing
+   * counted beside it, which is what every floor was before boards had
+   * rooms of their own.
    */
-  flow?: boolean;
+  projects?: readonly { counts: boolean }[];
 }
 
 export function buildFloorSpec(source: SourceMap, options: FloorOptions = {}): RoomSpec {
@@ -643,7 +755,7 @@ export function buildFloorSpec(source: SourceMap, options: FloorOptions = {}): R
       source,
       kinds,
       Math.max(1, options.rooms ?? OPS_ROOM_COUNT),
-      options.flow ?? false,
+      options.projects?.length ? options.projects : [{ counts: false }],
     );
 
   const boards = kinds.map((kind) => BOARDS[kind]);
@@ -675,12 +787,11 @@ function operationsSpec(
   source: SourceMap,
   kinds: readonly BoardKind[],
   roomCount: number,
-  flow: boolean,
+  projects: readonly { counts: boolean }[],
 ): RoomSpec {
   const rooms = opsRooms(roomCount);
   const width = opsWidth(roomCount);
 
-  const [first] = rooms;
   const support = opsSupportRoom(roomCount);
 
   /**
@@ -689,11 +800,20 @@ function operationsSpec(
    * a wide board to read it rather than at one end. Odd widths land on a
    * tile; the five counts are five tiles, which is why they are.
    */
-  const hang = (board: { region: Region; poi: PoiSpec }, room: OpsRoom, at: number) => ({
+  const hang = (
+    board: { region: Region; poi: PoiSpec },
+    room: OpsRoom,
+    at: number,
+    slot?: number,
+  ) => ({
     ...board,
     region: { ...board.region, dx: room.x + at, dy: room.wallRow + 1 },
     poi: {
       ...board.poi,
+      // Numbered only where there are several of the same thing to tell
+      // apart. The queue and its counts are one apiece, and an unnumbered
+      // name is what `lib/fixtures.ts` matches when there is nothing to say.
+      name: slot === undefined ? board.poi.name : `${board.poi.name} ${slot}`,
       tx: room.x + at + Math.floor(board.region.sw / 2),
       ty: room.wallRow + 2,
     },
@@ -713,13 +833,29 @@ function operationsSpec(
    * way a building naming no boards has no Operations floor.
    */
   const queue = kinds.includes(SUPPORT_BOARD) ? BOARDS[SUPPORT_BOARD] : null;
-  const hung = kinds
-    .filter((kind) => kind !== SUPPORT_BOARD)
-    .map((kind, i) => hang(BOARDS[kind], first, OPS_WALL.board + i * (BOARDS[kind].region.sw + 1)));
-  // The stage counts, at the right-hand end of the same wall — a second way
-  // of reading the board on the left of it, so the same room and the same
-  // arrangement Support's queue and counts have.
-  if (flow) hung.push(hang(PROJECT_FLOW, first, OPS_WALL.flow));
+
+  /**
+   * A project board to a room, and its stage counts on the same wall.
+   *
+   * The points of interest are numbered from one — `Project board 2`, and
+   * `Project flow 2` beside it — because the map is shared by every
+   * building running this many boards and a slot is geometry where a name
+   * is the tenant's. The scene reads the number back out of the name and
+   * asks the building which board that room holds; the browser never names
+   * a board, for the same reason it never names the room it is standing in.
+   *
+   * A room with no counts declared gets the board and nothing on the right
+   * of its wall, which is Castle Atlantic's one unnamed board.
+   */
+  const hung = kinds.includes("trello")
+    ? opsProjectRooms(roomCount, projects.length).flatMap((room, i) => {
+        const slot = i + 1;
+        const board = hang(BOARDS.trello, room, BOARD_WALL.board, slot);
+        return projects[i]?.counts
+          ? [board, hang(PROJECT_FLOW, room, BOARD_WALL.counts, slot)]
+          : [board];
+      })
+    : ([] as ReturnType<typeof hang>[]);
 
   /**
    * The whiteboard goes in the empty room next door, where there is a queue
@@ -740,7 +876,7 @@ function operationsSpec(
   // same desk counted, so a building with no support queue has nothing for
   // them to count and no room to hang them in.
   const inSupport = queue
-    ? [hang(queue, support, SUPPORT_WALL.queue), hang(SUPPORT_PULSE, support, SUPPORT_WALL.pulse)]
+    ? [hang(queue, support, BOARD_WALL.board), hang(SUPPORT_PULSE, support, BOARD_WALL.counts)]
     : ([] as ReturnType<typeof hang>[]);
   // Only the whiteboard is cut from the source map. A board is a picture the
   // scene draws over the wall, which is why its region is here for its box

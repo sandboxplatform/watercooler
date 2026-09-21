@@ -29,6 +29,16 @@ export interface Panel {
   /** Whether the panel is up. */
   open: boolean;
   /**
+   * Which of the fixture's points opened it, where they are several
+   * different things — the number off `Project board 2`, so a panel can
+   * ask about the board in that room rather than about the floor's.
+   *
+   * Null for every fixture with one point, and for a panel opened by its
+   * query parameter, which names no point. Read while the panel is up; it
+   * is set before the state flips, so the first render already has it.
+   */
+  subject: string | null;
+  /**
    * Close it and tell the office, so the character walks again.
    *
    * Stable across renders, so it can go straight into a dependency list or
@@ -51,7 +61,7 @@ interface PanelOptions {
    * fresh each time rather than subscribed against, so it need not be
    * memoised at the call site.
    */
-  onOpen?: () => void;
+  onOpen?: (subject: string | null) => void;
   /** Run as it closes, before the office is told. Same. */
   onClose?: () => void;
   /**
@@ -65,6 +75,7 @@ interface PanelOptions {
 
 export function usePanel(id: FixtureId, options: PanelOptions = {}): Panel {
   const [open, setOpen] = useState(false);
+  const [subject, setSubject] = useState<string | null>(null);
   const spec = fixture(id);
   const { escape = true } = options;
 
@@ -90,8 +101,11 @@ export function usePanel(id: FixtureId, options: PanelOptions = {}): Panel {
   // Opening: the scene says when somebody walked up and pressed E, and the
   // query parameter goes through the same event, so there is one way in.
   useEffect(() => {
-    const unsubscribe = gameEvents.on(spec.opens, () => {
-      latest.current.onOpen?.();
+    const unsubscribe = gameEvents.on(spec.opens, (which?: string | null) => {
+      // Set before the flag, so the panel's first render is already about
+      // the right thing rather than about whatever was opened last.
+      setSubject(which ?? null);
+      latest.current.onOpen?.(which ?? null);
       setOpen(true);
     });
     if (new URLSearchParams(window.location.search).get(spec.param) === "1") {
@@ -113,5 +127,5 @@ export function usePanel(id: FixtureId, options: PanelOptions = {}): Panel {
     return () => document.removeEventListener("keydown", onKey, true);
   }, [open, escape, close]);
 
-  return { open, close, show };
+  return { open, subject, close, show };
 }

@@ -127,22 +127,41 @@ export interface Tenant {
    */
   projects?: number;
   /**
-   * The stages counted on the wall beside the project board, where a
-   * building keeps them.
+   * The project boards this building runs, one to a room.
    *
-   * A second way of reading the board next to it — how much work is
-   * standing in each stage — so it hangs in the same room and comes off the
-   * same board. Declared rather than derived, and per building, because the
-   * lists are the board's own and no two boards agree about them: Sandbox
-   * ERP runs Backlog through Testing, and a building that names none has
-   * nothing on that stretch of wall.
+   * A board is a room rather than a choice: the first hangs in Operations,
+   * the room the lift lands you facing, and the rest take the rooms of the
+   * lower rank, left to right. Each room gets the board itself on the left
+   * of its wall, the board's name lettered in the middle and its stage
+   * counts on the right — so walking the corridor and looking in is how you
+   * see what is on the go, rather than standing at one wall switching a
+   * picker between three things.
    *
-   * `board` is the Trello board to count, by name as somebody would say it
-   * out loud. It is a fallback rather than an override: a board configured
-   * in the environment or picked on the wall wins, so the numbers always
-   * count the board hanging beside them.
+   * Declared rather than derived, and per building, because the lists are
+   * the board's own and no two boards agree about them. A building that
+   * names none still hangs one project board wherever `operations` says
+   * `trello` — unnamed, showing whatever the office has picked, which is
+   * Castle Atlantic and is what every building did before this.
    */
-  flow?: { board: string; lanes: readonly string[] };
+  boards?: readonly ProjectBoardSpec[];
+}
+
+/**
+ * One project board: the Trello board, and the stages counted beside it.
+ *
+ * `board` is named the way somebody would say it out loud — "Hammer Time" —
+ * and is resolved to an id when it is read. It is that room's own board and
+ * wins over anything picked on a wall or named in the environment: three
+ * rooms all deferring to one office-wide choice would be the single
+ * switching wall again, wearing three doors.
+ *
+ * `lanes` are the lists counted, in the order they run. Required rather
+ * than optional, because a room with a board's name over the door and
+ * nothing under it says less than the corridor outside it.
+ */
+export interface ProjectBoardSpec {
+  board: string;
+  lanes: readonly string[];
 }
 
 const org = (slug: string) => organisationFor(slug)!;
@@ -183,12 +202,23 @@ export const TENANTS: readonly Tenant[] = [
     helpDesk: true,
     operations: ["trello", "zoho"],
     projects: 5,
-    // The stages of its development board, in the order they run. On the
-    // wall beside the board itself, in the room the board hangs in.
-    flow: {
-      board: "Sandbox ERP",
-      lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"],
-    },
+    // Three boards, three rooms. The first has Operations — the room above
+    // the lift, which is what you step out facing — and the other two take
+    // the first two rooms of the lower rank. Each names its own lists, in
+    // the order they run, because they are the board's own and these three
+    // do not agree: Hammer Time finishes at Done where the other two go on
+    // to Testing.
+    boards: [
+      {
+        board: "Sandbox Main App",
+        lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"],
+      },
+      { board: "Hammer Time", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Done"] },
+      {
+        board: "Reports App",
+        lanes: ["Backlog", "Refined", "In Progress", "In Review", "Done"],
+      },
+    ],
   }),
   lobby("chester-warehouse", "chester", { location: "Warehouse", kind: "warehouse" }),
   lobby("chester-store", "chester", { location: "Store", kind: "store" }),
@@ -319,10 +349,30 @@ export function operationsBoards(tenant: Tenant | null | undefined): readonly Bo
  * How many rooms a building's Operations floor has: Operations itself, and
  * one for each project on the go. One when nothing is configured, because a
  * floor with boards on the wall has at least the room they hang in.
+ *
+ * Never fewer than the project boards need. The boards take Operations and
+ * then the lower rank, and the lower rank fills in every other room — so
+ * three boards want four rooms whatever `projects` says, and a floor a room
+ * short would be a board declared with no wall to hang on. Asked here
+ * rather than checked in a test, because `projects` is the size of a
+ * company's workload and the boards are a fact about its walls: the two are
+ * allowed to be set independently and only one of them can be wrong.
  */
 export function operationsRoomCount(tenant: Tenant | null | undefined): number {
   if (!hasOperationsFloor(tenant)) return 0;
-  return 1 + Math.max(0, tenant?.projects ?? 0);
+  return Math.max(1 + Math.max(0, tenant?.projects ?? 0), roomsForBoards(projectBoards(tenant)));
+}
+
+/**
+ * The rooms `n` project boards need: Operations, then the lower rank from
+ * its second room on.
+ *
+ * The lower rank is the odd-numbered half of the list, and its first room is
+ * the one the lift is set into, which hangs nothing — so the second board
+ * wants four rooms, the third six, and so on.
+ */
+function roomsForBoards(boards: readonly ProjectBoardSpec[]): number {
+  return boards.length <= 1 ? 1 : 2 * boards.length;
 }
 
 /** Whether a building has an Operations floor above its agents' floor. */
@@ -331,23 +381,45 @@ export function hasOperationsFloor(tenant: Tenant | null | undefined): boolean {
 }
 
 /**
- * The stages counted beside a building's project board, if it counts any.
+ * The project boards a building runs, in the order their rooms run.
  *
- * Null where the building has no Operations floor, names no lanes, or names
- * an empty list of them — all three are the same answer, which is that
- * stretch of wall being bare. One accessor, so the map that hangs the plate
- * and the server that fills it in cannot disagree about whether it is
- * there.
+ * Empty where the building has no Operations floor or hangs no project
+ * board at all. A building that hangs one but names none — Castle Atlantic
+ * — gets a single unnamed board with no stages, which is the wall as it was
+ * before boards had rooms of their own: whatever the office has picked, and
+ * nothing counted beside it.
+ *
+ * One accessor, so the map that hangs the plates, the scene that letters
+ * the walls and the server that fills in the numbers cannot disagree about
+ * how many there are or which is which.
  */
-export function projectFlow(tenant: Tenant | null | undefined): Tenant["flow"] | null {
-  if (!hasOperationsFloor(tenant)) return null;
-  const flow = tenant?.flow;
-  return flow && flow.lanes.length > 0 ? flow : null;
+export function projectBoards(tenant: Tenant | null | undefined): readonly ProjectBoardSpec[] {
+  if (!hasOperationsFloor(tenant)) return [];
+  if (!operationsBoards(tenant).includes("trello")) return [];
+  return tenant?.boards ?? [UNNAMED_BOARD];
 }
 
-/** Whether the numbers hang on a building's Operations wall. */
+/** The one board a building hangs when it names none: the office's pick. */
+const UNNAMED_BOARD: ProjectBoardSpec = { board: "", lanes: [] };
+
+/**
+ * The board in a given room of the floor, by the slot the map gave it.
+ *
+ * One-based, because that is how the points of interest are lettered and
+ * how the browser names the one it pressed: `Project board 2` is the
+ * second room along. Null for a slot this building has no board in, which
+ * is what a stale link or a hand-edited query parameter asks for.
+ */
+export function projectBoardAt(
+  tenant: Tenant | null | undefined,
+  slot: number,
+): ProjectBoardSpec | null {
+  return projectBoards(tenant)[slot - 1] ?? null;
+}
+
+/** Whether any stage counts hang on a building's Operations floor. */
 export function hasProjectFlow(tenant: Tenant | null | undefined): boolean {
-  return projectFlow(tenant) !== null;
+  return projectBoards(tenant).some((board) => board.lanes.length > 0);
 }
 
 /** The store an organisation is entered through, if it is a store business. */

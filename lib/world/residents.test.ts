@@ -24,6 +24,7 @@ import { CUTOUT, TILE, WIDTH } from "../map/office";
 import {
   HEIGHT as FLOOR_ROWS,
   WIDTH as FLOOR_COLS,
+  ROOM_COLS,
   opsSupportPost,
   opsSupportRoom,
 } from "../map/floor";
@@ -263,9 +264,9 @@ describe("working a station", () => {
     const left = room.x * TILE;
     const top = room.y * TILE;
     expect(SUPPORT.post.x).toBeGreaterThan(left);
-    expect(SUPPORT.post.x).toBeLessThan(left + 14 * TILE);
+    expect(SUPPORT.post.x).toBeLessThan(left + ROOM_COLS * TILE);
     expect(SUPPORT.paces.x).toBeGreaterThan(left);
-    expect(SUPPORT.paces.x + SUPPORT.paces.width).toBeLessThan(left + 14 * TILE);
+    expect(SUPPORT.paces.x + SUPPORT.paces.width).toBeLessThan(left + ROOM_COLS * TILE);
     expect(SUPPORT.paces.y).toBeGreaterThan(top);
     expect(SUPPORT.paces.y + SUPPORT.paces.height).toBeLessThan(top + 7 * TILE);
   });

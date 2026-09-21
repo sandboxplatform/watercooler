@@ -36,13 +36,15 @@ export default function ProjectFlow() {
   const overlayRef = useRef<HTMLDivElement>(null);
   const fullscreen = useFullscreen(overlayRef);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (slot: string | null) => {
     setLoading(true);
     try {
       // The room is read as it loads rather than at mount: riding the lift
       // changes rooms without rebuilding the HUD.
       const room = encodeURIComponent(currentRoom());
-      const response = await fetch(`/api/trello/flow?room=${room}`, { cache: "no-store" });
+      const response = await fetch(`/api/trello/flow?room=${room}&slot=${slot ?? "1"}`, {
+        cache: "no-store",
+      });
       setAnswer((await response.json()) as Answer);
     } catch (err) {
       log.warn("could not count the board:", (err as Error).message);
@@ -52,15 +54,20 @@ export default function ProjectFlow() {
     }
   }, []);
 
-  const { open, close } = usePanel("project-flow", { onOpen: () => void load() });
+  // Which room's counts: the plate walked up to says which, and a panel
+  // opened by `?flow=1` names none, which is the first — the building's own
+  // board, in Operations.
+  const { open, subject, close } = usePanel("project-flow", {
+    onOpen: (slot) => void load(slot),
+  });
 
   // While it is up, keep the counts current — on the same beat the board
   // behind it uses.
   useEffect(() => {
     if (!open) return;
-    const timer = setInterval(() => void load(), PULSE_REFRESH_MS);
+    const timer = setInterval(() => void load(subject), PULSE_REFRESH_MS);
     return () => clearInterval(timer);
-  }, [open, load]);
+  }, [open, subject, load]);
 
   if (!open) return null;
 
@@ -89,7 +96,7 @@ export default function ProjectFlow() {
               type="button"
               className="pixel-icon-btn"
               style={{ width: 26, height: 26 }}
-              onClick={() => void load()}
+              onClick={() => void load(subject)}
               title="Count the board again"
               aria-label="Refresh the counts"
             >
@@ -114,8 +121,8 @@ export default function ProjectFlow() {
             <div className="board-note">
               <p className="board-note__lead">Nothing is counted on this wall.</p>
               <p>
-                The stage counts hang beside a building&rsquo;s project board, and which stages they
-                are is that building&rsquo;s own — see <code>flow</code> in{" "}
+                The stage counts hang beside a building&rsquo;s project board, one board to a room,
+                and which stages they are is that building&rsquo;s own — see <code>boards</code> in{" "}
                 <code>lib/world/tenants.ts</code>.
               </p>
             </div>
@@ -130,7 +137,7 @@ export default function ProjectFlow() {
           ) : answer?.error ? (
             <div className="board-note">
               <p className="board-note__lead">{answer.error}</p>
-              <button type="button" className="pixel-button" onClick={() => void load()}>
+              <button type="button" className="pixel-button" onClick={() => void load(subject)}>
                 Try again
               </button>
             </div>
