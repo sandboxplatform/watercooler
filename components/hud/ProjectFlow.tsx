@@ -186,6 +186,23 @@ export default function ProjectFlow() {
                   ))}
                 </div>
               </section>
+              {flow.incidents > 0 && (
+                /*
+                 * First of the three, because it is the one that is not
+                 * about the work: a roadblock and a despatch are two ends
+                 * of the pipeline the bank above draws, and this is the
+                 * server on fire. Somebody who has walked up to the wall
+                 * to read the stages should be told that before they are
+                 * told anything about the stages.
+                 */
+                <p className="pulse-legend pulse-legend--incident">
+                  <strong>
+                    {flow.incidents} incident{flow.incidents === 1 ? " is" : "s are"} open
+                  </strong>{" "}
+                  on this board — counted wherever they are standing, by the label on the card or
+                  the list they are parked in. Not a stage: they are the beacon by the door.
+                </p>
+              )}
               {flow.blocked > 0 && (
                 /*
                  * What the five bars cannot say: a stuck card is still

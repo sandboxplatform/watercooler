@@ -138,13 +138,20 @@ export function countRoadblocks(board: BoardView): number {
  * same way — off the whole board, by the label on the card or the list it
  * is parked in, however the board spells it.
  *
- * Matched on the folded name, like a roadblock, and for the same reason:
- * no two boards agree on the word. Sandbox ERP's own three are the case in
- * point — Hammer Time and the Reports App each keep a **Deployed** list,
- * and the board named after the building itself calls the identical thing
- * **Production**. One feature that only knew the first word would have
- * drawn a bare corner in the building's own Operations room while
- * fifty-odd shipped cards sat on the board behind the wall.
+ * Matched on the folded name, like a roadblock, and the width is paid for
+ * by **the word having moved under it**. This was written when Sandbox
+ * ERP's three boards disagreed — Hammer Time and the Reports App kept a
+ * **Deployed** list and the board named after the building itself called
+ * the identical thing **Production** — and since then the other two have
+ * been renamed to match, so all three now say Production. The net is what
+ * made that rename a non-event: a rule holding the one word would have
+ * emptied the crates out of two Operations rooms the afternoon somebody
+ * retitled a list, with nothing on screen to say why and nothing wrong
+ * with the board.
+ *
+ * So three boards agreeing today is not the argument for narrowing it. It
+ * is the argument the other way: these names drift, and this one has been
+ * watched drifting.
  *
  * Deliberately not "Done": that is the stage before this one, it is on
  * two of those three boards as a counted lane, and a bay on the wall
@@ -186,6 +193,77 @@ export function countDeployed(board: BoardView, lanes: readonly string[] = []): 
     }
   }
   return out;
+}
+
+/**
+ * What a board calls an incident on the server.
+ *
+ * The third kind of card the five bays cannot describe, and the only one
+ * of the three that is not a fact about the *work*. A roadblock is work
+ * that has stopped and a despatch is work that has left; an incident is
+ * the server on fire, which is not a stage of anything and is not going to
+ * wait for one. It is the reason a room's whole pipeline stops being the
+ * most important thing in the room.
+ *
+ * **This is the narrow one of the three**, and the narrowest rule any of
+ * this floor is counted by: all three of the building's boards call the
+ * list **Server Incident**, in those words. So the folding is for
+ * capitalisation, spacing and the plural only — the word the boards use,
+ * written how anybody might write it — with the qualifier optional because
+ * a bare Incidents is that list with its adjective dropped and can mean
+ * nothing else. Outage, Live and Production Incident were in it and came
+ * out: they were guesses at boards that do not exist, and every extra word
+ * is another way for a working stage to be read as the building burning
+ * down.
+ *
+ * **The despatches next door are the argument against this, and it is a
+ * real one.** That net is wide because the word moved under it — two of
+ * these boards said Deployed and have since been renamed to Production —
+ * so "the boards agree today" is a weaker guarantee here than it looks.
+ * The day somebody retitles this list to Outages the beacon reads zero,
+ * and a beacon that never lights is indistinguishable from a quiet month,
+ * which is the silent failure `isDeployed` exists to have avoided. Widen
+ * it the moment a board wants it; what is not worth doing is widening it
+ * for boards nobody has seen.
+ *
+ * Leaving the qualifier a closed set rather than anything-plus-Incidents
+ * is what keeps **"RCA / Incidents"** out, and that is worth saying because
+ * a list of that name has been on this board: a root-cause write-up is what
+ * is done *after* an incident and a board keeps every one it has ever had,
+ * so a beacon counting it is a red light permanently on with a large number
+ * under it — which says exactly as little as a barrier reading 0, from the
+ * other end.
+ */
+export function isIncident(name: string): boolean {
+  return /^(server)?incidents?$/.test(name.toLowerCase().replace(/[^a-z]+/g, ""));
+}
+
+/**
+ * Cards on the board that are incidents, however the board says so.
+ *
+ * Off the whole board, like the other two, and by the label on the card or
+ * the list it is parked in: an incident raised against work already in
+ * flight is still an incident, and that card is as likely to be sitting in
+ * In Progress with somebody on it as parked in a list of its own.
+ *
+ * **A list the wall already counts is never one of these**, which is
+ * `countDeployed`'s guard. It is not load-bearing the way it is next door,
+ * since the net above is one word and no building is going to declare
+ * Server Incident as a stage of its pipeline — it is here because the
+ * alternative is a building that did declare it having the same cards
+ * counted twice, on the wall and on the floor, and because one rule for
+ * all three of these is one rule to remember.
+ */
+export function countIncidents(board: BoardView, lanes: readonly string[] = []): number {
+  const counted = new Set(lanes.map((name) => name.trim().toLowerCase()));
+  let raised = 0;
+  for (const column of board.columns) {
+    const burning = isIncident(column.name) && !counted.has(column.name.trim().toLowerCase());
+    for (const card of column.cards) {
+      if (burning || card.labels.some((label) => isIncident(label.name))) raised += 1;
+    }
+  }
+  return raised;
 }
 
 export interface FlowLane {
@@ -242,6 +320,19 @@ export interface Flow {
    * out of the way, which is where finished work goes.
    */
   deployed: number;
+  /**
+   * Cards on the board that are incidents — see `countIncidents`.
+   *
+   * The third of these, and the one that is not about the work at all.
+   * `blocked` is work that has stopped and `deployed` is work that has
+   * gone; this is the server on fire, which is not a stage, not a share of
+   * `total`, and not something the five bays would show even if it were —
+   * a card raised this morning against a live outage sits in whatever lane
+   * somebody dropped it in. It is the beacon standing in the near corner
+   * of the room: the one thing in there asking to be looked at before
+   * anything else on the wall.
+   */
+  incidents: number;
   /** The board's other lists, counted but not on the wall. */
   others: FlowOther[];
 }
@@ -301,6 +392,7 @@ export function toFlow(board: BoardView, lanes: readonly string[]): Flow {
     total: flowLanes.reduce((sum, lane) => sum + (lane.missing ? 0 : lane.count), 0),
     blocked: countRoadblocks(board),
     deployed: countDeployed(board, lanes),
+    incidents: countIncidents(board, lanes),
     others,
   };
 }

@@ -36,6 +36,7 @@ import {
   opsProjectFlow,
   opsProjectSign,
   opsDeployed,
+  opsIncident,
   opsRoadblock,
   opsSign,
   opsSupportPulse,
@@ -46,6 +47,7 @@ import {
 import { DeskWeek, SupportPulse } from "../systems/SupportPulse";
 import { ProjectFlow } from "../systems/ProjectFlow";
 import { DEPLOYED } from "../systems/Deployed";
+import { INCIDENT } from "../systems/Incident";
 import { FloorMarker } from "../systems/FloorMarker";
 import { ROADBLOCK } from "../systems/Roadblock";
 import { legible } from "../systems/legible";
@@ -756,14 +758,16 @@ export class OfficeScene extends Phaser.Scene {
    * whatever the office picked, and a room with PROJECT BOARD written over
    * a project board says less than the sign already hanging on it.
    *
-   * And two things standing on the floor, which are the two things the
+   * And three things standing on the floor, which are the three things the
    * plate on the wall cannot say: a roadblock in the middle of any room
-   * with work stuck in it, and the crates in the far corner of any room
-   * that has shipped something. A stuck card is still standing in a stage
-   * and a shipped one has left them all, so neither is a sixth bay — see
-   * `systems/FloorMarker`. Both read the same answer as the counts beside
-   * them (`systems/room-flow`), so a room with all three in it is still
-   * one request.
+   * with work stuck in it, the crates in the far corner of any room that
+   * has shipped something, and a beacon in the near corner of any room
+   * with an incident on it. A stuck card is still standing in a stage, a
+   * shipped one has left them all, and an incident is not a stage at all —
+   * so none of the three is a sixth bay, see `systems/FloorMarker`. All of
+   * them read the same answer as the counts beside them
+   * (`systems/room-flow`), so a room showing every one is still one
+   * request.
    *
    * Hands back one teardown for every plate and every marker, since each
    * keeps a timer.
@@ -779,12 +783,14 @@ export class OfficeScene extends Phaser.Scene {
       const at = opsProjectFlow(rooms, slot);
       const stuck = opsRoadblock(rooms, slot);
       const shipped = opsDeployed(rooms, slot);
+      const burning = opsIncident(rooms, slot);
       return [
         ...(at ? [new ProjectFlow(this).place(at, TILE, slot)] : []),
-        // The same read as the counts beside them, and neither drawn until
-        // there is something to say — see `systems/FloorMarker`.
+        // The same read as the counts beside them, and none of them drawn
+        // until there is something to say — see `systems/FloorMarker`.
         ...(stuck ? [new FloorMarker(this, ROADBLOCK).place(stuck, TILE, slot)] : []),
         ...(shipped ? [new FloorMarker(this, DEPLOYED).place(shipped, TILE, slot)] : []),
+        ...(burning ? [new FloorMarker(this, INCIDENT).place(burning, TILE, slot)] : []),
       ];
     });
     if (!stops.length) return null;

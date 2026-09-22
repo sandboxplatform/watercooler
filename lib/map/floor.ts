@@ -787,6 +787,42 @@ export function opsDeployed(rooms: number, slot: number) {
 }
 
 /**
+ * Where a project room stands its incident beacon, in tiles: the near
+ * corner of the floor, two columns in from the left-hand wall and standing
+ * on the room's last row.
+ *
+ * The crates' mirror, across the room and measured the same way, because
+ * the two are the same kind of object and reading one against the other is
+ * most of what they say. The far corner is where work that is finished
+ * with is stacked; this is the corner you walk in past, which is where
+ * something that wants looking at **now** belongs. So the room reads left
+ * to right and front to back as it did, with one more thing in it: the
+ * board on the wall, the trouble in the middle of the floor, what has gone
+ * out in the far corner — and, on the way in, whether the server is on
+ * fire.
+ *
+ * Two columns in, like the crates, so the picture keeps a clear column
+ * between itself and the wall rather than reading as shoved through it.
+ * The same offset from its own wall as they have from theirs, which is
+ * what makes the pair read as a pair from the doorway.
+ *
+ * It is clear of both ranks' doorways by construction: this is the room's
+ * bottom row and every doorway off the corridor is cut through a wall, and
+ * clear of the doorway between two rooms in the same rank, which
+ * `BETWEEN_ROOMS` puts across the middle rows of the side wall.
+ *
+ * Null where the floor has no such room, as the other two are.
+ */
+export function opsIncident(rooms: number, slot: number) {
+  const room = opsProjectRooms(rooms, slot)[slot - 1];
+  if (!room) return null;
+  return {
+    tx: room.x + 2,
+    ty: room.y + ROOM_ROWS - 1,
+  } as const;
+}
+
+/**
  * Doc's post in Support, and the floor he paces at it.
  *
  * A band across the middle of the room rather than a spot against a wall:

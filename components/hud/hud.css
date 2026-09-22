@@ -1854,6 +1854,12 @@
   color: #faa53d;
 }
 
+/* An incident: the red the beacon by the door is lit in, which is off the
+   flow plate's scale altogether because an incident is off the pipeline. */
+.pulse-legend--incident strong {
+  color: var(--pixel-red);
+}
+
 /* Shipped: the green the flow plate's last bay and the crates are lit in. */
 .pulse-legend--shipped strong {
   color: #4bce97;

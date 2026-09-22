@@ -12,6 +12,7 @@ import {
   opsBoardroom,
   opsBoardroomTable,
   opsDeployed,
+  opsIncident,
   opsElevator,
   opsProjectFlow,
   opsProjectRooms,
@@ -464,6 +465,34 @@ describe("an Operations floor", () => {
         expect(at.ty).toBeGreaterThan(stuck.ty);
       }
       expect(opsDeployed(6, 9)).toBeNull();
+    });
+
+    /**
+     * The beacon stands in the near corner, mirroring the crates.
+     *
+     * The same two columns off its own wall that they are off theirs and
+     * the same last row, because the two are read against each other from
+     * the doorway: what has gone out in the far corner, whether the server
+     * is on fire in the one you walk in past.
+     */
+    it("stands the beacon in the near corner, mirroring the crates", () => {
+      for (const slot of [1, 2, 3]) {
+        const at = opsIncident(6, slot)!;
+        const room = opsProjectRooms(6, slot)[slot - 1];
+        expect(at.tx).toBe(room.x + 2);
+        expect(at.ty).toBe(room.y + 6);
+        // A clear column between it and the wall, as the crates have.
+        expect(at.tx - 1).toBeGreaterThan(room.x);
+        expect(at.ty).toBeLessThan(room.y + 7);
+        // Mirrored: the same offset from its wall that they have from theirs,
+        // on the same row, with the barrier's middle between the two.
+        const shipped = opsDeployed(6, slot)!;
+        const stuck = opsRoadblock(6, slot)!;
+        expect(at.tx - room.x).toBe(room.x + ROOM_COLS - shipped.tx);
+        expect(at.ty).toBe(shipped.ty);
+        expect(at.tx).toBeLessThan(stuck.tx - 2);
+      }
+      expect(opsIncident(6, 9)).toBeNull();
     });
 
     it("runs the counts to Support's right-hand corner", () => {

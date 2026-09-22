@@ -357,6 +357,35 @@ Castle Atlantic. A list that has been renamed or archived reads as a dash
 rather than a zero — a stage nobody is looking at and a stage with nothing
 in it are opposite news.
 
+#### And three things on the floor
+
+The five bays say where the work in flight is standing, which leaves three
+things about a board they cannot say at all — so those are in the room
+rather than on the wall, and you read them off a project room by looking
+into it from the corridor:
+
+| In the room     | Is                | Says                                       |
+| --------------- | ----------------- | ------------------------------------------ |
+| The middle      | A striped barrier | How many cards are roadblocked             |
+| The far corner  | A stack of crates | How many have been deployed off this board |
+| The near corner | A red beacon, lit | How many incidents are open on the server  |
+
+A stuck card is still standing in a stage, a shipped one has left all five,
+and an incident is not a stage at all, so none of the three could have been
+a sixth bay. Each carries its count on a plate over it, refreshes with the
+wall, flashes once when its number moves — and is not there at all when
+there is nothing to say, which is most of the point: a beacon that is
+always lit is a light nobody looks at.
+
+Each is counted off the whole board, by the label on a card or the list it
+is parked in. The despatches are read from whichever word a board uses —
+all three say **Production** today and two of them said Deployed until they
+were renamed, which is exactly why that rule is not fussy about the word.
+The incidents are: all three call that list **Server Incident**, so the
+rule is that word and nothing else, which is also what keeps a board's RCA
+archive from lighting a beacon that would then never go out. A list the wall itself counts is never one of them either: the
+building has already said that list is a stage by naming it among its five.
+
 ### The help desk, through the corridor
 
 Sandbox ERP's third floor is a corridor with rooms off both sides, and the

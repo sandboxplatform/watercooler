@@ -5,11 +5,13 @@ import {
   FLOW_COLOURS,
   NO_LANE,
   countDeployed,
+  countIncidents,
   countRoadblocks,
   flowBars,
   flowFigure,
   flowRows,
   isDeployed,
+  isIncident,
   isRoadblock,
   laneId,
   laneShort,
@@ -243,8 +245,10 @@ describe("counting a board's roadblocks", () => {
  */
 describe("counting what a board has deployed", () => {
   it("reads the word however the board spells it", () => {
-    // Sandbox ERP's own three boards spell it two ways between them, which
-    // is the whole argument for folding the word rather than naming it.
+    // The width is paid for by the word having moved: two of the building's
+    // three boards said Deployed and have since been renamed to Production.
+    // A rule holding one word would have emptied two rooms' crates that
+    // afternoon, which is the whole argument for folding rather than naming.
     for (const name of [
       "Deployed",
       "Deploy",
@@ -313,17 +317,148 @@ describe("counting what a board has deployed", () => {
     expect(flow.total).toBe(7);
   });
 
-  /** Sandbox ERP's own two shapes, which is what this was written against. */
-  it("reads both of the building's own boards", () => {
-    const hammer = toFlow(board({ Backlog: 4, Done: 0, Deployed: 9 }), ["Backlog", "Done"]);
-    expect(hammer.deployed).toBe(9);
-    const main = toFlow(board({ Backlog: 10, Testing: 1, Production: 57 }), ["Backlog", "Testing"]);
-    expect(main.deployed).toBe(57);
-    // Neither is part of what the bars are a share of.
-    expect([hammer.total, main.total]).toEqual([4, 11]);
+  /**
+   * The building's boards before and after the rename, which is the pair
+   * this has to go on reading. All three say Production today; two of them
+   * said Deployed when this was written, and a board restored from an
+   * export or a fourth building set up from the old template still will.
+   */
+  it("reads the building's boards on either side of the rename", () => {
+    const was = toFlow(board({ Backlog: 4, Done: 0, Deployed: 9 }), ["Backlog", "Done"]);
+    expect(was.deployed).toBe(9);
+    const now = toFlow(board({ Backlog: 4, Done: 0, Production: 9 }), ["Backlog", "Done"]);
+    expect(now.deployed).toBe(9);
+    const main = toFlow(board({ Backlog: 10, Testing: 1, Production: 58 }), ["Backlog", "Testing"]);
+    expect(main.deployed).toBe(58);
+    // None of it is part of what the bars are a share of.
+    expect([was.total, now.total, main.total]).toEqual([4, 4, 11]);
   });
 
   it("says none where nothing has gone out", () => {
     expect(toFlow(board({ Backlog: 4, Testing: 2 }), LANES).deployed).toBe(0);
+  });
+});
+
+/**
+ * Incidents on the server, which is the third thing the five bars cannot
+ * say and the only one of the three that is not about the work at all.
+ * A roadblock is work that has stopped and a despatch is work that has
+ * gone; this is the server on fire, sitting in whatever lane somebody
+ * dropped the card in.
+ */
+describe("counting a board's incidents", () => {
+  /**
+   * The narrow one of the three, and deliberately: all three of the
+   * building's boards call this **Server Incident**, in those words, so
+   * the folding is for capitalisation, spacing and the plural and nothing
+   * else. The despatches next door are a wide net because those boards
+   * really do disagree; spreading this one over words no board here uses
+   * would be guessing, and every extra word is another way for a working
+   * stage to read as the building burning down.
+   */
+  it("reads the board's own word, however it is written", () => {
+    for (const name of [
+      "Server Incident",
+      "Server Incidents",
+      " SERVER INCIDENT ",
+      "server-incident",
+      // The adjective dropped, which can mean nothing else.
+      "Incident",
+      "incidents",
+    ])
+      expect(isIncident(name)).toBe(true);
+    /*
+     * The qualifier is a closed set rather than anything-plus-Incidents,
+     * which is what keeps RCA out — a root-cause write-up is what is done
+     * *after* an incident and a board keeps every one it has ever had, so
+     * a beacon counting that list is a red light permanently on. Outage
+     * and Production Incident are out for the plainer reason: no board
+     * here uses either, so counting them is a guess.
+     */
+    for (const name of [
+      "RCA / Incidents",
+      "Post-incident review",
+      "Incident Review",
+      "Outage",
+      "Production Incident",
+      "Backlog",
+      "Testing",
+      "",
+    ])
+      expect(isIncident(name)).toBe(false);
+  });
+
+  it("counts a card carrying the label, wherever it is standing", () => {
+    const view = labelled({
+      "In Progress": [["Server Incident"], [], ["bug"]],
+      Backlog: [["incident"], []],
+    });
+    expect(countIncidents(view)).toBe(2);
+  });
+
+  it("counts a card parked in a list of that name", () => {
+    expect(countIncidents(labelled({ Backlog: [[], []], "Server Incident": [[], [], []] }))).toBe(
+      3,
+    );
+  });
+
+  /** The count is of cards, not of the ways the board found to say so. */
+  it("counts a card once when it is both", () => {
+    expect(countIncidents(labelled({ Incidents: [["Server Incident"], []] }))).toBe(2);
+  });
+
+  /**
+   * `countDeployed`'s guard. Not load-bearing here — the net is one word
+   * and no building is going to call a stage of its pipeline Server
+   * Incident — but a building that did would otherwise have the same cards
+   * counted twice, on the wall and on the floor.
+   */
+  it("never counts a list the wall itself counts", () => {
+    const view = labelled({ Backlog: [[]], Incidents: [[], [], []] });
+    expect(countIncidents(view, ["Backlog", "Incidents"])).toBe(0);
+    expect(countIncidents(view, ["Backlog"])).toBe(3);
+    // A label is somebody saying so about that card, wherever it stands.
+    const flagged = labelled({ Incidents: [["Server Incident"], []] });
+    expect(countIncidents(flagged, ["Incidents"])).toBe(1);
+  });
+
+  it("counts them off the whole board, and out of what the bars share", () => {
+    const view = labelled({ Backlog: [[]], "Server Incident": [[], []] });
+    const flow = toFlow(view, ["Backlog"]);
+    expect(flow.incidents).toBe(2);
+    // Not a stage, so not part of what each bar is a share of.
+    expect(flow.total).toBe(1);
+  });
+
+  /**
+   * The building's own board, list for list, which is the shape all three
+   * of them have: five declared stages, then Server Incident and
+   * Production, neither of them a stage. The two questions are asked of
+   * different cards and neither answer may leak into the other — which is
+   * worth pinning, because Production is a word `isDeployed` matches and
+   * Server Incident sits right beside it.
+   */
+  it("reads the building's own board without the two answers leaking", () => {
+    const flow = toFlow(
+      board({
+        Backlog: 10,
+        Refined: 7,
+        "In Progress": 0,
+        "In Review": 3,
+        Testing: 0,
+        "Server Incident": 2,
+        Production: 58,
+      }),
+      LANES,
+    );
+    expect(flow.incidents).toBe(2);
+    expect(flow.deployed).toBe(58);
+    // Only the five declared stages are what the bars are a share of.
+    expect(flow.total).toBe(20);
+    expect(flow.others.map((o) => o.name)).toEqual(["Server Incident", "Production"]);
+  });
+
+  it("says none where nothing is burning", () => {
+    expect(toFlow(board({ Backlog: 4, Testing: 2 }), LANES).incidents).toBe(0);
   });
 });

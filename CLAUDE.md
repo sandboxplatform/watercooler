@@ -1630,13 +1630,17 @@ on the wall and on the floor.
 Four decisions in it, and the first is the one that would have shipped a
 feature nobody could see:
 
-- **The word is folded, and the net is wider than one word.** Sandbox
-  ERP's own three boards spell it two ways between them: Hammer Time and
-  the Reports App keep a **Deployed** list, and the board named after the
-  building itself calls the identical thing **Production**. Matching the
-  first word only would have drawn a bare corner in the building's own
-  Operations room with fifty-odd shipped cards on the board behind the
-  wall.
+- **The word is folded, and the net has since been proved right.** It was
+  written because Sandbox ERP's three boards spelled it two ways — Hammer
+  Time and the Reports App kept a **Deployed** list and the board named
+  after the building itself called the identical thing **Production** — so
+  matching the first word only would have drawn a bare corner in the
+  building's own Operations room with fifty-odd shipped cards on the board
+  behind the wall. The other two have since been **renamed to Production**,
+  and the net is what made that a non-event: a rule holding one word would
+  have emptied the crates out of two rooms the afternoon somebody retitled
+  a list, with nothing wrong with either board. Three boards agreeing today
+  is not a reason to narrow it — it is the reason not to.
 - **A list the wall already counts is never a despatch**, and that guard
   is what makes the wider net safe. There is no writing down which words
   are despatches and which are working stages — "Production" is where
@@ -1656,6 +1660,76 @@ feature nobody could see:
   second of these was written by copying the first, which is the shape of
   duplication this codebase has been bitten by twice — see `CountBoard`,
   one storey up, which is the same arrangement.
+
+**And a beacon in the near corner, for the server being on fire.** The
+third thing on a project room's floor, and the only one of the three that
+is not about the work. A roadblock is work that has stopped and the crates
+are work that has gone; an incident is not standing in any stage because it
+is not a stage — the card for one sits in whatever lane somebody dropped it
+in, if it is on a lane at all, and the five bays would go on drawing the
+same picture while the building was down. Sandbox ERP's three boards each
+keep a **Server Incident** list, and nothing anywhere in this world said a
+word about it.
+
+Where it stands is the crates' mirror: they are in the **far corner**
+because being finished with is the whole fact about them, so this is the
+**near** one — two columns off its own wall on the room's last row, the
+same offset they have from theirs, so the pair reads as a pair from the
+doorway. A red light by the door and a green stack across the room is a
+room summed up before anybody has looked at the board.
+
+| Where                      | What                                                               |
+| -------------------------- | ------------------------------------------------------------------ |
+| `countIncidents` in `flow` | What counts as one. Pure, over the board `readBoard` already holds |
+| `opsIncident` in `floor`   | Where it stands, read off the room so a longer corridor carries it |
+| `systems/Incident`         | The plinth, the sign, the collar and the lit dome over it          |
+| `systems/FloorMarker`      | The plate, the figure, the timer, the beat — for all three of them |
+
+Six decisions in it, and the first three are the ones that would have lit a
+light nobody would ever look at again — or never lit it at all:
+
+- **This is the narrow one of the three**, and the narrowest rule anything
+  on this floor is counted by: **all three boards call the list Server
+  Incident**, in those words. The folding is for capitalisation, spacing
+  and the plural only, with the qualifier optional because a bare Incidents
+  is that list with its adjective dropped. Outage and Production Incident
+  were in it and came out — guesses at boards that do not exist, and every
+  extra word is another way for a working stage to read as the building
+  burning down.
+- **The despatches are the argument against that, and it is a real one.**
+  Their net is wide because the word moved under it: two of these boards
+  said Deployed and have since been renamed to Production, so "the boards
+  agree today" is a weaker guarantee here than it looks. The day somebody
+  retitles this list to Outages the beacon reads zero, and a beacon that
+  never lights is indistinguishable from a quiet month — the silent failure
+  the despatches' net exists to have avoided. Widen it the moment a board
+  wants it; what is not worth doing is widening it for boards nobody has
+  seen.
+- **RCA is deliberately not an incident**, which is what leaving the
+  qualifier a closed set buys rather than matching anything-plus-Incidents.
+  A list of that name has been on this board, and a root-cause write-up is
+  what is done _after_ one: a board keeps every one it has ever had, so a
+  beacon counting it is a red light permanently on with a large number
+  under it — which says exactly as little as a barrier reading 0 does from
+  the other end.
+- **A list the wall already counts is never one**, which is the despatches'
+  guard. Not load-bearing here, since the net is one word and no building
+  is going to call a stage of its pipeline Server Incident — it is there
+  because one that did would have the same cards counted twice, on the wall
+  and on the floor.
+- **Nothing is up when nothing is burning**, which is the rule the other
+  two are under and here is the entire point — a beacon that is always lit
+  is a light nobody looks at.
+- **Red, and off the flow plate's scale altogether.** The plate runs cool to
+  warm to green across five stages and the barrier is the warm end of it
+  stood on the floor; the crates are its green end. This is the HUD's own
+  `--pixel-red`, which is on none of it, because an incident is on none of
+  the pipeline.
+
+The dome is drawn a pixel row at a time from a half-ellipse rather than as
+a Phaser ellipse, which is drawn smooth: an antialiased curve standing
+beside the barrier's staircased stripes is the one thing on this floor that
+would not look like it belongs there.
 
 **Which stages, and off which board, is the building's** — `boards` in
 `lib/world/tenants.ts`, one entry per project room, each naming its Trello
