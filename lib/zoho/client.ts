@@ -455,3 +455,95 @@ export async function fetchPulse(config: ZohoConfig, now: number = Date.now()): 
     zone,
   });
 }
+
+// ── The mailboxes on the world map ──────────────────────
+
+/**
+ * How long the customers' counts are held.
+ *
+ * Longer than the wall's minute, because of where they hang: the world map
+ * is the one room everybody passes through, and a mailbox is a thing you
+ * glance at on the way past rather than a dashboard anybody stands in front
+ * of. Two minutes old is the truth about who is waiting.
+ */
+export const CUSTOMERS_CACHE_MS = 120_000;
+
+/**
+ * Which statuses count as open, for the bubbles over the mailboxes.
+ *
+ * `ZOHO_OPEN_STATUSES` names them, comma separated, and they have to match
+ * the desk's Status picklist exactly — Zoho filters by literal value, the
+ * same as the standing counters do.
+ *
+ * With nothing named it is the standing three (`ZOHO_PULSE_STATUSES`), so
+ * out of the box a mailbox and Support's wall agree: the six bubbles sum to
+ * the wall's three bays. A separate name rather than sharing that one,
+ * because they are different questions asked of the same desk — the wall
+ * has three bays and takes exactly three statuses, and a desk whose open
+ * work is spread over five of its nine has nowhere to say so.
+ */
+export function readOpenStatuses(env: NodeJS.ProcessEnv = process.env): string[] {
+  const named = env.ZOHO_OPEN_STATUSES?.split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  return named && named.length > 0 ? named : readPulseStatuses(env);
+}
+
+/**
+ * The little of an open ticket a mailbox needs: who it is filed against,
+ * and who wrote it in.
+ *
+ * Narrowed here, at the fetch, rather than downstream: attributing a ticket
+ * takes an account id and an address and nothing else, and an address is
+ * not a thing to carry any further through this app than it has to go. See
+ * `personName` in `tickets.ts`, which is the same argument about the wall.
+ */
+export interface TicketParty {
+  accountId: string | null;
+  email: string | null;
+}
+
+const text = (value: unknown): string | null => {
+  const found = typeof value === "string" ? value.trim() : "";
+  return found || null;
+};
+
+/**
+ * Every open ticket on the desk, as the pair of facts that says whose it is.
+ *
+ * One sweep, not ten. Zoho has no count endpoint this token can use — see
+ * the note above `fetchPulse` — so the choice is paging a filtered list
+ * once and sorting the tickets into customers here, or asking per account
+ * and paying for ten of these. The sweep is capped like every other, and a
+ * capped one makes every figure a floor rather than a total: a mailbox
+ * cannot say which customer the pages it never read belonged to.
+ */
+export async function fetchOpenParties(
+  config: ZohoConfig,
+): Promise<{ parties: TicketParty[]; capped: boolean; statuses: string[] }> {
+  const statuses = readOpenStatuses();
+  const scope: Record<string, string> = config.departmentId
+    ? { departmentId: config.departmentId }
+    : {};
+  // "contacts", plural, is what fills in the singular `contact` — Zoho names
+  // the include differently from the field and refuses the singular with a
+  // 422. See `fetchTickets`.
+  const swept = await sweep(config, {
+    ...scope,
+    status: statuses.join(","),
+    sortBy: "-modifiedTime",
+    include: "contacts",
+  });
+
+  const parties = swept.tickets.map((ticket): TicketParty => {
+    const contact = ticket.contact as { email?: unknown } | null | undefined;
+    return {
+      accountId: text(ticket.accountId),
+      // The ticket's own address first: a ticket raised by email carries the
+      // address it came from whether or not Zoho has a contact for it, and
+      // the contact is the one that is missing on exactly those tickets.
+      email: text(ticket.email) ?? text(contact?.email),
+    };
+  });
+  return { parties, capped: swept.capped, statuses };
+}

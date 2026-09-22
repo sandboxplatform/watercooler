@@ -1331,6 +1331,68 @@ for (const [name, body, dark] of [
   slot(`car-${name}-south`, 44, 88, car(body, dark, "south"));
 }
 
+/**
+ * The mailbox outside a customer's building, and the only prop on this sheet
+ * whose whole job is to be somewhere to hang a number.
+ *
+ * 40 by 72, which is written down again in `lib/world/mailboxes.ts` — a
+ * `.mjs` cannot import a `.ts`, so the size is in both places, the
+ * arrangement the eggs' shell tones and the basketball board's measurements
+ * are already under. The bubble over it is measured off that height, so the
+ * two have to agree.
+ *
+ * Bold rather than detailed. It is looked at from the far side of a road, on
+ * grass at four of the six and on paving at the others, so what it needs is a
+ * silhouette that is neither: a dark barrel-topped tin on a pale post, with
+ * the flag up in the desk's own warning red.
+ */
+slot("mailbox", 40, 72, (set, d) => {
+  d.ellipse(18, 69, 12, 3, P.shadow);
+
+  // The post. Lit down one side, which is what stops a six-pixel column
+  // reading as a stick somebody drew.
+  d.rect(14, 32, 22, 70, P.woodDark);
+  d.rect(15, 32, 21, 70, P.wood);
+  d.rect(15, 32, 17, 70, P.woodLit);
+  d.outline(14, 32, 22, 70);
+
+  // The tin: a barrel top stepped a row at a time, for the reason the
+  // incident lamp's dome is — an antialiased curve is the one shape in this
+  // world that would not belong to it. Each step is capped in ink across the
+  // whole of what it exposes rather than at its corner pixel, or the dome
+  // comes out with daylight along the top of every step in it.
+  const ARCH = [7, 4, 3, 2, 1, 1, 0, 0];
+  const LEFT = 3;
+  const RIGHT = 31;
+  const TOP = 4;
+  const BASE = 36;
+  const inset = (row) => ARCH[row - TOP] ?? 0;
+  for (let y = TOP; y < BASE; y++) {
+    const x0 = LEFT + inset(y);
+    const x1 = RIGHT - inset(y);
+    // The lid catches the light, the belly falls away from it.
+    d.rect(x0, y, x1, y + 1, y < TOP + 3 ? P.slabLit : y > BASE - 7 ? P.steelDark : P.steel);
+    const above = y === TOP ? Infinity : inset(y - 1);
+    d.rect(x0, y, Math.min(LEFT + above, x1), y + 1, P.ink);
+    d.rect(Math.max(RIGHT - above, x0), y, x1, y + 1, P.ink);
+    set(x0, y, P.ink);
+    set(x1 - 1, y, P.ink);
+  }
+  d.rect(LEFT, BASE - 1, RIGHT, BASE, P.ink);
+
+  // The door at the near end, and the slot in it. Two lines, which at this
+  // size is the whole difference between a mailbox and a cistern.
+  d.rect(LEFT + 2, TOP + 7, LEFT + 3, BASE - 1, P.ink);
+  d.rect(LEFT + 7, TOP + 12, RIGHT - 5, TOP + 14, P.ink2);
+
+  // The flag, up. Red because that is what a flag up means, and it is the one
+  // warm thing on the prop — from the far side of a road it is what says the
+  // box is a box rather than a bin.
+  d.rect(RIGHT, TOP + 2, RIGHT + 2, BASE - 4, P.ink);
+  d.rect(RIGHT + 1, TOP - 1, RIGHT + 8, TOP + 8, P.ink);
+  d.rect(RIGHT + 1, TOP, RIGHT + 7, TOP + 7, P.red);
+});
+
 frames.fountain.animateWith = "fountain2";
 
 /** Open water: two frames, the glints shifting between them so it moves. */

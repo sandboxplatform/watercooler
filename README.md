@@ -166,6 +166,7 @@ For that, configure sign-in (below) — it layers on top.
 - **One basketball:** There is a court in the park with a ball on it, and it is the same ball for everybody. Pick it up and the world watches you carry it; sink one and the world is told.
 - **A world to cross:** Six building supply stores along the west road, the head offices and the plaza in the middle, the campus gate east of that — and past it a third of the map with nothing built on it at all, with a highway down the far side and a car on it now and then.
 - **Eggs to collect:** Michael the chicken drops one in the grass now and then when somebody startles him — six kinds, from an ordinary hen's egg to a rainbow one nobody can account for. Anybody out on the map can walk up and pocket it.
+- **Tickets on the map:** A mailbox outside each customer's building, with a bubble over it saying how many tickets they have open in Zoho. Walk past and you know who is waiting.
 - **Somebody to talk to:** Doc works the support desk, and he is the one person you walk up to and press E at. His conversation on Mettara opens in a window over the room.
 - **Workers at their desks:** Idle workers roam the office — whiteboards, printers, sofas, bookshelves — and the seat manager sets their names, roles and sprites.
 
@@ -304,6 +305,31 @@ Your basket is the **Eggs** tab in the column, and it shows on your profile
 beside your badges. Four badges go with them: your first egg, startling him
 into laying one, finding the rainbow, and — the long one — an egg of every
 kind there is.
+
+### The mailboxes outside the shops
+
+Six of the businesses on the world map are customers of Sandbox ERP's support
+desk, and each has a **mailbox** standing at the corner of its building with a
+little speech bubble over it: how many tickets they have open in Zoho, right
+now. Castle Atlantic, Sandbox ERP and Homestar in the middle and east of the
+map; Targetts, Masstown and MacCallum out along the west road.
+
+So walking from one end of the map to the other is how you see who is waiting
+on a lot. Nothing to press and nothing to open — the numbers are just there as
+you go past, and they keep themselves up to date every couple of minutes.
+
+**A customer with nothing open has no bubble at all**, only the box. A row of
+noughts would be a row of things to read that say nothing, and what the map is
+for is spotting the one shop with seventeen tickets waiting from across the
+green.
+
+Not every building has one, and not every customer does: four of the desk's
+customers have no premises in this world, and the stores and the lab that
+nobody raises tickets against have a doorway and no mailbox.
+
+Which statuses count as "open" is `ZOHO_OPEN_STATUSES`; left unset it is the
+same three the counts on Support's wall stand for, so the six bubbles and that
+wall are the same tickets counted two ways.
 
 ### The project board on Sandbox ERP's third floor
 

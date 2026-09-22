@@ -222,6 +222,17 @@ export const CAMERA_DRAG_THRESHOLD = 3;
  */
 export const PULSE_REFRESH_MS = 60_000;
 
+/**
+ * How often the bubbles over the mailboxes on the world map are read again.
+ *
+ * Matched to the server's hold on them (`CUSTOMERS_CACHE_MS`), like the wall
+ * above — and twice as long, because of where it hangs. The world map is the
+ * one room everybody passes through, so this is the poll most browsers make;
+ * and a mailbox is glanced at on the way past rather than stood in front of,
+ * which is a number two minutes old being the truth about who is waiting.
+ */
+export const MAILBOX_REFRESH_MS = 120_000;
+
 // ── Press E prompt style (shared between boss seat & worker) ──
 export const PRESS_E_STYLE: {
   fontFamily: string;

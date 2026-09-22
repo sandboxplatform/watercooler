@@ -20,6 +20,7 @@ import { COURT_PX } from "@/lib/world/basketball";
 import { BasketballCourt } from "../systems/BasketballCourt";
 import { EggPatch } from "../systems/EggPatch";
 import { Highway } from "../systems/Highway";
+import { Mailboxes } from "../systems/Mailboxes";
 import {
   addSolid,
   layGround,
@@ -136,11 +137,16 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
       entrances: BUILDINGS,
       solids,
       label: "World map",
-      // The three things on this map that are not scenery, all of them the
+      // The four things on this map that are not scenery, all of them the
       // server's: this side draws them, offers the Press E and — for the
-      // ball — swings the meter. The traffic is the one with nothing to
-      // press at: a car is a thing that goes past.
-      extras: [new BasketballCourt(this), new EggPatch(this), new Highway(this)],
+      // ball — swings the meter. The last two have nothing to press at: a
+      // car is a thing that goes past, and a mailbox is a number to read.
+      extras: [
+        new BasketballCourt(this),
+        new EggPatch(this),
+        new Highway(this),
+        new Mailboxes(this),
+      ],
       camera: {
         coverMap: true,
         // The map opens where it was left. Every building is a page of its

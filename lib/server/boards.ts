@@ -23,14 +23,17 @@ import { toFlow, type Flow } from "../trello/flow";
 import { tenantInRoom } from "../world/floors";
 import { projectBoardAt } from "../world/tenants";
 import {
+  CUSTOMERS_CACHE_MS,
   DESK_CACHE_MS,
   PULSE_CACHE_MS,
   ZohoError,
   fetchDepartments,
+  fetchOpenParties,
   fetchPulse,
   fetchTickets,
   readZohoConfig,
 } from "../zoho/client";
+import { tallyCustomers } from "./customers";
 import type { DeskView } from "../zoho/tickets";
 import type { Pulse } from "../zoho/pulse";
 import { getRoomStore } from "./room-store";
@@ -104,10 +107,27 @@ export interface PulseAnswer {
   fetchedAt?: number;
 }
 
+/** What hangs over the mailboxes on the world map. */
+export interface CustomersAnswer {
+  configured: boolean;
+  /**
+   * Open tickets standing against each customer, by the slug of the
+   * organisation whose building the box stands outside. Every one of them is
+   * in here, a nought included — what to make of a nought is the map's.
+   */
+  open?: Record<string, number>;
+  /** Every figure is a floor: the sweep ran out of pages before the desk did. */
+  capped?: boolean;
+  error?: string;
+  status?: number;
+  fetchedAt?: number;
+}
+
 const boards = new Map<string, { at: number; board: BoardView }>();
 let boardList: { at: number; boards: BoardSummary[] } | null = null;
 let desk: { at: number; view: DeskView; departments: { id: string; name: string }[] } | null = null;
 let pulse: { at: number; view: Pulse } | null = null;
+let customers: { at: number; open: Record<string, number>; capped: boolean } | null = null;
 
 /**
  * The project board. With no board named and none configured, the answer
@@ -298,10 +318,62 @@ export async function readPulse(): Promise<PulseAnswer> {
   }
 }
 
+/**
+ * What is standing against each customer, for the mailboxes on the world map.
+ *
+ * Held here with the rest, and for longer than any of them: the world map is
+ * the one room everybody passes through, so this is the read most likely to
+ * be asked for by twenty browsers in the same minute — and a mailbox is
+ * glanced at on the way past rather than stood in front of.
+ *
+ * A sweep of its own rather than the standing sweep `fetchPulse` already
+ * makes, which asks Zoho for very nearly the same page. Two reasons, and the
+ * first decides it: this one needs `include=contacts`, because a great many
+ * tickets are raised by email from somebody Zoho has not linked to an
+ * account, and the address is then the only thing saying whose they are. And
+ * the two are allowed to mean different things — `ZOHO_OPEN_STATUSES`
+ * against the wall's three bays — so sharing the read would be sharing that
+ * decision with it.
+ */
+export async function readCustomers(): Promise<CustomersAnswer> {
+  const config = readZohoConfig();
+  if (!config) return { configured: false };
+
+  const now = Date.now();
+  if (customers && now - customers.at < CUSTOMERS_CACHE_MS) {
+    return {
+      configured: true,
+      open: customers.open,
+      capped: customers.capped,
+      fetchedAt: customers.at,
+    };
+  }
+
+  try {
+    const { parties, capped } = await fetchOpenParties(config);
+    const { open, unattributed } = tallyCustomers(parties);
+    // Worth a line in the log and nothing more: a desk serves people who are
+    // not on the record, so this is only ever evidence that the record may be
+    // short — never that anything has failed.
+    if (unattributed > 0) {
+      log.info(`${unattributed} open tickets belong to nobody on the customer record`);
+    }
+    customers = { at: now, open, capped };
+    return { configured: true, open, capped, fetchedAt: now };
+  } catch (err) {
+    if (err instanceof ZohoError) {
+      return { configured: true, error: err.message, status: err.status };
+    }
+    log.error("could not count the customers:", (err as Error).message);
+    return { configured: true, error: "The customers could not be counted.", status: 500 };
+  }
+}
+
 /** Test seam: forget what is held, so the next read goes out again. */
 export function forgetBoards() {
   boards.clear();
   boardList = null;
   desk = null;
   pulse = null;
+  customers = null;
 }

@@ -32,6 +32,7 @@ import {
 } from "./tenants";
 import { HIGHWAY, SEA, WILD_PLANTING, shoreAt } from "./wilderness";
 import { blockedCells } from "./route";
+import { MAILBOX, MAILBOXES } from "./mailboxes";
 import { COURT, HOOPS, hoopProp } from "./basketball";
 import {
   WOOD_BEACHES,
@@ -402,6 +403,13 @@ export const PROPS = {
   // line out of play for the sake of something nobody can walk into.
   hoopWest: { width: 112, height: 128, footprint: { width: 16, height: 12 } },
   hoopEast: { width: 112, height: 128, footprint: { width: 16, height: 12 } },
+  // The mailbox outside a customer's building — see `lib/world/mailboxes.ts`,
+  // which is where its size is written, because the bubble that hangs over it
+  // is measured off the same number. Solid at the post and nowhere else: the
+  // box itself is at chest height, so a footprint the width of the picture
+  // would be a metre of kerb nobody can walk along for the sake of something
+  // that is not in the way.
+  mailbox: { width: MAILBOX.width, height: MAILBOX.height, footprint: { width: 16, height: 12 } },
 } as const satisfies Record<string, PropSpec>;
 
 export type PropKind = keyof typeof PROPS;
@@ -549,6 +557,12 @@ const PLACED: readonly PlacedProp[] = [
   // the door when a shop moves: Blockhouse's and Chester's are the same
   // arrangement, measured off theirs, from when there were two of them.
   ...BUILDINGS.filter((b) => b.org.style === "shop").flatMap(atTheDoor),
+
+  // A mailbox outside each customer's building, read off `MAILBOXES` rather
+  // than written out six times — the bubble over it is drawn at those same
+  // points, and a box put down separately is a number hanging over nothing.
+  // Which is the argument the basketball hoops are already under.
+  ...MAILBOXES.map((m): PlacedProp => ({ kind: "mailbox", x: m.x, y: m.y })),
 
   // The shops' own park, between the two roads west of the town: trees,
   // benches and a lamp or two, the same furniture the town's blocks have.
