@@ -67,7 +67,7 @@ export interface EggKind {
  * The weights total ten thousand, so the rare end is exact and reads
  * straight off — five hundred is one in twenty, two hundred is one in
  * fifty, a hundred is one in a hundred, which at `EGG_CHANCE` is about
- * one cluck in fourteen hundred. The common end takes what is left over,
+ * one cluck in two and a half thousand. The common end takes what is left over,
  * which is why a hen's egg is 5450 rather than a round number: a
  * rarity somebody crossed the park for is worth being exact about, and
  * the one they were going to find anyway is not.
@@ -198,21 +198,23 @@ export function tierFromRoll(roll: number): EggTier {
 }
 
 /**
- * How often a fright leaves an egg behind: seven clucks in a hundred.
+ * How often a fright leaves an egg behind: four clucks in a hundred.
  *
  * **Odds, not a count.** It is drawn afresh on every cluck
  * (`this.random() >= EGG_CHANCE` in `lib/server/residents.ts`) and
  * nothing anywhere counts clucks — so a dozen of them may pass with
  * nothing to show, and two eggs in a row is a thing that happens. An egg
- * on every fourteenth fright would be a rhythm somebody could learn, and
- * then walking up to Michael would be a chore with a payout at the end of
- * it rather than a chance.
+ * on every twenty-fifth fright would be a rhythm somebody could learn,
+ * and then walking up to Michael would be a chore with a payout at the
+ * end of it rather than a chance.
  *
  * It was three in a hundred, which is a rate the chase was not worth: a
  * fright is five seconds of running a chicken down at half again a
  * sprint, and thirty of those for one egg is a quarter of an hour of the
- * same afternoon. Seven is a handful of chases rather than a session, and
- * it changes nothing about the ladder — what kind of egg it is stays as
+ * same afternoon. Seven was the answer to that and overshot it the other
+ * way — an egg every other chase is a thing you collect rather than a
+ * thing you come across. Four is a handful of chases for one, and it
+ * changes nothing about the ladder — what kind of egg it is stays as
  * rare as it was, so the rainbow is still the thing nobody is going to
  * sit down and work through.
  *
@@ -220,7 +222,7 @@ export function tierFromRoll(roll: number): EggTier {
  * number is here beside the ladder it feeds. It is rolled where the
  * fright is, because that is where the seeded randomness lives.
  */
-export const EGG_CHANCE = 7 / 100;
+export const EGG_CHANCE = 4 / 100;
 
 /**
  * How close you have to be standing to pick one up.

@@ -16,7 +16,7 @@ import type { EggsBroadcast } from "../../presence-types";
  * park with no eggs in it looks like.
  *
  * **What is deliberately not driven here is the laying.** An egg comes of
- * Michael being startled, seven clucks in a hundred, with a second of quiet
+ * Michael being startled, four clucks in a hundred, with a second of quiet
  * between clucks at best and a whole fright's worth of running before it is
  * dropped — so waiting for one is minutes rather than milliseconds,
  * and the chance is the simulation's own randomness. The two halves of it

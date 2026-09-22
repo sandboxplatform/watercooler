@@ -2291,7 +2291,7 @@ empty court until somebody touched it.
 
 ### The eggs
 
-Startle Michael and seven clucks in a hundred — `EGG_CHANCE` — he leaves
+Startle Michael and four clucks in a hundred — `EGG_CHANCE` — he leaves
 an egg in the grass **where the bolt ends**, not where it began, and it goes
 off like a firework as he does. Anybody out on the map can walk up to it and
 press E, and it goes in their basket, which hangs on their profile beside
@@ -2300,9 +2300,11 @@ their badges and stays there.
 It was three clucks in a hundred, which is a rate the chase was not worth: a
 fright is five seconds of running a chicken down at half again a sprint, and
 thirty of those for one egg is a quarter of an hour of the same afternoon.
-Seven is a handful of chases rather than a session, and it moves nothing else
-— the ladder below is per **egg**, so what a rainbow is worth is exactly what
-it was.
+Seven was the answer to that and overshot it the other way — an egg every
+other chase is a thing you collect rather than a thing you come across. Four
+is a handful of chases for one, and neither change moves anything else — the
+ladder below is per **egg**, so what a rainbow is worth is exactly what it
+was.
 
 **Whether is settled at the cluck and where at the end of the run.** The roll
 belongs to the moment of the fright, which is where the seeded randomness is;
@@ -2315,7 +2317,7 @@ costs, and it is **one egg to a run**: a fright that is already carrying one
 does not roll again, so running him down over and over is worth another
 cluck and not another egg.
 
-**Odds, not every fourteenth cluck**, and the two are nothing alike to
+**Odds, not every twenty-fifth cluck**, and the two are nothing alike to
 play: the draw is fresh on every fright and nothing anywhere counts them,
 so fifty may pass with nothing to show and two may come one after the
 other. A counter would be a rhythm somebody could learn, and then walking
@@ -2347,7 +2349,7 @@ hen's egg is 5450 rather than a round number. A rarity somebody crossed
 the park for is worth being exact about; the one they were going to find
 anyway is not.
 
-So a rainbow is seven clucks in ten thousand, which is the world's rarity
+So a rainbow is four clucks in ten thousand, which is the world's rarity
 rather than anybody's goal — and The Whole Clutch, the badge for one of
 every kind, is the long one in the catalogue on purpose. Both numbers are
 meant to be read as "there may be one of these in this world", not as
