@@ -29,9 +29,11 @@ import {
   operationsBoards,
   operationsRoomCount,
   tenantFor,
+  tenantsOf,
   type Tenant,
 } from "./tenants";
 import { residentsAt } from "./residents";
+import { CAST } from "./cast";
 
 export type Level = 1 | 2 | 3;
 export type Floor = { kind: "lobby" } | { kind: "floor"; level: Level };
@@ -142,12 +144,6 @@ export interface Person extends Occupant {
   home: string | null;
 }
 
-/** Who has a desk on each floor of a building. */
-export interface Occupancy {
-  /** The organisation's people, from the register. */
-  people: Occupant[];
-}
-
 export interface FloorStop {
   floor: Floor;
   label: string;
@@ -161,14 +157,52 @@ export function floorTitle(floor: Floor): string {
   return floor.level === 2 ? "Floor 2 · Agents" : "Floor 3 · Operations";
 }
 
+/**
+ * The building an organisation's people keep their desks in.
+ *
+ * A persona's `home` is an organisation and a desk stands in a building,
+ * which for every organisation but one is the same thing. Homestar is the
+ * exception — a campus of six premises — so its people's desks are in the
+ * first of its buildings with floors to put them in, rather than one desk
+ * each in all three of its office blocks. One person, one desk.
+ */
+function deskBuilding(orgSlug: string): Tenant | null {
+  return tenantsOf(orgSlug).find(hasFloors) ?? null;
+}
+
+/**
+ * Everyone with a desk on a building's People floor, in desk order.
+ *
+ * Read off the cast, which is the one place that knows who this world is
+ * of — exactly as Floor 2's desks are read off `RESIDENTS`. Their id is
+ * their `AccessIdentity`, so a person is one person here for the same
+ * reason their badges follow them about.
+ *
+ * It was a register before: every browser that walked in posted a name and
+ * a building under an id minted into its own localStorage, and a desk stood
+ * for every row. A code names exactly one person, so that id was the one
+ * thing about them that did not hold — a private window, a sign-out, a
+ * cleared profile and every fresh machine was a new id, a new row and
+ * another desk with the same name on it. Sandbox ERP's floor had seventeen
+ * Coops on it and eight desks to draw them at.
+ */
+export function peopleAt(lobbySlug: string): Occupant[] {
+  const tenant = tenantFor(lobbySlug);
+  if (!tenant || deskBuilding(tenant.org)?.slug !== tenant.slug) return [];
+  return CAST.filter((who) => who.kind === "person" && who.org === tenant.org).map((who) => ({
+    id: who.id,
+    name: who.name,
+  }));
+}
+
 /** The floors of a building, bottom up, with who sits on each. */
-export function floorsOf(tenant: Tenant, occupancy: Occupancy): FloorStop[] {
+export function floorsOf(tenant: Tenant): FloorStop[] {
   const floors: FloorStop[] = [
     { floor: LOBBY, label: floorTitle(LOBBY), names: [] },
     {
       floor: PEOPLE_FLOOR,
       label: floorTitle(PEOPLE_FLOOR),
-      names: occupancy.people.map((p) => p.name),
+      names: peopleAt(tenant.slug).map((p) => p.name),
     },
     {
       floor: AGENTS_FLOOR,
@@ -184,9 +218,9 @@ export function floorsOf(tenant: Tenant, occupancy: Occupancy): FloorStop[] {
 }
 
 /** Who has a desk on a floor, in slot order. */
-export function occupantsOf(tenant: Tenant, floor: Floor, occupancy: Occupancy): Occupant[] {
+export function occupantsOf(tenant: Tenant, floor: Floor): Occupant[] {
   if (floor.kind === "lobby") return [];
-  if (floor.level === 1) return occupancy.people;
+  if (floor.level === 1) return peopleAt(tenant.slug);
   // The Operations floor has no desks: it is a wall and the room to read it.
   if (floor.level === 3) return [];
   return residentsAt(tenant.slug).map((r) => ({ id: r.id, name: r.name }));
@@ -204,8 +238,8 @@ export interface ElevatorStop extends FloorStop {
 }
 
 /** The lift's buttons from where you stand. */
-export function elevatorStops(address: Address, occupancy: Occupancy): ElevatorStop[] {
-  return floorsOf(address.tenant, occupancy).map((stop) => ({
+export function elevatorStops(address: Address): ElevatorStop[] {
+  return floorsOf(address.tenant).map((stop) => ({
     ...stop,
     url: floorUrl(address.tenant, stop.floor, "elevator"),
     here: sameFloor(stop.floor, address.floor),

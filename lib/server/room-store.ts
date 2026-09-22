@@ -119,14 +119,6 @@ CREATE TABLE IF NOT EXISTS arcade_scores (
 CREATE INDEX IF NOT EXISTS arcade_by_game ON arcade_scores (room, game, score DESC);
 CREATE INDEX IF NOT EXISTS strokes_by_room ON board_strokes (room, position);
 
-CREATE TABLE IF NOT EXISTS people (
-  id         TEXT PRIMARY KEY,
-  name       TEXT NOT NULL,
-  home       TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS people_home ON people (home, updated_at);
-
 CREATE TABLE IF NOT EXISTS settings (
   key        TEXT PRIMARY KEY,
   value      TEXT NOT NULL,
@@ -267,6 +259,25 @@ const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    name: "drop the register",
+    up: (db) => {
+      // A desk is the cast's now, not a browser's. This held one row per
+      // browser profile that ever walked in — a name, a building, and an id
+      // minted into that browser's own localStorage — and Floor 1 stood a
+      // desk for each. A code names exactly one person, so the id was the
+      // one thing about them that did not hold: a private window, a
+      // sign-out, a cleared profile and every new machine was another row
+      // and another desk with the same name on it. Sandbox ERP's floor had
+      // seventeen Coops on it.
+      //
+      // Nothing is carried over, because there is nothing a row knows that
+      // `CAST` does not: who works where is written down, and who is at a
+      // keyboard right now is presence rather than a register.
+      db.exec("DROP INDEX IF EXISTS people_home");
+      db.exec("DROP TABLE IF EXISTS people");
+    },
+  },
 ];
 
 /** The shape this build expects. */
@@ -403,27 +414,6 @@ export class RoomStore {
     }
   }
 
-  // ── People ────────────────────────────────────────────
-
-  /**
-   * Remember who calls a building home. A person is a browser profile, not
-   * an account; this is what puts a desk with their name on it on their
-   * building's floor for everyone else to see.
-   */
-  upsertPerson(person: { id: string; name: string; home: string }) {
-    this.stmt(
-      `INSERT INTO people (id, name, home, updated_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET name = excluded.name, home = excluded.home, updated_at = excluded.updated_at`,
-    ).run(person.id, person.name.slice(0, 16), person.home, new Date().toISOString());
-  }
-
-  /** Everyone who calls a building home, earliest first — desks are handed out in this order. */
-  listPeople(home: string): { id: string; name: string }[] {
-    return this.stmt("SELECT id, name FROM people WHERE home = ? ORDER BY rowid ASC").all(
-      home,
-    ) as unknown as { id: string; name: string }[];
-  }
-
   // ── Settings ──────────────────────────────────────────
 
   /** A server-wide setting chosen from the HUD, kept across restarts. */
@@ -488,7 +478,6 @@ export class RoomStore {
       now,
       now,
     );
-    this.upsertPerson({ id: personIdForEmail(email), name: profile.name, home: profile.home });
     return this.getAccount(email)!;
   }
 

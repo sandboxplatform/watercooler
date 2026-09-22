@@ -8,6 +8,7 @@ import {
   floorUrl,
   mapFileFor,
   occupantsOf,
+  peopleAt,
   roomForFloor,
   LIFT_REACH,
   LIFT_REFUSAL,
@@ -36,16 +37,14 @@ import {
   projectBoards,
   tenantFor,
 } from "./tenants";
+import { CAST } from "./cast";
+import { MAX_DESKS } from "./desks";
 import { roomFromLocation } from "../rooms";
 import type { AccessIdentity } from "../identity";
 import { existsSync } from "fs";
 import { join } from "path";
 
 const castle = TENANTS[0];
-const people = [
-  { id: "ab12cd34", name: "Robert" },
-  { id: "ef56gh78", name: "Alice" },
-];
 
 describe("addresses", () => {
   it("reads the lobby and the floors from the path", () => {
@@ -77,14 +76,14 @@ describe("addresses", () => {
 
 describe("the lift", () => {
   it("lists every floor of the building, with who is on each", () => {
-    const stops = elevatorStops({ tenant: castle, floor: { kind: "lobby" } }, { people });
+    const stops = elevatorStops({ tenant: castle, floor: { kind: "lobby" } });
     expect(stops.map((s) => s.label)).toEqual([
       "Lobby",
       "Floor 1 · People",
       "Floor 2 · Agents",
       "Floor 3 · Operations",
     ]);
-    expect(stops[1].names).toEqual(["Robert", "Alice"]);
+    expect(stops[1].names).toEqual(["Hunter"]);
     expect(stops[2].names).toEqual(["Yoshi"]);
     // Nobody sits on the Operations floor; the boards are what it is for.
     expect(stops[3].names).toEqual([]);
@@ -95,13 +94,13 @@ describe("the lift", () => {
   /** Most buildings have no third floor, and their lift stops at two. */
   it("stops at the agents' floor in a building with no boards", () => {
     const sales = TENANTS.find((t) => t.slug === "homestar-sales")!;
-    const stops = elevatorStops({ tenant: sales, floor: { kind: "lobby" } }, { people: [] });
+    const stops = elevatorStops({ tenant: sales, floor: { kind: "lobby" } });
     expect(stops.map((s) => s.label)).toEqual(["Lobby", "Floor 1 · People", "Floor 2 · Agents"]);
   });
 
   it("has nobody on the agents' floor of a building with no agents", () => {
     const finance = TENANTS.find((t) => t.slug === "homestar-finance")!;
-    const stops = elevatorStops({ tenant: finance, floor: { kind: "lobby" } }, { people: [] });
+    const stops = elevatorStops({ tenant: finance, floor: { kind: "lobby" } });
     expect(stops[2].names).toEqual([]);
   });
 
@@ -118,16 +117,49 @@ describe("the lift", () => {
   });
 
   it("knows which floor you are on", () => {
-    const stops = elevatorStops({ tenant: castle, floor: PEOPLE_FLOOR }, { people });
+    const stops = elevatorStops({ tenant: castle, floor: PEOPLE_FLOOR });
     expect(stops.map((s) => s.here)).toEqual([false, true, false, false]);
   });
 });
 
 describe("desks", () => {
   it("seat the people on Floor 1 and the agents on Floor 2, in order", () => {
-    expect(occupantsOf(castle, PEOPLE_FLOOR, { people })).toEqual(people);
-    expect(occupantsOf(castle, AGENTS_FLOOR, { people })).toEqual([{ id: "yoshi", name: "Yoshi" }]);
-    expect(occupantsOf(castle, { kind: "lobby" }, { people })).toEqual([]);
+    expect(occupantsOf(castle, PEOPLE_FLOOR)).toEqual([{ id: "hunter", name: "Hunter" }]);
+    expect(occupantsOf(castle, AGENTS_FLOOR)).toEqual([{ id: "yoshi", name: "Yoshi" }]);
+    expect(occupantsOf(castle, { kind: "lobby" })).toEqual([]);
+  });
+
+  /**
+   * The whole of why the desks came off the cast. The register they replaced
+   * was keyed on an id minted into a browser's localStorage, so one person
+   * who had walked in from two browsers was two people with two desks, and
+   * Sandbox ERP's floor ended up with seventeen Coops on it.
+   */
+  it("gives everybody who works somewhere exactly one desk in the world", () => {
+    const desks = TENANTS.flatMap((t) => peopleAt(t.slug).map((who) => who.id));
+    expect(new Set(desks).size).toBe(desks.length);
+    for (const who of CAST) {
+      const mine = desks.filter((id) => id === who.id);
+      expect(mine).toHaveLength(who.kind === "person" && who.org ? 1 : 0);
+    }
+  });
+
+  /**
+   * A campus is several buildings and a person works for the organisation,
+   * so Campbell's desk is in the first of Homestar's blocks rather than in
+   * every one of them. One building's floor is where to look for him.
+   */
+  it("puts a campus's people in one of its buildings, not in each", () => {
+    expect(peopleAt("homestar-sales").map((p) => p.name)).toEqual(["Campbell"]);
+    expect(peopleAt("homestar-finance")).toEqual([]);
+    expect(peopleAt("homestar-operations")).toEqual([]);
+    // A store has no floors, so nobody's desk can stand in one.
+    expect(peopleAt("homestar-store")).toEqual([]);
+  });
+
+  it("has a slot for everybody on the busiest floor", () => {
+    for (const tenant of TENANTS)
+      expect(peopleAt(tenant.slug).length).toBeLessThanOrEqual(MAX_DESKS);
   });
 });
 

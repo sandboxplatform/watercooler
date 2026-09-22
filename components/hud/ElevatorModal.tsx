@@ -8,8 +8,7 @@ import { createPortal } from "react-dom";
 import { ArrowUpDown, X } from "lucide-react";
 import { gameEvents } from "@/lib/events";
 import { focusableIn, nextFocusIndex } from "@/lib/gamepad/focus";
-import { fetchPeople } from "@/lib/people-client";
-import { addressFromLocation, elevatorStops, type Occupant } from "@/lib/world/floors";
+import { addressFromLocation, elevatorStops } from "@/lib/world/floors";
 import { travelTo } from "@/lib/room-travel";
 
 /**
@@ -23,7 +22,6 @@ import { travelTo } from "@/lib/room-travel";
  */
 export default function ElevatorModal() {
   const [open, setOpen] = useState(false);
-  const [people, setPeople] = useState<Occupant[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => gameEvents.on("open-elevator", () => setOpen(true)), []);
@@ -51,20 +49,6 @@ export default function ElevatorModal() {
     if (!open) return;
     const buttons = panelRef.current ? focusableIn(panelRef.current) : [];
     (buttons.find((b) => b.classList.contains("lift-stop")) ?? buttons[0])?.focus();
-  }, [open, people]);
-
-  // Who has a desk upstairs, fetched each time the doors open.
-  useEffect(() => {
-    if (!open) return;
-    const address = addressFromLocation(window.location);
-    if (!address) return;
-    let live = true;
-    void fetchPeople(address.tenant.org).then((found) => {
-      if (live) setPeople(found);
-    });
-    return () => {
-      live = false;
-    };
   }, [open]);
 
   useEffect(() => {
@@ -116,7 +100,7 @@ export default function ElevatorModal() {
 
   const address = addressFromLocation(window.location);
   // Only where you can go: the floor you are on is not a destination.
-  const stops = address ? elevatorStops(address, { people }).filter((s) => !s.here) : [];
+  const stops = address ? elevatorStops(address).filter((s) => !s.here) : [];
 
   return createPortal(
     <div className="studio-overlay" onClick={close}>

@@ -35,14 +35,9 @@ describe("an account", () => {
     expect(again.profile).toEqual(PROFILE);
   });
 
-  it("gets a desk in its home building under a stable id", () => {
+  it("carries a stable id derived from the email, so a desk and a badge follow it", () => {
     const account = store.saveAccountProfile(ROBERT, PROFILE);
     expect(account.personId).toBe(personIdForEmail("robert@example.com"));
-    expect(store.listPeople("castle-atlantic")).toEqual([{ id: account.personId, name: "Robert" }]);
-
-    store.saveAccountProfile(ROBERT, { ...PROFILE, home: "sandbox-erp" });
-    expect(store.listPeople("castle-atlantic")).toEqual([]);
-    expect(store.listPeople("sandbox-erp")).toEqual([{ id: account.personId, name: "Robert" }]);
   });
 
   it("keeps whatever is counted about it", () => {

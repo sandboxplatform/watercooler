@@ -14,7 +14,6 @@ import AlreadyOnline from "./AlreadyOnline";
 import Arrival from "./Arrival";
 import GamepadDriver from "./GamepadDriver";
 import { profileSnapshot, subscribeToProfile } from "@/lib/profile";
-import { registerProfile } from "@/lib/people-client";
 import { pushProfileToAccount } from "@/lib/account-client";
 import ElevatorModal from "./ElevatorModal";
 import BadgeToast from "./BadgeToast";
@@ -53,16 +52,9 @@ export default function GameHud({
   const { state } = useStudio();
   const [seatManagerOpen, setSeatManagerOpen] = useState(false);
 
-  // Keep the building's register current: name or home may have changed.
-  // And a change made here — a new character, say — follows someone
-  // signed in to their account.
-  useEffect(() => {
-    void registerProfile(profileSnapshot());
-    return subscribeToProfile(() => {
-      void registerProfile(profileSnapshot());
-      void pushProfileToAccount(profileSnapshot());
-    });
-  }, []);
+  // A change made here — a new character, say — follows someone signed in
+  // to their account.
+  useEffect(() => subscribeToProfile(() => void pushProfileToAccount(profileSnapshot())), []);
 
   /**
    * Where the shoulder buttons have turned to.

@@ -18,7 +18,6 @@ import {
   saveProfile,
   subscribeToProfile,
 } from "@/lib/profile";
-import { registerProfile } from "@/lib/people-client";
 import { addressFromLocation } from "@/lib/world/floors";
 import { ORGANISATIONS } from "@/lib/world/tenants";
 import { isOutdoorPath } from "@/lib/world/paths";
@@ -135,7 +134,6 @@ export default function Welcome() {
       profile.character?.key === character?.key;
     if (already) return;
     saveProfile({ name: persona.name, home, character });
-    void registerProfile(profileSnapshot());
   }, [persona, profile, characters]);
 
   if (!profile || !me || done) return null;
@@ -176,9 +174,6 @@ export default function Welcome() {
     } else {
       saveProfile(next);
     }
-    // Put a desk with this name on the building's floor, then walk in: the
-    // game begins on the world map, by the fountain.
-    await registerProfile(profileSnapshot());
     // The arrival takes it from here: it covers the screen and then travels,
     // so the world map builds behind a card with this person on it rather
     // than behind nothing. Saying who has arrived is the last thing this

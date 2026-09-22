@@ -62,7 +62,6 @@ import {
   tenantFor,
 } from "@/lib/world/tenants";
 import { GARAGE_BAYS } from "@/lib/map/premises";
-import { fetchPeople } from "@/lib/people-client";
 import { ensureSheet } from "../utils/sheets";
 import { letterOnWall } from "../utils/wall-lettering";
 import { createLogger } from "@/lib/logger";
@@ -298,7 +297,7 @@ export class OfficeScene extends Phaser.Scene {
 
     // Upstairs, everyone with a desk gets one, with their name on it.
     const address = addressFromLocation(window.location);
-    if (address?.floor.kind === "floor") void this.furnishFloor(address, map, collisionRects);
+    if (address?.floor.kind === "floor") this.furnishFloor(address, map, collisionRects);
 
     this.identityKnown = this.askWhoIAm();
 
@@ -556,19 +555,14 @@ export class OfficeScene extends Phaser.Scene {
     gameEvents.emit("open-elevator");
   }
 
-  private async furnishFloor(
+  private furnishFloor(
     address: Address,
     map: Phaser.Tilemaps.Tilemap,
     collisionRects: { x: number; y: number; width: number; height: number }[],
   ) {
-    // The register is fetched; the residents are known. Only after waiting
-    // can the scene have gone away — during create() it is not yet "active".
-    let people: { id: string; name: string }[] = [];
-    if (address.floor.kind === "floor" && address.floor.level === 1) {
-      people = await fetchPeople(address.tenant.slug);
-      if (!this.scene.isActive()) return;
-    }
-    const occupants = occupantsOf(address.tenant, address.floor, { people }).slice(0, MAX_DESKS);
+    // Who sits here is known without asking: the people on Floor 1 and the
+    // residents on Floor 2 are both read off the cast.
+    const occupants = occupantsOf(address.tenant, address.floor).slice(0, MAX_DESKS);
 
     // The desk and the laptop on it are cut from the office tileset, which
     // the map already loads.

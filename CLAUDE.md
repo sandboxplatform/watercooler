@@ -1229,6 +1229,42 @@ lobby("sandbox-erp", "sandbox-erp", {
 lobby("castle-atlantic", "castle-atlantic", { game: "pong", operations: ["trello"], projects: 3 }),
 ```
 
+**Both floors of desks are read off the cast, and everybody has exactly
+one.** `peopleAt(slug)` in `lib/world/floors.ts` is Floor 1 and
+`residentsAt(slug)` is Floor 2; the lift's list and the desks the scene
+draws are the same call, so the two cannot disagree about who works here.
+
+It was a **register** before, and that is what put seventeen Coops on
+Sandbox ERP's floor. Every browser that walked in posted its name and its
+building to `/api/people` under an id minted into its own localStorage, and
+a desk stood for every row. A code names exactly one person, so that id was
+the one thing about its holder that did not hold: a private window, a
+sign-out — `clearProfile` nulls the id, and the lock button calls it — a
+cleared profile and every new machine was another row and another desk with
+the same name over it. Nothing pruned them, and eight desk slots is a floor
+that fills up with one person.
+
+So the whole of it went: the table (migration 7), the route, the client and
+`registerProfile`. Nothing is carried over, because a row knew nothing
+`CAST` does not — who works where is written down, and who is at a keyboard
+right now is presence rather than a register. It is the same answer the
+badges already gave: a person's handle is their `AccessIdentity`, not their
+browser.
+
+Two things follow:
+
+- **A persona's `home` is an organisation and a desk stands in a
+  building**, which is the same thing everywhere but Homestar — a campus of
+  six premises. `deskBuilding` picks the first of an organisation's
+  buildings with floors to put desks in, so Campbell has one desk in
+  Homestar Sales rather than three across the blocks. One person, one desk,
+  which `floors.test.ts` asserts over the whole world.
+- **Nobody else has one, and nobody else ever did.** `worksNowhere` in
+  `Welcome.tsx` is a visitor or a persona with no `home`, and a visitor is
+  never asked for an office — signing in does not change that, since a
+  signed-in person on the shared code is still `visitor`. So the register
+  only ever held personas' browsers, which is exactly what the cast knows.
+
 `trello` is the project board and `zoho` the support queue — each a picture
 on the wall you walk up to and press E at. The list **is** the floor: a
 building that names none has no third floor at all, and `addressFromLocation`
@@ -2944,7 +2980,7 @@ file is the last moment before a test file's own imports are evaluated.
 ## Layout
 
 ```
-app/                    App Router pages + API routes (room, characters, people, auth)
+app/                    App Router pages + API routes (room, characters, eggs, auth)
 components/
   game/
     PhaserGame.tsx      dynamic import, ssr:false; creates the Game in useEffect, destroys on return
