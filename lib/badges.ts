@@ -313,7 +313,7 @@ export const BADGES: readonly Badge[] = [
     group: "eggs",
     title: "Ruffled Feathers",
     description: "Startled Michael badly enough that he laid one",
-    hint: "Three clucks in a hundred leave one behind. It is a chance and not a count, so it is worth startling him whenever you pass.",
+    hint: "Seven clucks in a hundred leave one behind. It is a chance and not a count, so it is worth startling him whenever you pass.",
     // A feather would be the obvious one and it is not drawn on every
     // machine — it measures as tofu here, which is a badge that reads as
     // a blank box. The bolt away is the other half of the moment anyway.

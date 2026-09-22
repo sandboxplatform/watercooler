@@ -1,10 +1,12 @@
 import * as Phaser from "phaser";
-import { onEggs, takeEgg, type EggTaken } from "@/lib/eggs-client";
+import { onEggs, takeEgg, type EggNews, type EggTaken } from "@/lib/eggs-client";
 import { eggKind, eggWithinReach, type LaidEgg } from "@/lib/world/eggs";
 import { PRESS_E_STYLE } from "@/lib/constants";
 import type { Facing } from "@/lib/presence-types";
 import { PROPS_KEY } from "../scenes/outdoors";
 import { keepLegible, legible } from "./legible";
+import { addBeacon, type EggBeacon } from "../utils/egg-beacon";
+import { burstAt, type EggBurst } from "../utils/egg-burst";
 
 /**
  * The eggs lying in the grass on the world map.
@@ -21,6 +23,20 @@ import { keepLegible, legible } from "./legible";
  * acted on only when something of ours is within reach. Two things a step
  * apart never argue over a press, because neither claims one it has
  * nothing to do with.
+ *
+ * **Two things are drawn over an egg rather than at it**, and they answer
+ * the same complaint from either end of it. Out of doors everything sorts
+ * by the bottom of its own picture, so an egg in the wood is behind
+ * whatever tree stands a row south of it:
+ *
+ * | What                     | Says                                        | For        |
+ * | ------------------------ | ------------------------------------------- | ---------- |
+ * | `utils/egg-burst`        | Michael has just laid one, and of what kind | A moment   |
+ * | `utils/egg-beacon`       | There is one here                           | Until gone |
+ *
+ * The burst needs the field to say *which* egg is new, because the message
+ * carrying it is the whole list and a browser walking onto the map is sent
+ * the same list — see `EggNews`.
  */
 
 /** Over everything, which out of doors is a bigger number than it looks. */
@@ -49,9 +65,17 @@ const EGG_DEPTH_DROP = 6;
  */
 const SHOUT_ABOUT = new Set(["copper", "jade", "gilded", "rainbow"]);
 
+/** The picture of one egg, and the mark hanging over it. */
+interface Drawn {
+  image: Phaser.GameObjects.Image;
+  beacon: EggBeacon;
+}
+
 export class EggPatch {
-  /** One image per egg lying out there, by the egg's own id. */
-  private drawn = new Map<string, Phaser.GameObjects.Image>();
+  /** One picture and one beacon per egg out there, by the egg's own id. */
+  private drawn = new Map<string, Drawn>();
+  /** Whatever fireworks are still in the air. */
+  private bursts = new Set<EggBurst>();
   private lying: readonly LaidEgg[] = [];
   private prompt: Phaser.GameObjects.Text;
   private shout: Phaser.GameObjects.Text;
@@ -82,7 +106,7 @@ export class EggPatch {
     // were written however far out the camera stands.
     keepLegible(scene, this.prompt, this.shout);
 
-    this.unsub = onEggs((eggs, taken) => this.receive(eggs, taken));
+    this.unsub = onEggs((eggs, news) => this.receive(eggs, news));
   }
 
   /**
@@ -93,13 +117,19 @@ export class EggPatch {
    * gets a picture, whatever has gone loses one, and the ones that were
    * already there are left exactly as they are rather than being torn
    * down and rebuilt every time somebody two fields away finds one.
+   *
+   * Which is why the fireworks cannot be hung off "an egg this screen has
+   * not drawn before": arriving on the map is a list of everything lying
+   * there, and that would set one off over every egg in the park. `news`
+   * names the one that was actually just laid, and it is null on every
+   * other message.
    */
-  private receive(eggs: readonly LaidEgg[], taken: EggTaken | null) {
+  private receive(eggs: readonly LaidEgg[], news: EggNews) {
     this.lying = eggs;
     const here = new Set(eggs.map((egg) => egg.id));
-    for (const [id, image] of this.drawn) {
+    for (const [id, drawn] of this.drawn) {
       if (here.has(id)) continue;
-      image.destroy();
+      this.forget(drawn);
       this.drawn.delete(id);
     }
     for (const egg of eggs) {
@@ -107,9 +137,40 @@ export class EggPatch {
       const image = this.scene.add
         .image(egg.x, egg.y, PROPS_KEY, `egg-${egg.tier}`)
         .setDepth(egg.y - EGG_DEPTH_DROP);
-      this.drawn.set(egg.id, image);
+      const beacon = addBeacon(this.scene, egg, egg.tier, OVER_EVERYTHING - 1);
+      keepLegible(this.scene, beacon.object);
+      this.drawn.set(egg.id, { image, beacon });
+      if (news.laid === egg.id) this.celebrate(egg, image);
     }
-    if (taken) this.mark(taken);
+    if (news.taken) this.mark(news.taken);
+  }
+
+  /**
+   * Michael has just left this one: let the fireworks off over it.
+   *
+   * The egg lands with them rather than being there already — it is thrown
+   * out of the middle of the burst and settles, which is a tenth of a
+   * second of work and the difference between an egg that was laid and an
+   * egg that was always lying there under the bang.
+   */
+  private celebrate(egg: LaidEgg, image: Phaser.GameObjects.Image) {
+    const burst = burstAt(this.scene, egg, egg.tier, OVER_EVERYTHING);
+    this.bursts.add(burst);
+    // Tracked so a shutdown can take it down, and dropped when it has run
+    // its course — a scene that never let go would hold every firework of
+    // the session.
+    this.scene.time.delayedCall(2_000, () => {
+      burst.destroy();
+      this.bursts.delete(burst);
+    });
+
+    image.setScale(0.2);
+    this.scene.tweens.add({
+      targets: image,
+      scale: 1,
+      duration: 420,
+      ease: "Back.easeOut",
+    });
   }
 
   /**
@@ -168,12 +229,21 @@ export class EggPatch {
     return found;
   }
 
+  /** One egg's picture and its mark, taken down together. */
+  private forget(drawn: Drawn) {
+    legible(this.scene).forget(drawn.beacon.object);
+    drawn.beacon.destroy();
+    drawn.image.destroy();
+  }
+
   destroy() {
     this.unsub();
     legible(this.scene).forget(this.prompt, this.shout);
     this.prompt.destroy();
     this.shout.destroy();
-    for (const image of this.drawn.values()) image.destroy();
+    for (const burst of this.bursts) burst.destroy();
+    this.bursts.clear();
+    for (const drawn of this.drawn.values()) this.forget(drawn);
     this.drawn.clear();
   }
 }

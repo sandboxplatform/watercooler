@@ -439,11 +439,21 @@ export interface BasketballBroadcast {
  * because by the time the list arrives the egg is out of it — and it is
  * the egg's own spot rather than the finder's, so a screen that has never
  * drawn that person still puts the words where the thing was.
+ *
+ * `laid` is the other moment, and it is the reason the field alone will
+ * not do: a whole list says what is lying there and says nothing about
+ * which of it is *new*. Every browser that arrives on the map is sent the
+ * same list, so a scene that burst over everything it had not drawn
+ * before would set off fireworks at every egg in the park for anybody
+ * walking out of a building. An id rather than the egg itself, because
+ * unlike `taken` this one is still in the list beside it.
  */
 export interface EggsBroadcast {
   type: "eggs";
   eggs: import("./world/eggs").LaidEgg[];
   taken?: { tier: import("./world/eggs").EggTier; by: string; x: number; y: number };
+  /** The id of one just laid, for the scene that lets off the fireworks. */
+  laid?: string;
 }
 
 /**

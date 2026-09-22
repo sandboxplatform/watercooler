@@ -2,7 +2,7 @@
  * The eggs Michael leaves behind, and what kind each one is.
  *
  * Startle the chicken and now and then — `EGG_CHANCE` — he leaves an egg
- * in the grass where he was standing before he bolts. Anybody out on the
+ * in the grass at the end of the run he takes. Anybody out on the
  * map can walk up to it and pocket it, and it goes on their shelf beside
  * their badges.
  *
@@ -67,7 +67,7 @@ export interface EggKind {
  * The weights total ten thousand, so the rare end is exact and reads
  * straight off — five hundred is one in twenty, two hundred is one in
  * fifty, a hundred is one in a hundred, which at `EGG_CHANCE` is about
- * one cluck in three thousand. The common end takes what is left over,
+ * one cluck in fourteen hundred. The common end takes what is left over,
  * which is why a hen's egg is 5450 rather than a round number: a
  * rarity somebody crossed the park for is worth being exact about, and
  * the one they were going to find anyway is not.
@@ -135,7 +135,7 @@ export const EGG_KINDS: readonly EggKind[] = [
     note: "Nobody has a good explanation for this one, Michael least of all",
     lore:
       "Six colours wound round the shell in bands, and it twinkles, which eggs do not. One " +
-      "cluck in a few thousand ends with one of these lying in the grass. Nobody has a good " +
+      "cluck in a thousand-odd ends with one of these lying in the grass. Nobody has a good " +
       "explanation for it, Michael least of all, and he has the look of a bird who would " +
       "rather not be asked again.",
     shell: { base: "#7aa8e0", shade: "#b45ea8", lit: "#f2e07a" },
@@ -198,21 +198,29 @@ export function tierFromRoll(roll: number): EggTier {
 }
 
 /**
- * How often a fright leaves an egg behind: three clucks in a hundred.
+ * How often a fright leaves an egg behind: seven clucks in a hundred.
  *
  * **Odds, not a count.** It is drawn afresh on every cluck
  * (`this.random() >= EGG_CHANCE` in `lib/server/residents.ts`) and
- * nothing anywhere counts clucks — so thirty of them may pass with
+ * nothing anywhere counts clucks — so a dozen of them may pass with
  * nothing to show, and two eggs in a row is a thing that happens. An egg
- * on every thirty-third fright would be a rhythm somebody could learn, and
+ * on every fourteenth fright would be a rhythm somebody could learn, and
  * then walking up to Michael would be a chore with a payout at the end of
  * it rather than a chance.
+ *
+ * It was three in a hundred, which is a rate the chase was not worth: a
+ * fright is five seconds of running a chicken down at half again a
+ * sprint, and thirty of those for one egg is a quarter of an hour of the
+ * same afternoon. Seven is a handful of chases rather than a session, and
+ * it changes nothing about the ladder — what kind of egg it is stays as
+ * rare as it was, so the rainbow is still the thing nobody is going to
+ * sit down and work through.
  *
  * A fact about the world rather than about the simulation, so the one
  * number is here beside the ladder it feeds. It is rolled where the
  * fright is, because that is where the seeded randomness lives.
  */
-export const EGG_CHANCE = 3 / 100;
+export const EGG_CHANCE = 7 / 100;
 
 /**
  * How close you have to be standing to pick one up.

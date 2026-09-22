@@ -268,11 +268,13 @@ centre spot.
 ### Michael's eggs
 
 Michael is a chicken in a necktie who wanders the world map, and if you walk
-up to him he clucks and bolts. Rarely — three clucks in a hundred — the
+up to him he clucks and bolts. Now and then — seven clucks in a hundred — the
 fright leaves an **egg** in the grass, dropped where the bolt ends rather
-than where it began, so getting it means following him. It is a chance
-rather than a countdown: there is nothing to work through, so an egg is
-something you come across rather than something you earn.
+than where it began, so getting it means following him. It goes off like a
+firework as it lands — in the egg's own colours, and harder the rarer it is
+— so you can see from across the park that the chase paid out. It is a
+chance rather than a countdown: there is nothing to work through, so an egg
+is something you come across rather than something you earn.
 
 He runs at half again a sprint, so you will not simply out-run him — but
 **catch him mid-bolt and he clucks again**, which is a fresh fright and a
@@ -280,7 +282,9 @@ fresh chance, and only one egg comes out of any one run however many times
 you run him down. Let him go and he drops it where he stops.
 
 It stays where it fell for ten minutes, and it belongs to whoever gets there
-first: walk up and press E. There are six kinds, and which one you have got
+first: walk up and press E. A glow and a bobbing arrow hang over it the whole
+time, drawn above the trees — otherwise an egg laid in the wood is an egg
+behind a canopy, which is an egg nobody was ever going to find. There are six kinds, and which one you have got
 is luck rather than skill:
 
 | Egg          | How often    |
@@ -292,7 +296,7 @@ is luck rather than skill:
 | Gilded Egg   | one in 50    |
 | Rainbow Egg  | one in 100   |
 
-A rainbow is three clucks in ten thousand, so there may only ever be one in a
+A rainbow is seven clucks in ten thousand, so there may only ever be one in a
 world, if that. Anything better than a speckled one is called out over the grass
 for everyone on the map to see.
 

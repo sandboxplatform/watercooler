@@ -2237,10 +2237,18 @@ empty court until somebody touched it.
 
 ### The eggs
 
-Startle Michael and three clucks in a hundred — `EGG_CHANCE` — he leaves
-an egg in the grass **where the bolt ends**, not where it began. Anybody out
-on the map can walk up to it and press E, and it goes in their basket, which
-hangs on their profile beside their badges and stays there.
+Startle Michael and seven clucks in a hundred — `EGG_CHANCE` — he leaves
+an egg in the grass **where the bolt ends**, not where it began, and it goes
+off like a firework as he does. Anybody out on the map can walk up to it and
+press E, and it goes in their basket, which hangs on their profile beside
+their badges and stays there.
+
+It was three clucks in a hundred, which is a rate the chase was not worth: a
+fright is five seconds of running a chicken down at half again a sprint, and
+thirty of those for one egg is a quarter of an hour of the same afternoon.
+Seven is a handful of chases rather than a session, and it moves nothing else
+— the ladder below is per **egg**, so what a rainbow is worth is exactly what
+it was.
 
 **Whether is settled at the cluck and where at the end of the run.** The roll
 belongs to the moment of the fright, which is where the seeded randomness is;
@@ -2253,14 +2261,14 @@ costs, and it is **one egg to a run**: a fright that is already carrying one
 does not roll again, so running him down over and over is worth another
 cluck and not another egg.
 
-**Odds, not every thirty-third cluck**, and the two are nothing alike to
+**Odds, not every fourteenth cluck**, and the two are nothing alike to
 play: the draw is fresh on every fright and nothing anywhere counts them,
-so a hundred may pass with nothing to show and two may come one after the
+so fifty may pass with nothing to show and two may come one after the
 other. A counter would be a rhythm somebody could learn, and then walking
 up to Michael would be a chore with a payout at the end of it rather than
 a chance. `residents.test.ts` holds it to that from both ends — a roll
 that keeps paying out keeps paying out, which is what says there is no
-counter swallowing the other ninety-nine.
+counter swallowing the other thirteen.
 
 **There is a ladder, and rarity is one number written once.** Six kinds
 (`EGG_KINDS` in `lib/world/eggs.ts`), each declaring a `weight`, and
@@ -2285,7 +2293,7 @@ hen's egg is 5450 rather than a round number. A rarity somebody crossed
 the park for is worth being exact about; the one they were going to find
 anyway is not.
 
-So a rainbow is three clucks in ten thousand, which is the world's rarity
+So a rainbow is seven clucks in ten thousand, which is the world's rarity
 rather than anybody's goal — and The Whole Clutch, the badge for one of
 every kind, is the long one in the catalogue on purpose. Both numbers are
 meant to be read as "there may be one of these in this world", not as
@@ -2293,11 +2301,11 @@ something to sit down and work through.
 
 Three files, and the split is the basketball's exactly:
 
-| Where                 | What                                                                             |
-| --------------------- | -------------------------------------------------------------------------------- |
-| `lib/world/eggs.ts`   | The ladder, the weighted pick, the reach. Pure, shared by all three layers       |
-| `lib/server/eggs.ts`  | The field: what is lying about, who may take it, and forgetting the stale ones   |
-| `systems/EggPatch.ts` | The drawing of them, the `Press E`, and the shout when somebody finds a good one |
+| Where                 | What                                                                           |
+| --------------------- | ------------------------------------------------------------------------------ |
+| `lib/world/eggs.ts`   | The ladder, the weighted pick, the reach. Pure, shared by all three layers     |
+| `lib/server/eggs.ts`  | The field: what is lying about, who may take it, and forgetting the stale ones |
+| `systems/EggPatch.ts` | The drawing of them, the `Press E`, the shout, the fireworks and the beacons   |
 
 Five decisions in it:
 
@@ -2340,6 +2348,14 @@ egg somebody pocketed. `egg-found` is a fact about a person and goes to
 everybody, so every browser's tally stays current without refetching.
 `/api/eggs` is the catch-up for a panel opened cold.
 
+**A whole list cannot say which of it is new**, which is what `laid` on the
+`eggs` message is for: the id of the one just dropped, null on every other
+message. Somebody walking onto the map is sent exactly the same list as
+somebody who was standing there when Michael laid one, so a scene bursting
+over everything it had not drawn before would let the fireworks off at every
+egg in the park for anybody coming out of a building. An id rather than the
+egg itself, unlike `taken` — this one is still in the list beside it.
+
 The browser's whole say is `{ type: "egg", action: "take" }`: which egg is
 whichever is nearest, and whether anything is in reach at all is answered
 off the room's own record of where that person is standing. A message that
@@ -2350,6 +2366,55 @@ of an egg — would be a thing a browser had an opinion about.
 world map now runs two of them, so `OutdoorPlace.extras` is a list; the ball
 and an egg a step apart never argue over a press, because neither acts on
 one unless something of theirs is within arm's length.
+
+**Two things are drawn over an egg rather than at it**, and they answer the
+same complaint from either end. Everything out of doors sorts by the bottom
+of its own picture, so an egg in the wood is behind whatever tree stands a
+row south of it — and the wood is where Michael spends half his day, since
+the walk along the river bank is five of his spots. Fourteen pixels of shell
+under a canopy is an egg that was never there.
+
+| What                  | Says                                        | For        |
+| --------------------- | ------------------------------------------- | ---------- |
+| `utils/egg-burst.ts`  | Michael has just laid one, and of what kind | A moment   |
+| `utils/egg-beacon.ts` | There is one here                           | Until gone |
+
+Both are drawn **over everything**, at the prompts' own depth rather than at
+the ground's, which is the whole of the point: the place they most have to
+be seen is exactly the place the egg cannot be. A burst that sorted with the
+scenery would be a firework let off inside a bush.
+
+Four decisions in the burst:
+
+- **The colours are the egg's** — the three `shell` tones off the ladder, so
+  the fireworks have said what kind it is before anybody is near enough to
+  read the shout over it. Nothing else in this feature tells you from across
+  a field.
+- **A rarer one goes off harder**, read off the rung rather than written per
+  tier: more sparks, faster, for longer, and the pops after it start at
+  copper. A seventh kind of egg needs nothing there.
+- **Squares, not smoke.** The spark and the four-point flash are generated
+  on first use rather than delivered as art, for the reason the count
+  boards' plates are drawn rather than painted — this is a white pixel and a
+  star, and a PNG of either is a file to keep in step with nothing. The
+  flash's spikes are stepped a pixel at a time, which is the argument the
+  incident lamp's dome is already under.
+- **It hands back a handle**, because a scene's shutdown takes its timers
+  with it: a burst still in the air when somebody walks into a building
+  would be waiting on a `delayedCall` that never arrives.
+
+And three in the beacon, which is the half that matters in the wood:
+
+- **The same mark for every rung.** Its job is "there is an egg here", which
+  is equally true of a hen's egg and a rainbow, and a beacon that only
+  showed the good ones is a beacon nobody can trust. What it takes from the
+  ladder is the **colour** — so it says which kind from across a field
+  without saying how much it is worth coming for.
+- **It is `keepLegible`'s**, like a name tag and unlike the lettering
+  painted on a wall: standing well back on a map this size is exactly when
+  an egg needs finding.
+- **The glow breathes and the arrow bobs, on two tweens.** One tween over
+  the lot would read as the egg itself bobbing about in the grass.
 
 **The sprite and the HUD are the same egg drawn twice.** `scripts/make-world-art.mjs`
 draws one frame per kind into the props atlas from the `shell` tones in

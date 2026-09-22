@@ -41,14 +41,32 @@ let field: LaidEgg[] = [];
 /** What somebody just picked up, if this message carried one. */
 export type EggTaken = NonNullable<EggsBroadcast["taken"]>;
 
-type FieldListener = (eggs: readonly LaidEgg[], taken: EggTaken | null) => void;
+/**
+ * What *happened*, beside what is lying there.
+ *
+ * The field is a whole list on every message, which is the right shape for
+ * drawing it and no shape at all for the two moments worth watching: one
+ * picked up, and one just laid. Both are null on the ordinary message —
+ * the one sent on arriving, and the one sent when a few go stale — which
+ * is what keeps a browser walking onto the map from marking every find and
+ * bursting over every egg in the park.
+ */
+export interface EggNews {
+  taken: EggTaken | null;
+  /** The id of one Michael has just left; it is in `eggs` beside it. */
+  laid: string | null;
+}
+
+const NO_NEWS: EggNews = { taken: null, laid: null };
+
+type FieldListener = (eggs: readonly LaidEgg[], news: EggNews) => void;
 const watchers = new Set<FieldListener>();
 
 /** Follow the field. What is lying there now, if anything, arrives at once. */
 export function onEggs(listener: FieldListener): () => void {
   listen();
   watchers.add(listener);
-  listener(field, null);
+  listener(field, NO_NEWS);
   return () => {
     watchers.delete(listener);
   };
@@ -91,8 +109,8 @@ function listen() {
   onRoomMessage((message) => {
     if (message.type === "eggs") {
       field = message.eggs;
-      const taken = message.taken ?? null;
-      for (const watcher of watchers) watcher(field, taken);
+      const news: EggNews = { taken: message.taken ?? null, laid: message.laid ?? null };
+      for (const watcher of watchers) watcher(field, news);
       return;
     }
     if (message.type !== "egg-found") return;

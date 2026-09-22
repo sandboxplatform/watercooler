@@ -807,11 +807,16 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
    * `EggsBroadcast` for why one appearing and another going would be the
    * wrong shape.
    */
-  const publishEggs = (taken?: { tier: EggTier; by: string; x: number; y: number }) => {
+  const publishEggs = (news?: {
+    taken?: { tier: EggTier; by: string; x: number; y: number };
+    /** The id of one Michael has just left, for the burst over it. */
+    laid?: string;
+  }) => {
     broadcast(WORLD_ROOM_SLUG, {
       type: "eggs",
       eggs: nest.lying,
-      ...(taken ? { taken } : {}),
+      ...(news?.taken ? { taken: news.taken } : {}),
+      ...(news?.laid ? { laid: news.laid } : {}),
     });
   };
 
@@ -1308,7 +1313,9 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
             tellEveryoneEgg(holder, egg.tier, at);
             announce(slug, onEggFound(holder, egg.tier));
           }
-          publishEggs({ tier: egg.tier, by: holder?.name ?? player.name, x: egg.x, y: egg.y });
+          publishEggs({
+            taken: { tier: egg.tier, by: holder?.name ?? player.name, x: egg.x, y: egg.y },
+          });
           return;
         }
 
@@ -1491,8 +1498,10 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
        */
       laid: (_residentId, room, at, startledBy) => {
         if (room !== WORLD_ROOM_SLUG) return;
-        nest.lay(eggSpot(at), Math.random(), Date.now());
-        publishEggs();
+        const egg = nest.lay(eggSpot(at), Math.random(), Date.now());
+        // Named on the way out, because the list alone cannot say which of
+        // it is new and a browser arriving is sent the same list.
+        publishEggs({ laid: egg.id });
         // Whoever walked up to him gets the credit, which is a badge
         // nobody can hand themselves: the fright is the server's to see.
         const holder = startledBy ? holderOf(startledBy) : null;
