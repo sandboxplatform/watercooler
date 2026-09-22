@@ -1,0 +1,15 @@
+{
+  "customers": [
+    {"name": "Castle Atlantic", "account_id": "258289000005325323", "domains": ["castleatlantic.ca"]},
+    {"name": "Focus Media Group", "account_id": "258289000002786223", "domains": ["fmgpublishing.com"]},
+    {"name": "Homestar", "account_id": "258289000008650589", "domains": ["homestarinc.ca", "homestarbuildingsupplies.ca"]},
+    {"name": "MacCallum", "account_id": "258289000003330089", "domains": ["maccallumcastle.com"]},
+    {"name": "Masstown", "account_id": "258289000018401001", "domains": ["masstownhardware.ca"]},
+    {"name": "Pareto", "account_id": "258289000000927001", "domains": ["paretobiz.com"]},
+    {"name": "Sandbox", "account_id": "258289000002786157", "domains": ["sandboxonline.co"]},
+    {"name": "Targetts", "account_id": "258289000009185057", "domains": ["targetts.ca"]},
+    {"name": "Trinity Energy Group", "account_id": "258289000001230001", "domains": ["trinityenergygroup.ca"]},
+    {"name": "Ultimate Windows", "account_id": "258289000004625001", "domains": ["ultimatewindows.ca"]}
+  ],
+  "notes": ""
+}
