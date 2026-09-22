@@ -464,6 +464,37 @@ load, so the name it wrote was read by a socket that had not opened yet.
 Without it everybody in the world goes on seeing the name you arrived under,
 which for a visitor is `Guest`.
 
+#### Covering a move
+
+**And every move after it is the same moment.** Walking in was the one
+arrival with a card over it, and the reason for the card — a place takes a
+second to build and the browser cannot paint while it does — is true of
+every front door, lift ride, campus gate and back button in the world. What
+they got instead was the freeze described under **Rooms and places**: your
+own character apparently stuck in the doorway for as long as the next place
+took. So `Arrival` covers the lot, off `room-changed`.
+
+Three things differ from the walk in, and the first is the one to remember:
+
+- **Only the first card travels.** The welcome's does, because it has to be
+  on screen before it sets the canvas going. Nothing else needs to: the
+  router holds its swap back for a paint, so every other move is already
+  announced a couple of frames before it is made.
+- **A shorter floor under it** (`MOVE_MS`, 300ms against the walk in's 900).
+  Walking into the world for the first time is meant to be a moment; a lift
+  ride is not, and a card held for the best part of a second on every door
+  would make the world feel slower than the freeze it replaced.
+- **It says where you are going**, in the People panel's own words —
+  `describeRoom` on the room off the event, so "Sandbox ERP · Lobby" and
+  "World map" mean the same thing wherever they are printed. The walk in
+  went through the same function rather than keeping its own wording.
+
+`place-changed` is what lifts it, and it is **remembered as well as waited
+for**: the card goes up when the move is announced and the scene is swapped
+two frames later, so ordinarily it is listening long before the new place
+says anything — but React commits on a schedule of its own, and an arrival
+that landed first would strand the card until its ceiling.
+
 ### Presence
 
 A room's people live in a `PresenceHub`, keyed by connection rather than by
@@ -1115,13 +1146,36 @@ written by the browser's network stack rather than by the page's script**: a
 page being torn down answers one exactly as a live page does.
 
 `lib/room-travel.ts` is the one place a room changes. It pushes the URL and
-says so with `room-changed`; three things listen.
+says so with `room-changed`; four things listen.
 
 | Who                                       | Does                                                                                                                         |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `components/game/systems/scene-router.ts` | Puts up the scene the new address names, clearing the cached tilemap first when that scene is the office                     |
+| `components/game/systems/scene-router.ts` | Puts up the scene the new address names, clearing the cached tilemap first when that scene is the office — after a paint     |
+| `components/hud/Arrival.tsx`              | Covers the move, because building the next place is a stretch the browser cannot paint during. See **Covering a move**       |
 | `lib/store.ts`                            | Refetches the room, since `room-client` reads the slug off the URL at call time and only the store held the old room's world |
 | presence                                  | Nothing. The socket carries no room in its URL, and every scene's `create` ends with `place-entered`, which rejoins          |
+
+**And the swap waits for a paint.** Building a place is one long synchronous
+stretch — the room being left torn down, and the next one's ground laid, its
+buildings put up, its trees planted — and on a second visit there is nothing
+left to fetch, so Phaser runs the new scene's `create` inside the call that
+asked for it. That call is a door firing in the old scene's own `update`, so
+the browser never gets a frame between the two: what it holds on screen for
+the whole build is the frame from **before** the door fired, with the
+character still standing in the doorway. Which is exactly how it read — the
+sprite freezing on the door rather than going through it, the hiding that
+`board(true)` had already done never reaching the glass.
+
+`afterPaint` in the router is the whole fix, and it buys two things at once:
+the doorway's last frame is the one with the character already gone, and the
+card the HUD put up on hearing the move is on screen before the thread is.
+Two frames rather than one, because that card is React's and React commits
+on a schedule of its own. Only the newest move is made — `go` reads the
+address bar rather than what it was handed, so two inside one pair of frames
+would both land on the second one's destination anyway.
+`__tests__/scene-router-timing.test.ts` is what holds it, since nothing else
+in the app would notice it stopping: the right room still comes up a moment
+later, and the only sign is a frozen doorway and a card nobody ever sees.
 
 Three ways of meaning it, one mover underneath:
 

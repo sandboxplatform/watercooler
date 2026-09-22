@@ -208,6 +208,12 @@ export interface GameEventMap {
    * scene the new address names, the store refetches the room, and presence
    * rejoins on the socket it already has. See `room-travel.ts` for why none
    * of it is a page load any more.
+   *
+   * It is a move being **announced** rather than made: `components/hud/Arrival`
+   * puts a card over the screen on hearing it, and the router holds the
+   * scene swap back for a paint so that card is up before the build takes
+   * the thread away. So this fires a couple of frames before the place it
+   * names is drawn, and the address bar already says so.
    */
   "room-changed": [room: string, arrival: RoomArrival];
   /**
@@ -225,11 +231,14 @@ export interface GameEventMap {
    * Where the player is, when it is not the room in the URL: a campus, the
    * world map. Null means the room.
    *
-   * **Nothing listens.** The top bar's name plate read it, and that came out
-   * — an Operations floor puts rooms against the top of the map and the
-   * panel sat on them, and the floor letters its own name on a wall now.
-   * The three scenes go on emitting it, the way the room's spend does, for
-   * whatever wants to say where somebody is next.
+   * **It is how a move ends.** `components/hud/Arrival` covers every move
+   * in this world — a door, a lift, the first walk in — because building a
+   * place is one long synchronous stretch the browser cannot paint during,
+   * and this is the place itself saying it is up. The label is not read;
+   * that a scene has finished `create` is the whole of the message. The top
+   * bar's name plate did read it, and that came out — an Operations floor
+   * puts rooms against the top of the map and the panel sat on them, and
+   * the floor letters its own name on a wall now.
    */
   "place-changed": [label: string | null];
   /**
