@@ -7,15 +7,18 @@ import {
   countDeployed,
   countIncidents,
   countRoadblocks,
+  countWip,
   flowBars,
   flowFigure,
   flowRows,
   isDeployed,
   isIncident,
   isRoadblock,
+  isWip,
   laneId,
   laneShort,
   toFlow,
+  wipLane,
 } from "../flow";
 
 /** A board of named lists holding that many cards apiece. */
@@ -460,5 +463,84 @@ describe("counting a board's incidents", () => {
 
   it("says none where nothing is burning", () => {
     expect(toFlow(board({ Backlog: 4, Testing: 2 }), LANES).incidents).toBe(0);
+  });
+});
+
+/**
+ * Work in hand, which is what the machine at the head of the room's
+ * production line is making.
+ *
+ * The odd one of the four things standing on that floor: the other three
+ * are counted off the whole board precisely because none of them is a
+ * stage of it, and this one is a stage — the stage — so it is read off the
+ * five the building declared and is the same number as the bay above the
+ * machine's head.
+ */
+describe("counting what a board has in hand", () => {
+  /**
+   * Narrow, for the incidents' reason: all three of the building's boards
+   * call the list **In Progress** and the wall already letters that WIP,
+   * so what is folded in is the handful of ways anybody writes the one
+   * stage down rather than a guess at boards nobody has seen.
+   */
+  it("reads the stage work is being done in, however it is written", () => {
+    for (const name of [
+      "In Progress",
+      " in progress ",
+      "in-progress",
+      "WIP",
+      "Work in progress",
+      "Doing",
+    ])
+      expect(isWip(name)).toBe(true);
+    /*
+     * The stages either side of it are stages where work is looked at
+     * rather than made, and each already has a bay saying so — a machine
+     * counting them would be making the same cards twice.
+     */
+    for (const name of ["In Review", "Testing", "Backlog", "Refined", "Progress report", "Done"])
+      expect(isWip(name)).toBe(false);
+  });
+
+  it("counts the lane the wall letters WIP", () => {
+    const flow = toFlow(
+      board({ Backlog: 4, Refined: 2, "In Progress": 3, "In Review": 1, Testing: 2 }),
+      LANES,
+    );
+    expect(countWip(flow)).toBe(3);
+    expect(wipLane(flow)?.short).toBe("WIP");
+  });
+
+  /**
+   * Off the wall's own five rather than off the whole board, which is the
+   * difference between this and the other three. A list nobody put on the
+   * wall is not a stage of this building's pipeline, whatever it is called
+   * — the building answered that question when it declared its lanes.
+   */
+  it("ignores a list the building did not declare", () => {
+    const flow = toFlow(
+      board({ Backlog: 4, Refined: 2, "In Review": 1, Testing: 2, Doing: 9 }),
+      LANES,
+    );
+    expect(countWip(flow)).toBe(0);
+    expect(wipLane(flow)).toBeNull();
+  });
+
+  /**
+   * A lane the board has not got counts nothing, which is what the rest of
+   * this floor does with one: the bay draws a dash, and a thing standing
+   * on the floor either stands there or does not.
+   */
+  it("counts nothing where the board has no such lane", () => {
+    const flow = toFlow(board({ Backlog: 4, Refined: 2, "In Review": 1, Testing: 2 }), LANES);
+    expect(flow.lanes.find((lane) => lane.short === "WIP")?.missing).toBe(true);
+    expect(countWip(flow)).toBe(0);
+  });
+
+  /** A building naming its own lanes gets the same answer. */
+  it("finds it wherever the building put it in the order", () => {
+    const lanes = ["Ideas", "Doing", "Shipped"];
+    const flow = toFlow(board({ Ideas: 1, Doing: 7, Shipped: 3 }), lanes);
+    expect(countWip(flow)).toBe(7);
   });
 });

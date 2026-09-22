@@ -13,6 +13,7 @@ import {
   opsBoardroomTable,
   opsDeployed,
   opsIncident,
+  opsMachine,
   opsElevator,
   opsProjectFlow,
   opsProjectRooms,
@@ -418,79 +419,65 @@ describe("an Operations floor", () => {
     });
 
     /**
-     * The roadblock stands in the middle of the room's floor.
+     * The machine, the roadblock and the crates stand side by side across
+     * the middle of the room.
      *
-     * The middle both ways, and the same answer for either rank: it is
-     * the one spot in an empty room that belongs to the room rather than
-     * to one of its edges, and everything else in here is on the wall.
+     * A production line, in the order those things happen to work: made,
+     * stopped, gone out — left to right, the way the pipeline on the wall
+     * above them runs. The spacing is what makes it a line rather than
+     * three things sharing a row, so it is asserted as an equal step
+     * rather than as three columns.
      */
-    it("stands the roadblock in the middle of the room", () => {
+    it("lines the three up across the middle of the room", () => {
       for (const slot of [1, 2, 3]) {
-        const at = opsRoadblock(6, slot)!;
         const room = opsProjectRooms(6, slot)[slot - 1];
-        expect(at.tx).toBe(room.x + ROOM_COLS / 2);
-        expect(at.ty).toBe(room.y + 3);
-        // Clear of both side walls, and inside the room's own rows.
-        expect(at.tx).toBeGreaterThan(room.x);
-        expect(at.tx).toBeLessThan(room.x + ROOM_COLS);
-        expect(at.ty).toBeGreaterThanOrEqual(room.y);
-        expect(at.ty).toBeLessThan(room.y + 7);
+        const line = [opsMachine(6, slot)!, opsRoadblock(6, slot)!, opsDeployed(6, slot)!];
+
+        // One row, the middle of the room's seven.
+        for (const at of line) expect(at.ty).toBe(room.y + 3);
+
+        // Left to right, evenly spaced, centred on the room — so the
+        // barrier keeps the middle it has always had.
+        const step = line[1].tx - line[0].tx;
+        expect(step).toBeGreaterThan(0);
+        expect(line[2].tx - line[1].tx).toBe(step);
+        expect(line[1].tx).toBe(room.x + ROOM_COLS / 2);
+
+        // Far enough apart that the pictures, two tiles apiece, keep clear
+        // floor between them.
+        expect(step).toBeGreaterThan(2);
+
+        // And the ends of it clear of both side walls, with room for the
+        // picture either side of the point it is drawn centred on.
+        expect(line[0].tx - 1).toBeGreaterThan(room.x);
+        expect(line[2].tx + 1).toBeLessThan(room.x + ROOM_COLS);
       }
-      expect(opsRoadblock(6, 9)).toBeNull();
+      for (const at of [opsMachine(6, 9), opsRoadblock(6, 9), opsDeployed(6, 9)]) {
+        expect(at).toBeNull();
+      }
     });
 
     /**
-     * What has shipped is stacked in the far corner of the room.
+     * The beacon is the one thing not on the line, in the near corner.
      *
-     * The barrier's opposite number and placed as its opposite: the
-     * middle of the floor is where a thing in the way stands, and the
-     * corner across the room from the board is where finished work goes.
-     * Two columns in, so the two-tile stack keeps a clear column between
-     * itself and the wall rather than reading as shoved through it.
+     * Which is the whole of what it says: the other three are things that
+     * happen to the work, and an incident happens to none of it. So it
+     * stands off the line, in the corner you walk in past, a clear two
+     * rows behind the machine at the head of it.
      */
-    it("stacks what has shipped in the far corner", () => {
-      for (const slot of [1, 2, 3]) {
-        const at = opsDeployed(6, slot)!;
-        const room = opsProjectRooms(6, slot)[slot - 1];
-        expect(at.tx).toBe(room.x + ROOM_COLS - 2);
-        expect(at.ty).toBe(room.y + 6);
-        // The picture is two tiles wide and drawn centred on the point, so
-        // a clear column either side of it and inside the room's own rows.
-        expect(at.tx - 1).toBeGreaterThan(room.x);
-        expect(at.tx + 1).toBeLessThan(room.x + ROOM_COLS);
-        expect(at.ty).toBeLessThan(room.y + 7);
-        // And nowhere near the barrier, which has the middle of the floor.
-        const stuck = opsRoadblock(6, slot)!;
-        expect(at.tx - stuck.tx).toBeGreaterThan(2);
-        expect(at.ty).toBeGreaterThan(stuck.ty);
-      }
-      expect(opsDeployed(6, 9)).toBeNull();
-    });
-
-    /**
-     * The beacon stands in the near corner, mirroring the crates.
-     *
-     * The same two columns off its own wall that they are off theirs and
-     * the same last row, because the two are read against each other from
-     * the doorway: what has gone out in the far corner, whether the server
-     * is on fire in the one you walk in past.
-     */
-    it("stands the beacon in the near corner, mirroring the crates", () => {
+    it("stands the beacon off the line, in the near corner", () => {
       for (const slot of [1, 2, 3]) {
         const at = opsIncident(6, slot)!;
         const room = opsProjectRooms(6, slot)[slot - 1];
         expect(at.tx).toBe(room.x + 2);
         expect(at.ty).toBe(room.y + 6);
-        // A clear column between it and the wall, as the crates have.
+        // A clear column between it and the wall.
         expect(at.tx - 1).toBeGreaterThan(room.x);
         expect(at.ty).toBeLessThan(room.y + 7);
-        // Mirrored: the same offset from its wall that they have from theirs,
-        // on the same row, with the barrier's middle between the two.
-        const shipped = opsDeployed(6, slot)!;
-        const stuck = opsRoadblock(6, slot)!;
-        expect(at.tx - room.x).toBe(room.x + ROOM_COLS - shipped.tx);
-        expect(at.ty).toBe(shipped.ty);
-        expect(at.tx).toBeLessThan(stuck.tx - 2);
+        // Off the line, both ways: behind it and short of its head.
+        const making = opsMachine(6, slot)!;
+        expect(at.ty).toBeGreaterThan(making.ty + 1);
+        expect(at.tx).toBeLessThan(making.tx - 1);
       }
       expect(opsIncident(6, 9)).toBeNull();
     });

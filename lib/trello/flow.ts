@@ -266,6 +266,53 @@ export function countIncidents(board: BoardView, lanes: readonly string[] = []):
   return raised;
 }
 
+/**
+ * What a board calls the stage work is actually being done in.
+ *
+ * The other three of these ask the whole board a question the wall cannot
+ * answer. This one asks the wall's own question again, because the machine
+ * standing on the floor **is** the WIP bay stood up and made to move: a
+ * bar can say how much work is in hand and cannot say that anything is
+ * happening to it, which is the one thing a room with work in it has to
+ * say from the doorway.
+ *
+ * Narrow, for `isIncident`'s reason: all three of the building's boards
+ * call the list **In Progress** and the wall already letters that WIP, so
+ * what is folded in is the handful of ways anybody writes the same stage
+ * down. Deliberately not In Review or Testing, which are stages where work
+ * is being looked at rather than made, and each of which has a bay of its
+ * own to say so.
+ */
+export function isWip(name: string): boolean {
+  return /^(work)?inprogress$|^wip$|^doing$/.test(name.toLowerCase().replace(/[^a-z]+/g, ""));
+}
+
+/**
+ * The lane the machine is making, off **the five on the wall** rather than
+ * off the whole board.
+ *
+ * That is the one difference between this and the other three, and it is
+ * the whole of the difference. A roadblock, a despatch and an incident are
+ * counted off the whole board precisely because none of them is a stage —
+ * a stuck card is standing in one, a shipped card has left them all, and
+ * an incident was never in any. This one is a stage, and it is the stage:
+ * the building has already said which of its lists that is by declaring
+ * its five, so asking the board over its head would be a second answer to
+ * a question already answered on the wall above the machine.
+ *
+ * A lane the board has not got counts nothing, which is what the rest of
+ * this floor does with one: the bay draws a dash, and a thing standing on
+ * the floor either stands there or does not.
+ */
+export function wipLane(flow: Flow): FlowLane | null {
+  return flow.lanes.find((lane) => !lane.missing && isWip(lane.name)) ?? null;
+}
+
+/** Cards in hand: what the machine on the room's floor is making. */
+export function countWip(flow: Flow): number {
+  return wipLane(flow)?.count ?? 0;
+}
+
 export interface FlowLane {
   id: string;
   /** The Trello list this counts, named as the building declared it. */

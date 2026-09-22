@@ -7,13 +7,20 @@ import { readRoomFlow } from "./room-flow";
  * A thing standing on a project room's floor with a figure on a plate over
  * it.
  *
- * There are two of them in every project room and they are the same
- * object: the roadblock in the middle of the floor, and the crates stacked
- * in the far corner. Both say something about the board on the wall that
- * the five bays beside it cannot — a stuck card is still standing in a
- * stage, a shipped one has left all five — so neither can be a sixth bay,
- * and both are therefore a thing in the room rather than a number on the
- * wall.
+ * There are four of them in every project room and they are one object.
+ * Three stand in a row across the middle of the floor, in the order those
+ * things happen to work: the machine making it, the roadblock it stops at,
+ * the crates it goes out in. The fourth is the incident beacon, off the
+ * line in the near corner, because nothing on the board happens to it.
+ *
+ * All four are on the floor rather than on the wall, and three of them for
+ * one reason: the five bays are the stages work is spread over, so a stuck
+ * card is still standing in one, a shipped card has left all five, and an
+ * incident was never in any — none of the three could be a sixth bay
+ * without reading as a sixth stage. The machine is the exception and the
+ * only one repeating a number the wall already has: a bar can say how much
+ * work is in hand and cannot say that anything is being done to it, which
+ * is what a thing that moves says by moving.
  *
  * What they share is everything except the picture: the plate, the figure
  * and the sizes it falls back through, the read on a timer, the beat when
@@ -51,10 +58,16 @@ export interface FloorMarkerSpec {
   /** How tall the thing under the plate stands, in pixels. */
   body: number;
   /**
-   * Draws that thing, once, into the container it stands in: origin at the
-   * middle of its feet, so everything in it is measured upward from zero.
+   * Draws that thing into the container it stands in: origin at the middle
+   * of its feet, so everything in it is measured upward from zero.
+   *
+   * Usually once and then left alone — a thing that moves while you watch
+   * it reads as a fault rather than as news, which is the rule the plate
+   * over it is under. The machine is the exception and says why in its own
+   * file, so this may hand back a teardown: a tween outlives the object it
+   * was pointed at, and every one of these is torn down on a lift ride.
    */
-  build(scene: Phaser.Scene, into: Phaser.GameObjects.Container): void;
+  build(scene: Phaser.Scene, into: Phaser.GameObjects.Container): void | (() => void);
   /** Which number off the room's own board is this one's. */
   count(flow: Flow): number;
   /** Its own fallback sizes, where a bigger count than usual is ordinary. */
@@ -67,6 +80,7 @@ export class FloorMarker {
   private figure: Phaser.GameObjects.Text | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private standing: number | null = null;
+  private still: (() => void) | null = null;
 
   constructor(
     private scene: Phaser.Scene,
@@ -89,7 +103,7 @@ export class FloorMarker {
       .setVisible(false);
     this.container = container;
 
-    this.spec.build(this.scene, container);
+    this.still = this.spec.build(this.scene, container) ?? null;
 
     const top = -(this.spec.body + PLATE);
     const plate = this.scene.add.rectangle(0, top, PLATE, PLATE, MARKER_DARK).setOrigin(0.5, 0);
@@ -163,6 +177,10 @@ export class FloorMarker {
   private destroy() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    // Before the container goes, since what this stops is pointed at what
+    // is in it.
+    this.still?.();
+    this.still = null;
     this.container?.destroy(true);
     this.container = null;
     this.plate = null;

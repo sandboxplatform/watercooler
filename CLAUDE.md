@@ -1594,6 +1594,93 @@ comparison; Backlog through Testing _are_ each other's comparison, so one
 scale and no dividing line. `divider` on the spec is that decision and
 nothing else.
 
+**Three things stand in a row across the middle of the floor, in the
+order those things happen to work.** A machine making it, a roadblock it
+stops at, the crates it goes out in — a production line, laid out left to
+right the way the pipeline on the wall above runs, with the number each
+one is about on a plate over it. So a project room is read **along**
+rather than looked round: work being made, work stuck, work gone, in that
+order, from the doorway.
+
+They stood apart before there were three of them, each in the one place
+that said the most about it on its own — the barrier in the middle
+because being in the way is the whole fact about it, the crates in the far
+corner because being finished with is the whole fact about them. The
+barrier has not moved; the line was laid out around it. Three tiles
+apart, which is what makes it a line rather than three things sharing a
+row: each picture is about two tiles wide, so three apart leaves a tile of
+floor between them and the eye carries from one to the next, where four
+apart they read as three separate objects. `opsLine` in `lib/map/floor.ts`
+is the spacing, written once, because the first edit to one of three
+separately worked-out coordinates is a line with a kink in it that nothing
+but standing in the room would catch.
+
+**A line across a room is in front of whichever door you come in by, and
+that is what a line is.** The barrier was moved out of the upper rank's
+doorway on its own account, and three of them spanning the middle cannot
+be anywhere else — the upper rank's doorway looks onto the head of the
+line and the lower rank's onto its far end, whatever the spacing. Which is
+the right way round now: what you are looking at is no longer one object
+standing where you wanted to walk, it is the room's work laid out in
+order.
+
+The incident beacon is the fourth thing on this floor and the one **off**
+the line, which is what it is: see below.
+
+**A machine at the head of it, for the work in hand.** The one thing in
+the room that moves, and the only one of the four repeating a number the
+wall already has — `countWip` is read off the five lanes the building
+declared rather than off the whole board, because unlike the other three
+this _is_ a stage, and it is the stage.
+
+What the wall cannot do is move. Five bays draw exactly the same picture
+whether the room is turning work out or sitting on it, and a number is a
+number whether it has been that number since March or has changed twice
+this morning. A machine running says work is happening here rather than
+reporting how much of it there is, which is the thing the bay over its
+head cannot say however large it is drawn.
+
+| Where                   | What                                                               |
+| ----------------------- | ------------------------------------------------------------------ |
+| `countWip` in `flow`    | Which lane is work in hand. Pure, over the board `readBoard` holds |
+| `opsMachine` in `floor` | The head of the line, read off the room like the other two         |
+| `systems/Machine`       | The housing, the hopper, the press portal and the belt under it    |
+| `systems/FloorMarker`   | The plate, the figure, the timer, the beat — for all four of them  |
+
+Five decisions in it:
+
+- **Two things move and no more**: a press that strokes, and parts riding
+  the belt out of the machine toward the rest of the line. Both are work
+  being done. Nothing flashes, nothing breathes and no light comes on —
+  the rule `CountBoard` is under, and this is a room where an actual fault
+  has a beacon of its own.
+- **The press is phased to the belt**, so a part is under the head when
+  the head comes down — worked out from the constants rather than written
+  down, because a stamp landing on empty belt is what the first change to
+  how fast the line runs would otherwise produce, and only standing in the
+  room would catch it.
+- **A part fades in at one end of the belt and out at the other.** The
+  three of them are the same three going round for ever, which is honest
+  enough for "work is being done here"; a box vanishing off the right and
+  reappearing on the left in the same frame is the one thing in the
+  picture that would read as the drawing being broken.
+- **Narrow, like the incidents.** All three of the building's boards call
+  the list **In Progress** and the wall already letters that WIP, so what
+  is folded in is the few ways anybody writes the one stage down. Not In
+  Review or Testing, which are stages where work is looked at rather than
+  made and each of which has a bay saying so.
+- **Three tones, which is the crates' argument.** The plate is the HUD's
+  own dark with a coloured edge, so a machine drawn the same way read as
+  the plate's own pedestal — one dark silhouette next to a barrier in
+  hazard stripes. It is a shade lighter than the plate, the frame under it
+  a shade darker again, and the purple is kept for the parts and the
+  rollers. Drawn once as a wide box with a gantry tucked under the plate,
+  it read as a desk with a monitor; the hopper and the press portal are
+  what make it a machine, and nothing in it hides behind the plate.
+
+Nothing is up when nothing is in hand, which is the rule all four are
+under.
+
 **A roadblock stands on the floor, and that is the point of it.** Work
 that has stopped is the one thing about a board nobody goes looking for
 and everybody needs to know, and the five counts on the wall cannot say
@@ -1616,6 +1703,11 @@ way. The middle column of seventeen is a half tile, which is exact rather
 than awkward: the marker is drawn centred on the point, and it stands on
 the bottom of its row, so its feet land a shade below centre — which is
 where a thing that stands up looks centred from.
+
+It stands there still: the line was laid out around it rather than the
+other way about. What it now has either side of it is what work looks
+like when it is **not** stuck, which is the comparison the barrier was
+making on its own and had nothing to make it against.
 
 | Where                       | What                                                                       |
 | --------------------------- | -------------------------------------------------------------------------- |
@@ -1664,22 +1756,20 @@ board that shipped nine things this month and one that shipped none draw
 the same five bars. A card that has shipped is not standing in any stage
 at all, which is why this is no more a sixth bay than the barrier is.
 
-Where it stands is half of what it says. The barrier is in the **middle**
-of the floor because being in the way is the whole fact about it; the
-crates are in the **far corner** — two columns in from the right-hand
-wall, on the room's last row — because being finished with is the whole
-fact about them. So a room reads left to right and front to back: the work
-on the wall, the trouble in the middle of the floor, the crates in the
-corner across from the board it all came off. Green, because the last bay
+Where it stands is half of what it says: the **far end of the line**, the
+end of the pipeline at the end of the row. It stood in the far corner of
+the floor before there was a line to stand at the end of, diagonally
+across from the board it came off — which said "out of the way" and
+nothing else, where the end of a line says what it is the end _of_. Green, because the last bay
 of the flow plate is green: the end of the pipeline is lit the same colour
 on the wall and on the floor.
 
-| Where                     | What                                                                        |
-| ------------------------- | --------------------------------------------------------------------------- |
-| `countDeployed` in `flow` | What counts as gone out. Pure, over the board `readBoard` already holds     |
-| `opsDeployed` in `floor`  | Where it stands, read off the room so a longer corridor carries it          |
-| `systems/Deployed`        | The pallet, the two crates, and the word stencilled on the lower one        |
-| `systems/FloorMarker`     | The plate, the figure, the timer, the beat when it moves — for both of them |
+| Where                     | What                                                                    |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `countDeployed` in `flow` | What counts as gone out. Pure, over the board `readBoard` already holds |
+| `opsDeployed` in `floor`  | Where it stands, read off the room so a longer corridor carries it      |
+| `systems/Deployed`        | The pallet, the two crates, and the word stencilled on the lower one    |
+| `systems/FloorMarker`     | The plate, the figure, the timer, the beat when it moves — for all four |
 
 Four decisions in it, and the first is the one that would have shipped a
 feature nobody could see:
@@ -1725,19 +1815,25 @@ same picture while the building was down. Sandbox ERP's three boards each
 keep a **Server Incident** list, and nothing anywhere in this world said a
 word about it.
 
-Where it stands is the crates' mirror: they are in the **far corner**
-because being finished with is the whole fact about them, so this is the
-**near** one — two columns off its own wall on the room's last row, the
-same offset they have from theirs, so the pair reads as a pair from the
-doorway. A red light by the door and a green stack across the room is a
-room summed up before anybody has looked at the board.
+Where it stands is the whole of what it says: **off the line**, in the
+near corner — two columns off its own wall, on the room's last row, a good
+two rows behind the machine at the head of it. The other three are things
+that happen to work, so they stand in a row in the order they happen;
+nothing on the board happens to an incident, and a thing that is off the
+pipeline stands off the line.
+
+The near corner rather than any other, because that is the corner you walk
+in past: something wanting to be looked at **now** belongs where the eye
+lands first. So a room reads in two glances — whether the server is on
+fire, and then the line across the middle of the floor saying how the work
+is going.
 
 | Where                      | What                                                               |
 | -------------------------- | ------------------------------------------------------------------ |
 | `countIncidents` in `flow` | What counts as one. Pure, over the board `readBoard` already holds |
 | `opsIncident` in `floor`   | Where it stands, read off the room so a longer corridor carries it |
 | `systems/Incident`         | The plinth, the sign, the collar and the lit dome over it          |
-| `systems/FloorMarker`      | The plate, the figure, the timer, the beat — for all three of them |
+| `systems/FloorMarker`      | The plate, the figure, the timer, the beat — for all four of them  |
 
 Six decisions in it, and the first three are the ones that would have lit a
 light nobody would ever look at again — or never lit it at all:
@@ -2883,6 +2979,8 @@ lib/
   voice/                           WebRTC voice, one conversation server-wide
   trello/ zoho/                    the two boards on an Operations floor, read-only
                                    (each with the counts drawn beside it: flow.ts, pulse.ts)
+                                   flow.ts also counts what stands on the floor:
+                                   the machine, the roadblock, the crates, the beacon
 public/maps|tilesets|sprites|characters|audio|ui
 scripts/                build-map, seed-erp, sprite and world-art generators
 types/game.ts           shared game types

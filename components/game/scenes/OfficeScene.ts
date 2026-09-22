@@ -37,6 +37,7 @@ import {
   opsProjectSign,
   opsDeployed,
   opsIncident,
+  opsMachine,
   opsRoadblock,
   opsSign,
   opsSupportPulse,
@@ -48,6 +49,7 @@ import { DeskWeek, SupportPulse } from "../systems/SupportPulse";
 import { ProjectFlow } from "../systems/ProjectFlow";
 import { DEPLOYED } from "../systems/Deployed";
 import { INCIDENT } from "../systems/Incident";
+import { MACHINE } from "../systems/Machine";
 import { FloorMarker } from "../systems/FloorMarker";
 import { ROADBLOCK } from "../systems/Roadblock";
 import { legible } from "../systems/legible";
@@ -758,16 +760,20 @@ export class OfficeScene extends Phaser.Scene {
    * whatever the office picked, and a room with PROJECT BOARD written over
    * a project board says less than the sign already hanging on it.
    *
-   * And three things standing on the floor, which are the three things the
-   * plate on the wall cannot say: a roadblock in the middle of any room
-   * with work stuck in it, the crates in the far corner of any room that
-   * has shipped something, and a beacon in the near corner of any room
-   * with an incident on it. A stuck card is still standing in a stage, a
-   * shipped one has left them all, and an incident is not a stage at all —
-   * so none of the three is a sixth bay, see `systems/FloorMarker`. All of
-   * them read the same answer as the counts beside them
-   * (`systems/room-flow`), so a room showing every one is still one
-   * request.
+   * And four things standing on the floor. Three of them are a production
+   * line across the middle of the room, in the order those things happen
+   * to work: the machine making it, the roadblock it stops at, the crates
+   * it goes out in. The fourth is a beacon in the near corner, off the
+   * line, for a room with an incident on it — nothing on the board happens
+   * to that.
+   *
+   * A stuck card is still standing in a stage, a shipped one has left them
+   * all and an incident was never in any, so none of those three could be
+   * a sixth bay; the machine is the one that repeats a number already on
+   * the wall, because a bar cannot move and this is what moving says. See
+   * `systems/FloorMarker`. All four read the same answer as the counts
+   * beside them (`systems/room-flow`), so a room showing every one of them
+   * is still one request.
    *
    * Hands back one teardown for every plate and every marker, since each
    * keeps a timer.
@@ -781,6 +787,7 @@ export class OfficeScene extends Phaser.Scene {
       if (board.board) this.addProjectSign(rooms, slot, board.board);
       if (board.lanes.length === 0) return [];
       const at = opsProjectFlow(rooms, slot);
+      const making = opsMachine(rooms, slot);
       const stuck = opsRoadblock(rooms, slot);
       const shipped = opsDeployed(rooms, slot);
       const burning = opsIncident(rooms, slot);
@@ -788,6 +795,7 @@ export class OfficeScene extends Phaser.Scene {
         ...(at ? [new ProjectFlow(this).place(at, TILE, slot)] : []),
         // The same read as the counts beside them, and none of them drawn
         // until there is something to say — see `systems/FloorMarker`.
+        ...(making ? [new FloorMarker(this, MACHINE).place(making, TILE, slot)] : []),
         ...(stuck ? [new FloorMarker(this, ROADBLOCK).place(stuck, TILE, slot)] : []),
         ...(shipped ? [new FloorMarker(this, DEPLOYED).place(shipped, TILE, slot)] : []),
         ...(burning ? [new FloorMarker(this, INCIDENT).place(burning, TILE, slot)] : []),

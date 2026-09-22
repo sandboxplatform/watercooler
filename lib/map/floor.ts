@@ -715,8 +715,89 @@ export function opsProjectFlow(rooms: number, slot = 1) {
 }
 
 /**
+ * The production line across the middle of a project room: the machine,
+ * the roadblock and the crates, side by side on one row.
+ *
+ * Each of the three is a thing about the board that the plate on the wall
+ * cannot say, and each stood somewhere of its own while there were only
+ * two of them — the barrier in the middle of the floor because being in
+ * the way is the whole fact about it, the crates in the far corner because
+ * being finished with is the whole fact about them. Three of them in a row
+ * says something neither arrangement could: work being made, work that has
+ * stopped, work that has gone out, in the order those happen to it, laid
+ * out left to right the way the pipeline on the wall above is. A room is
+ * then read along rather than looked round.
+ *
+ * `LINE_STEP` is three tiles, which is the spacing that makes it a line.
+ * Each picture is about two tiles wide, so three apart leaves a tile of
+ * floor between them and the eye carries from one to the next; four apart
+ * they are three things that happen to share a row.
+ *
+ * The middle of the room, both ways, as the barrier alone had it — so the
+ * barrier has not moved and the other two have come to it. The middle
+ * column of seventeen is a half tile, which is exact rather than awkward,
+ * since a marker is drawn centred on its point; the row is the middle of
+ * seven, and a marker stands on the bottom of its row, so the feet land a
+ * shade below centre, which is where a thing that stands up looks centred
+ * from.
+ *
+ * **A line across a room is in front of whichever door you come in by,
+ * and that is what a line is.** The barrier was moved out of the upper
+ * rank's doorway on its own account — one object in line with the door was
+ * a thing to walk round on the way in, off in the corner of the eye from
+ * everything else in the room. Three of them spanning the middle cannot be
+ * anywhere else: the upper rank's doorway looks onto the head of the line
+ * and the lower rank's onto its far end, whatever the spacing. Which is
+ * the right way round now, because what you are looking at is not one
+ * object standing where you wanted to walk — it is the room's work, laid
+ * out in order, read from the doorway without going in.
+ *
+ * Only the beacon is off it, and that is what the beacon is: see
+ * `opsIncident`.
+ */
+const LINE_ROW = Math.floor(ROOM_ROWS / 2);
+const LINE_STEP = 3;
+
+/**
+ * A place on that line, `step` stations either side of the middle.
+ *
+ * Written once rather than three times because "side by side" is the whole
+ * point of it: three coordinates worked out separately are three things to
+ * keep in step, and the first edit to one of them is a line with a kink in
+ * it that nothing but looking at the room would catch.
+ *
+ * Null where the floor has no such room, which a stale slot asks for.
+ */
+function opsLine(rooms: number, slot: number, step: number) {
+  const room = opsProjectRooms(rooms, slot)[slot - 1];
+  if (!room) return null;
+  return {
+    tx: room.x + ROOM_COLS / 2 + step * LINE_STEP,
+    ty: room.y + LINE_ROW,
+  } as const;
+}
+
+/**
+ * Where a project room stands its machine, in tiles: the head of the line.
+ *
+ * Work in hand is the one thing on this floor that is **happening**, and a
+ * bar on a wall cannot say so — five bays draw the same picture whether
+ * the room is turning work out or sitting on it. So the machine is the one
+ * thing in the room that moves, and the number over it is the WIP bay's
+ * own, which is the one number in here that is on the wall as well. See
+ * `systems/Machine`.
+ *
+ * At the head of the line because that is where work is made: the room
+ * then reads left to right as the board on the wall does, from what is
+ * being made, past what has stopped, to what has gone out.
+ */
+export function opsMachine(rooms: number, slot: number) {
+  return opsLine(rooms, slot, -1);
+}
+
+/**
  * Where a project room stands its roadblock, in tiles: the middle of the
- * room, both ways.
+ * line, which is the middle of the room.
  *
  * On the floor rather than on the wall, and that is the whole of it. The
  * wall is where the work is — the board and the five stages it is spread
@@ -725,65 +806,35 @@ export function opsProjectFlow(rooms: number, slot = 1) {
  * would read as more of the same; stood on the floor it is a thing in the
  * way, which is what it is.
  *
- * The middle rather than in line with the doorway, which is where it
- * stood first. Lined up with the door it was a thing to walk round on the
- * way in, and off to one side of a room whose every other feature is on
- * the wall opposite — so the room had the barrier in one corner of the
- * eye and what it is about in the other. The middle is the one spot in an
- * empty room that belongs to the room rather than to one of its edges,
- * and it is in shot through the doorway from the corridor either way.
- *
- * Both ways: the middle column of seventeen is a half tile, which is
- * exact rather than awkward — the marker is drawn centred on the point.
- * The row is the middle of seven, and the marker stands on the bottom of
- * it, so the feet land a shade below centre, which is where a thing that
- * stands up looks centred from.
- *
- * Null where the floor has no such room, as the sign and the counts are.
+ * It has stood in the middle of the room since it stopped standing in line
+ * with the doorway, and it stands there still — the line was laid out
+ * around it rather than the other way about, because the middle is the one
+ * spot in an empty room that belongs to the room rather than to one of its
+ * edges. What it now has either side of it is what work looks like when it
+ * is not stuck, which is the comparison the barrier was making on its own
+ * and had nothing to make it against.
  */
 export function opsRoadblock(rooms: number, slot: number) {
-  const room = opsProjectRooms(rooms, slot)[slot - 1];
-  if (!room) return null;
-  return {
-    tx: room.x + ROOM_COLS / 2,
-    ty: room.y + Math.floor(ROOM_ROWS / 2),
-  } as const;
+  return opsLine(rooms, slot, 0);
 }
 
 /**
- * Where a project room stacks what has shipped, in tiles: the far corner
- * of the floor, two columns in from the right-hand wall and standing on
- * the room's last row.
+ * Where a project room stacks what has shipped, in tiles: the far end of
+ * the line.
  *
- * The roadblock's opposite number, and placed as its opposite. Work that
- * has stopped stands in the **middle** because it is in the way, which is
- * the one thing there is to say about it; work that has gone out is
- * finished with, so it is stacked **out of the way** — and the corner it
- * is stacked in is the one diagonally across the room from the board it
- * came off. The board hangs in the left-hand corner of the wall, so a room
- * reads left to right and front to back: the work on the wall, the trouble
- * in the middle of the floor, the crates in the far corner.
+ * The end of the pipeline, and the end of the row, which is where work
+ * that is finished with belongs — out of the way, and in the direction
+ * everything else in the room is pointing. It used to stand in the far
+ * corner instead, diagonally across from the board it came off; the corner
+ * said "out of the way" and nothing else, where the end of a line says
+ * what it is the end *of*.
  *
- * Two columns in rather than hard into the corner: the stack is two tiles
- * wide and drawn centred on the point, so this leaves a clear column
- * between it and the wall — without which the crates read as having been
- * shoved through it. The row is the room's last, so they stand against the
- * back wall, which is where a pallet of finished goods ends up.
- *
- * It is clear of both ranks' doorways by construction: the lower rank's is
- * cut at `BOARD_WALL.door`, well to the left of this, and the upper rank's
- * is further left again.
- *
- * Null where the floor has no such room, as the roadblock and the counts
- * are.
+ * Off the right-hand wall by four and a half tiles, so the two-tile stack
+ * keeps clear floor between itself and the wall rather than reading as
+ * shoved through it.
  */
 export function opsDeployed(rooms: number, slot: number) {
-  const room = opsProjectRooms(rooms, slot)[slot - 1];
-  if (!room) return null;
-  return {
-    tx: room.x + ROOM_COLS - 2,
-    ty: room.y + ROOM_ROWS - 1,
-  } as const;
+  return opsLine(rooms, slot, 1);
 }
 
 /**
@@ -791,27 +842,30 @@ export function opsDeployed(rooms: number, slot: number) {
  * corner of the floor, two columns in from the left-hand wall and standing
  * on the room's last row.
  *
- * The crates' mirror, across the room and measured the same way, because
- * the two are the same kind of object and reading one against the other is
- * most of what they say. The far corner is where work that is finished
- * with is stacked; this is the corner you walk in past, which is where
- * something that wants looking at **now** belongs. So the room reads left
- * to right and front to back as it did, with one more thing in it: the
- * board on the wall, the trouble in the middle of the floor, what has gone
- * out in the far corner — and, on the way in, whether the server is on
- * fire.
+ * **The one thing in here that is not on the line, which is the whole of
+ * what it says.** The machine, the barrier and the crates are three things
+ * that happen to work — being made, stopping, going out — so they stand in
+ * a row in the order they happen. An incident happens to nothing on the
+ * board: it is the server on fire, it is not a stage, it will not wait for
+ * one, and it is the reason the rest of the room stops mattering for the
+ * afternoon. A thing that is off the pipeline stands off the line.
  *
- * Two columns in, like the crates, so the picture keeps a clear column
- * between itself and the wall rather than reading as shoved through it.
- * The same offset from its own wall as they have from theirs, which is
- * what makes the pair read as a pair from the doorway.
+ * The near corner rather than any other, because that is the corner you
+ * walk in past: something that wants looking at **now** belongs where the
+ * eye lands first. So a room reads in two glances — whether the server is
+ * on fire, and then the line across the middle of the floor saying how the
+ * work is going.
+ *
+ * Two columns in, so the picture keeps a clear column between itself and
+ * the wall rather than reading as shoved through it, and the room's last
+ * row, which puts it a good two rows clear of the line.
  *
  * It is clear of both ranks' doorways by construction: this is the room's
  * bottom row and every doorway off the corridor is cut through a wall, and
  * clear of the doorway between two rooms in the same rank, which
  * `BETWEEN_ROOMS` puts across the middle rows of the side wall.
  *
- * Null where the floor has no such room, as the other two are.
+ * Null where the floor has no such room, as the line's three are.
  */
 export function opsIncident(rooms: number, slot: number) {
   const room = opsProjectRooms(rooms, slot)[slot - 1];
