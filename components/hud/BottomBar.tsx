@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Gamepad2, Mic, MicOff, Users } from "lucide-react";
+import { Footprints, Gamepad2, Mic, MicOff, Users } from "lucide-react";
 import { gameEvents } from "@/lib/events";
 import { useOnline } from "@/lib/presence-online";
 import { useVoice } from "@/lib/hooks/useVoice";
+import { useSprinting } from "@/lib/hooks/useSprinting";
 import { meetingFor, useMeetings } from "@/lib/meeting";
 import { voiceChat } from "@/lib/voice/voice-chat";
 import { TURN_URL } from "@/lib/voice/ice";
@@ -40,6 +41,23 @@ export default function BottomBar({ peopleOpen, onTogglePeople }: BottomBarProps
       setPad(id ? { id, layout } : null);
     });
   }, []);
+
+  /**
+   * Walking or running, which on a phone had no switch at all.
+   *
+   * Sprinting is left Shift, and a handset has no Shift — so the one mode
+   * in this world that is neither a panel nor a place was a keyboard's and
+   * nobody else's. The pill is the same press by another route, and it is
+   * drawn on every screen rather than only the touch ones: the mode is
+   * kept between rooms and between sessions, so a browser that has been
+   * left sprinting should say so wherever it is being read.
+   *
+   * The state is the character's, and the browser's memory of it is what
+   * outlives them — the HUD is up long before any character and stays up
+   * through every door. So the pill reads that, and follows the character
+   * from there: a press of Shift moves it exactly as a press of it does.
+   */
+  const sprinting = useSprinting();
 
   /**
    * A meeting somebody has called at a boardroom table.
@@ -162,6 +180,28 @@ export default function BottomBar({ peopleOpen, onTogglePeople }: BottomBarProps
         {micOn ? <Mic size={10} /> : <MicOff size={10} />}
         {/* Off, the icon is the whole pill; on, the chat is worth naming and counting. */}
         {micOn && <span>Global Chat ({reached})</span>}
+      </button>
+      {/*
+        Sprinting, beside the microphone and drawn the same way: the icon on
+        its own while it is off, the word beside it while it is on. Walking
+        is the ordinary state and wants no pill of its own.
+      */}
+      <button
+        type="button"
+        className={`hud-pill hud-pill--metric hud-pill--button hud-sprint${
+          sprinting ? " hud-sprint--on" : " hud-sprint--icon"
+        }`}
+        onClick={() => gameEvents.emit("sprint-pressed")}
+        title={
+          sprinting
+            ? "Sprinting. Click, or press left Shift, to walk."
+            : "Walking. Click, or press left Shift, to sprint."
+        }
+        aria-pressed={sprinting}
+        aria-label={sprinting ? "Stop sprinting" : "Sprint"}
+      >
+        <Footprints size={10} />
+        {sprinting && <span>Sprint</span>}
       </button>
       {meetings.length > 0 && (
         <div

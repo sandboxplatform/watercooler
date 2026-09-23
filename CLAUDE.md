@@ -3792,7 +3792,25 @@ ignored while a field or a dialog has the keyboard). The mode is kept in the
 browser (`loadSprinting`), not on the character, because a room change builds
 a new character — holding it there dropped everyone back to a walk at every
 door, which is useless for the thing it is for: getting somewhere several
-rooms away. `player.speed` is what
+rooms away.
+
+**And a phone has no Shift**, which left the one mode in this world that is
+neither a panel nor a place reachable from a keyboard and nowhere else. The
+pill beside the microphone in the bottom bar is the same press by another
+route — `sprint-pressed` on the bus, which `Player.toggleSprint` answers, so
+there is one place the flip happens and the HUD cannot be sprinting while
+the room is walking. It is drawn on every screen rather than only the touch
+ones: the mode outlives the character, the door and the session, so a
+browser that was left sprinting should say so wherever it is being read.
+
+`sprint-changed` is the other half, and it is **pushed in when a character
+is built as well as on a press**, for the reason the voice mark is: a door
+builds a new character and a bus carries only what happens next. The pill
+reads `loadSprinting` through `useSprinting` — an external store rather than
+state kept in step by an effect, since this is a fact about the browser
+rather than about any component.
+
+`player.speed` is what
 every driver reads — the keys, the pad, a tapped route — so none of them knows
 about the mode; only the scripted walk out of a doorway stays at `MOVE_SPEED`.
 The walk cycle's `timeScale` comes from the actual velocity rather than from

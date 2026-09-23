@@ -671,6 +671,12 @@ It is left Shift only: right Shift keeps meaning what it usually means, and
 neither does anything while a panel with a text box in it is open, where
 Shift is a modifier rather than a binding.
 
+**On a phone it is the footprints beside the microphone**, at the bottom of
+the screen — the same switch, since a handset has no Shift to press. Tap it
+and it goes gold and says `Sprint`; tap it again to walk. It is there on a
+desktop too, because the mode is kept between rooms and between visits, and
+a browser that was left sprinting should be able to say so.
+
 Sprinting applies however you are moving — the keys, a controller stick, or a
 tapped route. Only the short walk out of a doorway on arriving is always at
 walking pace.

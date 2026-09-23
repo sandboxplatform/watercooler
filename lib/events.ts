@@ -85,6 +85,25 @@ export interface GameEventMap {
    */
   "interact-pressed": [];
   /**
+   * The sprint pill in the bottom bar, which stands in for left Shift.
+   *
+   * A phone has no Shift, so the one mode in this world that is neither a
+   * panel nor a place was reachable from a keyboard and nowhere else. A
+   * request rather than a state: the character owns the mode, and asking
+   * for it here is the same press arriving by another route.
+   */
+  "sprint-pressed": [];
+  /**
+   * Which way the mode was left, whoever flipped it.
+   *
+   * It is pushed in when a character is built as well as on a press, for
+   * the reason the voice mark is: a door builds a new character, and a bus
+   * carries only what happens next — so the pill would otherwise be right
+   * until somebody walked through a door and then say whatever it last
+   * heard.
+   */
+  "sprint-changed": [sprinting: boolean];
+  /**
    * Every fixture's open event carries which of its points was pressed, or
    * nothing where it has only one.
    *

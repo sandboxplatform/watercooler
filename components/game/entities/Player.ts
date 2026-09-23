@@ -93,15 +93,27 @@ export class Player {
     // focus is; see lib/sprint.ts for which presses count.
     const onKeyDown = (event: KeyboardEvent) => {
       if (!togglesSprint(event, typingInAField() || dialogOpen())) return;
-      this.sprinting = !this.sprinting;
-      saveSprinting(this.sprinting);
+      this.toggleSprint();
     };
     kb.on("keydown", onKeyDown);
+    // The same press, arriving from the pill in the bottom bar rather than
+    // from a keyboard a phone does not have. It asks the character rather
+    // than writing the mode itself, so there is one place the flip happens
+    // and nothing can be sprinting in the HUD and walking in the room.
+    const unsubSprint = gameEvents.on("sprint-pressed", () => this.toggleSprint());
     // Dropped when the scene goes, or a walk through a door would leave the
     // old scene's listener behind and every character built since would
     // toggle together. React's development double-mount makes two of these
     // on the first load, which is how the pile-up showed itself.
-    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => kb.off("keydown", onKeyDown));
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      kb.off("keydown", onKeyDown);
+      unsubSprint();
+    });
+
+    // What the mode is now, not only what it becomes: this character was
+    // built from the browser's own memory of it, and the HUD that has been
+    // up since before the door has heard nothing since the last press.
+    gameEvents.emit("sprint-changed", this.sprinting);
 
     this.sprite.anims.play(this.animKey("idle"));
     this.bubble = new ChatBubble(scene);
@@ -121,6 +133,18 @@ export class Player {
   /** Whether the toggle is on, for anything that wants to show it. */
   get isSprinting(): boolean {
     return this.sprinting;
+  }
+
+  /**
+   * Flip between walking and running, and say so.
+   *
+   * The one place the mode changes, whichever of the two presses asked for
+   * it — left Shift, or the pill a phone has instead.
+   */
+  private toggleSprint() {
+    this.sprinting = !this.sprinting;
+    saveSprinting(this.sprinting);
+    gameEvents.emit("sprint-changed", this.sprinting);
   }
 
   private animKey(prefix: "idle" | "walk"): string {
