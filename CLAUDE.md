@@ -1733,11 +1733,19 @@ They stood apart before there were three of them, each in the one place
 that said the most about it on its own — the barrier in the middle
 because being in the way is the whole fact about it, the crates in the far
 corner because being finished with is the whole fact about them. The
-barrier has not moved; the line was laid out around it. Three tiles
-apart, which is what makes it a line rather than three things sharing a
-row: each picture is about two tiles wide, so three apart leaves a tile of
-floor between them and the eye carries from one to the next, where four
-apart they read as three separate objects. `opsLine` in `lib/map/floor.ts`
+barrier has not moved; the line was laid out around it. **Right against
+each other, with no floor showing between**, so the row reads as one belt
+running across the room rather than as three things sharing it — it was
+two and a half tiles apart, and three before that, and the daylight
+between each pair was the only thing in the picture the eye had to
+measure by. **The step is measured off the widest pair and is written in
+pixels for it**: the plank and the lower crate are ninety-six apiece and
+the machine's belt is a hundred and four, so the machine and the barrier
+want a hundred pixels between centres and are the pair that decides it. A
+flat two tiles was tried and is four pixels short — the belt runs under
+the barrier's near leg, which is what an overlap looks like at this size.
+The crates then sit four pixels off the barrier, being the narrower, and
+four pixels is a seam rather than a gap. `opsLine` in `lib/map/floor.ts`
 is the spacing, written once, because the first edit to one of three
 separately worked-out coordinates is a line with a kink in it that nothing
 but standing in the room would catch.

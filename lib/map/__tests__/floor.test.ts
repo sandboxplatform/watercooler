@@ -38,7 +38,7 @@ import {
   WIDTH,
 } from "../floor";
 import { deriveCollisions, generateMap, paintShell, solidRuns, wallCollisions } from "../generate";
-import { STANDABLE, WALL_ROWS } from "../office";
+import { STANDABLE, TILE, WALL_ROWS } from "../office";
 import type { SourceMap } from "../harvest";
 import type { RoomSpec } from "../spec";
 import { DESK_SLOTS, deskBox, standingSpot } from "../../world/desks";
@@ -441,12 +441,14 @@ describe("an Operations floor", () => {
         // barrier keeps the middle it has always had.
         const step = line[1].tx - line[0].tx;
         expect(step).toBeGreaterThan(0);
-        expect(line[2].tx - line[1].tx).toBe(step);
+        expect(line[2].tx - line[1].tx).toBeCloseTo(step, 6);
         expect(line[1].tx).toBe(room.x + ROOM_COLS / 2);
 
-        // Far enough apart that the pictures, two tiles apiece, keep clear
-        // floor between them.
-        expect(step).toBeGreaterThan(2);
+        // Right against each other, and no closer: a hundred pixels is
+        // the two widest of them — the machine's belt at 104 and the
+        // barrier's plank at 96 — just touching, and anything under it is
+        // the belt drawn under the barrier's near leg.
+        expect(step * TILE).toBeCloseTo(100, 6);
 
         // And the ends of it clear of both side walls, with room for the
         // picture either side of the point it is drawn centred on.

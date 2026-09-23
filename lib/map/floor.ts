@@ -754,10 +754,23 @@ export function opsProjectFlow(rooms: number, slot = 1) {
  * out left to right the way the pipeline on the wall above is. A room is
  * then read along rather than looked round.
  *
- * `LINE_STEP` is three tiles, which is the spacing that makes it a line.
- * Each picture is about two tiles wide, so three apart leaves a tile of
- * floor between them and the eye carries from one to the next; four apart
- * they are three things that happen to share a row.
+ * `LINE_STEP` is the pictures' own width: they stand right against each
+ * other, with no floor showing between, so the row reads as one belt
+ * running across the room rather than as three things sharing it. It was
+ * two and a half tiles, and three before that, and the daylight between
+ * each pair was the only thing in the picture the eye had to measure by.
+ *
+ * **It is measured off the widest pair, which is why it is written in
+ * pixels.** The barrier's plank and the lower crate are ninety-six apiece
+ * and the machine's belt a hundred and four, so the machine and the
+ * barrier want fifty-two and forty-eight between their centres and are
+ * the pair that decides it: a hundred pixels, which is a shade over two
+ * tiles. Two flat was tried and is four pixels short — the belt runs
+ * under the barrier's near leg, which is what an overlap looks like at
+ * this size. The crates then sit four pixels off the barrier, being the
+ * narrower of the two, and four pixels is a seam rather than a gap.
+ *
+ * Draw any of the three wider and this is the number that follows it.
  *
  * The middle of the room, both ways, as the barrier alone had it — so the
  * barrier has not moved and the other two have come to it. The middle
@@ -782,7 +795,7 @@ export function opsProjectFlow(rooms: number, slot = 1) {
  * `opsIncident`.
  */
 const LINE_ROW = Math.floor(ROOM_ROWS / 2);
-const LINE_STEP = 3;
+const LINE_STEP = 100 / TILE;
 
 /**
  * A place on that line, `step` stations either side of the middle.

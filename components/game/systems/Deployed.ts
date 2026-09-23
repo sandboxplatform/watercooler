@@ -66,7 +66,22 @@ const DECK_H = 5;
 const FOOT_W = 14;
 const FOOT_X = 32;
 
-const LOW_W = 88;
+/**
+ * The lower crate is as wide as the barrier beside it is, and the word on
+ * it is why.
+ *
+ * It was 88, which held DEPLOYED at eight characters with room to spare.
+ * PRODUCTION is ten of them — eighty pixels of an eight-pixel font — and
+ * inside 88 with a two-pixel frame that leaves three clear pixels either
+ * side, which reads as a word jammed into a box rather than stencilled on
+ * one. Ninety-six is two tiles, which is what the barrier beside it
+ * stands, so the two pictures on this line are the same width as well as
+ * the same height — and neither of them is what the line is spaced by:
+ * `LINE_STEP` is a hundred pixels, off the machine's wider belt, so
+ * these two sit four pixels apart while the machine and the barrier
+ * touch. Draw this one past a hundred and four and the step follows it.
+ */
+const LOW_W = 96;
 const LOW_H = 26;
 const HIGH_W = 62;
 const HIGH_H = 18;
@@ -79,8 +94,19 @@ const HIGH_TOP = LOW_TOP - HIGH_H;
 
 const BODY = PALLET_H + LOW_H + HIGH_H;
 
-/** Stencilled on the side of the lower crate, where a crate carries one. */
-const WORD = "DEPLOYED";
+/**
+ * Stencilled on the side of the lower crate, where a crate carries one.
+ *
+ * The board's own word for the thing, which is Production on all three of
+ * Sandbox ERP's now: two of them said Deployed and have been renamed, and
+ * a crate still stencilled DEPLOYED is the room calling the end of the
+ * board by a name the board has stopped using. What is counted is
+ * untouched — `isDeployed` holds a net rather than a word, which is what
+ * made that rename a non-event to begin with — so this is only the label
+ * catching up, and the day a board says something else again it is this
+ * line that follows it and not the counting.
+ */
+const WORD = "PRODUCTION";
 
 export const DEPLOYED: FloorMarkerSpec = {
   ink: SHIPPED,
