@@ -3336,15 +3336,15 @@
 
 /* ── Sprinting ───────────────────────────────────────── */
 
-/* The mic's arrangement, in the HUD's own gold rather than the chat's
-   green: green on a pill in this bar means a conversation. */
+/* The icon and nothing else, either way, so it wants even padding rather
+   than the room a label would have needed. */
+.hud-sprint {
+  padding: 3px 6px;
+}
+
+/* Lit in the HUD's own gold rather than the chat's green: green on a pill
+   in this bar means a conversation. */
 .hud-sprint--on {
   color: var(--pixel-accent);
   border-color: var(--pixel-accent);
-}
-
-/* Walking, the pill is the icon and nothing else, so it wants even padding
-   rather than the room a label would have needed. */
-.hud-sprint--icon {
-  padding: 3px 6px;
 }

@@ -182,14 +182,16 @@ export default function BottomBar({ peopleOpen, onTogglePeople }: BottomBarProps
         {micOn && <span>Global Chat ({reached})</span>}
       </button>
       {/*
-        Sprinting, beside the microphone and drawn the same way: the icon on
-        its own while it is off, the word beside it while it is on. Walking
-        is the ordinary state and wants no pill of its own.
+        Sprinting, beside the microphone: the icon and nothing else, lit
+        while the mode is on. The bottom bar is glanced at rather than read,
+        and a switch with two faces has already said which it is in — a word
+        beside it would be the same fact printed twice, in the place with
+        least room for it.
       */}
       <button
         type="button"
         className={`hud-pill hud-pill--metric hud-pill--button hud-sprint${
-          sprinting ? " hud-sprint--on" : " hud-sprint--icon"
+          sprinting ? " hud-sprint--on" : ""
         }`}
         onClick={() => gameEvents.emit("sprint-pressed")}
         title={
@@ -201,7 +203,6 @@ export default function BottomBar({ peopleOpen, onTogglePeople }: BottomBarProps
         aria-label={sprinting ? "Stop sprinting" : "Sprint"}
       >
         <Footprints size={10} />
-        {sprinting && <span>Sprint</span>}
       </button>
       {meetings.length > 0 && (
         <div

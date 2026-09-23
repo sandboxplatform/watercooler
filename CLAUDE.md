@@ -3803,6 +3803,12 @@ the room is walking. It is drawn on every screen rather than only the touch
 ones: the mode outlives the character, the door and the session, so a
 browser that was left sprinting should say so wherever it is being read.
 
+**The icon and nothing else, either way.** The microphone earns its label
+because the thing it joins has a name and a number of people in it; this is
+a switch with two faces, which has said which it is in by being lit. A word
+beside it would be the same fact printed twice, in the place with least room
+for it.
+
 `sprint-changed` is the other half, and it is **pushed in when a character
 is built as well as on a press**, for the reason the voice mark is: a door
 builds a new character and a bus carries only what happens next. The pill
