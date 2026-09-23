@@ -205,18 +205,25 @@ export const TENANTS: readonly Tenant[] = [
     // Three boards, three rooms. The first has Operations — the room above
     // the lift, which is what you step out facing — and the other two take
     // the first two rooms of the lower rank. Each names its own lists, in
-    // the order they run, because they are the board's own and these three
-    // do not agree: Hammer Time finishes at Done where the other two go on
-    // to Testing.
+    // the order they run, because they are the board's own and have not
+    // always agreed: Hammer Time and the Reports App finished at Done where
+    // Sandbox ERP's own board went on to Testing, and the two have since
+    // been renamed to match. Written out three times all the same, rather
+    // than shared: they agreed once before about the last list but one and
+    // then drifted, so the next board to be retitled should be one line to
+    // change and not a list three rooms have to be talked out of.
     boards: [
       {
         board: "Sandbox ERP",
         lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"],
       },
-      { board: "Hammer Time", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Done"] },
+      {
+        board: "Hammer Time",
+        lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"],
+      },
       {
         board: "Reports App",
-        lanes: ["Backlog", "Refined", "In Progress", "In Review", "Done"],
+        lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"],
       },
     ],
   }),

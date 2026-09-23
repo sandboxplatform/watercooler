@@ -153,10 +153,12 @@ export function countRoadblocks(board: BoardView): number {
  * is the argument the other way: these names drift, and this one has been
  * watched drifting.
  *
- * Deliberately not "Done": that is the stage before this one, it is on
- * two of those three boards as a counted lane, and a bay on the wall
- * already says so. Bare "Ship" is out too — a list called Ship is as often
- * the queue of things to send as the record of what was sent.
+ * Deliberately not "Done": that is the stage before this one, and a board
+ * that keeps such a list is as likely to count it on the wall as not —
+ * Sandbox ERP's three did until the list was renamed to Testing on all
+ * three of them, which is the same drift from the other end and the same
+ * answer to it. Bare "Ship" is out too: a list called Ship is as often the
+ * queue of things to send as the record of what was sent.
  */
 export function isDeployed(name: string): boolean {
   return /^(deploy(s|ed|ing|ment|ments)?|release[sd]?|shipp(ed|ing)|prod(uction)?|live)$/.test(
