@@ -286,7 +286,7 @@ you run him down. Let him go and he drops it where he stops.
 It stays where it fell for ten minutes, and it belongs to whoever gets there
 first: walk up and press E. A glow and a bobbing arrow hang over it the whole
 time, drawn above the trees — otherwise an egg laid in the wood is an egg
-behind a canopy, which is an egg nobody was ever going to find. There are six kinds, and which one you have got
+behind a canopy, which is an egg nobody was ever going to find. There are eight kinds, and which one you have got
 is luck rather than skill:
 
 | Egg          | How often    |
@@ -296,11 +296,13 @@ is luck rather than skill:
 | Copper Egg   | one in eight |
 | Jade Egg     | one in 20    |
 | Gilded Egg   | one in 50    |
-| Rainbow Egg  | one in 100   |
+| Ruby Egg     | one in 80    |
+| Obsidian Egg | one in 125   |
+| Rainbow Egg  | one in 250   |
 
-A rainbow is four clucks in ten thousand, so there may only ever be one in a
-world, if that. Anything better than a speckled one is called out over the grass
-for everyone on the map to see.
+A rainbow is sixteen clucks in a hundred thousand, so there may only ever be one
+in a world, if that. Anything better than a speckled one is called out over the
+grass for everyone on the map to see.
 
 Your basket is the **Eggs** tab in the column, and it shows on your profile
 beside your badges. Four badges go with them: your first egg, startling him

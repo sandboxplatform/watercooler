@@ -120,50 +120,62 @@
     "width": 22,
     "height": 44
   },
-  "egg-rainbow": {
+  "egg-ruby": {
     "x": 1522,
     "y": 0,
     "width": 22,
     "height": 44
   },
-  "car-red-north": {
+  "egg-obsidian": {
     "x": 1552,
+    "y": 0,
+    "width": 22,
+    "height": 44
+  },
+  "egg-rainbow": {
+    "x": 1582,
+    "y": 0,
+    "width": 22,
+    "height": 44
+  },
+  "car-red-north": {
+    "x": 1612,
     "y": 0,
     "width": 44,
     "height": 88
   },
   "car-red-south": {
-    "x": 1604,
+    "x": 1664,
     "y": 0,
     "width": 44,
     "height": 88
   },
   "car-blue-north": {
-    "x": 1656,
+    "x": 1716,
     "y": 0,
     "width": 44,
     "height": 88
   },
   "car-blue-south": {
-    "x": 1708,
+    "x": 1768,
     "y": 0,
     "width": 44,
     "height": 88
   },
   "car-pale-north": {
-    "x": 1760,
+    "x": 1820,
     "y": 0,
     "width": 44,
     "height": 88
   },
   "car-pale-south": {
-    "x": 1812,
+    "x": 1872,
     "y": 0,
     "width": 44,
     "height": 88
   },
   "mailbox": {
-    "x": 1864,
+    "x": 1924,
     "y": 0,
     "width": 40,
     "height": 72

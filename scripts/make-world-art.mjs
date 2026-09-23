@@ -1034,9 +1034,23 @@ const EGGS = [
   {
     id: "gilded",
     mark: "leafed",
-    base: [224, 184, 112],
-    shade: [176, 140, 62],
-    lit: [247, 227, 168],
+    base: [233, 180, 28],
+    shade: [156, 116, 16],
+    lit: [255, 234, 148],
+  },
+  {
+    id: "ruby",
+    mark: "cut",
+    base: [192, 36, 64],
+    shade: [115, 18, 42],
+    lit: [244, 112, 140],
+  },
+  {
+    id: "obsidian",
+    mark: "glassy",
+    base: [69, 62, 94],
+    shade: [38, 32, 54],
+    lit: [155, 138, 216],
   },
   {
     id: "rainbow",
@@ -1170,6 +1184,41 @@ function shellTone(egg, x, y, u, v, rim) {
       const panel = (Math.floor(a / 5.5) + Math.floor(b / 6.5)) % 2 === 0;
       return shaded ? egg.shade : panel ? tint(egg.base, 0.16) : egg.base;
     }
+    // A stone that has been cut, which is the one thing a shell is not.
+    // Facets are flat, so the wedges are stepped in whole jumps of tone
+    // with nothing between them — a facet that graded into its neighbour
+    // is a marble, and a marble is a pebble with the lights on. Six of
+    // them, because at nine pixels of half-width a seventh is a stripe.
+    //
+    // The table is the flat across the crown a cut stone is given to look
+    // into, and it is where this reads as cut rather than merely angular:
+    // without it the wedges all meet at a point and it is a beach ball
+    // again, in one colour.
+    case "cut": {
+      const wedge = Math.floor(wrap(Math.atan2(y - 1, x * 1.5) / Math.PI + 1, 2) * 3);
+      const step = [0.26, -0.04, 0.14, -0.14, 0.32, -0.1][wedge];
+      if (rim >= 2 && v < -0.26 && u > -0.66 && u < 0.3) return tint(egg.lit, 0.12);
+      return tint(shaded ? egg.shade : egg.base, shaded ? step * 0.4 : step);
+    }
+    // Volcanic glass, broken the way glass breaks: conchoidal, which is to
+    // say in curved chips struck from a point off the shell rather than in
+    // straight flakes. Two arcs, because one is a scratch and three is a
+    // cracked egg.
+    //
+    // The sheen is the whole of why this is not a black ovoid. It is the
+    // violet the light picks out of the break, laid across the shell as a
+    // band with a bright edge — and it is drawn off `lit`, which is the
+    // one tone on this kind bright enough for the beacon and the fireworks
+    // to be made of.
+    case "glassy": {
+      const chip = Math.abs(Math.hypot((x + 7) * 0.85, (y + 3) * 0.62) - 8.2);
+      const chip2 = Math.abs(Math.hypot((x - 8) * 0.85, (y - 7) * 0.62) - 9);
+      if ((chip < 0.8 || chip2 < 0.8) && rim >= 1) return tint(egg.lit, -0.2);
+      const sheen = u * 0.62 + v;
+      if (sheen > -0.78 && sheen < -0.14 && rim >= 2)
+        return tint(egg.lit, sheen < -0.46 ? 0.14 : -0.24);
+      return shaded ? egg.shade : egg.base;
+    }
     // The whole spectrum, wound round the shell. Diagonal rather than
     // stacked — bands straight across the middle read as a beach ball — and
     // taken in `u` rather than in x, so they follow the curve instead of
@@ -1189,7 +1238,7 @@ function shellTone(egg, x, y, u, v, rim) {
 }
 
 /**
- * A four-pointed twinkle, for the two kinds with any business twinkling.
+ * A four-pointed twinkle, for the kinds with any business twinkling.
  *
  * Arms rather than a blob: a bright pixel on a bright shell is nothing, and
  * a plus sign is the smallest thing that reads as a glint. Three across and
@@ -1258,6 +1307,12 @@ for (const egg of EGGS) {
         set(cx + x, cy + y, [...tint(tone(x, y), r > 0.55 ? 0.3 : 0.62), 255]);
       }
     // And a glint on the two that have earned one.
+    if (egg.id === "ruby")
+      for (const at of [
+        [4, -2],
+        [-3, 6],
+      ])
+        sparkle(set, cx, cy, at, inside);
     if (egg.id === "gilded")
       for (const at of [
         [3, -3],

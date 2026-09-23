@@ -313,7 +313,7 @@ export const BADGES: readonly Badge[] = [
     group: "eggs",
     title: "Ruffled Feathers",
     description: "Startled Michael badly enough that he laid one",
-    hint: "Seven clucks in a hundred leave one behind. It is a chance and not a count, so it is worth startling him whenever you pass.",
+    hint: "Four clucks in a hundred leave one behind. It is a chance and not a count, so it is worth startling him whenever you pass.",
     // A feather would be the obvious one and it is not drawn on every
     // machine — it measures as tofu here, which is a badge that reads as
     // a blank box. The bolt away is the other half of the moment anyway.
@@ -324,7 +324,7 @@ export const BADGES: readonly Badge[] = [
     group: "eggs",
     title: "Over the Rainbow",
     description: "Found the rainbow egg, which nobody can account for",
-    hint: "One egg in a hundred, and there is nothing to do differently for it. You keep startling him, and one day it is there.",
+    hint: "One egg in two hundred and fifty, and there is nothing to do differently for it. You keep startling him, and one day it is there.",
     icon: "🌈",
   },
   {
@@ -332,7 +332,7 @@ export const BADGES: readonly Badge[] = [
     group: "eggs",
     title: "The Whole Clutch",
     description: "Found an egg of every kind there is to find",
-    hint: "Six kinds, hen's egg to rainbow. One of every kind, not six of any.",
+    hint: "Eight kinds, hen's egg to rainbow. One of every kind, not eight of any.",
     icon: "🧺",
   },
 

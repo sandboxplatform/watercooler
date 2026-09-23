@@ -21,7 +21,15 @@
 import { groundUnder } from "./basketball";
 
 /** The kinds of egg there are, commonest first. */
-export type EggTier = "plain" | "speckled" | "copper" | "jade" | "gilded" | "rainbow";
+export type EggTier =
+  | "plain"
+  | "speckled"
+  | "copper"
+  | "jade"
+  | "gilded"
+  | "ruby"
+  | "obsidian"
+  | "rainbow";
 
 export interface EggKind {
   id: EggTier;
@@ -59,24 +67,31 @@ export interface EggKind {
 /**
  * The ladder, commonest first.
  *
- * Six rungs. The common end halves — a hen's egg, one in four, one in
+ * Eight rungs. The common end halves — a hen's egg, one in four, one in
  * eight — and then the ladder pulls apart: the point of one is that the
- * last step is worth telling somebody about, and six rungs each half the
+ * last step is worth telling somebody about, and eight rungs each half the
  * one above it is a ladder anybody finishes in an afternoon.
  *
  * The weights total ten thousand, so the rare end is exact and reads
  * straight off — five hundred is one in twenty, two hundred is one in
- * fifty, a hundred is one in a hundred, which at `EGG_CHANCE` is about
- * one cluck in two and a half thousand. The common end takes what is left over,
- * which is why a hen's egg is 5450 rather than a round number: a
- * rarity somebody crossed the park for is worth being exact about, and
- * the one they were going to find anyway is not.
+ * fifty, forty is one in two hundred and fifty, which at `EGG_CHANCE` is
+ * about one cluck in six thousand. The common end takes what is left over,
+ * which is why a hen's egg is 5305 rather than a round number: a rarity
+ * somebody crossed the park for is worth being exact about, and the one
+ * they were going to find anyway is not.
+ *
+ * **The rare end got longer rather than steeper.** A rainbow was one in a
+ * hundred, which is a thing somebody turns up in an afternoon of chasing a
+ * chicken; it is one in two hundred and fifty now, and the two rungs put
+ * under it — a cut stone and a piece of volcanic glass — are what keep
+ * that from being a cliff with nothing on it. The stretch between the gold
+ * and the inexplicable is where a ladder is actually climbed.
  */
 export const EGG_KINDS: readonly EggKind[] = [
   {
     id: "plain",
     name: "Hen's Egg",
-    weight: 5450,
+    weight: 5305,
     note: "An ordinary egg, warm, from an ordinary chicken in a necktie",
     lore:
       "The one Michael means to lay. Warm through, a little heavier than it looks, and the " +
@@ -126,18 +141,42 @@ export const EGG_KINDS: readonly EggKind[] = [
       "Gold leaf, in panels, with the seams between them still showing where the sheets were " +
       "pressed down. Which is to say it looks laid on rather than laid, and nobody has yet " +
       "caught Michael at either.",
-    shell: { base: "#e0b870", shade: "#b08c3e", lit: "#f7e3a8" },
+    shell: { base: "#e9b41c", shade: "#9c7410", lit: "#ffea94" },
+  },
+  {
+    id: "ruby",
+    name: "Ruby Egg",
+    weight: 125,
+    note: "Cut, which is not a thing that happens to a shell",
+    lore:
+      "Faceted — flat planes meeting at edges you can feel with a thumbnail, and a table " +
+      "across the crown where a jeweller would have put one. Held to the light it throws a " +
+      "red patch on the grass a foot across, and the patch is warm. Whatever Michael is " +
+      "doing, laying is the wrong word for it.",
+    shell: { base: "#c02440", shade: "#73122a", lit: "#f4708c" },
+  },
+  {
+    id: "obsidian",
+    name: "Obsidian Egg",
+    weight: 80,
+    note: "Black glass, cold, with the whole spectrum asleep in the sheen",
+    lore:
+      "Volcanic glass, broken the way glass breaks — in curved chips, each one with an edge " +
+      "on it — and cold in a way the others are not, cold like a window in February. Turn it " +
+      "and a violet sheen rolls across the break and goes out. There is no volcano within " +
+      "four hundred miles of this park.",
+    shell: { base: "#453e5e", shade: "#262036", lit: "#9b8ad8" },
   },
   {
     id: "rainbow",
     name: "Rainbow Egg",
-    weight: 100,
+    weight: 40,
     note: "Nobody has a good explanation for this one, Michael least of all",
     lore:
       "Six colours wound round the shell in bands, and it twinkles, which eggs do not. One " +
-      "cluck in a thousand-odd ends with one of these lying in the grass. Nobody has a good " +
-      "explanation for it, Michael least of all, and he has the look of a bird who would " +
-      "rather not be asked again.",
+      "cluck in six thousand-odd ends with one of these lying in the grass. Nobody has a " +
+      "good explanation for it, Michael least of all, and he has the look of a bird who " +
+      "would rather not be asked again.",
     shell: { base: "#7aa8e0", shade: "#b45ea8", lit: "#f2e07a" },
   },
 ];
@@ -269,8 +308,8 @@ export function eggWithinReach(egg: { x: number; y: number }, at: { x: number; y
  *
  * A tally rather than a list of every egg, because that is what every
  * question anybody asks of a basket wants — how many, of what, and which
- * is the best one — and it is bounded by people times six where a list is
- * bounded by nothing at all.
+ * is the best one — and it is bounded by people times the length of the
+ * ladder where a list is bounded by nothing at all.
  */
 export interface EggTally {
   person: string;

@@ -696,7 +696,7 @@ export class RoomStore {
    *
    * A tally rather than the rows, because that is what every question
    * anybody asks of a basket wants and it is the one shape with a bound on
-   * it: people times the six rungs of the ladder, where the rows themselves
+   * it: people times the rungs of the ladder, where the rows themselves
    * grow for as long as the world runs.
    *
    * `name` is the one they found the most recent of that kind under, so

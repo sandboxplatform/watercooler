@@ -749,7 +749,7 @@ which is what keeps them true when the world changes:
 - **Grand Tour** counts `ORGANISATIONS`, so a new company moves the target.
 - **Knows Everybody** counts `RESIDENT_COUNT`, off the cast.
 - **The Whole Clutch** counts `EGG_TIER_COUNT`, off the ladder in
-  `lib/world/eggs.ts` — a seventh kind of egg moves it. Its marks are
+  `lib/world/eggs.ts` — a ninth kind of egg moves it. Its marks are
   `egg:<tier>`, which is why nine of one kind is not a clutch: the rule
   about tallies applies to eggs exactly as it does to lobbies.
 - **Played the Lot** counts `SCORED_MACHINES`, which is read off `TENANTS`
@@ -2654,34 +2654,43 @@ a chance. `residents.test.ts` holds it to that from both ends — a roll
 that keeps paying out keeps paying out, which is what says there is no
 counter swallowing the other thirteen.
 
-**There is a ladder, and rarity is one number written once.** Six kinds
+**There is a ladder, and rarity is one number written once.** Eight kinds
 (`EGG_KINDS` in `lib/world/eggs.ts`), each declaring a `weight`, and
 everything else is read off it — the share of eggs that come out that kind,
-the "1 in 100" the panel prints, the order the ladder is shown in, and the
+the "1 in 250" the panel prints, the order the ladder is shown in, and the
 target of the badge for finding one of each. A second field saying "rare"
 is a second thing to be wrong the next time a weight moves.
 
 | Kind         | Weight | Which is |
 | ------------ | ------ | -------- |
-| Hen's Egg    | 5450   | 1 in 2   |
+| Hen's Egg    | 5305   | 1 in 2   |
 | Speckled Egg | 2500   | 1 in 4   |
 | Copper Egg   | 1250   | 1 in 8   |
 | Jade Egg     | 500    | 1 in 20  |
 | Gilded Egg   | 200    | 1 in 50  |
-| Rainbow Egg  | 100    | 1 in 100 |
+| Ruby Egg     | 125    | 1 in 80  |
+| Obsidian Egg | 80     | 1 in 125 |
+| Rainbow Egg  | 40     | 1 in 250 |
 
 The weights total ten thousand, so the rare end is exact — five hundred
-is one in twenty, two hundred is one in fifty, a hundred is one in a
-hundred — and the common end takes what is left over, which is why a
-hen's egg is 5450 rather than a round number. A rarity somebody crossed
-the park for is worth being exact about; the one they were going to find
-anyway is not.
+is one in twenty, two hundred is one in fifty, forty is one in two
+hundred and fifty — and the common end takes what is left over, which is
+why a hen's egg is 5305 rather than a round number. A rarity somebody
+crossed the park for is worth being exact about; the one they were going
+to find anyway is not.
 
-So a rainbow is four clucks in ten thousand, which is the world's rarity
-rather than anybody's goal — and The Whole Clutch, the badge for one of
-every kind, is the long one in the catalogue on purpose. Both numbers are
-meant to be read as "there may be one of these in this world", not as
-something to sit down and work through.
+**The rare end got longer rather than steeper.** A rainbow was one in a
+hundred, which is a thing somebody turns up in an afternoon of chasing a
+chicken. Making it one in 250 on its own would have left a cliff with
+nothing on it above the gold, so the two rungs put under it — a cut stone
+and a piece of volcanic glass — are the climb: the stretch between the
+gold and the inexplicable is where a ladder is actually climbed.
+
+So a rainbow is sixteen clucks in a hundred thousand, which is the
+world's rarity rather than anybody's goal — and The Whole Clutch, the
+badge for one of every kind, is the long one in the catalogue on purpose.
+Both numbers are meant to be read as "there may be one of these in this
+world", not as something to sit down and work through.
 
 Three files, and the split is the basketball's exactly:
 
@@ -2776,7 +2785,7 @@ Four decisions in the burst:
   a field.
 - **A rarer one goes off harder**, read off the rung rather than written per
   tier: more sparks, faster, for longer, and the pops after it start at
-  copper. A seventh kind of egg needs nothing there.
+  copper. A ninth kind of egg needs nothing there.
 - **Squares, not smoke.** The spark and the four-point flash are generated
   on first use rather than delivered as art, for the reason the count
   boards' plates are drawn rather than painted — this is a white pixel and a

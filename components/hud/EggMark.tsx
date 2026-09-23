@@ -7,17 +7,18 @@ import type { EggKind } from "@/lib/world/eggs";
  * An egg, in the HUD.
  *
  * Drawn rather than lettered, for the reason the voice mark over somebody's
- * head is: an emoji's colour belongs to the font, and 🥚 six times over
- * would be six identical rows.
+ * head is: an emoji's colour belongs to the font, and 🥚 once a rung
+ * would be a ladder of identical rows.
  *
  * **And drawn with its markings, not just its colour.** It was a rounded
  * box in a gradient of the shell's three tones, which is the difference
- * between a hen's egg and a jade one written in hue alone — six pale ovals
- * in six shades of one light, at thirteen pixels across, in a list whose
+ * between a hen's egg and a jade one written in hue alone — a column of
+ * pale ovals in shades of one light, at thirteen pixels across, in a list whose
  * whole job is to say that the bottom of it is worth crossing the park for.
  * So every kind's `mark` in `scripts/make-world-art.mjs` has its
  * counterpart here: freckles, a hammered sheen, veins lit from within, gold
- * leaf in panels, and the whole spectrum wound round the shell. The sprite
+ * leaf in panels, the flat faces of a cut stone, the curved chips glass
+ * breaks into, and the whole spectrum wound round the shell. The sprite
  * in the grass and the egg in the panel are one egg, and now they are one
  * egg twice rather than an egg and a bead.
  *
@@ -53,6 +54,35 @@ const FRECKLES: readonly [number, number, number][] = [
   [9.2, 19.6, 0.75],
   [13.0, 11.0, 0.5],
   [8.0, 3.4, 0.45],
+];
+
+/**
+ * One flat face of a cut stone, struck from the middle of it.
+ *
+ * Wedges rather than a drawn outline, because what makes a stone read as
+ * cut at this size is that each face takes the light as a whole — a facet
+ * that graded into its neighbour is a marble, and a marble is a pebble
+ * with the lights on. Six of them; a seventh at eighteen pixels across is
+ * a stripe.
+ */
+function facet(from: number, to: number): string {
+  const [cx, cy] = [9, 12.5];
+  const R = 17;
+  const at = (deg: number) => {
+    const a = (deg * Math.PI) / 180;
+    return `${(cx + R * Math.cos(a)).toFixed(2)} ${(cy + R * Math.sin(a)).toFixed(2)}`;
+  };
+  return `M${cx} ${cy} L${at(from)} L${at(to)} Z`;
+}
+
+/** The faces, clockwise from the crown: which tone each takes, and how much. */
+const FACETS: readonly [number, number, "lit" | "shade", number][] = [
+  [-90, -30, "lit", 0.34],
+  [-30, 30, "shade", 0.4],
+  [30, 90, "shade", 0.72],
+  [90, 150, "shade", 0.24],
+  [150, 210, "lit", 0.14],
+  [210, 270, "lit", 0.58],
 ];
 
 /** A four-pointed glint, the same one the sprite gets two of. */
@@ -132,6 +162,42 @@ function Marking({ kind, ids }: { kind: EggKind; ids: (name: string) => string }
           </g>
         </g>
       );
+    // Cut, which is not a thing that happens to a shell: flat faces meeting
+    // at hard edges, and the table across the crown a jeweller would have
+    // put there. The table is what says the stone was *worked* — without it
+    // the wedges all run to one point and it reads as a beach ball in red.
+    case "ruby":
+      return (
+        <g>
+          {FACETS.map(([from, to, tone, opacity]) => (
+            <path
+              key={from}
+              d={facet(from, to)}
+              fill={tone === "lit" ? lit : shade}
+              opacity={opacity}
+            />
+          ))}
+          <path d="M5.2 6.6 L9 3.5 L12.8 6.6 L9 9.5 Z" fill={lit} opacity="0.72" />
+        </g>
+      );
+    // Volcanic glass: conchoidal fracture — the curved chips glass breaks
+    // into, rather than the straight flakes a stone gives — and the sheen
+    // rolling across the break, which is the only bright thing on it and
+    // the whole reason it is not a black oval.
+    case "obsidian":
+      return (
+        <g>
+          <path
+            d="M4.2 2.6 C2 8 2.4 14.2 4.6 19.8 L8.4 22.8 C5.6 16 5.4 8.8 8.2 1.8 Z"
+            fill={lit}
+            opacity="0.42"
+          />
+          <g fill="none" stroke={lit} strokeWidth="0.75" strokeLinecap="round">
+            <path d="M1.2 9.2 C5 6.2 9.8 7 12.6 11 C14.8 14.2 14.9 18.6 13.4 22.4" opacity="0.5" />
+            <path d="M3.4 21 C4.3 17.2 7.4 14.4 11.2 14" opacity="0.34" />
+          </g>
+        </g>
+      );
     default:
       // The rainbow is its own base fill, and a hen's egg is a shell and
       // nothing on it.
@@ -153,13 +219,20 @@ export default function EggMark({
   const ids = (name: string) => `egg-${name}-${uid}`;
   const { base, shade, lit } = kind.shell;
   const rainbow = kind.id === "rainbow";
-  // The modelling is the shell's own two tones, except on the one egg whose
-  // shell has six — there it has to be plain light and plain shadow, or the
-  // roundness would be drawn in a colour that fights three of the bands.
-  const hi = rainbow ? "#ffffff" : lit;
+  // The modelling is the shell's own two tones, except on the two eggs whose
+  // bright tone is a colour in its own right. On the rainbow that is the six
+  // bands, three of which the shell's own `lit` would fight; on the obsidian
+  // it is the violet sheen, and a highlight painted in it turns the one black
+  // egg on the ladder lilac. Both get plain light and plain shadow instead,
+  // which on polished glass is what a highlight is anyway.
+  const ownColour = rainbow || kind.id === "obsidian";
+  const hi = ownColour ? "#ffffff" : lit;
   const lo = rainbow ? "#2a2036" : shade;
   const twinkles = rainbow ? [star(12.4, 8.4, 2.2), star(6, 16.6, 1.7)] : [];
   if (kind.id === "gilded") twinkles.push(star(12.2, 7.6, 2), star(6.4, 17.4, 1.5));
+  // A cut stone flashes; black glass does not — its answer to the light is
+  // the sheen, and a twinkle on it would read as a chip of something else.
+  if (kind.id === "ruby") twinkles.push(star(11.8, 8.2, 1.9), star(6.2, 17, 1.5));
 
   return (
     <span className={`egg-mark${dim ? " egg-mark--dim" : ""}`} aria-hidden="true">

@@ -63,7 +63,7 @@ const EGG_DEPTH_DROP = 6;
  * is not news to them. So the two commonest kinds pass quietly and the
  * rest are called out, which is what makes the call mean something.
  */
-const SHOUT_ABOUT = new Set(["copper", "jade", "gilded", "rainbow"]);
+const SHOUT_ABOUT = new Set(["copper", "jade", "gilded", "ruby", "obsidian", "rainbow"]);
 
 /** The picture of one egg, and the mark hanging over it. */
 interface Drawn {
