@@ -288,8 +288,8 @@ export function isWip(name: string): boolean {
 }
 
 /**
- * The lane the machine is making, off **the five on the wall** rather than
- * off the whole board.
+ * The lane the machine is making, off **the lanes the building declared**
+ * rather than off the whole board.
  *
  * That is the one difference between this and the other three, and it is
  * the whole of the difference. A roadblock, a despatch and an incident are
@@ -297,8 +297,13 @@ export function isWip(name: string): boolean {
  * a stuck card is standing in one, a shipped card has left them all, and
  * an incident was never in any. This one is a stage, and it is the stage:
  * the building has already said which of its lists that is by declaring
- * its five, so asking the board over its head would be a second answer to
- * a question already answered on the wall above the machine.
+ * its five, so asking the board which of them it means would be a second
+ * answer to a question already answered.
+ *
+ * The declaration rather than the wall, because the wall no longer letters
+ * it — see `wallLanes`. The machine is where this number is now shown, and
+ * it would be an odd thing indeed for it to be read off the one plate that
+ * has stopped saying it.
  *
  * A lane the board has not got counts nothing, which is what the rest of
  * this floor does with one: the bay draws a dash, and a thing standing on
@@ -311,6 +316,31 @@ export function wipLane(flow: Flow): FlowLane | null {
 /** Cards in hand: what the machine on the room's floor is making. */
 export function countWip(flow: Flow): number {
   return wipLane(flow)?.count ?? 0;
+}
+
+/**
+ * The lanes the wall letters: the ones the building declared, less the one
+ * the machine on the floor is making.
+ *
+ * Work in hand is on the floor of the room now — a machine with the number
+ * on a plate over it, running while there is anything in it — and a bay
+ * saying the same thing six feet above it is the same number printed
+ * twice. The wall is then the stages work is **waiting** in and the floor
+ * is the stage it is being worked on, which is a sharper division than
+ * five bars one of which happens to have a machine under it.
+ *
+ * By the name rather than by `wipLane`, which answers null for a lane the
+ * board has not got: the rule is that this stage is not on the wall, and a
+ * lane the board has lost is no more the wall's business than one it has.
+ *
+ * The bars are left alone, and they are still a share of every declared
+ * lane (`flowBars`) rather than of the four that are drawn. What is in
+ * hand is still work in flight, so the share of the plate that is bare is
+ * what the machine is making — which is the honest picture, and the one
+ * the machine is standing there to complete.
+ */
+export function wallLanes(flow: Flow): FlowLane[] {
+  return flow.lanes.filter((lane) => !isWip(lane.name));
 }
 
 export interface FlowLane {
@@ -472,10 +502,15 @@ export function flowFigure(lane: FlowLane): string {
 /**
  * How many bays to a row, for the plate on the wall.
  *
- * Three across is what fits a five-tile board at a size worth calling
+ * Three across is what fits a plate of counts at a size worth calling
  * legible, so five lanes hang three and two — the way a line of text
  * wraps, left to right and then down. Rows as even as they go, with the
  * fuller one first: five is 3 and 2, four is 2 and 2, six is 3 and 3.
+ *
+ * Four is the ordinary case now that the wall has stopped lettering WIP,
+ * and two rows of two is why the plate wanting the whole depth of the wall
+ * was worth having: a row of four across one row leaves the figures the
+ * size they would have been and most of the plate bare.
  */
 export const FLOW_ROW_MAX = 3;
 

@@ -60,6 +60,24 @@ export const WALLS: WallVocabulary = {
 export const WALL_ROWS = 2 + WALLS.topFace.length;
 
 /**
+ * The painted part of that band, as an inset in pixels off its top and its
+ * bottom.
+ *
+ * A wall here is not a flat colour. The cap carries a cornice — a dark
+ * line, a white band and a dark line under it, eighteen pixels of it — and
+ * the base ends in the three-pixel shadow the wall throws onto the floor.
+ * What is left between the two is the wall's **face**, and the face is what
+ * anything hangs on.
+ *
+ * Measured off `WALLS.topCap` and `WALLS.topBase` rather than guessed at,
+ * because both ways of guessing read as a mistake in the art: a board given
+ * the whole band covers the cornice and looks like it is poking through the
+ * ceiling, and one given a whole tile less leaves a stripe of bare wall
+ * above it with nothing to explain why.
+ */
+export const WALL_FACE = { top: 18, bottom: 3 } as const;
+
+/**
  * The one thing on the walls: a whiteboard, lifted from the old office. It
  * is the shared board — every room shows the same drawing — and its point
  * of interest sits on the board's lower tile so standing just below is

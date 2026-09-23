@@ -72,6 +72,25 @@ export const HELP_DESK = {
 };
 
 /**
+ * How much wall a plate of counts takes, and how deep into it.
+ *
+ * All of what is left, which is the whole point: a plate is a screen, and
+ * the two things that decide how big a number on it can be drawn are the
+ * wall it has and the wall it takes. Five tiles of a seventeen-tile wall
+ * left a clear tile between the plate and whatever was next along — a tile
+ * nothing either side wanted, which is a gap rather than a margin — and two
+ * rows of a three-row band left a stripe of bare wall above every plate on
+ * the floor.
+ *
+ * So a plate runs from the doorway, or from the board's own corner
+ * upstairs, to the room's right-hand corner, and stands the full depth of
+ * the wall. `WALL_FACE` is where the picture goes inside that, since the
+ * band is not all wall you can hang something on — that is the drawing's,
+ * in `systems/CountBoard`, and what is here is the footprint.
+ */
+const COUNTS_COLS = 6;
+
+/**
  * The five counts, next along Support's wall from the queue.
  *
  * Wider than the other two because it is five things rather than one, and
@@ -88,10 +107,10 @@ export const SUPPORT_PULSE = {
     label: "support pulse",
     sx: 0,
     sy: 0,
-    sw: 5,
-    sh: 2,
+    sw: COUNTS_COLS,
+    sh: WALL_ROWS,
     dx: 0,
-    dy: 1,
+    dy: 0,
     layers: [],
   } satisfies Region,
   poi: { name: "Support pulse", tx: 2, ty: 2, facing: "up" } satisfies PoiSpec,
@@ -116,10 +135,10 @@ export const PROJECT_FLOW = {
     label: "project flow",
     sx: 0,
     sy: 0,
-    sw: 5,
-    sh: 2,
+    sw: COUNTS_COLS,
+    sh: WALL_ROWS,
     dx: 0,
-    dy: 1,
+    dy: 0,
     layers: [],
   } satisfies Region,
   poi: { name: "Project flow", tx: 2, ty: 2, facing: "up" } satisfies PoiSpec,
@@ -330,7 +349,10 @@ const BETWEEN_ROOMS = {
  * you are looking into.
  *
  * Both pictures go **hard into their corners** and the name has whatever is
- * left between them. Two tiles of clear wall to the left of the board is
+ * left between them — and the plate of counts, unlike the board, goes on
+ * until it meets what is next along, which downstairs is the doorway and
+ * upstairs is nothing at all. A screen is as readable as it is big, so of
+ * the things on this wall it is the one to give the spare tile to. Two tiles of clear wall to the left of the board is
  * not a margin, it is a gap: a board that starts a couple of tiles in
  * reads as having drifted off the end of its wall, and from the corridor
  * the eye has the doorway's edge to compare it against. Flush, the three
@@ -357,16 +379,19 @@ const BOARD_AT = 0;
 const NAME_AT = BOARD_AT + PROJECT_BOARD.region.sw;
 const COUNTS_AT = ROOM_COLS - SUPPORT_PULSE.region.sw;
 /**
- * Hard against the counts, less a clear tile.
+ * Hard against the counts.
  *
- * The same column it has always been at, and now saying why: the doorway
- * is the last thing onto the wall, so it takes the right-hand end of what
- * the name does not want and leaves a tile of wall between itself and the
- * plate — without which the gap and the doorway read as one opening. What
- * is left to the left of it is the name's, which is what `nameRun` hands
- * out.
+ * The same column it has always been at, and now saying why differently:
+ * the doorway is the last thing onto the wall, so it takes the right-hand
+ * end of what the name does not want, and it ends where the plate begins.
+ * There used to be a clear tile between the two, from when the counts were
+ * five tiles of a wall of seventeen — a tile nothing either side wanted,
+ * which reads as a gap rather than as a margin. The answer was to give the
+ * wall to the plate rather than leave it standing empty, so the plate grew
+ * a column and the doorway stayed where it was. What is left to the left
+ * of it is the name's, which is what `nameRun` hands out.
  */
-const DOOR_AT = COUNTS_AT - DOOR_COLS - 1;
+const DOOR_AT = COUNTS_AT - DOOR_COLS;
 
 const BOARD_WALL = {
   board: BOARD_AT,
@@ -784,8 +809,9 @@ function opsLine(rooms: number, slot: number, step: number) {
  * Work in hand is the one thing on this floor that is **happening**, and a
  * bar on a wall cannot say so — five bays draw the same picture whether
  * the room is turning work out or sitting on it. So the machine is the one
- * thing in the room that moves, and the number over it is the WIP bay's
- * own, which is the one number in here that is on the wall as well. See
+ * thing in the room that moves, and the number over it is the one the
+ * wall has stopped lettering: work in hand came off the plate when the
+ * machine went up, so this is where the room says it. See
  * `systems/Machine`.
  *
  * At the head of the line because that is where work is made: the room
@@ -1066,8 +1092,15 @@ function operationsSpec(
   /**
    * Hang a board on a room's wall, `at` tiles along from its left edge, with
    * the point of interest under the middle of it — so you stand in front of
-   * a wide board to read it rather than at one end. Odd widths land on a
-   * tile; the five counts are five tiles, which is why they are.
+   * a wide board to read it rather than at one end. An even width lands the
+   * point half a tile off the middle, which a plate six tiles wide can
+   * afford and a picture three tiles wide cannot.
+   *
+   * How deep into the wall is the region's own — `dy` and `sh` — because
+   * the two kinds of thing on these walls want different amounts of it: a
+   * board is a picture that hangs on the face, and a plate of counts is a
+   * screen that takes the wall. The point of interest is on the bottom row
+   * of the band either way, which is the row you stand under.
    */
   const hang = (
     board: { region: Region; poi: PoiSpec },
@@ -1076,7 +1109,7 @@ function operationsSpec(
     slot?: number,
   ) => ({
     ...board,
-    region: { ...board.region, dx: room.x + at, dy: room.wallRow + 1 },
+    region: { ...board.region, dx: room.x + at, dy: room.wallRow + board.region.dy },
     poi: {
       ...board.poi,
       // Numbered only where there are several of the same thing to tell
@@ -1084,7 +1117,7 @@ function operationsSpec(
       // name is what `lib/fixtures.ts` matches when there is nothing to say.
       name: slot === undefined ? board.poi.name : `${board.poi.name} ${slot}`,
       tx: room.x + at + Math.floor(board.region.sw / 2),
-      ty: room.wallRow + 2,
+      ty: room.wallRow + WALL_ROWS - 1,
     },
   });
 

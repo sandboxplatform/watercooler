@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { WALL_FACE } from "@/lib/map/office";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("CountBoard");
@@ -144,13 +145,22 @@ export class CountBoard {
    * Build the board at `box` — the tile footprint the map made solid, so
    * the picture lands exactly where the wall says it is.
    *
+   * The footprint is the whole wall band and the plate is the wall's
+   * **face**: `WALL_FACE` is the cornice along the top of it and the shadow
+   * along the bottom, neither of which is wall you can hang anything on. A
+   * plate drawn on the band rather than on the face covers the cornice and
+   * reads as poking through the ceiling, which is the one way of getting
+   * this wrong that looks like the art is broken rather than the layout.
+   *
    * Returns a teardown, because the scene restarts on every lift ride and
    * an interval that outlives it goes on fetching for a room nobody is in.
    */
   place(box: { tx: number; ty: number; tw: number; th: number }, tile: number): () => void {
     const width = box.tw * tile;
-    const height = box.th * tile;
-    const container = this.scene.add.container(box.tx * tile, box.ty * tile).setDepth(DEPTH);
+    const height = box.th * tile - WALL_FACE.top - WALL_FACE.bottom;
+    const container = this.scene.add
+      .container(box.tx * tile, box.ty * tile + WALL_FACE.top)
+      .setDepth(DEPTH);
     this.container = container;
 
     const plate = this.scene.add.rectangle(0, 0, width, height, PLATE).setOrigin(0, 0);

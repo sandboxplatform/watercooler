@@ -1544,9 +1544,27 @@ BOARD over a project board says less than the sign already on it.
 **Fourteen tiles of wall, three things on it, and the layout written down
 once** — `BOARD_WALL` in `lib/map/floor.ts`, for **both** kinds of working
 room, because Support and a project room are the same arrangement. **Both
-pictures go hard into their corners** — the board into the left, the five
+pictures go hard into their corners** — the board into the left, the
 counts running to the right — and the room's own name has what is left
 between them, drawn at the size the building's name is drawn downstairs.
+
+**And the plate takes every tile nobody else asked for**, which the board
+does not: six columns rather than five, running from what is next along —
+the doorway downstairs, nothing at all upstairs — to the right-hand
+corner, and the whole depth of the wall rather than two rows of three. A
+board is a picture and is as big as it is drawn; a plate is a screen, and
+how big it is is how readable it is, so of the things on this wall it is
+the one to give the spare tile and the spare row to. That tile used to sit
+clear between the doorway and the plate, which is a gap rather than a
+margin: nothing on either side of it wanted it.
+
+Where the picture goes inside that footprint is `WALL_FACE` in
+`lib/map/office.ts`. A wall in this tileset is not a flat colour — the cap
+carries a cornice, eighteen pixels of it, and the base ends in the three
+pixels of shadow it throws onto the floor — so the band and the face are
+different things, and a plate drawn on the band covers the cornice and
+reads as poking through the ceiling. `systems/CountBoard` insets to the
+face; the map carries the band, because the band is what is solid.
 
 Flush rather than a couple of tiles in, because two tiles of clear wall to
 the left of a board is not a margin, it is a gap: from the corridor the eye
@@ -1578,7 +1596,9 @@ clear wall it was written on, with the doorway's own edge beside it to
 compare against. `nameRun` is the stretch and `signOn` is its middle, and
 the scene wraps the lettering to what `cols` says it has. `DOOR_AT` was
 worked out _from_ the name band, so it now says what it always came to on
-its own terms: hard against the counts, less a clear tile.
+its own terms: hard against the counts. It has not moved through any of
+this — when the plate took the clear tile beside it, the plate grew a
+column westward and the doorway stayed exactly where it was.
 
 **The whiteboard is next door** — `opsWhiteboardRoom`, in the **left-hand
 corner** of that room's wall, where every other board on this floor starts
@@ -1735,17 +1755,34 @@ The incident beacon is the fourth thing on this floor and the one **off**
 the line, which is what it is: see below.
 
 **A machine at the head of it, for the work in hand.** The one thing in
-the room that moves, and the only one of the four repeating a number the
-wall already has — `countWip` is read off the five lanes the building
-declared rather than off the whole board, because unlike the other three
-this _is_ a stage, and it is the stage.
+the room that moves, and the one of the four that is a **stage** —
+`countWip` is read off the lanes the building declared rather than off the
+whole board, because unlike the other three this is one of them, and it is
+the one work is actually being done in.
 
-What the wall cannot do is move. Five bays draw exactly the same picture
+What the wall cannot do is move. A bay draws exactly the same picture
 whether the room is turning work out or sitting on it, and a number is a
 number whether it has been that number since March or has changed twice
 this morning. A machine running says work is happening here rather than
-reporting how much of it there is, which is the thing the bay over its
-head cannot say however large it is drawn.
+reporting how much of it there is, which is the thing a bay cannot say
+however large it is drawn.
+
+**So the wall has stopped lettering it.** It had a bay and a machine both,
+which is one count printed twice six feet apart — and of the two the bar
+was the one saying less. `wallLanes` in `lib/trello/flow.ts` is the rule:
+the plate letters the stages work **waits** in and the floor carries the
+one it is worked on, which is a sharper division than five bars one of
+which happens to have a machine under it. Four bays hang two and two,
+which is what the plate being given the whole depth of its wall bought.
+
+Two things about it. It is taken off by the **name**, not by `wipLane`,
+which answers null for a lane the board has not got: a list that has been
+archived is no more the wall's business than one that is there, or losing
+it would put the bay back. And the bars are untouched — still each lane's
+share of every lane declared (`flowBars`), so the part of the plate left
+bare is what the machine is making. The panel behind the plate still lists
+all five, because it is the detail and the detail is where "what does WIP
+mean" is answered.
 
 | Where                   | What                                                               |
 | ----------------------- | ------------------------------------------------------------------ |
@@ -2012,10 +2049,12 @@ nothing:
   Production and RCA / Incidents — because a wall counting five of seven
   lists should say which two it is not counting.
 
-`laneShort` is what the wall letters: a bay is eighty pixels and a letter
-eight of them, so "In Progress" is WIP, the same word the support board
-next door uses for the same thing. Anything unlisted is its own name in
-capitals, dropped a size if it does not fit.
+`laneShort` is what the wall letters: a bay is a hundred-odd pixels and a
+letter eight of them, so a long name is folded to a short one — "In
+Review" is REVIEW, and "In Progress" is WIP, which the support board next
+door still letters for the same thing though this plate no longer draws
+the bay. Anything unlisted is its own name in capitals, dropped a size if
+it does not fit.
 
 The arithmetic is `lib/zoho/pulse.ts`, pure, and the sweeps are
 `fetchPulse` in `lib/zoho/client.ts`. Three sweeps rather than one page,

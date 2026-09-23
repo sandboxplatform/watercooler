@@ -18,6 +18,7 @@ import {
   laneId,
   laneShort,
   toFlow,
+  wallLanes,
   wipLane,
 } from "../flow";
 
@@ -479,9 +480,11 @@ describe("counting a board's incidents", () => {
 describe("counting what a board has in hand", () => {
   /**
    * Narrow, for the incidents' reason: all three of the building's boards
-   * call the list **In Progress** and the wall already letters that WIP,
-   * so what is folded in is the handful of ways anybody writes the one
-   * stage down rather than a guess at boards nobody has seen.
+   * call the list **In Progress**, so what is folded in is the handful of
+   * ways anybody writes the one stage down rather than a guess at boards
+   * nobody has seen. It decides two things now — what the machine counts,
+   * and what the wall leaves off — so a name folded in wrongly here both
+   * makes the machine and unletters a bay.
    */
   it("reads the stage work is being done in, however it is written", () => {
     for (const name of [
@@ -502,7 +505,7 @@ describe("counting what a board has in hand", () => {
       expect(isWip(name)).toBe(false);
   });
 
-  it("counts the lane the wall letters WIP", () => {
+  it("counts the lane the machine is making", () => {
     const flow = toFlow(
       board({ Backlog: 4, Refined: 2, "In Progress": 3, "In Review": 1, Testing: 2 }),
       LANES,
@@ -512,10 +515,11 @@ describe("counting what a board has in hand", () => {
   });
 
   /**
-   * Off the wall's own five rather than off the whole board, which is the
-   * difference between this and the other three. A list nobody put on the
-   * wall is not a stage of this building's pipeline, whatever it is called
-   * — the building answered that question when it declared its lanes.
+   * Off the building's own declaration rather than off the whole board,
+   * which is the difference between this and the other three. A list
+   * nobody declared is not a stage of this building's pipeline, whatever
+   * it is called — the building answered that question when it named its
+   * lanes.
    */
   it("ignores a list the building did not declare", () => {
     const flow = toFlow(
@@ -542,5 +546,65 @@ describe("counting what a board has in hand", () => {
     const lanes = ["Ideas", "Doing", "Shipped"];
     const flow = toFlow(board({ Ideas: 1, Doing: 7, Shipped: 3 }), lanes);
     expect(countWip(flow)).toBe(7);
+  });
+});
+
+/**
+ * The bays the plate draws: everything declared, less the stage the
+ * machine on the floor of the room is making.
+ *
+ * The machine went up with the number on a plate over it, and a bay six
+ * feet above it saying the same thing is one count printed twice. What is
+ * left is the stages work **waits** in, which is a sharper division than
+ * five bars one of which happens to have a machine under it.
+ */
+describe("the lanes the wall letters", () => {
+  const five = { Backlog: 4, Refined: 2, "In Progress": 3, "In Review": 1, Testing: 2 };
+
+  it("leaves work in hand off the wall and keeps the rest in order", () => {
+    const lanes = wallLanes(toFlow(board(five), LANES));
+    expect(lanes.map((lane) => lane.short)).toEqual(["BACKLOG", "REFINED", "REVIEW", "TESTING"]);
+  });
+
+  /**
+   * By the name rather than by `wipLane`, which answers null for a lane
+   * the board has not got. The rule is that this stage is not on the wall,
+   * and a lane the board has lost is no more the wall's business than one
+   * it has — otherwise an archived list would put the bay back.
+   */
+  it("leaves it off even where the board has no such list", () => {
+    const flow = toFlow(board({ Backlog: 4, Refined: 2, "In Review": 1, Testing: 2 }), LANES);
+    expect(flow.lanes.find((lane) => lane.short === "WIP")?.missing).toBe(true);
+    expect(wallLanes(flow).map((lane) => lane.short)).not.toContain("WIP");
+  });
+
+  /** However the board spells it, which is what the machine is found by. */
+  it("follows the same word the machine does", () => {
+    const flow = toFlow(board({ Ideas: 1, Doing: 7, Shipped: 3 }), ["Ideas", "Doing", "Shipped"]);
+    expect(wallLanes(flow).map((lane) => lane.short)).toEqual(["IDEAS", "SHIPPED"]);
+  });
+
+  /**
+   * Nothing to letter is a bare wall rather than an empty plate, which is
+   * what `systems/ProjectFlow` does with this — a building whose whole
+   * declared pipeline is the one stage on the floor has said everything it
+   * has to say down there.
+   */
+  it("letters nothing where the one lane declared is the one on the floor", () => {
+    expect(wallLanes(toFlow(board({ "In Progress": 3 }), ["In Progress"]))).toHaveLength(0);
+  });
+
+  /**
+   * The bars are untouched: still a share of every declared lane, so the
+   * share of the plate left bare is what the machine is making. Scaling
+   * them to the four would say the work in hand is not in flight, which is
+   * the one thing about it that is certain.
+   */
+  it("leaves the bars a share of the work in flight, machine included", () => {
+    const flow = toFlow(board(five), LANES);
+    const bars = flowBars(flow);
+    const drawn = wallLanes(flow).reduce((sum, lane) => sum + bars[lane.id], 0);
+    expect(drawn).toBeCloseTo(9 / 12);
+    expect(bars[laneId("In Progress")]).toBeCloseTo(3 / 12);
   });
 });

@@ -21,6 +21,7 @@ import {
   opsRoadblock,
   opsRooms,
   opsSign,
+  opsSupportPulse,
   opsSupportRoom,
   opsSupportSign,
   opsWallRun,
@@ -37,7 +38,7 @@ import {
   WIDTH,
 } from "../floor";
 import { deriveCollisions, generateMap, paintShell, solidRuns, wallCollisions } from "../generate";
-import { STANDABLE } from "../office";
+import { STANDABLE, WALL_ROWS } from "../office";
 import type { SourceMap } from "../harvest";
 import type { RoomSpec } from "../spec";
 import { DESK_SLOTS, deskBox, standingSpot } from "../../world/desks";
@@ -724,6 +725,46 @@ describe("an Operations floor", () => {
     it("leaves that wall bare in a building that counts none", () => {
       expect(named(without, "Project flow 1")).toBeUndefined();
       expect(named(without, "Project board 1")).toBeDefined();
+    });
+
+    /**
+     * A plate is a screen and a screen is as readable as it is big, so of
+     * the things wanting this wall it is the one given every tile nobody
+     * else has asked for — the whole depth of the band, and every column
+     * from what is next along to the room's right-hand corner.
+     *
+     * Downstairs what is next along is the room's own doorway and the two
+     * are now flush, which is the clear tile that used to sit between them:
+     * a tile neither side wanted, which reads as a gap rather than a
+     * margin. So the assertion is on the doorway rather than on a column,
+     * because moving the door and leaving the plate behind is the way this
+     * goes wrong without anything else noticing.
+     */
+    it("gives the plate the whole wall between the doorway and the corner", () => {
+      for (const slot of [1, 2, 3]) {
+        const room = opsProjectRooms(6, slot)[slot - 1];
+        const box = opsProjectFlow(6, slot)!;
+        expect(box.tx + box.tw).toBe(room.x + ROOM_COLS);
+        expect(box.ty).toBe(room.wallRow);
+        expect(box.th).toBe(WALL_ROWS);
+        if (room.rank === "lower") expect(box.tx).toBe(room.door.to);
+      }
+    });
+
+    /**
+     * And Support's is the same plate on the same kind of wall, which is
+     * the whole of why `BOARD_WALL` is one layout rather than two: the
+     * corridor reads as the work on the left of every doorway and the
+     * numbers on the right of it, and two plates of different sizes along
+     * one corridor is the arrangement saying nothing.
+     */
+    it("gives Support's the same wall on the same terms", () => {
+      const support = opsSupportRoom(6);
+      const box = opsSupportPulse(6);
+      expect(box.tw).toBe(PROJECT_FLOW.region.sw);
+      expect(box.th).toBe(WALL_ROWS);
+      expect(box.ty).toBe(support.wallRow);
+      expect(box.tx + box.tw).toBe(support.x + ROOM_COLS);
     });
 
     /**

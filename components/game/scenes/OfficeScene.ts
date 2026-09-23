@@ -959,8 +959,10 @@ export class OfficeScene extends Phaser.Scene {
    *
    * A stuck card is still standing in a stage, a shipped one has left them
    * all and an incident was never in any, so none of those three could be
-   * a sixth bay; the machine is the one that repeats a number already on
-   * the wall, because a bar cannot move and this is what moving says. See
+   * a bay at all; the machine could have been one and is better not, since
+   * a bar cannot move and moving is the thing work in hand has to say. The
+   * wall letters the stages work waits in and the floor carries the one it
+   * is worked on — see `wallLanes` in `lib/trello/flow.ts`. See
    * `systems/FloorMarker`. All four read the same answer as the counts
    * beside them (`systems/room-flow`), so a room showing every one of them
    * is still one request.

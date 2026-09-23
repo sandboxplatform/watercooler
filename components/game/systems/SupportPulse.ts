@@ -41,10 +41,12 @@ const log = createLogger("SupportPulse");
  * The bays on the plate, in the order they hang: one row per bank.
  *
  * The two weeks are named here by their absence. They are the same desk
- * and they come off the same read, but the plate is five tiles of wall with
- * two rows on it — a third bank would take every figure down a size to make
- * room for one nobody asked the wall for, and a fourth is not even
- * arguable. They hang outside instead.
+ * and they come off the same read, but the plate is two banks with a line
+ * between them — a third would take every figure down a size to make room
+ * for one nobody asked the wall for, and a fourth is not even arguable.
+ * They hang outside instead, and the plate having since been given the
+ * whole of its wall does not change that: what it bought was two banks
+ * drawn larger, not room for four.
  */
 const ROWS: readonly (readonly CountBay[])[] = ["standing", "today"].map((bank) =>
   PULSE_METRICS.filter((metric) => metric.bank === bank).map((metric) => ({

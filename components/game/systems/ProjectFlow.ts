@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { flowBars, flowRows, type Flow } from "@/lib/trello/flow";
+import { flowBars, flowRows, wallLanes, type Flow } from "@/lib/trello/flow";
 import { PULSE_REFRESH_MS } from "@/lib/constants";
 import { CountBoard, type CountBay, type CountReading } from "./CountBoard";
 import { readRoomFlow } from "./room-flow";
@@ -24,6 +24,10 @@ import { readRoomFlow } from "./room-flow";
  * at the moment the numbers are fetched (`flow` in `lib/world/tenants.ts`).
  * So the bays cannot be built until the first answer comes back, which is
  * why this one asks before it draws.
+ *
+ * Not quite all of them: `wallLanes` takes work in hand off the wall,
+ * because the machine standing on the floor of the room is that number
+ * already and a bay above it would be the same count printed twice.
  *
  * The asking is `./room-flow` rather than a fetch of its own, because the
  * roadblock standing on the floor of the same room is drawn off the same
@@ -50,20 +54,22 @@ export class ProjectFlow {
     let stopped = false;
 
     void readRoomFlow(slot).then((flow) => {
+      if (stopped || !flow) return;
       // Nothing to letter the bays with: an unconfigured Trello, a board
-      // that could not be read, a room that counts nothing. The wall stays
-      // bare rather than showing five headings with dashes under them,
-      // which would read as a board that is broken rather than absent.
-      if (stopped || !flow || flow.lanes.length === 0) return;
+      // that could not be read, a room that counts nothing — or a room
+      // whose only declared lane is the one on the floor. The wall stays
+      // bare rather than showing headings with dashes under them, which
+      // would read as a board that is broken rather than absent.
+      const lanes = wallLanes(flow);
+      if (lanes.length === 0) return;
       const rows = flowRows(
-        flow.lanes.map(
-          (lane): CountBay => ({ id: lane.id, short: lane.short, colour: lane.colour }),
-        ),
+        lanes.map((lane): CountBay => ({ id: lane.id, short: lane.short, colour: lane.colour })),
       );
       const board = new CountBoard(this.scene, {
         rows,
-        // One bank wrapped over two rows, so no line: the five compare with
-        // each other and a line across the middle would say they do not.
+        // One bank wrapped over two rows, so no line: the lanes compare
+        // with each other and a line across the middle would say they do
+        // not.
         divider: false,
         read: async () => reading(await readRoomFlow(slot)),
         every: PULSE_REFRESH_MS,
@@ -86,12 +92,17 @@ export class ProjectFlow {
  * a figure, so it is drawn dead grey like a board nobody has counted yet:
  * an empty lane and a lane that is not there mean opposite things, and a
  * coloured zero would say the wrong one.
+ *
+ * Off `wallLanes` like the bays are, though the board would ignore a
+ * reading it has no bay for: a figure worked out for a bay that is not
+ * there is the kind of thing that outlives the reason it was harmless.
+ * The bars are `flowBars`, which is every declared lane — see `wallLanes`.
  */
 function reading(flow: Flow | null): ReadonlyMap<string, CountReading> | null {
   if (!flow) return null;
   const bars = flowBars(flow);
   const out = new Map<string, CountReading>();
-  for (const lane of flow.lanes) {
+  for (const lane of wallLanes(flow)) {
     if (lane.missing) continue;
     out.set(lane.id, { figure: String(lane.count), fill: bars[lane.id], value: lane.count });
   }
