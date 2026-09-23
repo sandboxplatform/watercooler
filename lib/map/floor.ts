@@ -12,6 +12,7 @@
 import { harvest, type Region, type SourceMap } from "./harvest";
 import type { PartitionSpec, PoiSpec, RoomSpec } from "./spec";
 import { TILE, WALL_ROWS, WALLS, WHITEBOARD } from "./office";
+import { buildCubiclesSpec } from "./cubicles";
 import type { BoardKind } from "../world/tenants";
 
 export const WIDTH = 20;
@@ -997,10 +998,25 @@ export interface FloorOptions {
    * rooms of their own.
    */
   projects?: readonly { counts: boolean }[];
+  /**
+   * How many cubicles the People floor has, which is what makes a floor
+   * one — see `lib/map/cubicles.ts`. It is read off the building's own
+   * people (`cubicleCount`), with spares where there are fewer of them
+   * than a floor is worth drawing.
+   *
+   * Absent, and with no boards either, the floor is the plain rectangle
+   * the agents' floor still is.
+   */
+  cubicles?: number;
 }
 
 export function buildFloorSpec(source: SourceMap, options: FloorOptions = {}): RoomSpec {
   const kinds = options.boards ?? [];
+  // A count of cubicles is what makes a floor the People floor, and the
+  // People floor is the one with a bank of them above a corridor. Asked
+  // first because it is the narrower question: no floor is both, and a
+  // building's People floor names no boards.
+  if (options.cubicles) return buildCubiclesSpec(source, options.cubicles);
   // Naming boards is what makes a floor an Operations floor, and an
   // Operations floor is the one with rooms off a hallway.
   if (kinds.length)

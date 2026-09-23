@@ -26,7 +26,7 @@ import {
   storeOf,
   tenantsOf,
 } from "../lib/world/tenants";
-import { operationsMapFile } from "../lib/world/floors";
+import { cubiclesAt, cubiclesMapFile, operationsMapFile } from "../lib/world/floors";
 import type { SourceMap } from "../lib/map/harvest";
 
 const MAPS = join(process.cwd(), "public", "maps");
@@ -109,13 +109,34 @@ const operationsFloors = [
   return [file, (src: SourceMap) => buildFloorSpec(src, { boards, rooms, projects })] as const;
 });
 
+/**
+ * One People floor per size of cubicle bank actually in use.
+ *
+ * Named by how many cubicles it has rather than by the building, like the
+ * Operations floors above: two buildings whose people fill the same number
+ * of cubicles are the same floor, and who sits in which is the scene's
+ * business rather than the map's. A building with nobody at a desk has no
+ * bank at all and keeps the plain floor below.
+ */
+const peopleFloors = [...new Set(TENANTS.filter(hasFloors).map(cubiclesAt).filter(Boolean))].map(
+  (cubicles) => {
+    const file = cubiclesMapFile(cubicles).replace("/maps/", "");
+    return [file, (src: SourceMap) => buildFloorSpec(src, { cubicles })] as const;
+  },
+);
+
 for (const [file, build] of [
   ["office3.json", (src: SourceMap) => buildOfficeSpec(src)],
   // Every lobby nobody has put anything in, which is most of them.
   ["lobby.json", (src: SourceMap) => buildOfficeSpec(src)],
   // And one apiece for the buildings that have, off TENANTS.
   ...lobbies,
+  // The agents' floor, and the People floor of a building with nobody at
+  // a desk in it: one open room with eight desk slots drawn on it.
   ["floor.json", buildFloorSpec],
+  // And a bank of cubicles per size actually in use, for the buildings
+  // whose people do have desks.
+  ...peopleFloors,
   // An Operations floor per set of boards actually hung anywhere: the same
   // room each time, with those boards on the wall. Named by the boards
   // rather than the building, so two buildings running off the same ones

@@ -20,6 +20,7 @@ import { rememberCharacter, rememberedCharacter } from "@/lib/characters/choice"
 import { roomFromLocation } from "@/lib/rooms";
 import {
   addressFromLocation,
+  cubiclesOn,
   describeFloor,
   LIFT_REFUSAL,
   mapFileFor,
@@ -45,6 +46,16 @@ import {
   opsLastWeekCounts,
   opsWeekCounts,
 } from "@/lib/map/floor";
+import {
+  ROOM_NAMES,
+  cubicleShelf,
+  cubicleSign,
+  peopleFurnishings,
+  roomSign,
+  type FurnishingArt,
+} from "@/lib/map/cubicles";
+import { castMember } from "@/lib/world/cast";
+import { EggShelf, cutEggFrames, loadEggArt } from "../systems/EggShelf";
 import { DeskWeek, SupportPulse } from "../systems/SupportPulse";
 import { ProjectFlow } from "../systems/ProjectFlow";
 import { DEPLOYED } from "../systems/Deployed";
@@ -192,6 +203,10 @@ export class OfficeScene extends Phaser.Scene {
     // Furniture, not a board: the counter Doc works in Sandbox ERP's lobby.
     this.load.image("help-desk-counter", asset("/sprites/help_desk_counter_192x96.png"));
     this.load.image("van", asset("/sprites/world/van_96x144.png"));
+    // The eggs on the cubicle shelves, and only where there are shelves:
+    // the People floor of a building somebody has a desk in.
+    const here = addressFromLocation(window.location);
+    if (here && cubiclesOn(here)) loadEggArt(this);
     this.load.spritesheet("anim-elevator", asset("/sprites/animated_elevator_96x144.png"), {
       frameWidth: 96,
       frameHeight: 144,
@@ -297,7 +312,8 @@ export class OfficeScene extends Phaser.Scene {
 
     // Upstairs, everyone with a desk gets one, with their name on it.
     const address = addressFromLocation(window.location);
-    if (address?.floor.kind === "floor") this.furnishFloor(address, map, collisionRects);
+    const stopShelves =
+      address?.floor.kind === "floor" ? this.furnishFloor(address, map, collisionRects) : null;
 
     this.identityKnown = this.askWhoIAm();
 
@@ -484,6 +500,7 @@ export class OfficeScene extends Phaser.Scene {
       stopPulse?.();
       stopWeek?.();
       stopFlow?.();
+      stopShelves?.();
       unsubSprite();
       unsubDoor();
       unsubFixtures();
@@ -555,30 +572,40 @@ export class OfficeScene extends Phaser.Scene {
     gameEvents.emit("open-elevator");
   }
 
+  /**
+   * Furnish a floor above the lobby, and hand back whatever has to be torn
+   * down with the scene.
+   *
+   * Two quite different rooms come through here. The People floor of a
+   * building somebody has a desk in is a bank of cubicles, and gets the
+   * whole of `furnishCubicles`; every other floor above a lobby is the
+   * plain rectangle it always was, with desks drawn in slot order.
+   */
   private furnishFloor(
     address: Address,
     map: Phaser.Tilemaps.Tilemap,
     collisionRects: { x: number; y: number; width: number; height: number }[],
-  ) {
+  ): (() => void) | null {
+    this.cutFurnitureFrames();
+    const cubicles = cubiclesOn(address);
+    if (cubicles) return this.furnishCubicles(address, cubicles, map, collisionRects);
+
     // Who sits here is known without asking: the people on Floor 1 and the
     // residents on Floor 2 are both read off the cast.
     const occupants = occupantsOf(address.tenant, address.floor).slice(0, MAX_DESKS);
 
-    // The desk and the laptop on it are cut from the office tileset, which
-    // the map already loads.
-    const tileset = this.textures.get("modern_office");
-    if (!tileset.has("desk")) tileset.add("desk", 0, 288, 864, 96, 96);
-    if (!tileset.has("laptop")) tileset.add("laptop", 0, 624, 816, 48, 96);
-
     const solids = this.physics.add.staticGroup();
     const boxes = occupants.map((who, slot) => {
       const at = deskOrigin(slot);
+      // The two offsets are where these landed while the frames were whole
+      // tiles with the art padded inside them: 12 across and 6 across, 9
+      // down. Same pixels, said out loud.
       this.add
-        .image(at.x, at.y + 24, "modern_office", "desk")
+        .image(at.x + 12, at.y + 24, "modern_office", "desk")
         .setOrigin(0, 0)
         .setDepth(4);
       this.add
-        .image(at.x + 26, at.y, "modern_office", "laptop")
+        .image(at.x + 32, at.y + 9, "modern_office", "laptop")
         .setOrigin(0, 0)
         .setDepth(4);
       this.add
@@ -615,6 +642,175 @@ export class OfficeScene extends Phaser.Scene {
     log.info(
       `${occupants.length} desk(s) on ${address.tenant.name} floor ${address.floor.kind === "floor" ? address.floor.level : 0}`,
     );
+    return null;
+  }
+
+  /**
+   * The furniture cut out of the office tileset, named once.
+   *
+   * Nine rectangles of somebody else's sheet, which is why they are
+   * written down together rather than beside the things that draw them:
+   * the numbers were measured off the picture and mean nothing on their
+   * own, so the one place to look for "which desk is that" is here.
+   *
+   * Named rather than delivered as sprites, unlike the lift, the counter
+   * and the games — those are generated because the pack has nothing like
+   * them. It has all of this.
+   *
+   * Every rect is the art's **tight** bounds rather than the tile it sits
+   * in, because a cubicle stands its furniture on the bottom edge of a
+   * footprint and a rect with two empty rows under it is a vending
+   * machine hovering. The desk and the laptop were whole tiles before,
+   * drawn from a corner with the padding measured into the call — so the
+   * two offsets on the plain floor below are that same padding, taken out
+   * of the rect and put where it can be seen.
+   */
+  private cutFurnitureFrames() {
+    const sheet = this.textures.get("modern_office");
+    const cut: Record<FurnishingArt | "laptop", [number, number, number, number]> = {
+      desk: [300, 864, 75, 63],
+      laptop: [630, 825, 39, 63],
+      plant: [294, 624, 36, 66],
+      sofa: [3, 828, 93, 72],
+      armchair: [288, 738, 48, 54],
+      lowtable: [240, 864, 48, 63],
+      cooler: [579, 744, 42, 90],
+      vending: [15, 1119, 69, 102],
+      shelf: [339, 747, 90, 87],
+      copier: [384, 1155, 93, 54],
+    };
+    for (const [name, [x, y, w, h]] of Object.entries(cut)) {
+      if (!sheet.has(name)) sheet.add(name, 0, x, y, w, h);
+    }
+  }
+
+  /**
+   * A People floor: a cubicle per person, and the two rooms off the
+   * corridor.
+   *
+   * Every cubicle is furnished the same — a desk, a plant and a shelf —
+   * because the map is named by how many there are and two buildings with
+   * the same-sized bank share it. What occupancy decides is what is drawn
+   * on top of it: the name lettered on the back wall, and the eggs
+   * standing on the shelf.
+   *
+   * The pictures are stood on the footprints `lib/map/cubicles.ts` made
+   * solid, off the same functions the spec was built from, so the art and
+   * the boxes cannot drift apart — which is the arrangement the boards on
+   * an Operations floor are already under.
+   *
+   * Hands back one teardown for every shelf, since each holds a
+   * subscription to the baskets.
+   */
+  private furnishCubicles(
+    address: Address,
+    cubicles: number,
+    map: Phaser.Tilemaps.Tilemap,
+    collisionRects: { x: number; y: number; width: number; height: number }[],
+  ): () => void {
+    cutEggFrames(this);
+    const people = occupantsOf(address.tenant, address.floor);
+
+    for (const piece of peopleFurnishings(cubicles)) {
+      this.standFurniture(piece.art, piece);
+      // Every cubicle desk carries a laptop, as the plain floor's do: a
+      // little right of centre and standing on the desktop rather than on
+      // the floor, which is the eight pixels.
+      if (piece.art === "desk") {
+        this.add
+          .image(
+            (piece.tx + piece.tw / 2) * TILE + 10,
+            (piece.ty + piece.th) * TILE - 8,
+            "modern_office",
+            "laptop",
+          )
+          .setOrigin(0.5, 1)
+          .setDepth(4);
+      }
+    }
+
+    // Each room's name, on the stretch of its own wall beside its doorway.
+    ROOM_NAMES.forEach((name, i) => {
+      const at = roomSign(cubicles, i as 0 | 1);
+      const text = this.add
+        .text(at.tx * TILE, 0, name, {
+          fontFamily: '"Press Start 2P", monospace',
+          fontSize: "16px",
+          color: "#3a3a50",
+          align: "center",
+          wordWrap: { width: at.cols * TILE },
+        })
+        .setDepth(3)
+        .setResolution(2);
+      letterOnWall(at.ty * TILE, [text]);
+    });
+
+    const shelves: Array<() => void> = [];
+    for (let slot = 0; slot < cubicles; slot++) {
+      const who = people[slot] ?? null;
+      const sign = cubicleSign(cubicles, slot);
+      const shelf = cubicleShelf(cubicles, slot);
+      // A spare cubicle letters nothing. "VACANT" on the wall is a label
+      // for an absence, and the desk with nobody's name over it says it
+      // already.
+      if (who && sign) {
+        const name = this.add
+          .text(sign.tx * TILE, 0, who.name.toUpperCase(), {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: "16px",
+            color: "#3a3a50",
+            align: "center",
+            wordWrap: { width: sign.cols * TILE },
+          })
+          .setDepth(3)
+          .setResolution(2);
+        const role = this.add
+          .text(sign.tx * TILE, 0, (castMember(who.id)?.role ?? "").toUpperCase(), {
+            fontFamily: '"Press Start 2P", monospace',
+            fontSize: "12px",
+            color: "#565972",
+            align: "center",
+            wordWrap: { width: sign.cols * TILE },
+          })
+          .setDepth(3)
+          .setResolution(2);
+        letterOnWall(sign.ty * TILE, [name, role]);
+      }
+      if (shelf) shelves.push(new EggShelf(this).place(shelf, TILE, who?.id ?? null));
+    }
+
+    // Everything on this floor is solid, and all of it came off the spec —
+    // so the walker and the pathfinder read the map's own boxes rather
+    // than a second list built here. The plain floor below cannot do that:
+    // its desks are drawn per occupant and the map knows nothing of them.
+    this.pathfinder = new Pathfinder(
+      map.widthInPixels,
+      map.heightInPixels,
+      collisionRects,
+      PF_PADDING,
+    );
+    log.info(`${people.length} of ${cubicles} cubicle(s) taken on ${address.tenant.name} floor 1`);
+    return () => {
+      for (const stop of shelves) stop();
+    };
+  }
+
+  /**
+   * One piece of it, standing on the bottom edge of its own footprint.
+   *
+   * Bottom-centred rather than drawn from a corner, because the art is
+   * cut tight: a picture taller than the tiles it stands on grows up the
+   * room, which is what a vending machine does and what a footprint on
+   * the floor means.
+   */
+  private standFurniture(
+    art: FurnishingArt,
+    at: { tx: number; ty: number; tw: number; th: number },
+  ) {
+    this.add
+      .image((at.tx + at.tw / 2) * TILE, (at.ty + at.th) * TILE, "modern_office", art)
+      .setOrigin(0.5, 1)
+      .setDepth(4);
   }
 
   /** What a doorway in the top wall leads to, lettered above it. */
@@ -822,6 +1018,12 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private addWallSign(address: Address) {
+    // A People floor letters nothing of its own, because there is no wall
+    // left that is not already somebody's: the top one is the cubicles'
+    // names and the corridor's is the two rooms'. The building and the
+    // floor are in the top bar of the HUD in any case — what a glance in
+    // here is for is whose desk you are looking at.
+    if (cubiclesOn(address)) return;
     // Right of the board in a lobby, where the wall is widest; right of the
     // shop window in a store, warehouse or garage. The longest names fit
     // either at this size.

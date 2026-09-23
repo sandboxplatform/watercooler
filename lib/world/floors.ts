@@ -34,6 +34,7 @@ import {
 } from "./tenants";
 import { residentsAt } from "./residents";
 import { CAST } from "./cast";
+import { cubicleCount } from "../map/cubicles";
 
 export type Level = 1 | 2 | 3;
 export type Floor = { kind: "lobby" } | { kind: "floor"; level: Level };
@@ -270,6 +271,52 @@ export function operationsMapFile(boards: readonly string[], rooms: number, flow
 }
 
 /**
+ * The map file for a People floor with this many cubicles.
+ *
+ * Here rather than in the generator, for the reason the Operations one is:
+ * the script writes the files this names and the scene asks for them by
+ * the same rule.
+ *
+ * Named by the count and not by the building, so two buildings with the
+ * same-sized bank share one map. Who sits in it is nothing the map knows —
+ * a spare cubicle and an occupied one are the same tiles, and the name on
+ * the wall and the eggs on the shelf are the scene's.
+ */
+export function cubiclesMapFile(cubicles: number): string {
+  return `/maps/floor-cubicles-${cubicles}.json`;
+}
+
+/**
+ * How many cubicles a building's People floor is drawn with: one per
+ * person with a desk there, and never fewer than a floor is worth walking
+ * along.
+ *
+ * Zero people is no floor of cubicles at all — most buildings in this
+ * world have nobody with a desk in them, and a bank of four spares with
+ * nobody's name on any of them is a room pretending to be about people.
+ * Those keep the plain floor, which is what every floor was.
+ */
+export function cubiclesAt(tenant: Tenant): number {
+  const people = peopleAt(tenant.slug).length;
+  return people > 0 ? cubicleCount(people) : 0;
+}
+
+/**
+ * How many cubicles the floor at this address has; zero where it is not a
+ * bank of them.
+ *
+ * The one question the scene asks — it furnishes a People floor quite
+ * differently from every other — so the two halves of the answer are put
+ * together here rather than at the call site, where the level and the
+ * building would be checked separately and could come apart.
+ */
+export function cubiclesOn(address: Address): number {
+  return address.floor.kind === "floor" && address.floor.level === 1
+    ? cubiclesAt(address.tenant)
+    : 0;
+}
+
+/**
  * How many of a building's project boards count their stages, which is how
  * many rooms on its floor carry the five-tile plate.
  *
@@ -284,6 +331,12 @@ function countedBoards(tenant: Parameters<typeof projectBoards>[0]): number {
 export function mapFileFor(address: Address | null): string {
   if (!address) return "/maps/office3.json";
   if (address.floor.kind === "floor") {
+    if (address.floor.level === 1) {
+      // The People floor is a bank of cubicles where anybody has a desk
+      // here, and the plain floor where nobody does.
+      const cubicles = cubiclesAt(address.tenant);
+      return cubicles ? cubiclesMapFile(cubicles) : "/maps/floor.json";
+    }
     if (address.floor.level !== 3) return "/maps/floor.json";
     // Named by what hangs on the wall rather than by the building, so two
     // buildings running off the same boards share one map.

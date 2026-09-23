@@ -165,6 +165,22 @@ export function allEggs(): EggTally[] {
   return tallies;
 }
 
+/**
+ * Follow the baskets without React, for the shelves on a People floor.
+ *
+ * `useEggTallies` is the same subscription with a hook around it, and the
+ * hook is no use to the game layer — a cubicle's shelf is drawn by Phaser.
+ * Like `onEggs` above it fetches on the first listener and hands over what
+ * is known now, so a scene built before the answer arrives is told when it
+ * does rather than standing an empty shelf for ever.
+ */
+export function onBaskets(listener: (eggs: readonly EggTally[]) => void): () => void {
+  const relay = () => listener(tallies);
+  const stop = subscribe(relay);
+  relay();
+  return stop;
+}
+
 export function eggsLoaded(): boolean {
   return loaded;
 }

@@ -166,6 +166,7 @@ For that, configure sign-in (below) — it layers on top.
 - **One basketball:** There is a court in the park with a ball on it, and it is the same ball for everybody. Pick it up and the world watches you carry it; sink one and the world is told.
 - **A world to cross:** Six building supply stores along the west road, the head offices and the plaza in the middle, the campus gate east of that — and past it a third of the map with nothing built on it at all, with a highway down the far side and a car on it now and then.
 - **Eggs to collect:** Michael the chicken drops one in the grass now and then when somebody startles him — six kinds, from an ordinary hen's egg to a rainbow one nobody can account for. Anybody out on the map can walk up and pocket it.
+- **A cubicle each:** Floor 1 of a building is a bank of cubicles, one per person who works there, with their name on the wall and a shelf of the eggs they have found. Walk the corridor and you can see who has the rainbow.
 - **Tickets on the map:** A mailbox outside each customer's building, with a bubble over it saying how many tickets they have open in Zoho. Walk past and you know who is waiting.
 - **Somebody to talk to:** Doc works the support desk, and he is the one person you walk up to and press E at. His conversation on Mettara opens in a window over the room.
 - **Workers at their desks:** Idle workers roam the office — whiteboards, printers, sofas, bookshelves — and the seat manager sets their names, roles and sprites.
@@ -305,6 +306,30 @@ Your basket is the **Eggs** tab in the column, and it shows on your profile
 beside your badges. Four badges go with them: your first egg, startling him
 into laying one, finding the rainbow, and — the long one — an egg of every
 kind there is.
+
+And it shows on a shelf in your cubicle — see below.
+
+### Floor 1, where everybody sits
+
+Ride the lift one floor up from a lobby and you are on a **bank of
+cubicles**, one per person who works in the building, open to a corridor
+that runs the length of the floor. Each has its occupant's name and job
+lettered on the wall above it, a desk under that, and — on a shelf against
+the back wall — **one of every kind of egg they have found**.
+
+So the gaps are the interesting part. Six slots in the ladder's own order,
+and only the kinds actually in somebody's basket are standing there: you
+can see from the corridor who has the rainbow, and who has been round the
+park a hundred times and still has no jade. It says what somebody has
+found rather than how much of it, which is the same thing the badges do.
+
+Off the far side of the corridor are two rooms — the **copy room**, and the
+**break room**, where the whiteboard everybody scribbles on now hangs, with
+a sofa, a vending machine and a water cooler. Neither does anything yet.
+They are somewhere for the corridor to lead.
+
+A building where nobody has a desk — most of them — keeps the plain open
+floor it always had, and so does Floor 2, where the residents sit.
 
 ### The mailboxes outside the shops
 

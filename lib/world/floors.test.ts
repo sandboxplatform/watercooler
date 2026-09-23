@@ -6,6 +6,8 @@ import {
   describeFloor,
   elevatorStops,
   floorUrl,
+  cubiclesAt,
+  cubiclesOn,
   mapFileFor,
   occupantsOf,
   peopleAt,
@@ -39,6 +41,7 @@ import {
 } from "./tenants";
 import { CAST } from "./cast";
 import { MAX_DESKS } from "./desks";
+import { MIN_CUBICLES } from "../map/cubicles";
 import { roomFromLocation } from "../rooms";
 import type { AccessIdentity } from "../identity";
 import { existsSync } from "fs";
@@ -174,7 +177,45 @@ describe("the top bar and the maps", () => {
     expect(mapFileFor({ tenant: castle, floor: { kind: "lobby" } })).toBe(
       "/maps/lobby-castle-atlantic.json",
     );
-    expect(mapFileFor({ tenant: castle, floor: PEOPLE_FLOOR })).toBe("/maps/floor.json");
+    // Hunter has a desk at Castle Atlantic, so its People floor is a bank
+    // of cubicles — four of them, which is the fewest a floor is drawn
+    // with, three of them spare. The agents' floor above it is still the
+    // plain rectangle, and so is a People floor in a building nobody has a
+    // desk in.
+    expect(mapFileFor({ tenant: castle, floor: PEOPLE_FLOOR })).toBe("/maps/floor-cubicles-4.json");
+    expect(mapFileFor({ tenant: castle, floor: AGENTS_FLOOR })).toBe("/maps/floor.json");
+    const mettara = tenantFor("mettara")!;
+    expect(peopleAt(mettara.slug)).toEqual([]);
+    expect(mapFileFor({ tenant: mettara, floor: PEOPLE_FLOOR })).toBe("/maps/floor.json");
+  });
+
+  /**
+   * The bank is as long as the people in it, and never shorter than a floor
+   * is worth walking along — see `MIN_CUBICLES`. Sandbox ERP's five have a
+   * cubicle each; Castle Atlantic's one has a floor of four with three
+   * spares, because the alternative is a floor eight columns wide with no
+   * room under it for the two rooms.
+   */
+  it("gives a cubicle to each person, and never draws fewer than four", () => {
+    const erp = tenantFor("sandbox-erp")!;
+    expect(peopleAt(erp.slug)).toHaveLength(5);
+    expect(cubiclesAt(erp)).toBe(5);
+    expect(cubiclesOn({ tenant: erp, floor: PEOPLE_FLOOR })).toBe(5);
+
+    expect(peopleAt(castle.slug)).toHaveLength(1);
+    expect(cubiclesAt(castle)).toBe(MIN_CUBICLES);
+
+    // Only Floor 1 is a bank of them: Floor 2 is the residents' desks and
+    // Floor 3 is the corridor of rooms.
+    expect(cubiclesOn({ tenant: erp, floor: AGENTS_FLOOR })).toBe(0);
+    expect(cubiclesOn({ tenant: erp, floor: OPERATIONS_FLOOR })).toBe(0);
+    expect(cubiclesOn({ tenant: erp, floor: LOBBY })).toBe(0);
+  });
+
+  it("draws no bank at all where nobody has a desk", () => {
+    for (const tenant of TENANTS.filter(hasFloors)) {
+      expect(cubiclesAt(tenant) > 0, tenant.slug).toBe(peopleAt(tenant.slug).length > 0);
+    }
   });
 });
 

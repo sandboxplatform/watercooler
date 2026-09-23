@@ -1265,6 +1265,77 @@ Two things follow:
   signed-in person on the shared code is still `visitor`. So the register
   only ever held personas' browsers, which is exactly what the cast knows.
 
+**Floor 1 is a bank of cubicles, and each one is somebody's.**
+`lib/map/cubicles.ts` is the layout: the map's top wall, a cubicle per
+person under it, a corridor, and two rooms off the far side of that — the
+**copy room** and the **break room**, which is where the shared whiteboard
+hangs now. It **grows sideways** like the Operations floor, `cubicleWidth`
+off a count, and the height never changes.
+
+It was one open rectangle with eight desk slots drawn in two rows of four
+— the agents' floor with different people at the desks. That is still what
+a People floor is in a building where nobody has one (`mapFileFor` falls
+through to `floor.json`), and it is still the agents' floor above.
+
+Four decisions in it:
+
+- **A cubicle is open to the corridor.** Only the dividers between
+  neighbours are wall, and they stop at the corridor's edge. Walking the
+  corridor you see into every one of them, which is the whole of why they
+  are worth walking past — and it is the one thing about this floor that
+  is not an Operations floor with different furniture in it.
+- **The back wall is theirs**, so a cubicle letters its occupant's name and
+  role on the map's own top wall, centred on its width, the way a project
+  room letters the board it holds. Which is why **the building's name is
+  lettered nowhere on this floor**: every stretch of wall belongs to
+  somebody already, and the top bar of the HUD says the building and the
+  floor in any case.
+- **Never fewer than `MIN_CUBICLES`**, which is four. A floor of one
+  cubicle is eight columns wide with no room under it for the two rooms;
+  the spares are spare desks, which is what an office floor looks like.
+  Hunter is that case and so is Campbell.
+- **The map is named by how many cubicles, not by the building** —
+  `cubiclesMapFile`, giving `floor-cubicles-4.json` and
+  `floor-cubicles-5.json`, which is the whole of what this world uses. Who
+  sits in which is nothing the map knows: an occupied cubicle and a spare
+  are the same tiles, and the name on the wall and the eggs on the shelf
+  are the scene's.
+
+**And every cubicle carries a shelf of the eggs its occupant has found** —
+one slot per rung of the ladder, in the ladder's order, showing only the
+kinds actually in their basket. That is the floor's reason to be a place
+rather than a list: a basket is already on a profile card, and a card is
+something you open about somebody you had in mind already. A shelf is
+something you come across.
+
+| Where                        | What                                                                  |
+| ---------------------------- | --------------------------------------------------------------------- |
+| `lib/map/cubicles.ts`        | The layout: cubicles, rooms, where every picture stands. Pure, shared |
+| `systems/EggShelf`           | The plank, the slots, and following the baskets                       |
+| `onBaskets` in `eggs-client` | `useEggTallies` without the hook, since a shelf is drawn by Phaser    |
+
+Three decisions in the shelf:
+
+- **Fixed slots rather than the eggs pushed up together**, because the gaps
+  are half of what it says. Shuffled along, four eggs say "four"; in their
+  own places they say _which_ four, and that somebody has the gilded one
+  and not the jade.
+- **Presence, not count.** Six hen's eggs and six rainbows look identical
+  from the corridor. What is being asked is what somebody has found, not
+  how much of it — the same argument the badge catalogue is under.
+- **The eggs are the props atlas's own frames**, the same picture lying in
+  the grass on the world map, so the office loads that one 2304x128 sheet
+  and nothing else of the outdoors (`loadEggArt`). A third drawing of an
+  egg is what this codebase warns about twice over; the sprite and the
+  HUD's are already two.
+
+The furniture in both rooms is the office tileset's, cut tight and stood on
+footprints the spec made solid (`peopleFurnishings`) — one list read by the
+map for the boxes and by the scene for the pictures, which is the
+arrangement the boards upstairs are under. Neither room does anything yet
+and neither is meant to: a floor is a place before it is a feature, and
+what is asked of those two is that the corridor have somewhere to lead.
+
 `trello` is the project board and `zoho` the support queue — each a picture
 on the wall you walk up to and press E at. The list **is** the floor: a
 building that names none has no third floor at all, and `addressFromLocation`
@@ -2192,6 +2263,7 @@ line there and a `pnpm build:map`:
 | -------------------------------- | --------------------------------------------------------------------------- | ------------------------------------ |
 | `lobby-<slug>.json`              | A lobby with anything in it                                                 | `furnishedLobby` + `lobbyFurnishing` |
 | `lobby.json`                     | Every lobby with nothing in it, between them                                | —                                    |
+| `floor-cubicles-<n>.json`        | One per size of cubicle bank: a People floor where anybody has a desk       | `cubiclesAt`                         |
 | `room-<slug>.json`               | Each store, warehouse and garage                                            | `kind`                               |
 | `floor-ops-<boards>-<n>[-flowN]` | One per set of boards, number of projects, and how many project boards hang | `operations` + `projects` + `boards` |
 
@@ -3003,6 +3075,7 @@ lib/
   server/customers.ts              who the desk's customers are, and whose a ticket is
   server/traffic.ts                which cars are on the highway, and when one sets off
   map/ world/                      map generation and world layout
+  map/cubicles.ts                  the People floor: a cubicle each, and a shelf of eggs in it
   world/cast.ts                    who the world is of: roles, concept art, backstories
   world/basketball.ts              the court in the park, and the flight of the one ball
   world/eggs.ts                    the ladder of eggs Michael leaves behind, and how rare each is
