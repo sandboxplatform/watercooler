@@ -1222,7 +1222,9 @@ lobby("sandbox-erp", "sandbox-erp", {
   operations: ["trello", "zoho"], projects: 5,         // the floor above
   boards: [                                            // a project board per room
     { board: "Sandbox ERP", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"] },
-    { board: "Hammer Time", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Done"] },
+    { board: "Config App",  lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"] },
+    { board: "Settings App", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"] },
+    { board: "Hammer Time", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"] },
     { board: "Reports App", lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"] },
   ],
 }),
@@ -1347,8 +1349,23 @@ support queue, and nothing had to be special-cased to arrange it.
 rooms is two bays and ten is five. The floor **grows sideways**: `opsWidth`
 and `opsRooms` in `lib/map/floor.ts` take a room count, the height never
 changes, and a company with more projects on the go gets a longer corridor
-rather than a redrawn floor. Sandbox ERP's is 55 tiles wide, Castle
+rather than a redrawn floor. Sandbox ERP's is 73 tiles wide, Castle
 Atlantic's 37.
+
+**And past three bays it grows the other way too.** `opsWing` is the rule:
+from four bays on, the first bay stands **west of the lift** and the rest
+run east of it. Three bays is the right shape with the lift at one end —
+you step out facing Operations and the whole floor is in front of you — and
+a fourth stops it being true, since the far room is then four doorways off
+with nothing at your back and half the corridor is a walk rather than a
+place. With a wing there is work off both hands, and the two rooms nearest
+the lift are a pair facing each other across it, one up and one down.
+
+One bay and no more: a second would put the lift back in the middle of a
+walk from the other end. Everything else is asked of the layout rather than
+of the room list, which is why `opsOperations` exists — Operations is the
+first room on a floor with no wing and the third on one with, and every
+caller used to take `opsRooms(rooms)[0]`.
 
 **A room is seventeen tiles wide, and the three it gained were the lower
 rank's doorway.** Upstairs a room hangs its boards on the map's top wall and
@@ -1364,7 +1381,7 @@ everything on a lower room's wall to being clear of that room's doorway.
 
 How many is per building: `projects` on the tenant (`lib/world/tenants.ts`),
 counting the rooms besides Operations itself. **That number is in the map's
-file name** — `floor-ops-trello-zoho-6-flow3.json` — because the boards alone
+file name** — `floor-ops-trello-zoho-8-flow5.json` — because the boards alone
 no longer identify a floor: two buildings with the same boards and different
 numbers of projects are different floors, and sharing a file would give one
 of them the wrong corridor. The `-flow3` on the end is the same argument
@@ -1372,9 +1389,10 @@ about the project rooms below: each hangs a board and a plate of counts, so
 a floor with three of them is not a floor with one.
 
 **A project board is a room, not a choice.** `boards` on the tenant names
-them in the order their rooms run: the first has **Operations**, the room
-above the lift and the one you step out facing, and the rest take the lower
-rank left to right. Each room gets the board in the left-hand corner of its
+them in the order their rooms run, which is **outward from the lift**: the
+first has **Operations**, the room above the lift and the one you step out
+facing, then the wing where there is one — upper room, then lower — and then
+the lower rank east, left to right. Each room gets the board in the left-hand corner of its
 wall, **the board's name lettered in the middle** and its five stage counts running to
 the right-hand corner — the same arrangement as Support's, which is what
 makes the corridor readable: the work on the left of every doorway and the
@@ -1400,9 +1418,14 @@ Three things follow, and the first is the one that would go wrong quietly:
   wall face — so a board on the left of it is a board with a lift drawn
   across the end. It is skipped for the same reason it is not Support, and
   `opsProjectRooms` asks `opsElevator` rather than writing down "not the
-  first lower room". Which is why three boards want six rooms, and why
-  `operationsRoomCount` grows the floor to fit rather than leaving a board
-  with no wall.
+  first lower room". `roomsForBoards` is how many rooms a given number of
+  them wants, and it is **searched against the layout rather than worked
+  out from it**: three rules decide it — Operations, then the wing, then
+  the lower rank east — and the wing only appears past a certain length of
+  corridor, so arithmetic saying the same thing is arithmetic that
+  disagrees with the rooms at the boundary. `operationsRoomCount` grows
+  the floor to that rather than leaving a board with no wall, and a board
+  with no wall draws perfectly.
 - **The browser never names a board.** The map letters its points of
   interest `Project board 2` / `Project flow 2`; the number is the
   **subject**, captured by the fixture's own `match` and carried on its open
@@ -1412,7 +1435,8 @@ Three things follow, and the first is the one that would go wrong quietly:
   name any board the token can see.
 
 **The lift is set into the lower wall, directly beneath the door to
-Operations**, not at the end of the corridor. The ride has to land you
+Operations**, which on a floor with a wing is a bay in from the west end and
+on every other one is the end of the corridor. The ride has to land you
 somewhere that says where you are, and Operations is the room the floor is
 named after — so you step out facing its door. The two doorways in a bay are
 at different offsets, and it is the walls rather than the look of it that
@@ -2191,7 +2215,7 @@ Each board keeps its own place along the wall whether or not the others are
 there, so a building with one has a gap rather than a board in the wrong
 spot. The map is named by the boards rather than the building —
 `operationsMapFile` in `lib/world/floors.ts`, giving
-`floor-ops-trello-4.json` and `floor-ops-trello-zoho-6-flow3.json` — so two
+`floor-ops-trello-4.json` and `floor-ops-trello-zoho-8-flow5.json` — so two
 buildings running off the same boards, with the same number of rooms and
 project boards, share one map and a third needs no new file.
 `pnpm build:map` writes one per set actually in use, read off `TENANTS`.

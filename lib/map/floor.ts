@@ -193,14 +193,23 @@ export const SUPPORT_BOARD: BoardKind = "zoho";
  * The second working room: the whiteboard's, and the support queue's where
  * there is one, which is what makes it Support.
  *
- * Not the first room — Operations has that wall — and not the room whose
- * wall the lift is set into, which is the first of the lower rank. The
- * second bay's upper room has a clear wall; fall back only when there is no
- * second bay.
+ * Not Operations — that room has its own wall — and not the room whose
+ * wall the lift is set into, which is the lower room of the same bay. The
+ * first upper room **east** of Operations has a clear wall; fall back only
+ * when there is none.
+ *
+ * East rather than simply the next one along, because a floor long enough
+ * has a wing west of the lift (`opsWing`) and those rooms are the boards':
+ * the queue hung out there would be behind you as you step out, on the two
+ * walls nearest the lift, which are the two this floor most wants for the
+ * work itself.
  */
 export function opsSupportRoom(rooms: number): OpsRoom {
   const list = opsRooms(rooms);
-  return list.find((r, i) => i > 0 && r.rank === "upper") ?? list[1] ?? list[0];
+  const operations = opsOperations(rooms);
+  const along = list.find((r) => r.rank === "upper" && r.x > operations.x);
+  const across = list.find((r) => r.x === operations.x && r.rank === "lower");
+  return along ?? across ?? operations;
 }
 
 /**
@@ -252,17 +261,20 @@ export function opsBoardroom(rooms: number): OpsRoom {
 /**
  * An Operations floor: a corridor with rooms opening off both sides.
  *
- * The lift is at the left-hand end of the corridor. Rooms fill in bays along
- * it, one above and one below each bay, left to right — so a building with
- * two rooms gets one on each side and a building with six gets three bays,
- * and the floor **grows sideways** rather than being redrawn. That is the
- * point of the shape: a company with more projects on the go gets a longer
- * corridor.
+ * Rooms fill in bays along the corridor, one above and one below each bay,
+ * left to right — so a building with two rooms gets one on each side and a
+ * building with six gets three bays, and the floor **grows sideways**
+ * rather than being redrawn. That is the point of the shape: a company with
+ * more projects on the go gets a longer corridor.
+ *
+ * The lift is at the left-hand end of it, under Operations' door, until the
+ * corridor is four bays long — at which point the first bay stands west of
+ * the lift instead and the work opens off both hands. See `opsWing`.
  *
  *   rows 0-2      the top wall, boards on the first room's half of it
  *   rows 3-9      the upper rank of rooms
  *   rows 10-13    the wall they share with the corridor, doorways cut in it
- *   rows 13-16    the corridor, lift at the left end
+ *   rows 13-16    the corridor, lift at the left end or a bay in (opsWing)
  *   rows 17-20    the wall the lower rank shares with it, doorways likewise
  *   rows 20-26    the lower rank
  *   row  27       the bottom wall
@@ -458,6 +470,42 @@ export const opsBays = (rooms: number) => Math.max(1, Math.ceil(rooms / 2));
 export const opsWidth = (rooms: number) => 1 + opsBays(rooms) * (ROOM_COLS + 1);
 
 /**
+ * How many bays stand **west** of the lift, which on most floors is none.
+ *
+ * The corridor grows eastward a bay at a time, and for three bays that is
+ * the right shape: the lift is at one end, you step out facing Operations,
+ * and the whole floor is in front of you. A fourth bay stops that being
+ * true — the far room is four doorways off with nothing at your back, and
+ * a corridor read entirely in one direction is a corridor half of which is
+ * a walk rather than a place.
+ *
+ * So from four bays on, the first bay stands west of the lift. Stepping
+ * out you still face Operations; what changes is that there is work off
+ * both hands rather than all of it off one, and the two rooms nearest the
+ * lift — one up, one down — are the two nearest anybody riding to this
+ * floor, which is what makes them worth hanging a board in.
+ *
+ * One bay and no more. A second would put the lift back in the middle of a
+ * walk, from the other end.
+ */
+const WING_FROM_BAYS = 4;
+export const opsWing = (rooms: number) => (opsBays(rooms) >= WING_FROM_BAYS ? 1 : 0);
+
+/**
+ * The Operations room: the upper room of the lift's own bay, and so the
+ * doorway you step out facing.
+ *
+ * The first room on a floor with no wing and the third on one with, which
+ * is why it is asked of the layout rather than taken as `opsRooms(...)[0]`.
+ * That is what every caller used to do, and a bay west of the lift is
+ * exactly what makes it quietly wrong.
+ */
+export function opsOperations(rooms: number): OpsRoom {
+  const list = opsRooms(rooms);
+  return list[2 * opsWing(rooms)] ?? list[0];
+}
+
+/**
  * Where the lift stands: set into the lower wall, directly beneath the door
  * to Operations.
  *
@@ -468,7 +516,7 @@ export const opsWidth = (rooms: number) => 1 + opsBays(rooms) * (ROOM_COLS + 1);
  * you can stand in front of the car rather than inside the wall.
  */
 export function opsElevator(rooms: number) {
-  const [operations] = opsRooms(rooms);
+  const operations = opsOperations(rooms);
   return {
     tx: operations.door.from,
     ty: LOWER_WALL - 1,
@@ -548,7 +596,7 @@ const middleOf = (run: WallRun) => (run.from + run.to) / 2;
  * with and nothing to explain why.
  */
 export function opsSign(rooms: number) {
-  const [operations] = opsRooms(rooms);
+  const operations = opsOperations(rooms);
   return { tx: middleOf(opsWallRun(rooms, operations)), ty: UPPER_WALL } as const;
 }
 
@@ -675,19 +723,24 @@ export function opsSupportPulse(rooms: number) {
  * The rooms the project boards hang in, in the order the boards were
  * declared.
  *
- * The first is Operations — the room above the lift, which is what you step
- * out facing, so the building's own board is the one you walk into. The
- * rest take the lower rank left to right, **except the room the lift is set
- * into**: those are the rooms nothing else wants, and they line the far
- * side of the corridor, so three boards read as three doorways rather than
- * as one wall with three things on it.
+ * They run **outward from the lift**, because that is the order anybody
+ * riding to this floor meets them.
  *
- * The lift's room is skipped for the same reason it is not Support. The car
- * is three tiles tall and hangs a tile below the wall's cap, which is the
- * room's own wall face — so a board on the left of that wall is a board
- * with a lift drawn across the end of it. Asked of `opsElevator` rather
- * than written down as "not the first lower room", because where the lift
- * stands is a fact about the floor and has moved once already.
+ * The first is Operations — the room above the lift, which is what you step
+ * out facing, so the building's own board is the one you walk into. Then
+ * the wing, where there is one: the bay west of the lift, upper room then
+ * lower, which are the two nearest doorways on the floor and the only pair
+ * facing each other across the corridor that both have a clear wall. Then
+ * the lower rank east, left to right — the rooms nothing else wants, lining
+ * the far side of the corridor, so a board reads as a doorway rather than
+ * as one more thing on one long wall.
+ *
+ * The lift's own room is skipped for the same reason it is not Support. The
+ * car is three tiles tall and hangs a tile below the wall's cap, which is
+ * that room's own wall face — so a board on the left of it is a board with
+ * a lift drawn across the end. Asked of `opsElevator` rather than written
+ * down as "not the first lower room", because where the lift stands is a
+ * fact about the floor and has moved twice now.
  *
  * Shorter than `count` where the floor has not the rooms for it, which
  * cannot happen from a tenant — `operationsRoomCount` grows the floor to
@@ -696,11 +749,38 @@ export function opsSupportPulse(rooms: number) {
  */
 export function opsProjectRooms(rooms: number, count: number): OpsRoom[] {
   const list = opsRooms(rooms);
+  const operations = opsOperations(rooms);
   const lift = opsElevator(rooms);
   const clearOfLift = (room: OpsRoom) =>
     lift.tx >= room.x + BOARD_WALL.counts || lift.tx + lift.tw <= room.x + BOARD_WALL.board;
-  const lower = list.filter((room) => room.rank === "lower" && clearOfLift(room));
-  return [list[0], ...lower].slice(0, count).filter(Boolean);
+  const wing = list.filter((room) => room.x < operations.x);
+  const east = list.filter(
+    (room) => room.rank === "lower" && room.x >= operations.x && clearOfLift(room),
+  );
+  return [operations, ...wing, ...east].slice(0, count).filter(Boolean);
+}
+
+/**
+ * How many rooms `boards` project boards want, Operations included.
+ *
+ * Grown against the layout rather than worked out from it, because three
+ * rules decide it — Operations first, then the wing, then the lower rank
+ * east of the lift — and the wing only appears past a certain length of
+ * corridor. Arithmetic saying the same thing is arithmetic that disagrees
+ * with the rooms at the boundary, and the failure is a board declared with
+ * no wall to hang on, which draws perfectly.
+ *
+ * One board is one room: it hangs in Operations, and a floor of one room is
+ * a floor that has it. Anything more grows the floor until the layout has
+ * the walls for it.
+ */
+export function roomsForBoards(boards: number): number {
+  if (boards <= 1) return 1;
+  const most = 2 * boards + 4;
+  for (let rooms = 2; rooms < most; rooms++) {
+    if (opsProjectRooms(rooms, boards).length === boards) return rooms;
+  }
+  return most;
 }
 
 /**
@@ -965,7 +1045,7 @@ export function opsBoardroomTable(rooms: number) {
 
 /** Out of the lift and into the corridor, facing the door it is under. */
 export function opsPlayerStart(rooms: number) {
-  const door = opsRooms(rooms)[0].door;
+  const { door } = opsOperations(rooms);
   return { tx: door.from, ty: LOWER_WALL - 1, facing: "up" } as const;
 }
 

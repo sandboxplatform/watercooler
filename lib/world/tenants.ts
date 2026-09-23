@@ -18,6 +18,7 @@
 
 import { isArcadeGameId, type ArcadeGameId } from "../arcade/types";
 import type { Game, OfficeOptions } from "../map/office";
+import { roomsForBoards } from "../map/floor";
 
 export type OrgStyle =
   | "castle"
@@ -217,6 +218,16 @@ export const TENANTS: readonly Tenant[] = [
         board: "Sandbox ERP",
         lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"],
       },
+      // The wing, west of the lift: the first two doorways anybody stepping
+      // out of it passes, one up and one down. See `opsProjectRooms`.
+      {
+        board: "Config App",
+        lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"],
+      },
+      {
+        board: "Settings App",
+        lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"],
+      },
       {
         board: "Hammer Time",
         lanes: ["Backlog", "Refined", "In Progress", "In Review", "Testing"],
@@ -357,29 +368,19 @@ export function operationsBoards(tenant: Tenant | null | undefined): readonly Bo
  * one for each project on the go. One when nothing is configured, because a
  * floor with boards on the wall has at least the room they hang in.
  *
- * Never fewer than the project boards need. The boards take Operations and
- * then the lower rank, and the lower rank fills in every other room — so
- * three boards want four rooms whatever `projects` says, and a floor a room
- * short would be a board declared with no wall to hang on. Asked here
+ * Never fewer than the project boards need, which `roomsForBoards` answers
+ * off the layout itself — a floor a room short is a board declared with no
+ * wall to hang on, and it draws perfectly. Asked here
  * rather than checked in a test, because `projects` is the size of a
  * company's workload and the boards are a fact about its walls: the two are
  * allowed to be set independently and only one of them can be wrong.
  */
 export function operationsRoomCount(tenant: Tenant | null | undefined): number {
   if (!hasOperationsFloor(tenant)) return 0;
-  return Math.max(1 + Math.max(0, tenant?.projects ?? 0), roomsForBoards(projectBoards(tenant)));
-}
-
-/**
- * The rooms `n` project boards need: Operations, then the lower rank from
- * its second room on.
- *
- * The lower rank is the odd-numbered half of the list, and its first room is
- * the one the lift is set into, which hangs nothing — so the second board
- * wants four rooms, the third six, and so on.
- */
-function roomsForBoards(boards: readonly ProjectBoardSpec[]): number {
-  return boards.length <= 1 ? 1 : 2 * boards.length;
+  return Math.max(
+    1 + Math.max(0, tenant?.projects ?? 0),
+    roomsForBoards(projectBoards(tenant).length),
+  );
 }
 
 /** Whether a building has an Operations floor above its agents' floor. */

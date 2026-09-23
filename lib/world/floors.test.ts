@@ -416,8 +416,8 @@ describe("the Operations floor", () => {
     // drawn — so the lanes a building names are none of the file name's
     // business.
     expect(projectBoardAt(erp, 1)?.lanes.length).toBe(5);
-    expect(projectBoardAt(erp, 3)?.lanes.length).toBe(5);
-    expect(projectBoardAt(erp, 4)).toBeNull();
+    expect(projectBoardAt(erp, 5)?.lanes.length).toBe(5);
+    expect(projectBoardAt(erp, 6)).toBeNull();
   });
 
   /**
@@ -426,16 +426,21 @@ describe("the Operations floor", () => {
    * before boards had rooms of their own.
    */
   it("gives every named board a room, and an unnamed building one", () => {
+    // In the order their rooms run, which is outward from the lift:
+    // Operations, then the wing west of it, then the lower rank east.
     expect(projectBoards(erp).map((board) => board.board)).toEqual([
       "Sandbox ERP",
+      "Config App",
+      "Settings App",
       "Hammer Time",
       "Reports App",
     ]);
     expect(projectBoards(castle)).toHaveLength(1);
     expect(projectBoards(castle)[0].board).toBe("");
-    // And the floor grew to fit them: three boards want Operations and two
-    // rooms of the lower rank, so four rooms at the least.
-    expect(operationsRoomCount(erp)).toBeGreaterThanOrEqual(4);
+    // And the floor grew to fit them: five boards want Operations, the two
+    // rooms of the wing and two of the lower rank, so eight rooms at the
+    // least — which is what `roomsForBoards` reads off the layout.
+    expect(operationsRoomCount(erp)).toBeGreaterThanOrEqual(8);
   });
 
   /**

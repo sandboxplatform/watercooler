@@ -19,6 +19,7 @@ import {
   opsProjectRooms,
   opsProjectSign,
   opsRoadblock,
+  opsOperations,
   opsRooms,
   opsSign,
   opsSupportPulse,
@@ -30,7 +31,9 @@ import {
   opsWeekCounts,
   opsWhiteboardRoom,
   opsWidth,
+  opsWing,
   PLAYER_START,
+  roomsForBoards,
   PROJECT_BOARD,
   PROJECT_FLOW,
   ROOM_COLS,
@@ -852,6 +855,126 @@ describe("an Operations floor", () => {
  * than a picture on a wall, so the things worth pinning are different —
  * where it stands, that you can get at it, and that it is solid.
  */
+/**
+ * A floor of four bays or more stands its first bay **west** of the lift,
+ * and the two rooms there hang boards.
+ *
+ * Nothing about the world running would notice this going wrong. The floor
+ * still generates, the lift still opens, and a board hung on a wall with a
+ * lift drawn across it or a room nobody can reach both draw perfectly —
+ * they are only ever seen by somebody standing in the corridor.
+ */
+describe("the wing west of the lift", () => {
+  it("appears at four bays and not before", () => {
+    // Three bays is six rooms, which is the floor Sandbox ERP ran before
+    // Config App and Settings App: lift at the west end, everything east.
+    for (const rooms of [1, 2, 3, 4, 5, 6]) expect(opsWing(rooms), `${rooms} rooms`).toBe(0);
+    for (const rooms of [7, 8, 9, 10, 12]) expect(opsWing(rooms), `${rooms} rooms`).toBe(1);
+    // With no wing Operations is the first room, as it always was.
+    expect(opsOperations(6)).toEqual(opsRooms(6)[0]);
+    // With one it is the third, and the lift comes east with it.
+    expect(opsOperations(8)).toEqual(opsRooms(8)[2]);
+    expect(opsElevator(8).tx).toBeGreaterThan(opsElevator(6).tx);
+  });
+
+  it("puts two rooms west of the lift, one up and one down", () => {
+    const lift = opsElevator(8);
+    const west = opsRooms(8).filter((room) => room.x < opsOperations(8).x);
+    expect(west.map((room) => room.rank)).toEqual(["upper", "lower"]);
+    for (const room of west) expect(room.x + ROOM_COLS).toBeLessThan(lift.tx);
+  });
+
+  /**
+   * And they are the boards' — the second and third of them, because the
+   * slots run outward from the lift and these are the two nearest doorways
+   * anybody riding up walks past.
+   */
+  it("gives the wing the two boards nearest the lift", () => {
+    const slots = opsProjectRooms(8, 5);
+    expect(slots).toHaveLength(5);
+    expect(slots[0]).toEqual(opsOperations(8));
+    expect(slots.slice(1, 3)).toEqual(opsRooms(8).slice(0, 2));
+    expect(slots.slice(3).map((room) => room.rank)).toEqual(["lower", "lower"]);
+    // No room hangs two of them, and none is Support's or the boardroom's.
+    const taken = new Set(slots.map((room) => `${room.rank}:${room.x}`));
+    expect(taken.size).toBe(5);
+    for (const room of [opsSupportRoom(8), opsWhiteboardRoom(8), opsBoardroom(8)]) {
+      expect(taken.has(`${room.rank}:${room.x}`), `${room.rank}:${room.x}`).toBe(false);
+    }
+  });
+
+  /**
+   * The desk stays east of the lift: those two walls are the work's, and a
+   * queue behind you as you step out is a queue on the floor's best wall.
+   */
+  it("keeps Support east of Operations", () => {
+    expect(opsSupportRoom(8).x).toBeGreaterThan(opsOperations(8).x);
+    // Unchanged where there is no wing.
+    expect(opsSupportRoom(6)).toEqual(opsRooms(6).find((r) => r.rank === "upper" && r.x > 1));
+  });
+
+  /**
+   * `roomsForBoards` is read off this layout rather than worked out from
+   * it, so the two cannot disagree — which is the whole reason it is a
+   * search. A floor a room short is a board with no wall, and it draws.
+   */
+  it("grows the floor to exactly the rooms the boards want", () => {
+    for (let boards = 1; boards <= 8; boards++) {
+      const rooms = roomsForBoards(boards);
+      expect(opsProjectRooms(rooms, boards), `${boards} boards`).toHaveLength(boards);
+      if (boards > 1) {
+        expect(
+          opsProjectRooms(rooms - 1, boards).length,
+          `${boards} boards, one room short`,
+        ).toBeLessThan(boards);
+      }
+    }
+  });
+
+  /** And the wing is walked into, not looked at: eight rooms, all reachable. */
+  it("lets you walk from the lift into every room of it", () => {
+    const wide = buildFloorSpec(source, { boards: ["trello", "zoho"], rooms: 8 });
+    const width = wide.width;
+    const layer = generateMap(wide, []).layers.find((x) => x.name === "floor")!;
+    if (layer.type !== "tilelayer") throw new Error("no floor layer");
+    const solid = deriveCollisions(wide).concat(wallCollisions(wide));
+    const t = wide.tileSize;
+    const walkable = (x: number, y: number) =>
+      STANDABLE.includes(layer.data[y * width + x]) &&
+      !solid.some(
+        (r) => x * t >= r.x && x * t < r.x + r.width && y * t >= r.y && y * t < r.y + r.height,
+      );
+
+    const start = wide.spawns[0];
+    expect(walkable(start.tx, start.ty), "the spawn itself").toBe(true);
+    const seen = new Set([start.ty * width + start.tx]);
+    const queue = [[start.tx, start.ty] as const];
+    while (queue.length) {
+      const [x, y] = queue.pop()!;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= wide.height) continue;
+        const key = ny * width + nx;
+        if (seen.has(key) || !walkable(nx, ny)) continue;
+        seen.add(key);
+        queue.push([nx, ny]);
+      }
+    }
+    for (const [i, room] of opsRooms(8).entries()) {
+      const x = room.x + 3;
+      const y = room.y + 2;
+      expect(walkable(x, y), `room ${i} floor`).toBe(true);
+      expect(seen.has(y * width + x), `room ${i} reachable`).toBe(true);
+    }
+  });
+});
+
 describe("the boardroom table", () => {
   const long = buildFloorSpec(source, { boards: ["trello", "zoho"], rooms: 6 });
   const table = opsBoardroomTable(6);
