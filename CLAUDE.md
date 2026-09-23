@@ -1709,6 +1709,32 @@ and switching a microphone on is how you join that. This says a meeting is
 happening here, which is the part somebody three floors down has no way of
 knowing.
 
+**The queue on the wall is the open queue.** `toDeskView` in
+`lib/zoho/tickets.ts` leaves closed tickets off the board altogether: a
+closed lane is the longest column on any desk keeping up with itself, it
+grows the better the week went, and it is the one column nobody walks up to
+a wall to read. What the desk has closed is said next door in numbers — the
+two day counters on the plate and the two weeks in the corridor — which is
+the right shape for it, since what matters about finished work is how much
+of it there was rather than which tickets they were.
+
+Two things about how, and the first is the one that would have been
+invisible from this side:
+
+- **By Zoho's own coarse type**, not by a list of status names written
+  down here. A desk names its statuses its own way — Resolved, Invoice
+  sent, Done — and it is the only thing that knows which of them mean the
+  work has gone. It is left off here rather than at the fetch for the same
+  reason: filtering would mean naming the desk's _open_ statuses in
+  `status=`, and one left off that list is open work vanishing from the
+  board with nothing to say so. A coarse type cannot hide an open ticket.
+- **What was left off is counted and said**, at the foot of the panel. The
+  page is the hundred most recently **modified** tickets and closing one
+  modifies it, so a desk having a good afternoon spends much of its page on
+  work that is finished with and the board comes up short. `closedCount` is
+  what says why. `openCount` went at the same time: with the board being
+  the open ones, it was `ticketCount` under a second name.
+
 **The five counts are a second way of looking at the same queue,** so they
 come with the queue rather than being declared: `SUPPORT_PULSE` is not a
 `BoardKind`, and a building running no support desk has nothing for them to

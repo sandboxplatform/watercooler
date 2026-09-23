@@ -67,8 +67,38 @@ describe("a queue as the wall shows it", () => {
 
   const view = toDeskView(raw, NOW);
 
-  it("puts open work first, then what is parked, then the closed ones", () => {
-    expect(view.columns.map((c) => c.name)).toEqual(["Open", "Escalated", "On Hold", "Closed"]);
+  it("puts open work first, then what is parked", () => {
+    expect(view.columns.map((c) => c.name)).toEqual(["Open", "Escalated", "On Hold"]);
+  });
+
+  /**
+   * The board is the work still to do. A closed lane is the longest
+   * column on any desk keeping up with itself and the one nobody walks to
+   * a wall to read — what the desk has closed is said next door, in the
+   * day counters on the plate and the two weeks in the corridor.
+   */
+  it("leaves the closed lane off altogether", () => {
+    expect(view.columns.map((c) => c.name)).not.toContain("Closed");
+    expect(JSON.stringify(view)).not.toContain("Invoice query");
+  });
+
+  /**
+   * By Zoho's own coarse type rather than by a status named here: a desk
+   * names its statuses its own way, and a written-down list would put a
+   * lane back the first time somebody added one.
+   */
+  it("goes by the coarse type, whatever the desk calls the status", () => {
+    const view = toDeskView(
+      [
+        { id: "a", status: "Invoice sent", statusType: "Closed" },
+        { id: "b", status: "Resolved", statusType: "Closed" },
+        { id: "c", status: "Awaiting parts", statusType: "Open" },
+      ],
+      NOW,
+    );
+    expect(view.columns.map((c) => c.name)).toEqual(["Awaiting parts"]);
+    expect(view.ticketCount).toBe(1);
+    expect(view.closedCount).toBe(2);
   });
 
   it("orders a desk that names its statuses its own way", () => {
@@ -83,18 +113,19 @@ describe("a queue as the wall shows it", () => {
       ],
       NOW,
     );
-    expect(real.columns.map((c) => c.name)).toEqual([
-      "New",
-      "Queue",
-      "Under Consideration",
-      "Closed",
-    ]);
-    expect(real.openCount).toBe(3);
+    expect(real.columns.map((c) => c.name)).toEqual(["New", "Queue", "Under Consideration"]);
+    expect(real.ticketCount).toBe(3);
   });
 
-  it("counts the queue, what is still open, and what is late", () => {
-    expect(view.ticketCount).toBe(5);
-    expect(view.openCount).toBe(4);
+  /**
+   * The closed ones are counted even though they are not shown: the page
+   * is the hundred most recently modified tickets and closing one
+   * modifies it, so a board that is short is short for a reason the foot
+   * of the panel can give.
+   */
+  it("counts what is on the board, what was left off, and what is late", () => {
+    expect(view.ticketCount).toBe(4);
+    expect(view.closedCount).toBe(1);
     expect(view.overdueCount).toBe(1);
   });
 
@@ -112,9 +143,18 @@ describe("a queue as the wall shows it", () => {
     expect(JSON.stringify(view)).not.toContain("@example.com");
   });
 
+  /**
+   * Nothing on the board is closed any more, so this is asked of the one
+   * thing that still reads the flag: an overdue date on a closed ticket
+   * is not lateness, it is a ticket that was answered late and is done.
+   */
   it("treats a closed ticket as done rather than late", () => {
-    const closed = view.columns[3].tickets[0];
-    expect(closed.dueState).toBe("done");
+    const only = toDeskView(
+      [{ id: "3", status: "Closed", statusType: "Closed", dueDate: "2026-08-01T09:00:00.000Z" }],
+      NOW,
+    );
+    expect(only.overdueCount).toBe(0);
+    expect(only.closedCount).toBe(1);
   });
 
   it("fills in for a ticket with almost nothing on it", () => {
@@ -133,14 +173,14 @@ describe("a queue as the wall shows it", () => {
     expect(toDeskView([], NOW)).toEqual({
       columns: [],
       ticketCount: 0,
-      openCount: 0,
+      closedCount: 0,
       overdueCount: 0,
     });
     expect(toDeskView(null, NOW).ticketCount).toBe(0);
     expect(toDeskView([null, "nope", { subject: "no id" }], NOW).ticketCount).toBe(0);
   });
 
-  it("keeps a status it has never heard of, between the known ones and the closed", () => {
+  it("keeps a status it has never heard of, after the known ones", () => {
     const odd = toDeskView(
       [
         { id: "a", status: "Waiting on parts", statusType: "Open" },
@@ -149,6 +189,6 @@ describe("a queue as the wall shows it", () => {
       ],
       NOW,
     );
-    expect(odd.columns.map((c) => c.name)).toEqual(["Open", "Waiting on parts", "Closed"]);
+    expect(odd.columns.map((c) => c.name)).toEqual(["Open", "Waiting on parts"]);
   });
 });

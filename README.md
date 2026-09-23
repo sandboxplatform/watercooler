@@ -446,11 +446,19 @@ building has already said that list is a stage by naming it among its five.
 Sandbox ERP's third floor is a corridor with rooms off both sides, and the
 second working room is **Support** — lettered on its wall, with the shared
 whiteboard and the support queue from Zoho Desk in it. Doc works in there.
-Walk up and press E and the tickets appear in columns by status — open
-first, then anything on hold or escalated, with the closed ones last. Each
-ticket shows its number, priority as a coloured dot, channel, due date, who
-asked and who it is with. It refreshes every half minute, and is
-**read-only**: nothing in the office replies to a ticket or changes one.
+Walk up and press E and the open tickets appear in columns by status —
+open first, then anything on hold or escalated. Each ticket shows its
+number, priority as a coloured dot, channel, due date, who asked and who it
+is with. It refreshes every half minute, and is **read-only**: nothing in
+the office replies to a ticket or changes one.
+
+**Closed tickets are not on it.** The board is the work still to do, and a
+lane of closed ones is the longest column on any desk that is keeping up —
+it gets longer the better the week went, and nobody walks up to a wall to
+read it. What the desk has closed is the two day counters beside it and the
+two weeks out in the corridor. The foot of the panel says how many closed
+tickets were left off, because the page it reads is the hundred most
+recently _modified_ tickets and closing one modifies it.
 
 Next along the same wall, five numbers are lit up on a board you do not
 have to press anything to read — the point of them is the glance you take

@@ -136,7 +136,7 @@ export default function HelpDesk() {
           <span className="arcade-head__buttons">
             {desk && (
               <span className="board-count">
-                {desk.openCount} open
+                {desk.ticketCount} open
                 {desk.overdueCount > 0 && (
                   <span className="desk-overdue"> · {desk.overdueCount} overdue</span>
                 )}
@@ -201,10 +201,7 @@ export default function HelpDesk() {
             ) : (
               <div className="board-columns">
                 {desk.columns.map((column) => (
-                  <section
-                    key={column.name}
-                    className={`board-column${column.closed ? " board-column--closed" : ""}`}
-                  >
+                  <section key={column.name} className="board-column">
                     <header className="board-column__head">
                       <span className="board-column__name">{column.name}</span>
                       <span className="board-column__count">{column.tickets.length}</span>
@@ -227,7 +224,18 @@ export default function HelpDesk() {
 
         <div className="board-foot">
           <span>Read-only · nothing here answers or changes a ticket</span>
-          {desk && <span>{desk.ticketCount} shown</span>}
+          {/*
+           * Not "N shown", which was the open count printed twice — the
+           * head already says it. What the foot is for is the part the
+           * board cannot show: the page is the hundred most recently
+           * modified tickets and closing one modifies it, so a good
+           * afternoon can spend most of the page on work that has gone.
+           */}
+          {desk && desk.closedCount > 0 && (
+            <span>
+              {desk.closedCount} closed ticket{desk.closedCount === 1 ? "" : "s"} left off
+            </span>
+          )}
         </div>
       </div>
     </div>

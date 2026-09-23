@@ -1669,10 +1669,6 @@
 }
 
 /* ── The help desk queue, beside the project board ── */
-.board-column--closed {
-  opacity: 0.72;
-}
-
 .desk-ticket__top {
   display: flex;
   align-items: center;
