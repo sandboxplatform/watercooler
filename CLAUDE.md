@@ -1807,7 +1807,34 @@ one it is worked on, which is a sharper division than five bars one of
 which happens to have a machine under it. Four bays hang two and two,
 which is what the plate being given the whole depth of its wall bought.
 
-Two things about it. It is taken off by the **name**, not by `wipLane`,
+**And it is that lane less what is roadblocked in it**, which is the one
+count on this floor that is not simply a list's length. The barrier stands
+a foot to the machine's right and counts a stuck card wherever it is
+standing, so three of Hammer Time's nine In Progress cards were being
+counted by both of them — the row said twelve where the board said nine,
+which is exactly what a line laid out in the order work happens exists not
+to do. The machine reads six. The machine gives way rather than the barrier: being
+stuck is the whole fact about a stuck card, where the lane it stopped in is
+an accident of how far it got, and what the machine is there to say is that
+work is _happening_. `countInHand` is the rule.
+
+**A roadblock is the only one of the three this can happen to**, which is
+why nothing like it is subtracted for the beacon or the crates. Server
+Incident and Production are **lanes** — a card in either has left In
+Progress, so the machine was never counting it and there is nothing to take
+away. A roadblock is not a lane: it is a status a card carries **while it
+stands in the stage work is made in**, which is what put one card under two
+things in the same row.
+
+The **lane's own count is untouched**, which is the other half of it: a bar
+is that stage's share of the work in flight and a stuck card is still in
+flight, which is the whole reason `blocked` is not a sixth bay. So the
+panel behind the wall goes on saying how many cards stand in the list, and
+says in a line why the machine on the floor reads fewer — two numbers about
+one list differing by three is the sort of thing somebody walks up to the
+wall to ask.
+
+Two things about the wall. It is taken off by the **name**, not by `wipLane`,
 which answers null for a lane the board has not got: a list that has been
 archived is no more the wall's business than one that is there, or losing
 it would put the bay back. And the bars are untouched — still each lane's
@@ -1816,12 +1843,12 @@ bare is what the machine is making. The panel behind the plate still lists
 all five, because it is the detail and the detail is where "what does WIP
 mean" is answered.
 
-| Where                   | What                                                               |
-| ----------------------- | ------------------------------------------------------------------ |
-| `countWip` in `flow`    | Which lane is work in hand. Pure, over the board `readBoard` holds |
-| `opsMachine` in `floor` | The head of the line, read off the room like the other two         |
-| `systems/Machine`       | The housing, the hopper, the press portal and the belt under it    |
-| `systems/FloorMarker`   | The plate, the figure, the timer, the beat — for all four of them  |
+| Where                   | What                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `countInHand` in `flow` | The lane, less what is roadblocked in it. Pure, over the board `readBoard` holds |
+| `opsMachine` in `floor` | The head of the line, read off the room like the other two                       |
+| `systems/Machine`       | The housing, the hopper, the press portal and the belt under it                  |
+| `systems/FloorMarker`   | The plate, the figure, the timer, the beat — for all four of them                |
 
 Five decisions in it:
 

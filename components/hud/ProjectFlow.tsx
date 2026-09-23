@@ -6,7 +6,7 @@ import FullscreenButton, { useFullscreen } from "./FullscreenButton";
 import { usePanel } from "@/lib/hooks/usePanel";
 import { createLogger } from "@/lib/logger";
 import { currentRoom } from "@/lib/room-client";
-import { flowBars, flowFigure, type Flow } from "@/lib/trello/flow";
+import { flowBars, flowFigure, wipLane, type Flow } from "@/lib/trello/flow";
 import { PULSE_REFRESH_MS } from "@/lib/constants";
 
 const log = createLogger("ProjectFlow");
@@ -217,6 +217,21 @@ export default function ProjectFlow() {
                   </strong>{" "}
                   on this board — counted wherever they are standing, by the label on the card or
                   the list they are parked in.
+                  {/*
+                   * Why the machine on the floor and the tile above can
+                   * disagree. A card stuck in the stage work is made in is
+                   * standing in that list and is not being worked on, so
+                   * the tile counts it and the machine does not — and two
+                   * numbers about the same list differing by three is the
+                   * sort of thing somebody walks up to the wall to ask.
+                   */}
+                  {wipLane(flow) && (
+                    <>
+                      {" "}
+                      The machine on the floor leaves out the ones standing in {wipLane(flow)?.name}
+                      , so it reads {flow.wip}: work that has stopped is not work in hand.
+                    </>
+                  )}
                 </p>
               )}
               {flow.deployed > 0 && (

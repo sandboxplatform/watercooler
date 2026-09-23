@@ -5,6 +5,7 @@ import {
   FLOW_COLOURS,
   NO_LANE,
   countDeployed,
+  countInHand,
   countIncidents,
   countRoadblocks,
   countWip,
@@ -473,9 +474,14 @@ describe("counting a board's incidents", () => {
  *
  * The odd one of the four things standing on that floor: the other three
  * are counted off the whole board precisely because none of them is a
- * stage of it, and this one is a stage — the stage — so it is read off the
- * five the building declared and is the same number as the bay above the
- * machine's head.
+ * stage of it, and this one is a stage — the stage — so which list it is
+ * is read off the five the building declared rather than asked of the
+ * board.
+ *
+ * And it is that lane **less what is roadblocked in it**, which is the
+ * other thing that makes it odd: the barrier standing beside the machine
+ * counts the same cards, and a card cannot both have stopped and be in
+ * hand.
  */
 describe("counting what a board has in hand", () => {
   /**
@@ -546,6 +552,74 @@ describe("counting what a board has in hand", () => {
     const lanes = ["Ideas", "Doing", "Shipped"];
     const flow = toFlow(board({ Ideas: 1, Doing: 7, Shipped: 3 }), lanes);
     expect(countWip(flow)).toBe(7);
+  });
+
+  /**
+   * Hammer Time, which is the board this came off: nine cards standing in
+   * the lane, three of them roadblocked. The machine and the barrier stand
+   * a foot apart in the same row, so counting those three in both had the
+   * room claiming twelve cards where the board had nine.
+   */
+  it("leaves out a stuck card standing in the lane", () => {
+    const view = labelled({
+      Backlog: [[], []],
+      "In Progress": [
+        ["Roadblocked"],
+        ["Roadblock"],
+        ["bug", "Blocked"],
+        [],
+        [],
+        ["bug"],
+        [],
+        [],
+        [],
+      ],
+    });
+    const flow = toFlow(view, LANES);
+    expect(flow.lanes.find((lane) => lane.short === "WIP")?.count).toBe(9);
+    expect(flow.blocked).toBe(3);
+    expect(countWip(flow)).toBe(6);
+  });
+
+  /**
+   * The lane's own count is untouched: a bar is that stage's share of the
+   * work in flight and a stuck card is still standing in the stage, which
+   * is the whole reason `blocked` is not a sixth bay. Only the thing on
+   * the floor answers the narrower question.
+   */
+  it("leaves the lane on the plate saying what stands in the list", () => {
+    const flow = toFlow(labelled({ "In Progress": [["Roadblocked"], [], []] }), LANES);
+    expect(flow.lanes.find((lane) => lane.short === "WIP")?.count).toBe(3);
+    expect(flow.total).toBe(3);
+    expect(countWip(flow)).toBe(2);
+  });
+
+  /** A card stuck somewhere else is the barrier's business and not the machine's. */
+  it("keeps a stuck card standing in another lane out of it", () => {
+    const flow = toFlow(
+      labelled({ Backlog: [["Roadblocked"], ["Roadblocked"]], "In Progress": [[], [], []] }),
+      LANES,
+    );
+    expect(flow.blocked).toBe(2);
+    expect(countWip(flow)).toBe(3);
+  });
+
+  /**
+   * Nothing is up when nothing is in hand, which is the rule all four are
+   * under — so a lane whose every card has stopped stops the machine, and
+   * the barrier beside it is what says why.
+   */
+  it("stops the machine where every card in the lane is stuck", () => {
+    const flow = toFlow(labelled({ "In Progress": [["Blocked"], ["Roadblock"]] }), LANES);
+    expect(countWip(flow)).toBe(0);
+    expect(flow.blocked).toBe(2);
+  });
+
+  /** Off the board rather than off the lane, so it answers the board directly too. */
+  it("counts the lane off a board it is handed", () => {
+    const view = labelled({ Doing: [["Roadblocked"], [], []], Backlog: [["Roadblocked"]] });
+    expect(countInHand(view, ["Backlog", "Doing"])).toBe(2);
+    expect(countInHand(view, ["Backlog"])).toBe(0);
   });
 });
 

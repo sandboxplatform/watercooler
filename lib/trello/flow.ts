@@ -310,14 +310,69 @@ export function isWip(name: string): boolean {
  * A lane the board has not got counts nothing, which is what the rest of
  * this floor does with one: the bay draws a dash, and a thing standing on
  * the floor either stands there or does not.
+ *
+ * This is the lane, which is not quite the machine's number: what is in
+ * hand is this less whatever is roadblocked in it — see `countInHand`.
  */
 export function wipLane(flow: Flow): FlowLane | null {
   return flow.lanes.find((lane) => !lane.missing && isWip(lane.name)) ?? null;
 }
 
+/**
+ * Cards in hand, off the board rather than off the lane's own total:
+ * everything standing in that lane **less what is roadblocked in it**.
+ *
+ * The barrier standing next to the machine is work that has stopped, and
+ * a card that has stopped is not a card being worked on — so a stuck card
+ * standing in the WIP lane was counted twice by two things a foot apart in
+ * the same row, which is exactly what a row laid out in the order work
+ * happens exists to stop. Hammer Time is the board that showed it: nine
+ * on the machine and three on the barrier, and the three were three of the
+ * nine, so the room said twelve where the board said nine. It reads six.
+ *
+ * **The machine gives way rather than the barrier.** Being stuck is the
+ * whole fact about a stuck card and the lane it stopped in is an accident
+ * of where it got to; what the machine is there to say is that work is
+ * *happening* here, and nothing is happening to these three.
+ *
+ * **The lane's own count is untouched**, which is the other half of it. A
+ * bar is that lane's share of the work in flight and a stuck card is still
+ * in flight — it is standing in that stage, which is the whole reason
+ * `blocked` is not a sixth bay. So the panel behind the wall goes on
+ * saying how many cards stand in the list, and it is only the thing on the
+ * floor that answers the narrower question.
+ *
+ * A label is the only way a card in this lane is stuck: the other way a
+ * board says so is a list of its own, and a card stands in one list.
+ * `isWip` and `isRoadblock` share no word, so the lane cannot be both.
+ *
+ * **And a roadblock is the only one of the three this can happen to**,
+ * which is the reason nothing like it is subtracted for the beacon or the
+ * crates. Server Incident and Production are *lanes* on these boards — a
+ * card in either has left In Progress, so the machine was never counting
+ * it and there is nothing to take away. A roadblock is not a lane: it is a
+ * status a card carries while it stands in the stage work is made in,
+ * which is what puts the same card under two things in one row. Generalise
+ * this to the other two and the floor starts subtracting cards the machine
+ * never had.
+ */
+export function countInHand(board: BoardView, lanes: readonly string[]): number {
+  const named = lanes.find((name) => isWip(name));
+  if (named === undefined) return 0;
+  const key = named.trim().toLowerCase();
+  let making = 0;
+  for (const column of board.columns) {
+    if (column.name.trim().toLowerCase() !== key) continue;
+    for (const card of column.cards) {
+      if (!card.labels.some((label) => isRoadblock(label.name))) making += 1;
+    }
+  }
+  return making;
+}
+
 /** Cards in hand: what the machine on the room's floor is making. */
 export function countWip(flow: Flow): number {
-  return wipLane(flow)?.count ?? 0;
+  return flow.wip;
 }
 
 /**
@@ -378,6 +433,16 @@ export interface Flow {
   lanes: FlowLane[];
   /** Cards standing in the lanes, which is what each bar is a share of. */
   total: number;
+  /**
+   * Cards in hand — see `countInHand`.
+   *
+   * The WIP lane less the cards roadblocked in it, which makes it the one
+   * count here that is not simply a lane's length. It is the machine at the
+   * head of the room's line, and the barrier standing beside it is the rest
+   * of that lane: between them the list is accounted for once rather than
+   * twice.
+   */
+  wip: number;
   /**
    * Cards on the board that are roadblocked — see `countRoadblocks`.
    *
@@ -469,6 +534,7 @@ export function toFlow(board: BoardView, lanes: readonly string[]): Flow {
     url: board.url,
     lanes: flowLanes,
     total: flowLanes.reduce((sum, lane) => sum + (lane.missing ? 0 : lane.count), 0),
+    wip: countInHand(board, lanes),
     blocked: countRoadblocks(board),
     deployed: countDeployed(board, lanes),
     incidents: countIncidents(board, lanes),

@@ -10,17 +10,23 @@ import { ink, MARKER_DARK, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMark
  * what happens to work — it is made, it stops, it goes out — and this is
  * the first of them. The barrier beside it and the crates beyond it are
  * both on the floor because the five bays on the wall could not say what
- * they say; this one is on the floor for the opposite reason, and it is
- * the only one of the four in here repeating a number the wall already
- * has.
+ * they say; this one is on the floor for the opposite reason — it is the
+ * one stage of the pipeline that is in here, and the wall gave up its bay
+ * to it (`wallLanes`) rather than print the same number twice.
+ *
+ * **It is the lane less what is roadblocked in it** — see `countInHand`.
+ * The barrier a foot to its right is work that has stopped, and a card
+ * that has stopped is not a card being worked on, so a stuck card standing
+ * in this lane was being counted by both of them. Hammer Time is the board
+ * that showed it.
  *
  * What the wall cannot do is **move**. Five bays draw exactly the same
  * picture whether the room is turning work out or sitting on it, and a
  * number is a number whether it has been that number since March or has
  * changed twice this morning. A machine running is the one thing in this
  * building that says work is happening here rather than reporting how much
- * of it there is — which is why this is a machine at all, and why the WIP
- * bay over its head is not enough on its own.
+ * of it there is — which is why this is a machine at all, and why a bay on
+ * the wall was never going to be enough on its own.
  *
  * Two things move and no more, which is the line `CountBoard` draws: a
  * press that strokes, and parts riding the belt out of the machine toward
