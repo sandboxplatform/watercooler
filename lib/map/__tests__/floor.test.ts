@@ -14,11 +14,13 @@ import {
   opsDeployed,
   opsIncident,
   opsMachine,
+  opsRefined,
   opsElevator,
   opsProjectFlow,
   opsProjectRooms,
   opsProjectSign,
   opsRoadblock,
+  opsTesting,
   opsOperations,
   opsRooms,
   opsSign,
@@ -423,42 +425,64 @@ describe("an Operations floor", () => {
     });
 
     /**
-     * The machine, the roadblock and the crates stand side by side across
-     * the middle of the room.
+     * The rack, the machine, the roadblock, the testing rig and the crates
+     * stand side by side across the middle of the room.
      *
-     * A production line, in the order those things happen to work: made,
-     * stopped, gone out — left to right, the way the pipeline on the wall
-     * above them runs. The spacing is what makes it a line rather than
-     * three things sharing a row, so it is asserted as an equal step
-     * rather than as three columns.
+     * A production line, in the order those things happen to work:
+     * waiting, made, stopped, checked, gone out — left to right, the way
+     * the pipeline the wall above them counts runs. The spacing is what
+     * makes it a line rather than five things sharing a row, so it is
+     * asserted as an equal step rather than as five columns.
+     *
+     * **Every gap, not the first two.** Nothing on the line is in the map,
+     * so no flood-fill can catch a station in the wrong place — the only
+     * things standing between a kink in this row and somebody noticing it
+     * from the doorway are these assertions, and a loop that checked the
+     * head of the line and stopped would go on reading as if it covered
+     * the lot.
      */
-    it("lines the three up across the middle of the room", () => {
+    it("lines the five up across the middle of the room", () => {
       for (const slot of [1, 2, 3]) {
         const room = opsProjectRooms(6, slot)[slot - 1];
-        const line = [opsMachine(6, slot)!, opsRoadblock(6, slot)!, opsDeployed(6, slot)!];
+        const line = [
+          opsRefined(6, slot)!,
+          opsMachine(6, slot)!,
+          opsRoadblock(6, slot)!,
+          opsTesting(6, slot)!,
+          opsDeployed(6, slot)!,
+        ];
 
         // One row, the middle of the room's seven.
         for (const at of line) expect(at.ty).toBe(room.y + 3);
 
         // Left to right, evenly spaced, centred on the room — so the
-        // barrier keeps the middle it has always had.
+        // barrier keeps the middle it has always had, which is now the
+        // middle of the line as well.
         const step = line[1].tx - line[0].tx;
         expect(step).toBeGreaterThan(0);
-        expect(line[2].tx - line[1].tx).toBeCloseTo(step, 6);
-        expect(line[1].tx).toBe(room.x + ROOM_COLS / 2);
+        for (let i = 1; i < line.length; i++) {
+          expect(line[i].tx - line[i - 1].tx).toBeCloseTo(step, 6);
+        }
+        expect(line[2].tx).toBe(room.x + ROOM_COLS / 2);
 
         // Right against each other, and no closer: a hundred pixels is
-        // the two widest of them — the machine's belt at 104 and the
-        // barrier's plank at 96 — just touching, and anything under it is
-        // the belt drawn under the barrier's near leg.
+        // the widest adjacent pair — a 104 against a 96, the row
+        // alternating — just touching, and anything under it is one
+        // picture drawn through its neighbour.
         expect(step * TILE).toBeCloseTo(100, 6);
 
         // And the ends of it clear of both side walls, with room for the
         // picture either side of the point it is drawn centred on.
         expect(line[0].tx - 1).toBeGreaterThan(room.x);
-        expect(line[2].tx + 1).toBeLessThan(room.x + ROOM_COLS);
+        expect(line[line.length - 1].tx + 1).toBeLessThan(room.x + ROOM_COLS);
       }
-      for (const at of [opsMachine(6, 9), opsRoadblock(6, 9), opsDeployed(6, 9)]) {
+      for (const at of [
+        opsRefined(6, 9),
+        opsMachine(6, 9),
+        opsRoadblock(6, 9),
+        opsTesting(6, 9),
+        opsDeployed(6, 9),
+      ]) {
         expect(at).toBeNull();
       }
     });
@@ -466,10 +490,16 @@ describe("an Operations floor", () => {
     /**
      * The beacon is the one thing not on the line, in the near corner.
      *
-     * Which is the whole of what it says: the other three are things that
+     * Which is the whole of what it says: the other five are things that
      * happen to the work, and an incident happens to none of it. So it
      * stands off the line, in the corner you walk in past, a clear two
-     * rows behind the machine at the head of it.
+     * rows behind the rack at the head of it.
+     *
+     * Against the head of the line rather than against the machine, which
+     * is what this used to compare with: the line grew two stations and
+     * the machine stopped being its head, so the old comparison went on
+     * passing with two tiles of slack it no longer had. It is a third of a
+     * tile now, and a sixth station would want `ROOM_COLS` to grow.
      */
     it("stands the beacon off the line, in the near corner", () => {
       for (const slot of [1, 2, 3]) {
@@ -481,9 +511,9 @@ describe("an Operations floor", () => {
         expect(at.tx - 1).toBeGreaterThan(room.x);
         expect(at.ty).toBeLessThan(room.y + 7);
         // Off the line, both ways: behind it and short of its head.
-        const making = opsMachine(6, slot)!;
-        expect(at.ty).toBeGreaterThan(making.ty + 1);
-        expect(at.tx).toBeLessThan(making.tx - 1);
+        const head = opsRefined(6, slot)!;
+        expect(at.ty).toBeGreaterThan(head.ty + 1);
+        expect(at.tx).toBeLessThan(head.tx - 1);
       }
       expect(opsIncident(6, 9)).toBeNull();
     });

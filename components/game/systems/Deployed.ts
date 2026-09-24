@@ -5,24 +5,43 @@ import { ink, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMarker";
  * shipped.
  *
  * The roadblock's opposite number, and it exists for the same reason. The
- * five bays on the wall are the stages work is spread over, so they can
- * say where the work in flight is standing and nothing at all about the
- * work that has left — a board that shipped nine things this month and one
- * that shipped none draw the same five bars. A sixth bay would have read
- * as a sixth stage, which is exactly what it is not: these cards are not
- * standing anywhere any more.
+ * bays on the wall are the stages work is spread over, so they can say
+ * where the work in flight is standing and nothing at all about the work
+ * that has left — a board that shipped nine things this month and one that
+ * shipped none draw the same bars. Another bay would have read as another
+ * stage, which is exactly what this is not: these cards are not standing
+ * anywhere any more.
  *
  * So it is a thing in the room instead, and where it stands is half of
- * what it says. The barrier is in the middle of the floor because being in
- * the way is the whole fact about it; the crates are in the corner
- * furthest from the board because being finished with is the whole fact
- * about them. Walking the corridor past three rooms says which of them is
- * stuck and which is shipping without going into either.
+ * what it says: the far end of the line, which is the end of the pipeline
+ * at the end of the row. It stood in the far corner of the floor before
+ * there was a line to stand at the end of — diagonally across from the
+ * board it came off, which said "out of the way" and nothing else, where
+ * the end of a line says what it is the end *of*.
  *
- * Green because the last bay of the flow plate is green: the end of the
- * pipeline is lit the same colour on the wall and on the floor, so the
- * crates read as what happens after the right-hand bay rather than as a
- * separate piece of news.
+ * **Brass, and off the flow plate's scale altogether** — the HUD's own
+ * `--pixel-accent`, which is on none of `FLOW_COLOURS`. It was green,
+ * because the last bay of the plate was green and the end of the pipeline
+ * was lit the same colour on the wall and on the floor. Two things ended
+ * that. Testing came off the wall to stand on this line, and it owns that
+ * green: a lane's colour is assigned by position and the panel behind the
+ * plate prints it, so the station and its own lane answering differently
+ * would be the same board read twice. And there is no green bay left to be
+ * lit like — the plate letters Backlog and In Review now — so the reason
+ * that was written down here has expired.
+ *
+ * Which leaves the crates agreeing with their own argument for the first
+ * time: this file spends four paragraphs saying a despatch is not a stage
+ * and then painted itself in a stage's colour. `systems/Incident` already
+ * wrote the rule for that case — the one colour in the room that is not on
+ * the flow plate's scale at all, because it is off the pipeline — and a
+ * despatch is off the pipeline by the identical argument.
+ *
+ * Brass rather than anything else: it is not the beacon's red, so it is
+ * not a second alarm; it is what a crate is actually stencilled and banded
+ * in; and it is the **quietest ink on the line**, which is the right way
+ * round, since work that has shipped is the one station nobody has to do
+ * anything about.
  *
  * Nothing is up when nothing has gone out, which is the rule the barrier
  * is under and for the same reason — an empty pallet reading 0 is a thing
@@ -38,16 +57,16 @@ import { ink, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMarker";
  * and the beat when the figure moves are `systems/FloorMarker`.
  */
 
-/** The green the flow plate lights its last bay in. */
-const SHIPPED = 0x4bce97;
+/** Brass: the HUD's own accent, and on none of the flow plate's scale. */
+const SHIPPED = 0xc9a227;
 
 /**
  * The crates are filled a shade lighter than the plate over them, and the
  * pallet a shade darker than the crates.
  *
- * Not decoration: the plate is the HUD's own dark with a green edge, and a
- * crate drawn the same way sat directly under it read as the plate's own
- * pedestal — one tall sign on a post rather than a sign standing on a
+ * Not decoration: the plate is the HUD's own dark with a coloured edge,
+ * and a crate drawn the same way sat directly under it read as the plate's
+ * own pedestal — one tall sign on a post rather than a sign standing on a
  * stack of something. Three tones, lightest in the middle, is what makes
  * the stack a stack from across the room.
  */
@@ -58,8 +77,9 @@ const PALLET = 0x2a2a3e;
  * The picture, measured up from the floor it stands on.
  *
  * Fifty-six tall under a forty-pixel plate, which is exactly what the
- * barrier stands: the two things on a project room's floor are the same
- * height on purpose, so neither dwarfs the other from the doorway.
+ * other four things on the line stand: they are the same height on purpose,
+ * so none of them dwarfs its neighbours and the row reads as one line
+ * rather than as five objects that happen to share a floor.
  */
 const PALLET_H = 12;
 const DECK_H = 5;
@@ -67,19 +87,20 @@ const FOOT_W = 14;
 const FOOT_X = 32;
 
 /**
- * The lower crate is as wide as the barrier beside it is, and the word on
- * it is why.
+ * The lower crate is as wide as the barrier along the row is, and the word
+ * on it is why.
  *
  * It was 88, which held DEPLOYED at eight characters with room to spare.
  * PRODUCTION is ten of them — eighty pixels of an eight-pixel font — and
  * inside 88 with a two-pixel frame that leaves three clear pixels either
  * side, which reads as a word jammed into a box rather than stencilled on
- * one. Ninety-six is two tiles, which is what the barrier beside it
- * stands, so the two pictures on this line are the same width as well as
- * the same height — and neither of them is what the line is spaced by:
- * `LINE_STEP` is a hundred pixels, off the machine's wider belt, so
- * these two sit four pixels apart while the machine and the barrier
- * touch. Draw this one past a hundred and four and the step follows it.
+ * one. Ninety-six is two tiles, which is what the barrier and the
+ * refined rack stand as well: the line alternates 96, 104, 96, 104, 96,
+ * so that every seam along it closes to nothing. Its neighbour is the
+ * testing rig now rather than the barrier, and the four pixels these two
+ * used to sit apart have gone with the change. Draw this one past
+ * ninety-six and `LINE_STEP` has to follow it, since the rig beside it is
+ * a hundred and four.
  */
 const LOW_W = 96;
 const LOW_H = 26;

@@ -1,5 +1,6 @@
 /**
- * The five numbers on the wall of the room the project board hangs in.
+ * What a project room says about its board: the counts lettered on the
+ * wall, and the line of stations standing on the floor.
  *
  * The board beside them is the work itself — every card, in every column,
  * with who has it and when it is due. This is the other way of reading the
@@ -8,11 +9,19 @@
  *
  * It is the project board's answer to the five counts on Support's wall,
  * and deliberately the same shape of thing. One difference, and it is the
- * only one that matters to the arithmetic: these five are **one bank**.
- * Backlog through Testing are stages of a single flow, so each bar is that
- * stage's share of the work in flight and the five compare with each other.
+ * only one that matters to the arithmetic: the bays are **one bank**. The
+ * lanes left on the wall are stages of a single flow, so each bar is that
+ * stage's share of the work in flight and they compare with each other.
  * The support board's are two banks precisely because a standing total and
  * a day's traffic do not.
+ *
+ * **Three of the stages are not on the wall at all**, because each of them
+ * stands on the floor of the room as a thing you can look at: the rack of
+ * refined work at the head of the line, the machine making what is in
+ * hand, and the rig checking what has been made. A bay and a station
+ * saying the same number six feet apart is one count printed twice, so the
+ * wall letters the stages work **waits** in and the floor carries the
+ * three it happens in. See `wallLanes`.
  *
  * Everything here is pure: no fetching, no credentials, no clock. Which
  * matters for the same reason it does next door — a wall reading 0 and a
@@ -269,135 +278,218 @@ export function countIncidents(board: BoardView, lanes: readonly string[] = []):
 }
 
 /**
+ * What a board calls the stage work has been written up and is waiting in.
+ *
+ * The first of the three stages that stand on the room's floor rather than
+ * on its wall, and the one that is doing nothing: a rack of stock cut to
+ * spec, at the head of the line, with the machine next along waiting to
+ * take it. Everything about that picture is the point — this is work
+ * somebody has already thought about and nobody has started.
+ *
+ * **Narrow, for `isIncident`'s reason.** All three of Sandbox ERP's boards
+ * call the list **Refined**, in that word, so what is folded in is the
+ * inflections of the one word and nothing else. Deliberately not "Ready",
+ * however it is qualified, though `laneShort` carries a shortening for
+ * "Ready for Dev": that table is about **lettering** a bay and this is
+ * about **claiming** a lane, which is a far more expensive mistake. Ready
+ * is the most overloaded word on a kanban board — ready for dev, ready for
+ * QA, ready to deploy are three different stages, and `isDeployed`'s own
+ * tests pin the last of them as something that must not be matched there.
+ *
+ * A wide net fails in the worst direction of any on this floor: it takes a
+ * bay **off** the wall while the station on the floor counts something
+ * else, so a stage disappears from the room altogether with nothing
+ * anywhere to say why. That is worse than `isIncident`'s failure, which is
+ * only a light that never lights. Widen it when a board wants it.
+ */
+export function isRefined(name: string): boolean {
+  return /^refined?$/.test(name.toLowerCase().replace(/[^a-z]+/g, ""));
+}
+
+/**
  * What a board calls the stage work is actually being done in.
  *
- * The other three of these ask the whole board a question the wall cannot
- * answer. This one asks the wall's own question again, because the machine
- * standing on the floor **is** the WIP bay stood up and made to move: a
- * bar can say how much work is in hand and cannot say that anything is
- * happening to it, which is the one thing a room with work in it has to
- * say from the doorway.
+ * The three nets below ask the whole board a question the wall cannot
+ * answer. This one, and the two either side of it, ask the wall's own
+ * question again — because the machine standing on the floor **is** the
+ * WIP bay stood up and made to move: a bar can say how much work is in
+ * hand and cannot say that anything is happening to it, which is the one
+ * thing a room with work in it has to say from the doorway.
  *
  * Narrow, for `isIncident`'s reason: all three of the building's boards
- * call the list **In Progress** and the wall already letters that WIP, so
+ * call the list **In Progress** and the wall already lettered that WIP, so
  * what is folded in is the handful of ways anybody writes the same stage
- * down. Deliberately not In Review or Testing, which are stages where work
- * is being looked at rather than made, and each of which has a bay of its
- * own to say so.
+ * down. Deliberately not In Review, which is a stage where work is looked
+ * at rather than made and has a bay of its own to say so — nor Testing,
+ * which is looked at too and now has a station of its own.
  */
 export function isWip(name: string): boolean {
   return /^(work)?inprogress$|^wip$|^doing$/.test(name.toLowerCase().replace(/[^a-z]+/g, ""));
 }
 
 /**
- * The lane the machine is making, off **the lanes the building declared**
- * rather than off the whole board.
+ * What a board calls the stage work is checked in.
  *
- * That is the one difference between this and the other three, and it is
- * the whole of the difference. A roadblock, a despatch and an incident are
- * counted off the whole board precisely because none of them is a stage —
- * a stuck card is standing in one, a shipped card has left them all, and
- * an incident was never in any. This one is a stage, and it is the stage:
- * the building has already said which of its lists that is by declaring
- * its five, so asking the board which of them it means would be a second
- * answer to a question already answered.
+ * The last of the three stages on the floor, standing between the barrier
+ * and the crates: work that has been made and is being looked at before it
+ * goes out. It moves, as the machine does, because checking is something
+ * being done to the work rather than somewhere the work is sitting — and
+ * it moves differently, because the machine's parts ride past a fixed head
+ * and this one holds the work still and crosses it.
  *
- * The declaration rather than the wall, because the wall no longer letters
- * it — see `wallLanes`. The machine is where this number is now shown, and
- * it would be an odd thing indeed for it to be read off the one plate that
- * has stopped saying it.
- *
- * A lane the board has not got counts nothing, which is what the rest of
- * this floor does with one: the bay draws a dash, and a thing standing on
- * the floor either stands there or does not.
- *
- * This is the lane, which is not quite the machine's number: what is in
- * hand is this less whatever is roadblocked in it — see `countInHand`.
+ * Narrow, on the boards' own word, which is `isRefined`'s argument exactly
+ * and matters most here. **"Done" is deliberately out**, and it is the
+ * sharpest call in the catalogue: `isDeployed` records that these three
+ * boards kept a Done list until it was renamed to Testing on all three of
+ * them, which is the same word drifting that argues for a wide net next
+ * door. It is still refused, because a pipeline of Backlog, Refined, In
+ * Progress, Testing and Done is an entirely ordinary five — and two
+ * declared lanes answering one station is a station counting a stage it
+ * was never about, with the other stage off the wall to pay for it. "QA"
+ * is out for the same reason and a weaker one: it is a guess at a board
+ * nobody here has seen.
  */
-export function wipLane(flow: Flow): FlowLane | null {
-  return flow.lanes.find((lane) => !lane.missing && isWip(lane.name)) ?? null;
+export function isTesting(name: string): boolean {
+  return /^test(s|ing)?$/.test(name.toLowerCase().replace(/[^a-z]+/g, ""));
 }
 
 /**
- * Cards in hand, off the board rather than off the lane's own total:
- * everything standing in that lane **less what is roadblocked in it**.
+ * The three stages that stand on the room's floor, in the order they run,
+ * with what each of their stations reads.
  *
- * The barrier standing next to the machine is work that has stopped, and
- * a card that has stopped is not a card being worked on — so a stuck card
- * standing in the WIP lane was counted twice by two things a foot apart in
- * the same row, which is exactly what a row laid out in the order work
- * happens exists to stop. Hammer Time is the board that showed it: nine
- * on the machine and three on the barrier, and the three were three of the
- * nine, so the room said twelve where the board said nine. It reads six.
+ * Written once because everything about them is the same question asked
+ * three times: which lane is this, is it on the wall, and what does the
+ * thing standing on the floor say. Three predicates scattered through
+ * three functions is how one of them comes to be left out of the fourth.
  *
- * **The machine gives way rather than the barrier.** Being stuck is the
+ * A list rather than a union, because the next stage taken off the plate
+ * should be one entry here and nothing else — which is exactly how two of
+ * these three arrived, the machine having been the only one before them.
+ */
+const ON_THE_FLOOR = [
+  { is: isRefined, reads: (flow: Flow) => flow.refined },
+  { is: isWip, reads: (flow: Flow) => flow.wip },
+  { is: isTesting, reads: (flow: Flow) => flow.testing },
+] as const;
+
+/** Whether a lane of that name is a thing standing on the room's floor. */
+export function standsOnFloor(name: string): boolean {
+  return ON_THE_FLOOR.some((station) => station.is(name));
+}
+
+/**
+ * Cards standing in the lanes a station counts, **less what is roadblocked
+ * in them** — which is what the thing on the floor reads.
+ *
+ * The barrier in the middle of the row counts a stuck card wherever it is
+ * standing, off the whole board, so a card carrying a Roadblock label
+ * while it stands in one of these three lanes was being counted twice by
+ * two things a few feet apart in the same row. That is exactly what a line
+ * laid out in the order work happens exists to stop. Hammer Time is the
+ * board that showed it: nine cards in the WIP lane with three of them
+ * stuck, so the room said twelve where the board said nine. It reads six.
+ *
+ * **The station gives way rather than the barrier.** Being stuck is the
  * whole fact about a stuck card and the lane it stopped in is an accident
- * of where it got to; what the machine is there to say is that work is
- * *happening* here, and nothing is happening to these three.
+ * of how far it got; what a station is there to say is that something is
+ * *happening* to the work, and nothing is happening to these.
  *
  * **The lane's own count is untouched**, which is the other half of it. A
  * bar is that lane's share of the work in flight and a stuck card is still
  * in flight — it is standing in that stage, which is the whole reason
- * `blocked` is not a sixth bay. So the panel behind the wall goes on
- * saying how many cards stand in the list, and it is only the thing on the
- * floor that answers the narrower question.
+ * `blocked` is not a bay of its own. So the panel behind the wall goes on
+ * saying how many cards stand in each list, and only the things on the
+ * floor answer the narrower question.
  *
- * A label is the only way a card in this lane is stuck: the other way a
- * board says so is a list of its own, and a card stands in one list.
- * `isWip` and `isRoadblock` share no word, so the lane cannot be both.
+ * A label is the only way a card in one of these lanes is stuck: the other
+ * way a board says so is a list of its own, and a card stands in one list.
+ * No two of these nets share a word, which is the property this leans on —
+ * three times over now — and which `flow.test.ts` asserts rather than
+ * leaving it to be rediscovered.
  *
- * **And a roadblock is the only one of the three this can happen to**,
- * which is the reason nothing like it is subtracted for the beacon or the
- * crates. Server Incident and Production are *lanes* on these boards — a
- * card in either has left In Progress, so the machine was never counting
- * it and there is nothing to take away. A roadblock is not a lane: it is a
- * status a card carries while it stands in the stage work is made in,
- * which is what puts the same card under two things in one row. Generalise
- * this to the other two and the floor starts subtracting cards the machine
- * never had.
+ * **And a roadblock is the only thing on this floor the subtraction is
+ * owed to.** A stuck card is not a lane: it is a status a card carries
+ * *while it stands in a stage*, which is what puts one card under two
+ * things in the same row. A despatch and an incident are lanes on these
+ * boards, so a card in either has left all three of these stages and there
+ * was never anything to take away — a card in Refined carrying a Server
+ * Incident label is legitimately counted by both the rack and the beacon,
+ * which is two true facts rather than one card twice. Generalise this to
+ * those two and the floor starts subtracting cards no station ever had.
+ *
+ * Off the building's own declaration rather than off the whole board: a
+ * station is a *stage*, and the building has already said which of its
+ * lists that is by declaring its lanes. Every lane matching is summed,
+ * which is `countByList`'s rule — two lists a board calls the same stage
+ * are both that stage, and dropping one would put less work on the floor
+ * than there is on the board.
  */
-export function countInHand(board: BoardView, lanes: readonly string[]): number {
-  const named = lanes.find((name) => isWip(name));
-  if (named === undefined) return 0;
-  const key = named.trim().toLowerCase();
-  let making = 0;
+export function countUnblocked(
+  board: BoardView,
+  lanes: readonly string[],
+  is: (name: string) => boolean,
+): number {
+  const keys = new Set(lanes.filter(is).map((name) => name.trim().toLowerCase()));
+  if (keys.size === 0) return 0;
+  let standing = 0;
   for (const column of board.columns) {
-    if (column.name.trim().toLowerCase() !== key) continue;
+    if (!keys.has(column.name.trim().toLowerCase())) continue;
     for (const card of column.cards) {
-      if (!card.labels.some((label) => isRoadblock(label.name))) making += 1;
+      if (!card.labels.some((label) => isRoadblock(label.name))) standing += 1;
     }
   }
-  return making;
+  return standing;
 }
 
-/** Cards in hand: what the machine on the room's floor is making. */
-export function countWip(flow: Flow): number {
-  return flow.wip;
+/** A stage that stands on the floor: the lane it counts, and what it reads. */
+export interface FloorLane {
+  /** The lane or lanes it counts, as the building named them. */
+  name: string;
+  /** The figure on its plate: those lanes less what is roadblocked in them. */
+  reads: number;
 }
 
 /**
- * The lanes the wall letters: the ones the building declared, less the one
- * the machine on the floor is making.
+ * The stations on the floor that are lanes of this board, for the panel
+ * behind the wall to say why the floor and the plate can differ.
  *
- * Work in hand is on the floor of the room now — a machine with the number
- * on a plate over it, running while there is anything in it — and a bay
- * saying the same thing six feet above it is the same number printed
- * twice. The wall is then the stages work is **waiting** in and the floor
- * is the stage it is being worked on, which is a sharper division than
- * five bars one of which happens to have a machine under it.
+ * Only the ones the board actually has a list for: a station whose lane
+ * has been renamed or archived stands nowhere at all, exactly as a missing
+ * lane draws a dash rather than a zero.
+ */
+export function floorLanes(flow: Flow): FloorLane[] {
+  return ON_THE_FLOOR.flatMap((station) => {
+    const named = flow.lanes.filter((lane) => !lane.missing && station.is(lane.name));
+    if (named.length === 0) return [];
+    return [{ name: named.map((lane) => lane.name).join(" and "), reads: station.reads(flow) }];
+  });
+}
+
+/**
+ * The lanes the wall letters: the ones the building declared, less the
+ * three that stand on the floor of the room.
  *
- * By the name rather than by `wipLane`, which answers null for a lane the
- * board has not got: the rule is that this stage is not on the wall, and a
- * lane the board has lost is no more the wall's business than one it has.
+ * Work that is refined and waiting, work in hand and work being checked
+ * are each a thing in the room now — a rack, a machine and a rig, each
+ * with its number on a plate over it — and a bay six feet above one of
+ * them saying the same thing is that count printed twice. The wall is then
+ * the stages work **waits** in and the floor is the three it happens in,
+ * which is a sharper division than five bars three of which happen to have
+ * something standing under them.
+ *
+ * By the name rather than by asking which lanes the board has got: the
+ * rule is that these stages are not on the wall, and a lane the board has
+ * lost is no more the wall's business than one it has — otherwise an
+ * archived list would put the bay back.
  *
  * The bars are left alone, and they are still a share of every declared
- * lane (`flowBars`) rather than of the four that are drawn. What is in
- * hand is still work in flight, so the share of the plate that is bare is
- * what the machine is making — which is the honest picture, and the one
- * the machine is standing there to complete.
+ * lane (`flowBars`) rather than of the ones that are drawn. What stands on
+ * the floor is still work in flight, so the share of the plate left bare
+ * is what the three stations are holding — which is the honest picture,
+ * and the one they are standing there to complete.
  */
 export function wallLanes(flow: Flow): FlowLane[] {
-  return flow.lanes.filter((lane) => !isWip(lane.name));
+  return flow.lanes.filter((lane) => !standsOnFloor(lane.name));
 }
 
 export interface FlowLane {
@@ -434,15 +526,22 @@ export interface Flow {
   /** Cards standing in the lanes, which is what each bar is a share of. */
   total: number;
   /**
-   * Cards in hand — see `countInHand`.
+   * The three stages that stand on the room's floor rather than on its
+   * wall — see `countUnblocked`.
    *
-   * The WIP lane less the cards roadblocked in it, which makes it the one
-   * count here that is not simply a lane's length. It is the machine at the
-   * head of the room's line, and the barrier standing beside it is the rest
-   * of that lane: between them the list is accounted for once rather than
-   * twice.
+   * Each is that declared lane less the cards roadblocked in it, which is
+   * what makes these the counts here that are not simply a lane's length.
+   * They are the rack, the machine and the rig standing in the room's line,
+   * and the barrier standing among them is the rest of all three: between
+   * them every card is accounted for once rather than twice.
+   *
+   * Flat, beside `blocked` and the others, because the four things on the
+   * floor that carry a plate read their number straight off this — a nested
+   * record would make three of the stations read differently from the rest.
    */
+  refined: number;
   wip: number;
+  testing: number;
   /**
    * Cards on the board that are roadblocked — see `countRoadblocks`.
    *
@@ -534,7 +633,9 @@ export function toFlow(board: BoardView, lanes: readonly string[]): Flow {
     url: board.url,
     lanes: flowLanes,
     total: flowLanes.reduce((sum, lane) => sum + (lane.missing ? 0 : lane.count), 0),
-    wip: countInHand(board, lanes),
+    refined: countUnblocked(board, lanes, isRefined),
+    wip: countUnblocked(board, lanes, isWip),
+    testing: countUnblocked(board, lanes, isTesting),
     blocked: countRoadblocks(board),
     deployed: countDeployed(board, lanes),
     incidents: countIncidents(board, lanes),
@@ -575,10 +676,12 @@ export function flowFigure(lane: FlowLane): string {
  * wraps, left to right and then down. Rows as even as they go, with the
  * fuller one first: five is 3 and 2, four is 2 and 2, six is 3 and 3.
  *
- * Four is the ordinary case now that the wall has stopped lettering WIP,
- * and two rows of two is why the plate wanting the whole depth of the wall
- * was worth having: a row of four across one row leaves the figures the
- * size they would have been and most of the plate bare.
+ * **Two is the ordinary case now**, in one row: the wall has given three
+ * of its five stages to the things standing on the floor, so Sandbox ERP's
+ * plate letters Backlog and In Review and nothing else. The wrapping is
+ * kept because it is the rule rather than the arrangement — a building
+ * declaring seven lanes would want it — and because the plate is a shared
+ * one, drawn for the support desk's five as well.
  */
 export const FLOW_ROW_MAX = 3;
 

@@ -6,7 +6,7 @@ import FullscreenButton, { useFullscreen } from "./FullscreenButton";
 import { usePanel } from "@/lib/hooks/usePanel";
 import { createLogger } from "@/lib/logger";
 import { currentRoom } from "@/lib/room-client";
-import { flowBars, flowFigure, wipLane, type Flow } from "@/lib/trello/flow";
+import { flowBars, flowFigure, floorLanes, type Flow } from "@/lib/trello/flow";
 import { PULSE_REFRESH_MS } from "@/lib/constants";
 
 const log = createLogger("ProjectFlow");
@@ -205,11 +205,11 @@ export default function ProjectFlow() {
               )}
               {flow.blocked > 0 && (
                 /*
-                 * What the five bars cannot say: a stuck card is still
-                 * standing in a stage, so the bank above draws the same
-                 * picture whether the work is moving or not. It is the
-                 * barrier on the floor of the room, said in words for
-                 * whoever has walked up and pressed E at the wall.
+                 * What the bars cannot say: a stuck card is still standing
+                 * in a stage, so the bank above draws the same picture
+                 * whether the work is moving or not. It is the barrier on
+                 * the floor of the room, said in words for whoever has
+                 * walked up and pressed E at the wall.
                  */
                 <p className="pulse-legend pulse-legend--stuck">
                   <strong>
@@ -218,29 +218,37 @@ export default function ProjectFlow() {
                   on this board — counted wherever they are standing, by the label on the card or
                   the list they are parked in.
                   {/*
-                   * Why the machine on the floor and the tile above can
-                   * disagree. A card stuck in the stage work is made in is
-                   * standing in that list and is not being worked on, so
-                   * the tile counts it and the machine does not — and two
-                   * numbers about the same list differing by three is the
-                   * sort of thing somebody walks up to the wall to ask.
+                   * Why the things on the floor and the lanes above can
+                   * disagree. A card stuck in a stage is standing in that
+                   * list and is not being worked on, so the lane counts it
+                   * and the station on the floor does not — and two numbers
+                   * about the same list differing by three is the sort of
+                   * thing somebody walks up to the wall to ask.
+                   *
+                   * All three of them, not the machine alone: the barrier
+                   * counts a stuck card wherever it is standing, so every
+                   * stage that has a thing of its own on the floor owes it
+                   * the same subtraction. See `countUnblocked`.
                    */}
-                  {wipLane(flow) && (
+                  {floorLanes(flow).length > 0 && (
                     <>
                       {" "}
-                      The machine on the floor leaves out the ones standing in {wipLane(flow)?.name}
-                      , so it reads {flow.wip}: work that has stopped is not work in hand.
+                      The things standing on the floor leave them out, so{" "}
+                      {floorLanes(flow)
+                        .map((lane) => `${lane.name} reads ${lane.reads}`)
+                        .join(", ")}
+                      : work that has stopped is not work in hand.
                     </>
                   )}
                 </p>
               )}
               {flow.deployed > 0 && (
                 /*
-                 * The other thing the five bars cannot say, from the other
-                 * end: a card that has shipped is not standing in any
-                 * stage, so the bank above is the same picture whether the
-                 * board has sent nine things out or none. It is the crates
-                 * in the corner of the room, said in words.
+                 * The other thing the bars cannot say, from the other end:
+                 * a card that has shipped is not standing in any stage, so
+                 * the bank above is the same picture whether the board has
+                 * sent nine things out or none. It is the crates at the far
+                 * end of the room's line, said in words.
                  */
                 <p className="pulse-legend pulse-legend--shipped">
                   <strong>
@@ -251,8 +259,10 @@ export default function ProjectFlow() {
                 </p>
               )}
               <p className="pulse-legend">
-                Each bar is that stage&rsquo;s share of the work in flight, so the five compare with
-                each other. Nothing here is a percentage of the whole board.
+                Each bar is that stage&rsquo;s share of the work in flight, so they compare with
+                each other. Nothing here is a percentage of the whole board — and the wall itself
+                letters only the stages that have nothing standing for them on the floor, which is
+                why it draws fewer bays than there are lanes listed here.
                 {flow.others.length > 0 && (
                   <>
                     {" "}

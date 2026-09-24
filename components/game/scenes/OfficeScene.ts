@@ -39,7 +39,9 @@ import {
   opsDeployed,
   opsIncident,
   opsMachine,
+  opsRefined,
   opsRoadblock,
+  opsTesting,
   opsSign,
   opsSupportPulse,
   opsSupportSign,
@@ -62,7 +64,9 @@ import { DEPLOYED } from "../systems/Deployed";
 import { INCIDENT } from "../systems/Incident";
 import { MACHINE } from "../systems/Machine";
 import { FloorMarker } from "../systems/FloorMarker";
+import { REFINED } from "../systems/Refined";
 import { ROADBLOCK } from "../systems/Roadblock";
+import { TESTING } from "../systems/Testing";
 import { legible } from "../systems/legible";
 import {
   hasCampus,
@@ -934,7 +938,7 @@ export class OfficeScene extends Phaser.Scene {
 
   /**
    * A project room apiece: the board's name lettered in the middle of its
-   * wall, and its five stage counts running to the right-hand corner.
+   * wall, and its stage counts running to the right-hand corner.
    *
    * One room to a board is the whole point of the arrangement — walking the
    * corridor and looking in says what is on the go, where one wall with a
@@ -950,20 +954,21 @@ export class OfficeScene extends Phaser.Scene {
    * whatever the office picked, and a room with PROJECT BOARD written over
    * a project board says less than the sign already hanging on it.
    *
-   * And four things standing on the floor. Three of them are a production
+   * And six things standing on the floor. Five of them are a production
    * line across the middle of the room, in the order those things happen
-   * to work: the machine making it, the roadblock it stops at, the crates
-   * it goes out in. The fourth is a beacon in the near corner, off the
-   * line, for a room with an incident on it — nothing on the board happens
-   * to that.
+   * to work: the rack of refined work waiting, the machine making it, the
+   * roadblock it stops at, the rig checking it, the crates it goes out in.
+   * The sixth is a beacon in the near corner, off the line, for a room with
+   * an incident on it — nothing on the board happens to that.
    *
    * A stuck card is still standing in a stage, a shipped one has left them
    * all and an incident was never in any, so none of those three could be
-   * a bay at all; the machine could have been one and is better not, since
-   * a bar cannot move and moving is the thing work in hand has to say. The
-   * wall letters the stages work waits in and the floor carries the one it
-   * is worked on — see `wallLanes` in `lib/trello/flow.ts`. See
-   * `systems/FloorMarker`. All four read the same answer as the counts
+   * a bay at all. The other three could each have been one and are better
+   * not: a bar cannot move, and that work is waiting, being made and being
+   * checked is the thing those three stages have to say. So the wall
+   * letters the stages work waits in and the floor carries the three it
+   * happens in — see `wallLanes` in `lib/trello/flow.ts`. See
+   * `systems/FloorMarker`. All six read the same answer as the counts
    * beside them (`systems/room-flow`), so a room showing every one of them
    * is still one request.
    *
@@ -979,16 +984,27 @@ export class OfficeScene extends Phaser.Scene {
       if (board.board) this.addProjectSign(rooms, slot, board.board);
       if (board.lanes.length === 0) return [];
       const at = opsProjectFlow(rooms, slot);
+      const waiting = opsRefined(rooms, slot);
       const making = opsMachine(rooms, slot);
       const stuck = opsRoadblock(rooms, slot);
+      const checking = opsTesting(rooms, slot);
       const shipped = opsDeployed(rooms, slot);
       const burning = opsIncident(rooms, slot);
       return [
         ...(at ? [new ProjectFlow(this).place(at, TILE, slot)] : []),
         // The same read as the counts beside them, and none of them drawn
         // until there is something to say — see `systems/FloorMarker`.
+        //
+        // **In the order they stand, left to right**, because that is the
+        // order they are drawn in: every marker is at one depth, Phaser
+        // sorts the display list stably, so the last one added is the one
+        // in front. The machine and the rig are each four pixels wider than
+        // the step, so those are the seams where getting it backwards would
+        // show — a neighbour drawn over the belt rather than under it.
+        ...(waiting ? [new FloorMarker(this, REFINED).place(waiting, TILE, slot)] : []),
         ...(making ? [new FloorMarker(this, MACHINE).place(making, TILE, slot)] : []),
         ...(stuck ? [new FloorMarker(this, ROADBLOCK).place(stuck, TILE, slot)] : []),
+        ...(checking ? [new FloorMarker(this, TESTING).place(checking, TILE, slot)] : []),
         ...(shipped ? [new FloorMarker(this, DEPLOYED).place(shipped, TILE, slot)] : []),
         ...(burning ? [new FloorMarker(this, INCIDENT).place(burning, TILE, slot)] : []),
       ];

@@ -390,20 +390,25 @@ generate it from an account that is only on the boards you want readable.
 
 #### The numbers beside it
 
-At the other end of the same wall, five numbers are lit up on a board you
-do not have to press anything to read — how much work is standing in each
-stage of the board next to it:
+At the other end of the same wall, the stages work **waits** in are lit up
+on a board you do not have to press anything to read — how much is standing
+in each. For Sandbox ERP that is two of them:
 
-| On the wall             | Counts                         |
-| ----------------------- | ------------------------------ |
-| BACKLOG · REFINED · WIP | Cards in the first three lists |
-| REVIEW · TESTING        | Cards in the last two          |
+| On the wall | Counts                        |
+| ----------- | ----------------------------- |
+| BACKLOG     | Cards written up and unsorted |
+| REVIEW      | Cards waiting to be looked at |
 
-The five are one group, so each bar is that stage's share of the work in
+The other three stages are not on this wall at all: work refined, work in
+hand and work being checked each have a thing standing on the floor of the
+room instead — see below — and a bay six feet above one of them saying the
+same number would be one count printed twice.
+
+The bays are one group, so each bar is that stage's share of the work in
 flight and they compare with each other; nothing is a percentage of the
 whole board. A number that has moved since the last read flashes once, and
-they refresh every minute. Walk up and press E for the same five with the
-stage names spelled out, the board they were counted off, and the lists on
+they refresh every minute. Walk up and press E for all five stages with
+their names spelled out, the board they were counted off, and the lists on
 it nobody is counting — Sandbox ERP's Production and RCA / Incidents, which
 sit outside the pipeline.
 
@@ -414,30 +419,46 @@ Castle Atlantic. A list that has been renamed or archived reads as a dash
 rather than a zero — a stage nobody is looking at and a stage with nothing
 in it are opposite news.
 
-#### And three things on the floor
+#### And a production line on the floor
 
-The five bays say where the work in flight is standing, which leaves three
-things about a board they cannot say at all — so those are in the room
-rather than on the wall, and you read them off a project room by looking
-into it from the corridor:
+Five things stand in a row across the middle of the room, in the order
+those things happen to work — so a project room is read **along** rather
+than looked round, from the corridor and without going in:
 
-| In the room     | Is                | Says                                       |
-| --------------- | ----------------- | ------------------------------------------ |
-| The middle      | A striped barrier | How many cards are roadblocked             |
-| The far corner  | A stack of crates | How many have been deployed off this board |
-| The near corner | A red beacon, lit | How many incidents are open on the server  |
+| Along the line    | Is                    | Says                                        |
+| ----------------- | --------------------- | ------------------------------------------- |
+| A rack of blanks  | Work refined, waiting | How many cards are written up and unstarted |
+| A machine         | Running, with a press | How many are in hand                        |
+| A striped barrier | In the way            | How many are roadblocked                    |
+| An inspection rig | A probe crossing work | How many are being tested                   |
+| A stack of crates | Shipped, on a pallet  | How many have gone out off this board       |
 
-A stuck card is still standing in a stage, a shipped one has left all five,
-and an incident is not a stage at all, so none of the three could have been
-a sixth bay. Each carries its count on a plate over it, refreshes with the
-wall, flashes once when its number moves — and is not there at all when
-there is nothing to say, which is most of the point: a beacon that is
-always lit is a light nobody looks at.
+And one thing off the line, in the near corner you walk in past: a red
+beacon, for how many incidents are open on the server. It is off the line
+because nothing on the board happens to an incident — the other five are
+things that happen to work, which is why they stand in the order they do.
 
-Each is counted off the whole board, by the label on a card or the list it
-is parked in. The despatches are read from whichever word a board uses —
-all three say **Production** today and two of them said Deployed until they
-were renamed, which is exactly why that rule is not fussy about the word.
+Three of the five are stages of the board, and they are on the floor rather
+than on the wall because a bar cannot **move**: a bay draws the same
+picture whether the room is turning work out or sitting on it. The machine
+and the rig say work is happening here by doing something, and the rack
+says the opposite by holding still. The other two could never have been
+bays at all — a stuck card is still standing in a stage, a shipped one has
+left them all, and an incident was never in any.
+
+Each carries its count on a plate over it, refreshes with the wall, flashes
+once when its number moves — and is not there at all when there is nothing
+to say, which is most of the point: a beacon that is always lit is a light
+nobody looks at.
+
+The barrier, the crates and the beacon are counted off the whole board, by
+the label on a card or the list it is parked in; the three stages are
+counted off the lists the building declared, each **less whatever is
+roadblocked standing in it**, so the barrier and the station beside it
+never count the same card twice. The despatches are read from whichever
+word a board uses — all three say **Production** today and two of them said
+Deployed until they were renamed, which is exactly why that rule is not
+fussy about the word.
 The incidents are: all three call that list **Server Incident**, so the
 rule is that word and nothing else, which is also what keeps a board's RCA
 archive from lighting a beacon that would then never go out. A list the wall itself counts is never one of them either: the

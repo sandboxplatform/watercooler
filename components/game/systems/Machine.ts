@@ -1,20 +1,22 @@
 import * as Phaser from "phaser";
-import { countWip } from "@/lib/trello/flow";
 import { ink, MARKER_DARK, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMarker";
 
 /**
- * The machine at the head of a project room's production line: work in
+ * The machine second along a project room's production line: work in
  * hand, being made.
  *
- * The three things standing in a row across the middle of the floor are
- * what happens to work — it is made, it stops, it goes out — and this is
- * the first of them. The barrier beside it and the crates beyond it are
- * both on the floor because the five bays on the wall could not say what
- * they say; this one is on the floor for the opposite reason — it is the
- * one stage of the pipeline that is in here, and the wall gave up its bay
- * to it (`wallLanes`) rather than print the same number twice.
+ * The five things standing in a row across the middle of the floor are
+ * what happens to work — it waits, it is made, it stops, it is checked, it
+ * goes out — and this is the second of them, taking its stock off the rack
+ * at the head of the line. The barrier beside it and the crates at the far
+ * end are on the floor because no bay on the wall could say what they say;
+ * this one is on the floor for the opposite reason — it is a stage of the
+ * pipeline, and the wall gave up its bay to it (`wallLanes`) rather than
+ * print the same number twice. Two more stages have since done the same,
+ * either side of it.
  *
- * **It is the lane less what is roadblocked in it** — see `countInHand`.
+ * **It is the lane less what is roadblocked in it** — see `countUnblocked`,
+ * which all three of the line's stages are under.
  * The barrier a foot to its right is work that has stopped, and a card
  * that has stopped is not a card being worked on, so a stuck card standing
  * in this lane was being counted by both of them. Hammer Time is the board
@@ -41,16 +43,18 @@ import { ink, MARKER_DARK, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMark
  * anybody changes how fast the line runs, which is the sort of thing only
  * standing in the room would catch.
  *
- * Purple, because that is the colour the third bay lights in the default
- * arrangement — the crates are green for the reason the last bay is, and
- * this is the same argument at the other end of the plate.
+ * Purple, because that is the colour the third bay lit before this stage
+ * came off the wall — the rack before it is the second bay's blue and the
+ * rig beyond the barrier is the last one's green, all three by the same
+ * argument. The crates are the exception and say why: a despatch was never
+ * a lane, so it is off the plate's scale altogether.
  *
- * Nothing is up when nothing is in hand, which is the rule all four of
+ * Nothing is up when nothing is in hand, which is the rule all six of
  * these are under: a machine standing idle with a 0 over it is a thing
  * somebody has to walk up to in order to find out there is nothing in it.
  *
  * The plate over it, the timer under it and the beat when the figure moves
- * are `systems/FloorMarker`, as they are for the other three.
+ * are `systems/FloorMarker`, as they are for the other five.
  */
 
 /** The colour the WIP bay lights in on the plate over the machine. */
@@ -74,11 +78,11 @@ const FRAME = 0x2a2a3e;
 /**
  * The picture, measured up from the floor it stands on.
  *
- * Fifty-six tall under a forty-pixel plate, which is what the barrier, the
- * crates and the beacon all stand: the things on a project room's floor
- * are the same height on purpose, and three of them in a row is exactly
- * when that starts to matter — a line whose middle is taller than its ends
- * reads as three objects rather than as one line.
+ * Fifty-six tall under a forty-pixel plate, which is what every other
+ * thing on this floor stands: they are the same height on purpose, and
+ * five of them in a row is exactly when that starts to matter — a line
+ * whose middle is taller than its ends reads as five objects rather than
+ * as one line.
  *
  * What fills that height is a **hopper on the left and a press portal over
  * the belt**, which is the silhouette a machine has. The first attempt
@@ -217,7 +221,7 @@ const WORD = "WIP";
 export const MACHINE: FloorMarkerSpec = {
   ink: WORKING,
   body: BODY,
-  count: countWip,
+  count: (flow) => flow.wip,
   build(scene, into) {
     // The legs and the belt everything else stands on, in the darkest of
     // the three tones: what is underneath is furniture, and the machine

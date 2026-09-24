@@ -5,22 +5,24 @@ import {
   FLOW_COLOURS,
   NO_LANE,
   countDeployed,
-  countInHand,
   countIncidents,
   countRoadblocks,
-  countWip,
+  countUnblocked,
+  floorLanes,
   flowBars,
   flowFigure,
   flowRows,
   isDeployed,
   isIncident,
+  isRefined,
   isRoadblock,
+  isTesting,
   isWip,
   laneId,
   laneShort,
+  standsOnFloor,
   toFlow,
   wallLanes,
-  wipLane,
 } from "../flow";
 
 /** A board of named lists holding that many cards apiece. */
@@ -472,16 +474,15 @@ describe("counting a board's incidents", () => {
  * Work in hand, which is what the machine at the head of the room's
  * production line is making.
  *
- * The odd one of the four things standing on that floor: the other three
- * are counted off the whole board precisely because none of them is a
- * stage of it, and this one is a stage — the stage — so which list it is
- * is read off the five the building declared rather than asked of the
- * board.
+ * One of the three stations on that line that are **stages**: the barrier,
+ * the crates and the beacon are counted off the whole board precisely
+ * because none of them is a stage of it, and these three are, so which
+ * list each one is is read off the lanes the building declared rather than
+ * asked of the board.
  *
- * And it is that lane **less what is roadblocked in it**, which is the
- * other thing that makes it odd: the barrier standing beside the machine
- * counts the same cards, and a card cannot both have stopped and be in
- * hand.
+ * And each is that lane **less what is roadblocked in it**, which is the
+ * other thing that makes them odd: the barrier standing among them counts
+ * the same cards, and a card cannot both have stopped and be in hand.
  */
 describe("counting what a board has in hand", () => {
   /**
@@ -516,8 +517,12 @@ describe("counting what a board has in hand", () => {
       board({ Backlog: 4, Refined: 2, "In Progress": 3, "In Review": 1, Testing: 2 }),
       LANES,
     );
-    expect(countWip(flow)).toBe(3);
-    expect(wipLane(flow)?.short).toBe("WIP");
+    expect(flow.wip).toBe(3);
+    expect(floorLanes(flow).map((lane) => lane.name)).toEqual([
+      "Refined",
+      "In Progress",
+      "Testing",
+    ]);
   });
 
   /**
@@ -532,8 +537,8 @@ describe("counting what a board has in hand", () => {
       board({ Backlog: 4, Refined: 2, "In Review": 1, Testing: 2, Doing: 9 }),
       LANES,
     );
-    expect(countWip(flow)).toBe(0);
-    expect(wipLane(flow)).toBeNull();
+    expect(flow.wip).toBe(0);
+    expect(floorLanes(flow).map((lane) => lane.name)).not.toContain("In Progress");
   });
 
   /**
@@ -544,14 +549,14 @@ describe("counting what a board has in hand", () => {
   it("counts nothing where the board has no such lane", () => {
     const flow = toFlow(board({ Backlog: 4, Refined: 2, "In Review": 1, Testing: 2 }), LANES);
     expect(flow.lanes.find((lane) => lane.short === "WIP")?.missing).toBe(true);
-    expect(countWip(flow)).toBe(0);
+    expect(flow.wip).toBe(0);
   });
 
   /** A building naming its own lanes gets the same answer. */
   it("finds it wherever the building put it in the order", () => {
     const lanes = ["Ideas", "Doing", "Shipped"];
     const flow = toFlow(board({ Ideas: 1, Doing: 7, Shipped: 3 }), lanes);
-    expect(countWip(flow)).toBe(7);
+    expect(flow.wip).toBe(7);
   });
 
   /**
@@ -578,7 +583,7 @@ describe("counting what a board has in hand", () => {
     const flow = toFlow(view, LANES);
     expect(flow.lanes.find((lane) => lane.short === "WIP")?.count).toBe(9);
     expect(flow.blocked).toBe(3);
-    expect(countWip(flow)).toBe(6);
+    expect(flow.wip).toBe(6);
   });
 
   /**
@@ -591,7 +596,7 @@ describe("counting what a board has in hand", () => {
     const flow = toFlow(labelled({ "In Progress": [["Roadblocked"], [], []] }), LANES);
     expect(flow.lanes.find((lane) => lane.short === "WIP")?.count).toBe(3);
     expect(flow.total).toBe(3);
-    expect(countWip(flow)).toBe(2);
+    expect(flow.wip).toBe(2);
   });
 
   /** A card stuck somewhere else is the barrier's business and not the machine's. */
@@ -601,7 +606,7 @@ describe("counting what a board has in hand", () => {
       LANES,
     );
     expect(flow.blocked).toBe(2);
-    expect(countWip(flow)).toBe(3);
+    expect(flow.wip).toBe(3);
   });
 
   /**
@@ -611,40 +616,40 @@ describe("counting what a board has in hand", () => {
    */
   it("stops the machine where every card in the lane is stuck", () => {
     const flow = toFlow(labelled({ "In Progress": [["Blocked"], ["Roadblock"]] }), LANES);
-    expect(countWip(flow)).toBe(0);
+    expect(flow.wip).toBe(0);
     expect(flow.blocked).toBe(2);
   });
 
   /** Off the board rather than off the lane, so it answers the board directly too. */
   it("counts the lane off a board it is handed", () => {
     const view = labelled({ Doing: [["Roadblocked"], [], []], Backlog: [["Roadblocked"]] });
-    expect(countInHand(view, ["Backlog", "Doing"])).toBe(2);
-    expect(countInHand(view, ["Backlog"])).toBe(0);
+    expect(countUnblocked(view, ["Backlog", "Doing"], isWip)).toBe(2);
+    expect(countUnblocked(view, ["Backlog"], isWip)).toBe(0);
   });
 });
 
 /**
- * The bays the plate draws: everything declared, less the stage the
- * machine on the floor of the room is making.
+ * The bays the plate draws: everything declared, less the three stages
+ * standing on the floor of the room.
  *
- * The machine went up with the number on a plate over it, and a bay six
- * feet above it saying the same thing is one count printed twice. What is
+ * Each of them went up with its number on a plate over it, and a bay six
+ * feet above saying the same thing is one count printed twice. What is
  * left is the stages work **waits** in, which is a sharper division than
- * five bars one of which happens to have a machine under it.
+ * five bars three of which happen to have something under them.
  */
 describe("the lanes the wall letters", () => {
   const five = { Backlog: 4, Refined: 2, "In Progress": 3, "In Review": 1, Testing: 2 };
 
-  it("leaves work in hand off the wall and keeps the rest in order", () => {
+  it("leaves the three on the floor off the wall and keeps the rest in order", () => {
     const lanes = wallLanes(toFlow(board(five), LANES));
-    expect(lanes.map((lane) => lane.short)).toEqual(["BACKLOG", "REFINED", "REVIEW", "TESTING"]);
+    expect(lanes.map((lane) => lane.short)).toEqual(["BACKLOG", "REVIEW"]);
   });
 
   /**
-   * By the name rather than by `wipLane`, which answers null for a lane
-   * the board has not got. The rule is that this stage is not on the wall,
-   * and a lane the board has lost is no more the wall's business than one
-   * it has — otherwise an archived list would put the bay back.
+   * By the name rather than by asking which lanes the board has got. The
+   * rule is that these stages are not on the wall, and a lane the board has
+   * lost is no more the wall's business than one it has — otherwise an
+   * archived list would put the bay back.
    */
   it("leaves it off even where the board has no such list", () => {
     const flow = toFlow(board({ Backlog: 4, Refined: 2, "In Review": 1, Testing: 2 }), LANES);
@@ -652,8 +657,8 @@ describe("the lanes the wall letters", () => {
     expect(wallLanes(flow).map((lane) => lane.short)).not.toContain("WIP");
   });
 
-  /** However the board spells it, which is what the machine is found by. */
-  it("follows the same word the machine does", () => {
+  /** However the board spells it, which is what the stations are found by. */
+  it("follows the same words the stations do", () => {
     const flow = toFlow(board({ Ideas: 1, Doing: 7, Shipped: 3 }), ["Ideas", "Doing", "Shipped"]);
     expect(wallLanes(flow).map((lane) => lane.short)).toEqual(["IDEAS", "SHIPPED"]);
   });
@@ -670,15 +675,152 @@ describe("the lanes the wall letters", () => {
 
   /**
    * The bars are untouched: still a share of every declared lane, so the
-   * share of the plate left bare is what the machine is making. Scaling
-   * them to the four would say the work in hand is not in flight, which is
-   * the one thing about it that is certain.
+   * share of the plate left bare is what the three stations are holding.
+   * Scaling them to the two drawn would say the work on the floor is not
+   * in flight, which is the one thing about it that is certain.
    */
-  it("leaves the bars a share of the work in flight, machine included", () => {
+  it("leaves the bars a share of the work in flight, the floor included", () => {
     const flow = toFlow(board(five), LANES);
     const bars = flowBars(flow);
     const drawn = wallLanes(flow).reduce((sum, lane) => sum + bars[lane.id], 0);
-    expect(drawn).toBeCloseTo(9 / 12);
+    expect(drawn).toBeCloseTo(5 / 12);
     expect(bars[laneId("In Progress")]).toBeCloseTo(3 / 12);
+  });
+});
+
+/**
+ * The two stages that joined the machine on the floor.
+ *
+ * Both are read exactly as work in hand is — off the lanes the building
+ * declared, and less whatever is roadblocked standing in them — so what is
+ * worth pinning here is the part that is theirs: the nets, which are the
+ * narrowest in the file and decide two things apiece, since a name folded
+ * in wrongly both feeds a station and unletters a bay.
+ */
+describe("the stages that stand on the floor", () => {
+  it("reads the stage work is refined and waiting in", () => {
+    for (const name of ["Refined", " refined ", "REFINED", "Refine"]) {
+      expect(isRefined(name)).toBe(true);
+    }
+    /*
+     * Ready is the most overloaded word on a kanban board and `laneShort`
+     * carrying a shortening for it is about lettering a bay rather than
+     * claiming a lane. Refinement is a guess at a board nobody has seen.
+     */
+    for (const name of ["Ready", "Ready for Dev", "Ready to Deploy", "Refinement", "Backlog"]) {
+      expect(isRefined(name)).toBe(false);
+    }
+  });
+
+  it("reads the stage work is checked in", () => {
+    for (const name of ["Testing", " testing ", "Test", "Tests"])
+      expect(isTesting(name)).toBe(true);
+    /*
+     * Done is the sharpest of these calls: `isDeployed` records that these
+     * boards kept such a list until it was renamed to Testing, so the word
+     * has moved here — and a pipeline of Backlog, Refined, In Progress,
+     * Testing and Done is still an entirely ordinary five, which is two
+     * declared lanes answering one station.
+     */
+    for (const name of ["Done", "QA", "Ready for Test", "In Review", "Tested and shipped"]) {
+      expect(isTesting(name)).toBe(false);
+    }
+  });
+
+  /**
+   * No two nets share a word, which is the property `countUnblocked` leans
+   * on three times over — a lane cannot be both a stage on the floor and
+   * the thing standing beside it. Asserted rather than left to be
+   * rediscovered: a station counting a despatch, or two stations counting
+   * one lane, would take a bay off the wall and put the count in the wrong
+   * place with nothing anywhere to say so.
+   */
+  it("keeps every net to itself", () => {
+    const nets = { isRefined, isWip, isTesting, isRoadblock, isDeployed, isIncident };
+    const names = [
+      ...DEFAULT_FLOW_LANES,
+      "Refine",
+      "Doing",
+      "WIP",
+      "Test",
+      "Blocked",
+      "Roadblocked",
+      "Production",
+      "Deployed",
+      "Server Incident",
+      "Incidents",
+    ];
+    for (const name of names) {
+      const claimed = Object.entries(nets).filter(([, is]) => is(name));
+      expect(
+        claimed.length,
+        `${name} claimed by ${claimed.map(([k]) => k).join(", ")}`,
+      ).toBeLessThan(2);
+    }
+  });
+
+  /** Only the three of them, and only where the building declared the lane. */
+  it("knows which lanes stand on the floor", () => {
+    for (const name of ["Refined", "In Progress", "Testing"]) {
+      expect(standsOnFloor(name)).toBe(true);
+    }
+    for (const name of ["Backlog", "In Review", "Production", "Server Incident"]) {
+      expect(standsOnFloor(name)).toBe(false);
+    }
+  });
+
+  it("counts each of them off the lanes the building declared", () => {
+    const flow = toFlow(
+      board({ Backlog: 4, Refined: 2, "In Progress": 3, "In Review": 1, Testing: 5 }),
+      LANES,
+    );
+    expect([flow.refined, flow.wip, flow.testing]).toEqual([2, 3, 5]);
+  });
+
+  /**
+   * The barrier counts a stuck card wherever it is standing, so every stage
+   * with a thing of its own on the floor owes it the same subtraction the
+   * machine has always made. Two cards stuck in Refined and one in Testing:
+   * three on the barrier, and the two racks read one and two rather than
+   * three and three, which is the row accounting for each card once.
+   */
+  it("leaves a stuck card to the barrier wherever on the line it stopped", () => {
+    const view = labelled({
+      Refined: [["Roadblocked"], ["Blocked"], []],
+      "In Progress": [[], []],
+      Testing: [["Roadblock"], [], []],
+    });
+    const flow = toFlow(view, LANES);
+    expect(flow.blocked).toBe(3);
+    expect([flow.refined, flow.wip, flow.testing]).toEqual([1, 2, 2]);
+  });
+
+  /**
+   * And the lanes themselves are untouched: a bar is that stage's share of
+   * the work in flight and a stuck card is still standing in the stage,
+   * which is the whole reason the barrier is not a bay. Only the things on
+   * the floor answer the narrower question.
+   */
+  it("leaves the lanes saying what stands in the list", () => {
+    const flow = toFlow(labelled({ Refined: [["Roadblocked"], [], []] }), LANES);
+    expect(flow.lanes.find((lane) => lane.short === "REFINED")?.count).toBe(3);
+    expect(flow.refined).toBe(2);
+  });
+
+  /**
+   * Two lists a board calls the same stage are both that stage, which is
+   * `countByList`'s rule one level up. Dropping one would put less work on
+   * the floor than there is on the board.
+   */
+  it("sums two declared lanes answering one station", () => {
+    const view = labelled({ Test: [[], []], Testing: [[], [], ["Blocked"]] });
+    expect(countUnblocked(view, ["Test", "Testing"], isTesting)).toBe(4);
+  });
+
+  /** A station whose lane the board has not got stands nowhere at all. */
+  it("names no station for a lane the board has lost", () => {
+    const flow = toFlow(board({ Backlog: 4, "In Review": 1 }), LANES);
+    expect(floorLanes(flow)).toEqual([]);
+    expect([flow.refined, flow.wip, flow.testing]).toEqual([0, 0, 0]);
   });
 });
