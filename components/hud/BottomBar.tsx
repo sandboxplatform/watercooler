@@ -135,91 +135,121 @@ export default function BottomBar({ peopleOpen, onTogglePeople }: BottomBarProps
         : (voice.reason ??
           `${voice.withMic > 0 ? `${inChat}. ` : ""}Join Global Chat: everyone in it hears you, wherever in the world they are standing. On a controller, hold ${talk} to talk.`);
 
+  /**
+   * Why the pill went red, written where a phone can read it.
+   *
+   * The reason was only ever the pill's `title`, and a touchscreen has no
+   * hover: on a handset the microphone was refused, the pill went red, and
+   * nothing anywhere said why or what to do about it. It stays up until it
+   * is tapped away — it is a setting somebody has to go and change, which
+   * takes longer to read than a toast lasts — and pressing the pill again
+   * brings it back if the retry is refused too.
+   */
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const refused = voice.status === "denied" || voice.status === "unsupported";
+  const notice = refused && voice.reason && voice.reason !== dismissed ? voice.reason : null;
+
   return (
-    <div className="layout-bottombar">
-      {/*
+    <>
+      {notice && (
+        <button
+          type="button"
+          className="pixel-panel hud-mic-notice"
+          role="alert"
+          onClick={() => setDismissed(notice)}
+          title="Dismiss"
+        >
+          <MicOff size={12} className="hud-mic-notice__icon" />
+          <span>{notice}</span>
+        </button>
+      )}
+      <div className="layout-bottombar">
+        {/*
         The count is a door, and it shuts as well as opens: pressing it again
         puts the column away. The button at the head of the column was the
         only way back from a list opened down here.
       */}
-      <button
-        type="button"
-        className={`hud-pill hud-pill--connection hud-pill--button${
-          peopleOpen ? " hud-pill--on" : ""
-        }`}
-        onClick={onTogglePeople}
-        /* Tab is the same door, and the pill is the only place it is written
+        <button
+          type="button"
+          className={`hud-pill hud-pill--connection hud-pill--button${
+            peopleOpen ? " hud-pill--on" : ""
+          }`}
+          onClick={onTogglePeople}
+          /* Tab is the same door, and the pill is the only place it is written
            down: the HUD has no key legend to put it in. */
-        title={
-          peopleOpen
-            ? "Click, or press Tab, to put the list away."
-            : online.length > 0
-              ? `${
-                  online.length === 1 ? "1 person is" : `${online.length} people are`
-                } in the world. Click, or press Tab, to see who and where.`
-              : "Click, or press Tab, to see who is in the world, and where."
-        }
-        aria-expanded={peopleOpen}
-        aria-label="Who is in the world"
-      >
-        <span className={`pixel-dot pixel-dot--${online.length > 0 ? "green" : "gray"}`} />
-        <span>Online{online.length > 0 ? ` (${online.length})` : ""}</span>
-      </button>
-      <button
-        type="button"
-        className={`hud-pill hud-pill--metric hud-pill--button hud-mic${
-          micOn ? " hud-mic--on" : " hud-mic--icon"
-        }${voice.speaking ? " hud-mic--speaking" : ""}${
-          voice.status === "requesting" ? " hud-pill--dim" : ""
-        }${voice.status === "denied" || voice.status === "unsupported" ? " hud-mic--blocked" : ""}`}
-        onClick={() => void voiceChat.toggle()}
-        title={micTitle}
-        aria-pressed={micOn}
-        aria-label={micOn ? `Leave Global Chat — ${inChat}` : "Join Global Chat"}
-      >
-        {micOn ? <Mic size={10} /> : <MicOff size={10} />}
-        {/* Off, the icon is the whole pill; on, the chat is worth naming and counting. */}
-        {micOn && <span>Global Chat ({reached})</span>}
-      </button>
-      {/*
+          title={
+            peopleOpen
+              ? "Click, or press Tab, to put the list away."
+              : online.length > 0
+                ? `${
+                    online.length === 1 ? "1 person is" : `${online.length} people are`
+                  } in the world. Click, or press Tab, to see who and where.`
+                : "Click, or press Tab, to see who is in the world, and where."
+          }
+          aria-expanded={peopleOpen}
+          aria-label="Who is in the world"
+        >
+          <span className={`pixel-dot pixel-dot--${online.length > 0 ? "green" : "gray"}`} />
+          <span>Online{online.length > 0 ? ` (${online.length})` : ""}</span>
+        </button>
+        <button
+          type="button"
+          className={`hud-pill hud-pill--metric hud-pill--button hud-mic${
+            micOn ? " hud-mic--on" : " hud-mic--icon"
+          }${voice.speaking ? " hud-mic--speaking" : ""}${
+            voice.status === "requesting" ? " hud-pill--dim" : ""
+          }${voice.status === "denied" || voice.status === "unsupported" ? " hud-mic--blocked" : ""}`}
+          onClick={() => {
+            setDismissed(null);
+            void voiceChat.toggle();
+          }}
+          title={micTitle}
+          aria-pressed={micOn}
+          aria-label={micOn ? `Leave Global Chat — ${inChat}` : "Join Global Chat"}
+        >
+          {micOn ? <Mic size={10} /> : <MicOff size={10} />}
+          {/* Off, the icon is the whole pill; on, the chat is worth naming and counting. */}
+          {micOn && <span>Global Chat ({reached})</span>}
+        </button>
+        {/*
         Sprinting, beside the microphone: the icon and nothing else, lit
         while the mode is on. The bottom bar is glanced at rather than read,
         and a switch with two faces has already said which it is in — a word
         beside it would be the same fact printed twice, in the place with
         least room for it.
       */}
-      <button
-        type="button"
-        className={`hud-pill hud-pill--metric hud-pill--button hud-sprint${
-          sprinting ? " hud-sprint--on" : ""
-        }`}
-        onClick={() => gameEvents.emit("sprint-pressed")}
-        title={
-          sprinting
-            ? "Sprinting. Click, or press left Shift, to walk."
-            : "Walking. Click, or press left Shift, to sprint."
-        }
-        aria-pressed={sprinting}
-        aria-label={sprinting ? "Stop sprinting" : "Sprint"}
-      >
-        <Footprints size={10} />
-      </button>
-      {meetings.length > 0 && (
-        <div
-          className="hud-pill hud-pill--metric hud-pill--meeting"
-          title={meetings
-            .map((m) => `${m.where} — called by ${m.host}, ${meetingFor(m.since)}`)
-            .join("\n")}
+        <button
+          type="button"
+          className={`hud-pill hud-pill--metric hud-pill--button hud-sprint${
+            sprinting ? " hud-sprint--on" : ""
+          }`}
+          onClick={() => gameEvents.emit("sprint-pressed")}
+          title={
+            sprinting
+              ? "Sprinting. Click, or press left Shift, to walk."
+              : "Walking. Click, or press left Shift, to sprint."
+          }
+          aria-pressed={sprinting}
+          aria-label={sprinting ? "Stop sprinting" : "Sprint"}
         >
-          <Users size={10} />
-          <span>
-            {meetings.length === 1
-              ? `meeting · ${meetings[0].where.split(" · ").slice(-1)[0]}`
-              : `${meetings.length} meetings`}
-          </span>
-        </div>
-      )}
-      {/*
+          <Footprints size={10} />
+        </button>
+        {meetings.length > 0 && (
+          <div
+            className="hud-pill hud-pill--metric hud-pill--meeting"
+            title={meetings
+              .map((m) => `${m.where} — called by ${m.host}, ${meetingFor(m.since)}`)
+              .join("\n")}
+          >
+            <Users size={10} />
+            <span>
+              {meetings.length === 1
+                ? `meeting · ${meetings[0].where.split(" · ").slice(-1)[0]}`
+                : `${meetings.length} meetings`}
+            </span>
+          </div>
+        )}
+        {/*
         Only when there is a controller to talk about.
 
         It hung there always, dimmed, reading `no pad` — which is the state
@@ -228,19 +258,20 @@ export default function BottomBar({ peopleOpen, onTogglePeople }: BottomBarProps
         plugged in was not plugged in. Plugging one in is the news, and it
         is what puts the pill up; the controller check goes with it.
       */}
-      {pad && (
-        <button
-          type="button"
-          className="hud-pill hud-pill--metric hud-pill--button"
-          onClick={() => setCheckOpen(true)}
-          title={`${pad.id}\nXbox layout: stick or d-pad walks · A talks to people and presses buttons · B backs out · LB RB turn the panels · View closes · hold ${talk} to talk\nClick for the controller check.`}
-          aria-label="Controller check"
-        >
-          <Gamepad2 size={10} />
-          <span>{`${pad.layout} · hold ${talk} to talk`}</span>
-        </button>
-      )}
-      {checkOpen && <ControllerCheck onClose={() => setCheckOpen(false)} />}
-    </div>
+        {pad && (
+          <button
+            type="button"
+            className="hud-pill hud-pill--metric hud-pill--button"
+            onClick={() => setCheckOpen(true)}
+            title={`${pad.id}\nXbox layout: stick or d-pad walks · A talks to people and presses buttons · B backs out · LB RB turn the panels · View closes · hold ${talk} to talk\nClick for the controller check.`}
+            aria-label="Controller check"
+          >
+            <Gamepad2 size={10} />
+            <span>{`${pad.layout} · hold ${talk} to talk`}</span>
+          </button>
+        )}
+        {checkOpen && <ControllerCheck onClose={() => setCheckOpen(false)} />}
+      </div>
+    </>
   );
 }

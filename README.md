@@ -762,6 +762,11 @@ hangs over their head — grey while they are listening, green while their
 voice is coming through. Your own character wears one as well, so the map
 says where you stand in the conversation without looking down at the bar.
 
+If the button goes red, the browser refused the microphone, and a note over
+the bar says why — usually that the site is blocked, which is changed from
+the icon beside the address. Voice needs an `https://` address: a phone
+pointed at a dev server by its LAN address gets no microphone at all.
+
 It was proximity voice before, one conversation per room with each voice
 faded by distance. Distance stops meaning anything once the chat crosses
 rooms, since every map has coordinates of its own.

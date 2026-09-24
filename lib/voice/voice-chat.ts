@@ -34,8 +34,32 @@ import type { OnlinePerson, VoiceSignal } from "../presence-types";
 import { STUN_URL, TURN_URL } from "./ice";
 import { offers } from "./proximity";
 import { rememberVoice, voiceWasOn } from "./remember";
+import { refusalReason, unsupportedReason, type MicError } from "./refusal";
 
 const log = createLogger("Voice");
+
+/** How long to wait on the permission lookup before explaining without it. */
+const PERMISSION_WAIT_MS = 1_000;
+
+/**
+ * What the browser says this site may do with a microphone, where it will
+ * say. Firefox throws on the name, and a web view may not answer at all —
+ * which is why it is raced: a lookup that never settles would leave the
+ * pill saying "Asking for the microphone…" over a refusal already made.
+ */
+async function microphonePermission(): Promise<PermissionState | null> {
+  try {
+    const query = navigator.permissions?.query({ name: "microphone" as PermissionName });
+    if (!query) return null;
+    const status = await Promise.race([
+      query,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), PERMISSION_WAIT_MS)),
+    ]);
+    return status?.state ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /** For a retry whose failure the counts already report. */
 const noted = () => {};
@@ -314,26 +338,30 @@ class VoiceChat {
    */
   async enable({ remember = true }: { remember?: boolean } = {}) {
     if (this.view.status === "on" || this.view.status === "requesting") return;
-    if (typeof RTCPeerConnection === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      this.publish({ status: "unsupported", reason: "This browser cannot do voice chat." });
+    const unsupported = unsupportedReason({
+      secure: typeof window === "undefined" || window.isSecureContext !== false,
+      hasApi: typeof RTCPeerConnection !== "undefined" && !!navigator.mediaDevices?.getUserMedia,
+    });
+    if (unsupported) {
+      this.publish({ status: "unsupported", reason: unsupported });
       return;
     }
     this.publish({ status: "requesting", reason: null });
     const turn = ++this.turn;
+    const askedAt = Date.now();
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
     } catch (err) {
-      const name = (err as Error)?.name;
-      const reason =
-        name === "NotAllowedError"
-          ? "Microphone access was refused. Allow it in the browser and try again."
-          : name === "NotFoundError"
-            ? "No microphone was found."
-            : `The microphone could not be opened: ${(err as Error)?.message ?? err}`;
-      log.warn(reason);
+      // Timed before the permission is looked up, which is its own await.
+      const elapsedMs = Date.now() - askedAt;
+      const reason = refusalReason(err as MicError, {
+        permission: await microphonePermission(),
+        elapsedMs,
+      });
+      log.warn(`${reason} (${(err as Error)?.name}: ${(err as Error)?.message}, ${elapsedMs}ms)`);
       // Only if this is still the switching-on in progress: a refusal that
       // arrives after the person already gave up must not overwrite "off"
       // with a red error they did not ask to see.

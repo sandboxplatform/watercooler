@@ -3008,6 +3008,32 @@
   color: var(--pixel-red);
 }
 
+/* Why it is red, over the bar. The pill's tooltip is the only other place
+   that is written, and a touchscreen has no hover. Clear of the action
+   button on the right, which stands just above the bar on a phone. */
+.hud-mic-notice {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(380px, calc(100% - 96px));
+  padding: 8px 10px;
+  border-color: var(--pixel-red);
+  font-size: var(--fs-lg);
+  line-height: 1.4;
+  text-align: left;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.hud-mic-notice__icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--pixel-red);
+}
+
 /* ── Files attached to a task ────────────────────────── */
 
 .hud-attachments {

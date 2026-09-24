@@ -1085,6 +1085,30 @@ connect however well any of this behaves, and the answer is the TURN relay
 above, at **build** time. Everything here is about making sure that is the
 only reason left.
 
+**A refused microphone says why, and says it where a phone can read it.**
+On a handset the pill went red with no prompt and nothing else: the reason
+was only ever the pill's `title`, and a touchscreen has no hover. It is a
+notice over the bottom bar now (`.hud-mic-notice` in `BottomBar`), up until
+it is tapped away, since what it says is a setting somebody has to go and
+change. Pressing the pill again retries and brings it back if that is
+refused too.
+
+The sentence had the same fault from the other end. Nearly every refusal
+came out as "access was refused", addressed to somebody who had been asked
+and said no — and on a phone nobody usually has been. `lib/voice/refusal.ts`
+takes the cases apart by what distinguishes them:
+
+| Evidence                              | Means                                                   |
+| ------------------------------------- | ------------------------------------------------------- |
+| `isSecureContext` false               | Plain http — a phone on a dev server's LAN address      |
+| `by system` in the message            | The device has the mic off for Chrome, not the site     |
+| Refused inside `UNASKED_MS`           | No prompt was shown: blocked, or another app's web view |
+| `navigator.permissions` says `denied` | The site is set to Block, and where to change it        |
+
+The permission lookup is raced against a second: Firefox throws on the
+name, which is fine, and a web view may never answer, which would have left
+the pill saying it was still asking over a refusal already made.
+
 `lib/voice/__tests__/handshake.test.ts` pins all of it against a stub
 `RTCPeerConnection`: which messages go out and when, not WebRTC.
 
