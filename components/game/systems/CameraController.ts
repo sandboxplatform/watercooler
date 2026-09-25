@@ -9,7 +9,7 @@ import {
   ZOOM_SAVE_DEBOUNCE_MS,
   CAMERA_DRAG_THRESHOLD,
 } from "@/lib/constants";
-import { frameZoom, reopenZoom, resizedZoom, zoomFloor } from "@/lib/camera";
+import { frameZoom, reopenZoom } from "@/lib/camera";
 import { loadWorldZoom, saveWorldZoom } from "@/lib/persistence";
 
 export class CameraController {
@@ -46,16 +46,17 @@ export class CameraController {
    * The zoom the wheel or a pinch last settled on in this scene, or null
    * while nobody has touched it.
    *
-   * What a resize holds to, in a room exactly as on the map — see
-   * `resizedZoom`. Only for the life of the scene: arriving somewhere is
-   * still a fit, and a room still opens fitted every time. The world map
-   * starts it off from what it remembered, which is the one place a choice
-   * outlives the scene it was made in.
+   * What a resize holds to, in a room exactly as on the map. A resize is
+   * not an arrival: it is the People column opening on Tab, its handle being
+   * dragged, a phone turned on its side — and refitting on every one of them
+   * threw away a zoom the person was in the middle of using. On Operations
+   * that meant pulling back to see the whole corridor, opening the column to
+   * see who was about, and being snapped straight back in.
    *
-   * Kept unclamped. A wider window pulls the camera in to what it allows —
-   * the whole place is on screen sooner — and the window narrowing again
-   * should hand the choice back rather than leave the camera wherever the
-   * wide one put it.
+   * Only for the life of the scene: arriving somewhere is still a fit, and a
+   * room still opens fitted every time. The world map starts it off from
+   * what it remembered, which is the one place a choice outlives the scene
+   * it was made in.
    */
   private chosen: number | null = null;
 
@@ -83,7 +84,7 @@ export class CameraController {
     cam.setZoom(ZOOM_DEFAULT);
     if (this.remembersZoom) {
       const fitted = frameZoom(cam.width, cam.height, ZOOM_OPEN_MIN, ZOOM_MAX);
-      this.chosen = reopenZoom(loadWorldZoom(), fitted, this.floor(cam), ZOOM_MAX);
+      this.chosen = reopenZoom(loadWorldZoom(), fitted, ZOOM_MIN, ZOOM_MAX);
     }
     this.applyFillZoom(cam);
     this.updateCameraBounds();
@@ -128,27 +129,17 @@ export class CameraController {
   }
 
   /**
-   * How far out the wheel and a pinch may go here: until the whole place is
-   * on screen, and no further than `ZOOM_MIN`. The same rule in a lobby, on
-   * Operations and on the world map — see `zoomFloor`.
-   */
-  private floor(cam: Phaser.Cameras.Scene2D.Camera): number {
-    return zoomFloor(cam.width, cam.height, this.mapWidth, this.mapHeight, ZOOM_MIN, ZOOM_MAX);
-  }
-
-  /**
    * Fit the lobby to the viewport. Called at start and whenever the
    * viewport changes. Every place starts at this scale, so people and
-   * signs are the same size out of doors as in; anywhere bigger than the
-   * screen, the wheel can then go further out.
+   * signs are the same size out of doors as in; the wheel and a pinch then
+   * go between `ZOOM_MIN` and `ZOOM_MAX` in every place alike.
    *
    * Once somebody has chosen a zoom — or the world map has remembered one —
-   * a resize keeps it instead, clamped to what the new viewport allows.
-   * Refitting would throw away a setting the person is still using.
+   * a resize keeps it instead. Refitting would throw away a setting the
+   * person is still using.
    */
   private applyFillZoom(cam: Phaser.Cameras.Scene2D.Camera) {
-    const fitted = frameZoom(cam.width, cam.height, ZOOM_OPEN_MIN, ZOOM_MAX);
-    const next = resizedZoom(this.chosen, fitted, this.floor(cam), ZOOM_MAX);
+    const next = this.chosen ?? frameZoom(cam.width, cam.height, ZOOM_OPEN_MIN, ZOOM_MAX);
     if (next !== cam.zoom) cam.setZoom(next);
   }
 
@@ -187,11 +178,7 @@ export class CameraController {
       e.preventDefault();
       const delta = e.ctrlKey ? e.deltaY * 3 : e.deltaY;
       const oldZoom = cam.zoom;
-      const newZoom = Phaser.Math.Clamp(
-        oldZoom - delta * ZOOM_SENSITIVITY,
-        this.floor(cam),
-        ZOOM_MAX,
-      );
+      const newZoom = Phaser.Math.Clamp(oldZoom - delta * ZOOM_SENSITIVITY, ZOOM_MIN, ZOOM_MAX);
       if (newZoom === oldZoom) return;
 
       if (!this.cameraFollowing) {
@@ -269,7 +256,7 @@ export class CameraController {
       e.preventDefault();
 
       const gap = gapBetween(e.touches[0], e.touches[1]);
-      const next = Phaser.Math.Clamp((startZoom * gap) / startGap, this.floor(cam), ZOOM_MAX);
+      const next = Phaser.Math.Clamp((startZoom * gap) / startGap, ZOOM_MIN, ZOOM_MAX);
       if (next === cam.zoom) return;
 
       // Hold the ground between the fingers still, the way the wheel holds
@@ -360,11 +347,11 @@ export class CameraController {
     const mw = this.mapWidth;
     const mh = this.mapHeight;
 
-    // Centred. Slack appears around a room smaller than the lobby, and
-    // along one side of a place zoomed out until the whole of it is in view
-    // — a long floor is on screen end to end with floor above and below it.
-    // Either way it belongs in the middle of the screen, not pushed into a
-    // corner.
+    // Centred. Slack appears around any place zoomed out past its own size
+    // — a room smaller than the lobby, a lobby pulled back, a long floor seen
+    // end to end with background above and below it — and a place with
+    // background round it belongs in the middle of the screen, not pushed
+    // into a corner.
     const bx = viewW > mw ? -(viewW - mw) / 2 : 0;
     const by = viewH > mh ? -(viewH - mh) / 2 : 0;
     const bw = viewW > mw ? viewW : mw;

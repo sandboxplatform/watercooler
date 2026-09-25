@@ -13,6 +13,7 @@ vi.mock("phaser", () => ({
 }));
 
 const { CameraController } = await import("../CameraController");
+const { ZOOM_MAX, ZOOM_MIN } = await import("@/lib/constants");
 
 /**
  * The one thing about the camera worth a test, and it is not arithmetic —
@@ -176,31 +177,24 @@ describe("CameraController", () => {
     expect(stub.camera.zoom).toBe(chosen);
   });
 
-  it("pulls a chosen zoom in only as far as a wider viewport needs, and gives it back", () => {
+  /**
+   * The same range in every place. A lobby used to stop where the whole of
+   * it was on screen, which on a desktop is where it opens — so the wheel
+   * did nothing there at all.
+   */
+  it("lets a lobby go out as far as anywhere else", () => {
     const stub = stubScene();
     new CameraController(
       stub.scene as unknown as PhaserTypes.Scene,
       {} as PhaserTypes.Physics.Arcade.Sprite,
-      3504,
-      1344,
+      960,
+      912,
     ).init();
 
-    // All the way out: the whole floor across 1200 pixels.
-    for (let i = 0; i < 20; i++) stub.canvasEvents.emit("wheel", wheel(200));
-    const whole = stub.camera.zoom;
-    expect(3504 * whole).toBeCloseTo(1200);
-
-    // Twice as wide gets the whole floor on screen sooner, so that zoom is
-    // past its floor and the camera comes in to it — and narrowing again
-    // hands the choice back.
-    stub.camera.width = 2400;
-    stub.scale.emit("resize");
-    expect(stub.camera.zoom).toBeGreaterThan(whole);
-    // Whole on screen — at this shape it is the floor's height that runs out.
-    expect(stub.camera.zoom).toBeCloseTo(800 / 1344);
-    stub.camera.width = 1200;
-    stub.scale.emit("resize");
-    expect(stub.camera.zoom).toBe(whole);
+    for (let i = 0; i < 40; i++) stub.canvasEvents.emit("wheel", wheel(200));
+    expect(stub.camera.zoom).toBe(ZOOM_MIN);
+    for (let i = 0; i < 40; i++) stub.canvasEvents.emit("wheel", wheel(-200));
+    expect(stub.camera.zoom).toBe(ZOOM_MAX);
   });
 
   it("still refits a live scene on resize", () => {

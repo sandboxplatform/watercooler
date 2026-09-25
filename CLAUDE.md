@@ -4103,43 +4103,43 @@ so a call, in tests that call it several times over.
 and signs are the same size out of doors as in — never under `ZOOM_OPEN_MIN`,
 which is half size and where a phone opens.
 
-**And every place has the same range from there**, the world map included:
-the wheel and a pinch go in to `ZOOM_MAX` and out to `ZOOM_MIN`, and what
-stops a place short of the far end is only its own size. `zoomFloor` in
-`lib/camera.ts` is the one rule — out until the whole place is on screen and
-no further, since past that there is only background.
+**And every place has the same range from there**, the world map and a lobby
+alike: the wheel and a pinch go in to `ZOOM_MAX` and out to `ZOOM_MIN`, and
+nothing stops short of either. A place pulled back past its own size is drawn
+in the middle of the screen with background round it (`updateCameraBounds`).
 
 It used to be two rules and a narrower range. A room stopped at the lobby's
 fit, so Operations, seventy-three tiles of corridor, could only ever be looked
 at a lobby's width at a time; the world map stopped where it just filled the
-viewport, which is the wrong answer for anything long and thin; and a phone
-opened at the old floor of 0.5 and could not be pinched out at all. The
-opening floor is a constant of its own for that last reason: lowering the
-pinch's limit was not meant to open every room on a phone smaller.
+viewport; and a phone opened at the old floor of 0.5 and could not be pinched
+out at all. A rule in between was tried — out until the whole place is on
+screen, and no further — and taken out again: it left a lobby on a desktop
+with a wheel that did nothing, which reads as the zoom being broken rather
+than as there being nothing more to see. The opening floor is a constant of
+its own for the phone's sake: lowering the pinch's limit was not meant to open
+every room on a phone smaller.
 
 `LEGIBLE_MAX_SCALE` is tied to `ZOOM_MIN` by `legible.test.ts` — at a
 quarter zoom a name tag is drawn four times over to arrive at the size it was
 written, and a cap under that is lettering that vanishes exactly when
 somebody has stood back to look for it. Lower one, raise the other.
 
-Two things are not that:
+Three things beyond that:
 
 - **The world map opens where it was left.** `reopenZoom` in `lib/camera.ts`
   is the rule and `loadWorldZoom` the store, in the browser for the reason
   sprinting is — a door builds a whole new scene, which is exactly the moment
   this is for. The saved value is clamped rather than trusted, because the
-  zoom floor comes off the viewport and the window it was saved from may have
-  been another shape. Rooms are still fitted every time, which is the point of
+  range has moved between builds and a stored value is whatever the browser
+  held. Rooms are still fitted every time, which is the point of
   fitting them; campuses too.
 - **A resize is not an arrival.** Once the wheel or a pinch has chosen a
   zoom, the People column opening on Tab, its handle being dragged and a
-  phone turned round all keep it — `resizedZoom`, clamped to what the new
-  viewport allows. A room used to refit on every one of them, which on
-  Operations meant pulling back to see the whole corridor, opening the column
-  to see who was about, and being snapped straight back in. The choice is
-  `chosen` on the controller and lives as long as the scene: arriving
-  somewhere is still a fit. It is held unclamped, so a window that grows and
-  narrows again hands it back.
+  phone turned round all keep it. A room used to refit on every one of them,
+  which on Operations meant pulling back to see the whole corridor, opening
+  the column to see who was about, and being snapped straight back in. The
+  choice is `chosen` on the controller and lives as long as the scene:
+  arriving somewhere is still a fit.
 - **Pinch zooms on glass.** Raw touch events on the canvas, like the wheel,
   because Phaser is given one active pointer by default and would not report a
   second finger at all. A trackpad's pinch needs none of this — a browser

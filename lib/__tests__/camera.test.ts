@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { ROOM_FRAME, fitZoom, frameZoom, reopenZoom, resizedZoom } from "../camera";
+import { ROOM_FRAME, fitZoom, frameZoom, reopenZoom } from "../camera";
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_OPEN_MIN } from "../constants";
 
 // The lobby is 20x19 tiles at 48px.
 const MAP_W = 960;
@@ -60,10 +61,10 @@ describe("reopenZoom", () => {
   });
 
   /**
-   * The floor comes off the viewport, so a zoom saved on one window can be
+   * The range has moved between builds, so a zoom saved by one can be
    * further out than another is allowed to go.
    */
-  it("pulls a zoom from another window up to this window's floor", () => {
+  it("pulls a zoom from a build with a lower floor up to this one's", () => {
     expect(reopenZoom(0.2, 1, FLOOR, MAX)).toBe(FLOOR);
   });
 
@@ -93,27 +94,10 @@ describe("reopenZoom", () => {
   });
 });
 
-/**
- * A resize is not an arrival: the column opening, the handle dragged, a
- * phone turned round. Somebody who zoomed out to see the whole of a floor
- * should still be seeing it once the column is open.
- */
-describe("resizedZoom", () => {
-  const FLOOR = 0.3;
-  const MAX = 2.5;
-
-  it("fits a place nobody has zoomed", () => {
-    expect(resizedZoom(null, 0.79, FLOOR, MAX)).toBe(0.79);
-  });
-
-  it("keeps a zoom somebody chose, whatever the fit has become", () => {
-    expect(resizedZoom(0.4, 0.79, FLOOR, MAX)).toBe(0.4);
-    expect(resizedZoom(2, 0.6, FLOOR, MAX)).toBe(2);
-  });
-
-  /** The floor comes off the viewport, so the new one may allow less. */
-  it("pulls a choice into what the new viewport allows", () => {
-    expect(resizedZoom(0.25, 0.79, FLOOR, MAX)).toBe(FLOOR);
-    expect(resizedZoom(9, 0.79, FLOOR, MAX)).toBe(MAX);
+/** Where the two ends sit relative to each other and to where places open. */
+describe("the zoom range", () => {
+  it("opens every place inside what the wheel can reach", () => {
+    expect(ZOOM_MIN).toBeLessThan(ZOOM_OPEN_MIN);
+    expect(ZOOM_OPEN_MIN).toBeLessThan(ZOOM_MAX);
   });
 });

@@ -213,13 +213,16 @@ export const ZOOM_DEFAULT = 0.82;
 /**
  * How far out the wheel or a pinch can take the camera, in any place.
  *
- * Every place has the same range, the world map included — what stops one
- * short of it is only its own size: nobody zooms out past the point where
- * the whole of it is already on screen (`zoomFloor`). It was 0.5, and rooms
- * stopped at the lobby's fit besides, so Operations — seventy-three tiles
- * long — could only ever be looked at a lobby's width at a time, and a
- * phone, pinned at 0.5 before it had been touched, had nowhere further out
- * to go at all.
+ * Every place has the same range, the world map and a lobby alike. It was
+ * 0.5, and rooms stopped at the lobby's fit besides, so Operations —
+ * seventy-three tiles long — could only ever be looked at a lobby's width at
+ * a time, and a phone, pinned at 0.5 before it had been touched, had nowhere
+ * further out to go at all.
+ *
+ * Nothing stops short of it, a place smaller than the screen included: past
+ * its own size a room is drawn in the middle with background round it
+ * (`updateCameraBounds`), which is a room looked at from further back
+ * rather than anything broken.
  */
 export const ZOOM_MIN = 0.25;
 
