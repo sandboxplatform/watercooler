@@ -24,6 +24,7 @@ import {
   OUTSIDE_PATH,
   operationsMapFile,
   LOBBY,
+  widestRoom,
   type Floor,
 } from "./floors";
 import {
@@ -44,7 +45,7 @@ import { MAX_DESKS } from "./desks";
 import { MIN_CUBICLES } from "../map/cubicles";
 import { roomFromLocation } from "../rooms";
 import type { AccessIdentity } from "../identity";
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
 const castle = TENANTS[0];
@@ -550,6 +551,32 @@ describe("every room's map is a map that exists", () => {
 
   it("draws the room with no address from one too", () => {
     expect(drawn(mapFileFor(null))).toBe(true);
+  });
+
+  /**
+   * Every room's camera stops pulling back at the whole of the widest one,
+   * so a room wider than `widestRoom` says is a room nobody can ever see
+   * end to end — and one narrower than it is a stop past anything there is
+   * to look at. Asked of the maps as drawn rather than of the arithmetic
+   * that sized them, since the map is what the camera is pointed at.
+   */
+  it("knows how big the biggest of them is", () => {
+    const TILE = 48;
+    const sizes = [null, ...everywhere].map((address) => {
+      const file = mapFileFor(address);
+      const map = JSON.parse(readFileSync(join(process.cwd(), "public", file), "utf8")) as {
+        width: number;
+        height: number;
+      };
+      return { file, width: map.width * TILE, height: map.height * TILE };
+    });
+    const widest = widestRoom();
+    for (const room of sizes) {
+      expect(room.width, room.file).toBeLessThanOrEqual(widest.width);
+      expect(room.height, room.file).toBeLessThanOrEqual(widest.height);
+    }
+    expect(Math.max(...sizes.map((room) => room.width))).toBe(widest.width);
+    expect(Math.max(...sizes.map((room) => room.height))).toBe(widest.height);
   });
 });
 

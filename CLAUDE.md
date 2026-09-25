@@ -4103,21 +4103,32 @@ so a call, in tests that call it several times over.
 and signs are the same size out of doors as in — never under `ZOOM_OPEN_MIN`,
 which is half size and where a phone opens.
 
-**And every place has the same range from there**, the world map and a lobby
-alike: the wheel and a pinch go in to `ZOOM_MAX` and out to `ZOOM_MIN`, and
-nothing stops short of either. A place pulled back past its own size is drawn
-in the middle of the screen with background round it (`updateCameraBounds`).
+**Every place zooms in to `ZOOM_MAX`; out of doors goes out to `ZOOM_MIN`,
+and every room stops at the whole of the widest room.** That is Operations,
+seventy-three tiles of corridor, and seeing it end to end is as much as anybody
+standing indoors needs — past that a room is a stamp in a screen of black.
+`zoomFloor` in `lib/camera.ts` is the stop, off the viewport, so it is the
+same sight on any screen: a monitor stops a little over half and a phone well
+down at `ZOOM_MIN`. `widestRoom` in `lib/world/floors.ts` is the room, read
+off the tenants rather than written down, and `floors.test.ts` holds it to
+every map on disk. The world map and a campus pass no frame and go the whole
+way, since a map bigger than any screen is exactly what standing back is for.
+A place pulled back past its own size is drawn in the middle of the screen
+with background round it (`updateCameraBounds`).
 
+**One stop for every room, not one per room**, and that is the part to keep.
 It used to be two rules and a narrower range. A room stopped at the lobby's
-fit, so Operations, seventy-three tiles of corridor, could only ever be looked
-at a lobby's width at a time; the world map stopped where it just filled the
-viewport; and a phone opened at the old floor of 0.5 and could not be pinched
-out at all. A rule in between was tried — out until the whole place is on
-screen, and no further — and taken out again: it left a lobby on a desktop
-with a wheel that did nothing, which reads as the zoom being broken rather
-than as there being nothing more to see. The opening floor is a constant of
-its own for the phone's sake: lowering the pinch's limit was not meant to open
-every room on a phone smaller.
+fit, so Operations could only ever be looked at a lobby's width at a time; the
+world map stopped where it just filled the viewport; and a phone opened at the
+old floor of 0.5 and could not be pinched out at all. Stopping each room at
+its own whole was tried next and taken out again: a lobby opens whole on a
+desktop, so its wheel did nothing, which reads as the zoom being broken rather
+than as there being nothing more to see. Then nothing stopped a room at all,
+which is the stamp in the black. The widest room answers both — a lobby still
+has a wheel, and nothing indoors goes past a floor seen whole.
+
+The opening floor is a constant of its own for the phone's sake: lowering the
+pinch's limit was not meant to open every room on a phone smaller.
 
 `LEGIBLE_MAX_SCALE` is tied to `ZOOM_MIN` by `legible.test.ts` — at a
 quarter zoom a name tag is drawn four times over to arrive at the size it was
@@ -4139,7 +4150,9 @@ Three things beyond that:
   which on Operations meant pulling back to see the whole corridor, opening
   the column to see who was about, and being snapped straight back in. The
   choice is `chosen` on the controller and lives as long as the scene:
-  arriving somewhere is still a fit.
+  arriving somewhere is still a fit. It is held to a room's stop, which moves
+  with the window — and kept unclamped, so a window that widens and narrows
+  again hands it back.
 - **Pinch zooms on glass.** Raw touch events on the canvas, like the wheel,
   because Phaser is given one active pointer by default and would not report a
   second finger at all. A trackpad's pinch needs none of this — a browser

@@ -26,6 +26,7 @@ import {
   mapFileFor,
   mayRideLift,
   occupantsOf,
+  widestRoom,
   type Address,
 } from "@/lib/world/floors";
 import { UNKNOWN_IDENTITY, type AccessIdentity } from "@/lib/identity";
@@ -415,11 +416,14 @@ export class OfficeScene extends Phaser.Scene {
     gameEvents.emit("place-changed", null);
 
     // ── Systems ───────────────────────────────────────────
+    // Every room stops pulling back at the whole of the widest one, which
+    // is as much as anybody indoors needs to see — see `zoomFloor`.
     this.cameraController = new CameraController(
       this,
       this.player.sprite,
       map.widthInPixels,
       map.heightInPixels,
+      { zoomOutTo: widestRoom() },
     );
     this.cameraController.init();
 

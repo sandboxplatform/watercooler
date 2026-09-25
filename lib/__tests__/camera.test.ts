@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ROOM_FRAME, fitZoom, frameZoom, reopenZoom } from "../camera";
+import { ROOM_FRAME, fitZoom, frameZoom, reopenZoom, zoomFloor } from "../camera";
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_OPEN_MIN } from "../constants";
 
 // The lobby is 20x19 tiles at 48px.
@@ -38,6 +38,47 @@ describe("frameZoom", () => {
     const open = frameZoom(800, 1000, 0.5, 2);
     const collapsed = frameZoom(1500, 1000, 0.5, 2);
     expect(collapsed).toBeGreaterThan(open);
+  });
+});
+
+/**
+ * How far out a room may be pulled: the whole of the widest room, and no
+ * further. Operations is 73 tiles by 28.
+ */
+describe("zoomFloor", () => {
+  const OPS = { width: 73 * 48, height: 28 * 48 };
+
+  it("stops where the whole of Operations is on screen", () => {
+    // A 1080p monitor with the browser's chrome taken off: the floor fills
+    // the width, which is as far out as anybody standing indoors needs.
+    expect(zoomFloor(1920, 920, OPS, ZOOM_MIN, ZOOM_MAX)).toBeCloseTo(1920 / OPS.width);
+  });
+
+  /**
+   * The reason it is the widest room and not each room's own size: a lobby
+   * opens whole on a desktop, and a stop there is a wheel that does nothing.
+   */
+  it("leaves a lobby room to pull back from where it opens", () => {
+    const opens = frameZoom(1920, 920, ZOOM_OPEN_MIN, ZOOM_MAX);
+    expect(zoomFloor(1920, 920, OPS, ZOOM_MIN, ZOOM_MAX)).toBeLessThan(opens * 0.6);
+  });
+
+  it("goes no lower than the least zoom, however small the screen", () => {
+    expect(zoomFloor(375, 640, OPS, ZOOM_MIN, ZOOM_MAX)).toBe(ZOOM_MIN);
+  });
+
+  /** A stop above the zoom a room opens at would snap it in on the first turn. */
+  it("is never above the lobby's fit, whatever frame it is handed", () => {
+    for (const [w, h] of [
+      [1920, 920],
+      [800, 1000],
+      [3840, 2000],
+    ]) {
+      const tiny = { width: 100, height: 100 };
+      expect(zoomFloor(w, h, tiny, ZOOM_MIN, ZOOM_MAX)).toBeLessThanOrEqual(
+        fitZoom(w, h, ROOM_FRAME.width, ROOM_FRAME.height),
+      );
+    }
   });
 });
 

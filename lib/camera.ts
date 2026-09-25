@@ -27,6 +27,40 @@ export function frameZoom(viewW: number, viewH: number, min: number, max: number
 }
 
 /**
+ * How far out a room's camera may stand: until the widest room in the world
+ * is whole on screen, and no further — the same stop in every room.
+ *
+ * One stop for every room rather than one per room, and that is the part to
+ * keep. Stopping each room at its own size was tried, and a lobby opens
+ * whole on a desktop, so its wheel did nothing at all — which reads as the
+ * zoom being broken. With nothing stopping it the other way, a room could be
+ * pulled back to a quarter and left a picture the size of a stamp in a
+ * screen of black. The whole of Operations is the most anybody standing
+ * indoors needs to see, so that is where every room stops: a lobby still
+ * has a wheel, and a floor seen end to end is as far as it goes.
+ *
+ * Off the viewport rather than a number, so it is the same sight on any
+ * screen — a monitor stops a little over half, a phone well down at `min`.
+ * Never past the lobby's fit, which is the zoom a room opens at: a stop
+ * above that would snap the camera in on the first turn of the wheel.
+ *
+ * @param frame the widest room, in pixels (`widestRoom` in `lib/world/floors`)
+ */
+export function zoomFloor(
+  viewW: number,
+  viewH: number,
+  frame: { width: number; height: number },
+  min: number,
+  max: number,
+): number {
+  const whole = Math.min(
+    fitZoom(viewW, viewH, frame.width, frame.height),
+    fitZoom(viewW, viewH, ROOM_FRAME.width, ROOM_FRAME.height),
+  );
+  return Math.min(max, Math.max(min, whole));
+}
+
+/**
  * The zoom to open a place at: the one the person left it on, if it still
  * fits, and otherwise the fitted one.
  *

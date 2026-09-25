@@ -9,7 +9,7 @@ import {
   ZOOM_SAVE_DEBOUNCE_MS,
   CAMERA_DRAG_THRESHOLD,
 } from "@/lib/constants";
-import { frameZoom, reopenZoom } from "@/lib/camera";
+import { frameZoom, reopenZoom, zoomFloor } from "@/lib/camera";
 import { loadWorldZoom, saveWorldZoom } from "@/lib/persistence";
 
 export class CameraController {
@@ -43,6 +43,16 @@ export class CameraController {
   private remembersZoom: boolean;
 
   /**
+   * The widest room in the world, where this camera stops pulling back — or
+   * null to go all the way to `ZOOM_MIN`.
+   *
+   * Rooms pass it and the outdoors does not. Past the whole of Operations
+   * there is nothing indoors left to see, only background; the world map is
+   * bigger than any screen, so standing back is what it is for.
+   */
+  private zoomOutTo: { width: number; height: number } | null;
+
+  /**
    * The zoom the wheel or a pinch last settled on in this scene, or null
    * while nobody has touched it.
    *
@@ -68,13 +78,14 @@ export class CameraController {
     playerSprite: Phaser.Physics.Arcade.Sprite,
     mapWidth: number,
     mapHeight: number,
-    options: { remembersZoom?: boolean } = {},
+    options: { remembersZoom?: boolean; zoomOutTo?: { width: number; height: number } } = {},
   ) {
     this.scene = scene;
     this.playerSprite = playerSprite;
     this.mapWidth = mapWidth;
     this.mapHeight = mapHeight;
     this.remembersZoom = options.remembersZoom ?? false;
+    this.zoomOutTo = options.zoomOutTo ?? null;
   }
 
   init() {
@@ -132,15 +143,30 @@ export class CameraController {
    * Fit the lobby to the viewport. Called at start and whenever the
    * viewport changes. Every place starts at this scale, so people and
    * signs are the same size out of doors as in; the wheel and a pinch then
-   * go between `ZOOM_MIN` and `ZOOM_MAX` in every place alike.
+   * go in to `ZOOM_MAX` everywhere, and out to `ZOOM_MIN` outdoors or to the
+   * whole of the widest room indoors.
    *
    * Once somebody has chosen a zoom — or the world map has remembered one —
    * a resize keeps it instead. Refitting would throw away a setting the
    * person is still using.
+   *
+   * Kept inside the stop, which comes off the viewport: a window that
+   * widens needs less standing back to see the whole of Operations, so a
+   * zoom chosen on a narrower one can be past it. `chosen` itself is left
+   * as it was, so a window that narrows again gives it back.
    */
   private applyFillZoom(cam: Phaser.Cameras.Scene2D.Camera) {
-    const next = this.chosen ?? frameZoom(cam.width, cam.height, ZOOM_OPEN_MIN, ZOOM_MAX);
+    const next =
+      this.chosen === null
+        ? frameZoom(cam.width, cam.height, ZOOM_OPEN_MIN, ZOOM_MAX)
+        : Math.min(ZOOM_MAX, Math.max(this.leastZoom(cam), this.chosen));
     if (next !== cam.zoom) cam.setZoom(next);
+  }
+
+  /** How far out the wheel and a pinch may take this camera, in this viewport. */
+  private leastZoom(cam: Phaser.Cameras.Scene2D.Camera): number {
+    if (!this.zoomOutTo) return ZOOM_MIN;
+    return zoomFloor(cam.width, cam.height, this.zoomOutTo, ZOOM_MIN, ZOOM_MAX);
   }
 
   /** A zoom the person settled on: held through a resize, and kept for next time. */
@@ -178,7 +204,11 @@ export class CameraController {
       e.preventDefault();
       const delta = e.ctrlKey ? e.deltaY * 3 : e.deltaY;
       const oldZoom = cam.zoom;
-      const newZoom = Phaser.Math.Clamp(oldZoom - delta * ZOOM_SENSITIVITY, ZOOM_MIN, ZOOM_MAX);
+      const newZoom = Phaser.Math.Clamp(
+        oldZoom - delta * ZOOM_SENSITIVITY,
+        this.leastZoom(cam),
+        ZOOM_MAX,
+      );
       if (newZoom === oldZoom) return;
 
       if (!this.cameraFollowing) {
@@ -256,7 +286,7 @@ export class CameraController {
       e.preventDefault();
 
       const gap = gapBetween(e.touches[0], e.touches[1]);
-      const next = Phaser.Math.Clamp((startZoom * gap) / startGap, ZOOM_MIN, ZOOM_MAX);
+      const next = Phaser.Math.Clamp((startZoom * gap) / startGap, this.leastZoom(cam), ZOOM_MAX);
       if (next === cam.zoom) return;
 
       // Hold the ground between the fingers still, the way the wheel holds

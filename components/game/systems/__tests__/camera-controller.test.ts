@@ -15,6 +15,20 @@ vi.mock("phaser", () => ({
 const { CameraController } = await import("../CameraController");
 const { ZOOM_MAX, ZOOM_MIN } = await import("@/lib/constants");
 
+/** The widest room in the world today: Sandbox ERP's Operations floor. */
+const OPERATIONS = { width: 3504, height: 1344 };
+
+/** A room's camera, as `OfficeScene` makes one. */
+function roomCamera(scene: unknown, width: number, height: number) {
+  return new CameraController(
+    scene as PhaserTypes.Scene,
+    {} as PhaserTypes.Physics.Arcade.Sprite,
+    width,
+    height,
+    { zoomOutTo: OPERATIONS },
+  );
+}
+
 /**
  * The one thing about the camera worth a test, and it is not arithmetic —
  * `lib/camera.ts` holds the zoom rules and they are checked there, without
@@ -159,12 +173,7 @@ describe("CameraController", () => {
   it("keeps a room at the zoom somebody chose when the viewport changes", () => {
     const stub = stubScene();
     // Operations, which is the floor this was for: long enough to zoom out on.
-    new CameraController(
-      stub.scene as unknown as PhaserTypes.Scene,
-      {} as PhaserTypes.Physics.Arcade.Sprite,
-      3504,
-      1344,
-    ).init();
+    roomCamera(stub.scene, OPERATIONS.width, OPERATIONS.height).init();
     const fitted = stub.camera.zoom;
 
     stub.canvasEvents.emit("wheel", wheel(200));
@@ -178,23 +187,57 @@ describe("CameraController", () => {
   });
 
   /**
-   * The same range in every place. A lobby used to stop where the whole of
-   * it was on screen, which on a desktop is where it opens — so the wheel
-   * did nothing there at all.
+   * Every room stops at the whole of Operations. A lobby used to stop where
+   * the whole of *it* was on screen, which on a desktop is where it opens —
+   * so the wheel did nothing there at all — and then not at all, which left
+   * it a stamp in a screen of black at a quarter.
    */
-  it("lets a lobby go out as far as anywhere else", () => {
+  it("lets a lobby go out as far as the whole of Operations, and no further", () => {
     const stub = stubScene();
-    new CameraController(
-      stub.scene as unknown as PhaserTypes.Scene,
-      {} as PhaserTypes.Physics.Arcade.Sprite,
-      960,
-      912,
-    ).init();
+    roomCamera(stub.scene, 960, 912).init();
+    const opens = stub.camera.zoom;
+
+    for (let i = 0; i < 40; i++) stub.canvasEvents.emit("wheel", wheel(200));
+    const stop = Math.min(
+      stub.camera.width / OPERATIONS.width,
+      stub.camera.height / OPERATIONS.height,
+    );
+    expect(stub.camera.zoom).toBeCloseTo(stop);
+    expect(stub.camera.zoom).toBeLessThan(opens);
+    expect(stub.camera.zoom).toBeGreaterThan(ZOOM_MIN);
+    for (let i = 0; i < 40; i++) stub.canvasEvents.emit("wheel", wheel(-200));
+    expect(stub.camera.zoom).toBe(ZOOM_MAX);
+  });
+
+  /** The world map is bigger than any screen, so standing back is what it is for. */
+  it("lets the world map go all the way out", () => {
+    const stub = stubScene();
+    controllerFor(stub.scene).init();
 
     for (let i = 0; i < 40; i++) stub.canvasEvents.emit("wheel", wheel(200));
     expect(stub.camera.zoom).toBe(ZOOM_MIN);
-    for (let i = 0; i < 40; i++) stub.canvasEvents.emit("wheel", wheel(-200));
-    expect(stub.camera.zoom).toBe(ZOOM_MAX);
+  });
+
+  /**
+   * The stop comes off the viewport: a wider window needs less standing
+   * back to see the whole floor, so a zoom chosen on a narrower one can be
+   * past it. Held to the stop — and handed back when the window narrows.
+   */
+  it("keeps a chosen zoom inside the stop as the window changes shape", () => {
+    const stub = stubScene();
+    stub.camera.width = 900;
+    roomCamera(stub.scene, OPERATIONS.width, OPERATIONS.height).init();
+    for (let i = 0; i < 40; i++) stub.canvasEvents.emit("wheel", wheel(200));
+    const narrowStop = stub.camera.zoom;
+    expect(narrowStop).toBeCloseTo(900 / OPERATIONS.width);
+
+    stub.camera.width = 1800;
+    stub.scale.emit("resize");
+    expect(stub.camera.zoom).toBeCloseTo(1800 / OPERATIONS.width);
+
+    stub.camera.width = 900;
+    stub.scale.emit("resize");
+    expect(stub.camera.zoom).toBe(narrowStop);
   });
 
   it("still refits a live scene on resize", () => {

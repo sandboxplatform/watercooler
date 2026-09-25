@@ -28,13 +28,16 @@ import {
   projectBoards,
   operationsBoards,
   operationsRoomCount,
+  TENANTS,
   tenantFor,
   tenantsOf,
   type Tenant,
 } from "./tenants";
 import { residentsAt } from "./residents";
 import { CAST } from "./cast";
-import { cubicleCount } from "../map/cubicles";
+import { CUBICLES_HEIGHT, cubicleCount, cubicleWidth } from "../map/cubicles";
+import { OPS_HEIGHT, opsWidth } from "../map/floor";
+import { HEIGHT as LOBBY_ROWS, TILE, WIDTH as LOBBY_COLS } from "../map/office";
 
 export type Level = 1 | 2 | 3;
 export type Floor = { kind: "lobby" } | { kind: "floor"; level: Level };
@@ -353,6 +356,36 @@ export function mapFileFor(address: Address | null): string {
   return furnishedLobby(address.tenant)
     ? `/maps/lobby-${address.tenant.slug}.json`
     : "/maps/lobby.json";
+}
+
+/**
+ * The widest room in the world and the tallest, in pixels: what every
+ * room's camera may pull back far enough to see whole, and no further
+ * (`zoomFloor` in `lib/camera.ts`).
+ *
+ * Two kinds of room grow — an Operations floor with its projects and a bank
+ * of cubicles with its people — and every other room is a fixed size no
+ * bigger than a lobby. So it is read off the buildings rather than written
+ * down: a project taken on moves it the day the corridor gets longer, which
+ * a 73 in the camera would not. `floors.test.ts` holds it to every map on
+ * disk.
+ */
+export function widestRoom(): { width: number; height: number } {
+  let cols = LOBBY_COLS;
+  let rows = LOBBY_ROWS;
+  for (const tenant of TENANTS) {
+    const rooms = operationsRoomCount(tenant);
+    if (rooms > 0) {
+      cols = Math.max(cols, opsWidth(rooms));
+      rows = Math.max(rows, OPS_HEIGHT);
+    }
+    const cubicles = cubiclesAt(tenant);
+    if (cubicles > 0) {
+      cols = Math.max(cols, cubicleWidth(cubicles));
+      rows = Math.max(rows, CUBICLES_HEIGHT);
+    }
+  }
+  return { width: cols * TILE, height: rows * TILE };
 }
 
 /** Whether a slug names an organisation someone can call home. */

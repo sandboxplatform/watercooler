@@ -676,11 +676,12 @@ ground between your fingers stays under them, so you pull open the part of
 the map you are looking at. Drag with the mouse or one finger to look around
 without walking.
 
-**Every place zooms the same amount.** In as close and out as far on a lobby
-as on the world map — so a long Operations floor can be seen end to end, and a
-phone can pull back well past where it opens. Names and signs stay readable
-however far out you go, and the zoom you chose stays put when the People
-column opens or a phone is turned round.
+**Every place zooms in as close as the next.** Out of doors you can pull back
+as far as you like; indoors every room goes out as far as it takes to see a
+long Operations floor end to end, and no further — so a lobby still has room
+to pull back, and a phone well past where it opens. Names and signs stay
+readable however far out you go, and the zoom you chose stays put when the
+People column opens or a phone is turned round.
 
 **The world map remembers how far out you were standing.** Walk into a
 building, do whatever you went in for, come out — and the map is where you
