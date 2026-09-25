@@ -33,11 +33,12 @@ import { ink, MARKER_DARK, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMark
  * nothing breathes and no light comes on — the rig has no lamp, and this
  * is a room where an actual fault has a beacon of its own in the corner.
  *
- * Green, because that is the colour the last of the five declared bays lit
- * before it came off the wall. The crates beyond it were never a lane and
- * had only borrowed that green from whichever bay happened to be last, so
- * when the two came to stand shoulder to shoulder it was the borrower that
- * moved — see `systems/Deployed`.
+ * Yellow, and the Testing lane in the panel behind the plate is yellow with
+ * it — the last of `FLOW_COLOURS` — because a station and its own lane are
+ * one stage and answering differently would be the same board read twice.
+ * It sits between the barrier's orange and the crates' green, which is
+ * where checking is: past the thing in the way, short of gone. It was green
+ * once, and gave it up to the crates — see `systems/Deployed`.
  *
  * Its picture is a hundred and four wide, both its neighbours being
  * ninety-six, which is what closes the seam on either side of it to
@@ -46,12 +47,12 @@ import { ink, MARKER_DARK, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMark
  * `systems/FloorMarker`.
  */
 
-/** The colour the Testing bay lit on the plate, before it came off it. */
-const CHECKING = 0x4bce97;
+/** The Testing lane's own colour, the last of `FLOW_COLOURS`. */
+const CHECKING = 0xf5cd47;
 
 /**
  * Three tones, the machine's arrangement exactly: the shell is the
- * machine, the frame is what it runs on, and the green is kept for the
+ * machine, the frame is what it runs on, and the yellow is kept for the
  * panel and the probe — the two things that say what the station is for.
  */
 const SHELL = MARKER_EDGE;

@@ -1856,7 +1856,7 @@
   color: var(--pixel-red);
 }
 
-/* Shipped: the green the flow plate's last bay and the crates are lit in. */
+/* Shipped: the green the crates are lit in, which is on none of the lanes. */
 .pulse-legend--shipped strong {
   color: #4bce97;
 }

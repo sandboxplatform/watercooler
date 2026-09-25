@@ -53,10 +53,15 @@ export const DEFAULT_FLOW_LANES = [
  *
  * By position rather than by name, so a building naming its own lanes gets
  * a board that reads as a progression rather than one with holes in it.
- * Cool at the back of the pipeline, warm at the front of it, green at the
+ * Cool at the back of the pipeline, warm at the front of it, yellow at the
  * end — the HUD's own palette, the same one the support board uses.
+ *
+ * Not green at the end, which it was: green is the crates' at the end of a
+ * project room's line (`systems/Deployed`), and those are work that has
+ * gone out rather than a stage anything stands in, so the colour has to be
+ * on none of these.
  */
-export const FLOW_COLOURS = ["#8590a2", "#579dff", "#a78bfa", "#faa53d", "#4bce97"] as const;
+export const FLOW_COLOURS = ["#8590a2", "#579dff", "#a78bfa", "#faa53d", "#f5cd47"] as const;
 
 /**
  * How a lane is lettered on the wall, where its own name is too long for a

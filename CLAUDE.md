@@ -2132,8 +2132,12 @@ applied a second time:
   whole carriage downward would take its head four pixels off its own
   guideway on every stroke, which is a carriage coming loose from its rail.
 
-Green, because that is the colour the last of the five declared bays lit
-before it came off the wall. Which is what moved the crates: see below.
+**Yellow, and its lane with it.** The rig and the Testing lane in the
+panel behind the plate are the same stage, so they are the same colour —
+the last of `FLOW_COLOURS`, which was green and is yellow now. Yellow sits
+between the barrier's orange and the crates' green, which is where checking
+is: past the thing in the way, short of gone. The green it gave up is the
+crates': see below.
 
 **And crates at the end of it, for the work that has gone out.** The
 roadblock's opposite number, and it exists for the opposite half of the
@@ -2148,26 +2152,23 @@ the floor before there was a line to stand at the end of, diagonally
 across from the board it came off — which said "out of the way" and
 nothing else, where the end of a line says what it is the end _of_.
 
-**Brass, and off the flow plate's scale altogether** — the HUD's own
-`--pixel-accent`, on none of `FLOW_COLOURS`. It was green, because the last
-bay of the plate was green and the end of the pipeline was lit the same
-colour on the wall and on the floor. Two things ended that. Testing came
-off the wall to stand on this line and it **owns** that green: a lane's
-colour is assigned by position and the panel behind the plate prints it, so
-the station and its own lane answering differently would be the same board
-read twice. And there is no green bay left to be lit like, the plate
-lettering Backlog and In Review — so the reason written down here had
-expired, and keeping a colour past its own argument is the drift this
-codebase writes essays against.
+**Green, and off the flow plate's scale altogether** — `FLOW_COLOURS` ends
+in Testing's yellow, so this green is on none of the lanes. It has been
+green before, borrowed from the plate's last bay while the scale ended
+there; then Testing came off the wall to stand on this line and **owned**
+that green — a lane's colour is assigned by position and the panel behind
+the plate prints it, so the station and its own lane answering differently
+would be the same board read twice — and the crates went brass to stay out
+of its way. Testing is yellow now and its lane with it, so green is
+nobody's lane and the crates have it back without being painted in a
+stage's colour.
 
-Which leaves the crates agreeing with themselves for the first time: this
-is the one station on the line that was never a lane, and it spent four
-paragraphs saying so while painted in a lane's colour. The beacon already
-wrote the rule for that case. Brass rather than anything else: it is not
-the beacon's red, so it is not a second alarm; it is what a crate is
-actually stencilled and banded in; and it is the **quietest ink on the
-line**, which is the right way round, since work that has shipped is the
-one station nobody has to do anything about.
+That keeps the beacon's rule, which is the one to hold to: the station that
+was never a lane is lit in a colour none of the lanes use. Green rather
+than anything else because it is what done is everywhere else in the HUD —
+a finished card's due date, the shipped line in the panel's legend — and
+it is not the beacon's red, so it is not a second alarm. If green ever goes
+back onto the scale, it is the crates that move again, not the lane.
 
 | Where                     | What                                                                    |
 | ------------------------- | ----------------------------------------------------------------------- |
@@ -2287,10 +2288,10 @@ light nobody would ever look at again — or never lit it at all:
   two are under and here is the entire point — a beacon that is always lit
   is a light nobody looks at.
 - **Red, and off the flow plate's scale altogether.** `FLOW_COLOURS` runs
-  cool to warm to green across the five stages a building declares, and
+  cool to warm to yellow across the five stages a building declares, and
   three of them are stood on the floor wearing their own bay's colour — the
-  rack its blue, the machine its purple, the rig its green — with the
-  barrier the warm end of it as a thing in the way. This is the HUD's own
+  rack its blue, the machine its purple, the rig its yellow — with the
+  barrier in its orange as a thing in the way. This is the HUD's own
   `--pixel-red`, which is on none of that scale, because an incident is on
   none of the pipeline. The crates are off it too and say why: a despatch
   was never a lane either.

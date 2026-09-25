@@ -19,29 +19,24 @@ import { ink, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMarker";
  * board it came off, which said "out of the way" and nothing else, where
  * the end of a line says what it is the end *of*.
  *
- * **Brass, and off the flow plate's scale altogether** — the HUD's own
- * `--pixel-accent`, which is on none of `FLOW_COLOURS`. It was green,
- * because the last bay of the plate was green and the end of the pipeline
- * was lit the same colour on the wall and on the floor. Two things ended
- * that. Testing came off the wall to stand on this line, and it owns that
- * green: a lane's colour is assigned by position and the panel behind the
- * plate prints it, so the station and its own lane answering differently
- * would be the same board read twice. And there is no green bay left to be
- * lit like — the plate letters Backlog and In Review now — so the reason
- * that was written down here has expired.
+ * **Green, and off the flow plate's scale altogether** — `FLOW_COLOURS`
+ * ends in Testing's yellow, so this green is on none of the lanes. It has
+ * been green before, borrowed from the plate's last bay while the scale
+ * ended there; then Testing came off the wall to stand on this line and
+ * owned that green — a lane's colour is assigned by position and the panel
+ * behind the plate prints it, so a station and its own lane answering
+ * differently would be the same board read twice — and the crates went
+ * brass to stay out of its way. Testing is yellow now, its lane with it,
+ * so green is nobody's lane and the crates have it back without being
+ * painted in a stage's colour.
  *
- * Which leaves the crates agreeing with their own argument for the first
- * time: this file spends four paragraphs saying a despatch is not a stage
- * and then painted itself in a stage's colour. `systems/Incident` already
- * wrote the rule for that case — the one colour in the room that is not on
- * the flow plate's scale at all, because it is off the pipeline — and a
- * despatch is off the pipeline by the identical argument.
- *
- * Brass rather than anything else: it is not the beacon's red, so it is
- * not a second alarm; it is what a crate is actually stencilled and banded
- * in; and it is the **quietest ink on the line**, which is the right way
- * round, since work that has shipped is the one station nobody has to do
- * anything about.
+ * That keeps the rule `systems/Incident` wrote: the station off the
+ * pipeline is lit in a colour none of the lanes use, and a despatch is off
+ * the pipeline by the identical argument. Green rather than anything else
+ * because it is what done is everywhere else in the HUD — a finished
+ * card's due date, the shipped line in the panel's legend — and it is not
+ * the beacon's red, so it is not a second alarm. If green ever goes back
+ * onto the scale, it is these that move again, not the lane.
  *
  * Nothing is up when nothing has gone out, which is the rule the barrier
  * is under and for the same reason — an empty pallet reading 0 is a thing
@@ -57,8 +52,8 @@ import { ink, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMarker";
  * and the beat when the figure moves are `systems/FloorMarker`.
  */
 
-/** Brass: the HUD's own accent, and on none of the flow plate's scale. */
-const SHIPPED = 0xc9a227;
+/** Green: done, and on none of the flow plate's scale. */
+const SHIPPED = 0x4bce97;
 
 /**
  * The crates are filled a shade lighter than the plate over them, and the
