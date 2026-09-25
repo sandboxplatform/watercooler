@@ -4100,8 +4100,29 @@ fifty thousand cells against better than a thousand rectangles, a second or
 so a call, in tests that call it several times over.
 
 **The camera.** Every place opens at the zoom that fits the lobby, so people
-and signs are the same size out of doors as in, and the wheel goes further out
-on a map. Two things are not that:
+and signs are the same size out of doors as in — never under `ZOOM_OPEN_MIN`,
+which is half size and where a phone opens.
+
+**And every place has the same range from there**, the world map included:
+the wheel and a pinch go in to `ZOOM_MAX` and out to `ZOOM_MIN`, and what
+stops a place short of the far end is only its own size. `zoomFloor` in
+`lib/camera.ts` is the one rule — out until the whole place is on screen and
+no further, since past that there is only background.
+
+It used to be two rules and a narrower range. A room stopped at the lobby's
+fit, so Operations, seventy-three tiles of corridor, could only ever be looked
+at a lobby's width at a time; the world map stopped where it just filled the
+viewport, which is the wrong answer for anything long and thin; and a phone
+opened at the old floor of 0.5 and could not be pinched out at all. The
+opening floor is a constant of its own for that last reason: lowering the
+pinch's limit was not meant to open every room on a phone smaller.
+
+`LEGIBLE_MAX_SCALE` is tied to `ZOOM_MIN` by `legible.test.ts` — at a
+quarter zoom a name tag is drawn four times over to arrive at the size it was
+written, and a cap under that is lettering that vanishes exactly when
+somebody has stood back to look for it. Lower one, raise the other.
+
+Two things are not that:
 
 - **The world map opens where it was left.** `reopenZoom` in `lib/camera.ts`
   is the rule and `loadWorldZoom` the store, in the browser for the reason
@@ -4110,6 +4131,15 @@ on a map. Two things are not that:
   zoom floor comes off the viewport and the window it was saved from may have
   been another shape. Rooms are still fitted every time, which is the point of
   fitting them; campuses too.
+- **A resize is not an arrival.** Once the wheel or a pinch has chosen a
+  zoom, the People column opening on Tab, its handle being dragged and a
+  phone turned round all keep it — `resizedZoom`, clamped to what the new
+  viewport allows. A room used to refit on every one of them, which on
+  Operations meant pulling back to see the whole corridor, opening the column
+  to see who was about, and being snapped straight back in. The choice is
+  `chosen` on the controller and lives as long as the scene: arriving
+  somewhere is still a fit. It is held unclamped, so a window that grows and
+  narrows again hands it back.
 - **Pinch zooms on glass.** Raw touch events on the canvas, like the wheel,
   because Phaser is given one active pointer by default and would not report a
   second finger at all. A trackpad's pinch needs none of this — a browser
@@ -4538,10 +4568,11 @@ React will not hand one its dispatcher outside a renderer.
   anything registered with `keepLegible` is redrawn at the size it was
   written however far out the camera stands. A room's zoom is fitted to a
   lobby — 960x912, nearly square — so a wide monitor opens _zoomed in_ and a
-  handset is pinned to `ZOOM_MIN`, where a 10px sign was landing as five
-  pixels of screen. The rule is a **floor, not a fixed size**: `1 / zoom`
+  handset opens at `ZOOM_OPEN_MIN`, where a 10px sign was landing as five
+  pixels of screen — and can be pinched out to `ZOOM_MIN`, a quarter. The rule is a **floor, not a fixed size**: `1 / zoom`
   where that magnifies and 1 elsewhere, so a monitor is untouched, a laptop
-  gains a little and a phone doubles. A true `1 / zoom` would have made every
+  gains a little and a phone doubles, and goes on growing as it is pinched
+  out. A true `1 / zoom` would have made every
   sign on every desktop smaller, which is not what anybody asked for.
 
   **What is in, and what is deliberately out.** Two kinds of text live in a

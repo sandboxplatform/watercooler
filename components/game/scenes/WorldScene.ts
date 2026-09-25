@@ -148,7 +148,6 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
         new Mailboxes(this),
       ],
       camera: {
-        coverMap: true,
         // The map opens where it was left. Every building is a page of its
         // own, so an errand indoors used to hand the map back at its fitted
         // zoom however far out you had chosen to stand.

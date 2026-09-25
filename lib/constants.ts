@@ -209,8 +209,32 @@ export const BOSS_PROMPT_OFFSET_Y = 16;
 export const CAMERA_LERP = 0.1;
 export const ZOOM_SENSITIVITY = 0.001;
 export const ZOOM_DEFAULT = 0.82;
-export const ZOOM_MIN = 0.5;
-export const ZOOM_MAX = 2;
+
+/**
+ * How far out the wheel or a pinch can take the camera, in any place.
+ *
+ * Every place has the same range, the world map included — what stops one
+ * short of it is only its own size: nobody zooms out past the point where
+ * the whole of it is already on screen (`zoomFloor`). It was 0.5, and rooms
+ * stopped at the lobby's fit besides, so Operations — seventy-three tiles
+ * long — could only ever be looked at a lobby's width at a time, and a
+ * phone, pinned at 0.5 before it had been touched, had nowhere further out
+ * to go at all.
+ */
+export const ZOOM_MIN = 0.25;
+
+/**
+ * The least zoom a place *opens* at, which is not how far out it can go.
+ *
+ * A room opens fitted to the lobby, and on a handset that fit is well under
+ * half — so without a floor of its own a phone would open every room with
+ * everybody in it a fifth smaller than before. Lowering `ZOOM_MIN` was for
+ * the pinch, not for that.
+ */
+export const ZOOM_OPEN_MIN = 0.5;
+
+/** How far in the camera can go, in any place. */
+export const ZOOM_MAX = 2.5;
 export const CAMERA_DRAG_THRESHOLD = 3;
 
 /**

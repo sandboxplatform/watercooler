@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ROOM_FRAME, fitZoom, frameZoom, reopenZoom } from "../camera";
+import { ROOM_FRAME, fitZoom, frameZoom, reopenZoom, resizedZoom } from "../camera";
 
 // The lobby is 20x19 tiles at 48px.
 const MAP_W = 960;
@@ -60,10 +60,10 @@ describe("reopenZoom", () => {
   });
 
   /**
-   * The floor comes off the viewport, so a zoom saved on a wide window can
-   * be further out than a narrow one is allowed to go.
+   * The floor comes off the viewport, so a zoom saved on one window can be
+   * further out than another is allowed to go.
    */
-  it("pulls a zoom from a wider window up to this window's floor", () => {
+  it("pulls a zoom from another window up to this window's floor", () => {
     expect(reopenZoom(0.2, 1, FLOOR, MAX)).toBe(FLOOR);
   });
 
@@ -90,5 +90,30 @@ describe("reopenZoom", () => {
   /** Clamping happens first, so a saved value below a fitted floor is not "the fit". */
   it("clamps before comparing, so the floor can be the answer", () => {
     expect(reopenZoom(0.1, 2, 1, MAX)).toBe(1);
+  });
+});
+
+/**
+ * A resize is not an arrival: the column opening, the handle dragged, a
+ * phone turned round. Somebody who zoomed out to see the whole of a floor
+ * should still be seeing it once the column is open.
+ */
+describe("resizedZoom", () => {
+  const FLOOR = 0.3;
+  const MAX = 2.5;
+
+  it("fits a place nobody has zoomed", () => {
+    expect(resizedZoom(null, 0.79, FLOOR, MAX)).toBe(0.79);
+  });
+
+  it("keeps a zoom somebody chose, whatever the fit has become", () => {
+    expect(resizedZoom(0.4, 0.79, FLOOR, MAX)).toBe(0.4);
+    expect(resizedZoom(2, 0.6, FLOOR, MAX)).toBe(2);
+  });
+
+  /** The floor comes off the viewport, so the new one may allow less. */
+  it("pulls a choice into what the new viewport allows", () => {
+    expect(resizedZoom(0.25, 0.79, FLOOR, MAX)).toBe(FLOOR);
+    expect(resizedZoom(9, 0.79, FLOOR, MAX)).toBe(MAX);
   });
 });

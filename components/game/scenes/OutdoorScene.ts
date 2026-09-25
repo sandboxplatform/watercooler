@@ -82,7 +82,7 @@ export interface OutdoorPlace {
   /** What this place is called, for whatever shows where somebody is. */
   label: string;
   /** Camera behaviour beyond the standard fit-and-follow. */
-  camera?: { coverMap?: boolean; remembersZoom?: boolean };
+  camera?: { remembersZoom?: boolean };
   /**
    * What this place runs each frame beyond walking about in it: the world
    * map's basketball and the eggs lying in its grass, and whatever comes

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { LEGIBLE_MAX_SCALE, legibleScale } from "../legible";
-import { ZOOM_MAX, ZOOM_MIN } from "../constants";
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_OPEN_MIN } from "../constants";
 import { frameZoom } from "../camera";
 
 /**
@@ -68,9 +68,9 @@ describe("legibleScale", () => {
 });
 
 describe("what a real viewport asks for", () => {
-  const scaleAt = (w: number, h: number) => legibleScale(frameZoom(w, h, ZOOM_MIN, ZOOM_MAX));
+  const scaleAt = (w: number, h: number) => legibleScale(frameZoom(w, h, ZOOM_OPEN_MIN, ZOOM_MAX));
 
-  /** A phone is the case this exists for: the zoom floor, so double size. */
+  /** A phone is the case this exists for: it opens at half zoom, so double size. */
   it("doubles lettering on a handset", () => {
     expect(scaleAt(375, 812)).toBe(2);
     expect(scaleAt(390, 844)).toBe(2);

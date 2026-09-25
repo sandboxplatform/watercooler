@@ -94,21 +94,33 @@ function stubScene() {
   };
 
   const cameras: { main: typeof camera | undefined } = { main: camera };
-  const canvas = { style: {}, addEventListener: () => {}, removeEventListener: () => {} };
+  const canvasEvents = new Emitter();
+  const canvas = {
+    style: {},
+    addEventListener: (event: string, handler: (...args: unknown[]) => void) =>
+      canvasEvents.on(event, handler),
+    removeEventListener: (event: string, handler: (...args: unknown[]) => void) =>
+      canvasEvents.off(event, handler),
+  };
   const scene = { scale, events, input, cameras, game: { canvas } };
 
-  return { scene, scale, events, cameras, camera };
+  return { scene, scale, events, cameras, camera, canvasEvents };
+}
+
+/** A turn of the wheel, as much of one as the handler reads. */
+function wheel(deltaY: number) {
+  return { deltaY, ctrlKey: false, offsetX: 0, offsetY: 0, preventDefault: () => {} };
 }
 
 function controllerFor(scene: unknown) {
   // The world map's shape: the place that actually reaches this, and the one
-  // whose camera both covers the map and remembers its zoom.
+  // whose camera remembers its zoom.
   return new CameraController(
     scene as PhaserTypes.Scene,
     {} as PhaserTypes.Physics.Arcade.Sprite,
     2976,
     1872,
-    { coverMap: true, remembersZoom: true },
+    { remembersZoom: true },
   );
 }
 
@@ -138,12 +150,65 @@ describe("CameraController", () => {
     expect(() => stub.scale.emit("resize")).not.toThrow();
   });
 
+  /**
+   * The People column opening on Tab is a resize, and so is dragging its
+   * handle. Somebody who had pulled back to see the whole of Operations was
+   * snapped straight back in by either.
+   */
+  it("keeps a room at the zoom somebody chose when the viewport changes", () => {
+    const stub = stubScene();
+    // Operations, which is the floor this was for: long enough to zoom out on.
+    new CameraController(
+      stub.scene as unknown as PhaserTypes.Scene,
+      {} as PhaserTypes.Physics.Arcade.Sprite,
+      3504,
+      1344,
+    ).init();
+    const fitted = stub.camera.zoom;
+
+    stub.canvasEvents.emit("wheel", wheel(200));
+    const chosen = stub.camera.zoom;
+    expect(chosen).toBeLessThan(fitted);
+
+    // The column opens: narrower, and the fit would be different.
+    stub.camera.width = 900;
+    stub.scale.emit("resize");
+    expect(stub.camera.zoom).toBe(chosen);
+  });
+
+  it("pulls a chosen zoom in only as far as a wider viewport needs, and gives it back", () => {
+    const stub = stubScene();
+    new CameraController(
+      stub.scene as unknown as PhaserTypes.Scene,
+      {} as PhaserTypes.Physics.Arcade.Sprite,
+      3504,
+      1344,
+    ).init();
+
+    // All the way out: the whole floor across 1200 pixels.
+    for (let i = 0; i < 20; i++) stub.canvasEvents.emit("wheel", wheel(200));
+    const whole = stub.camera.zoom;
+    expect(3504 * whole).toBeCloseTo(1200);
+
+    // Twice as wide gets the whole floor on screen sooner, so that zoom is
+    // past its floor and the camera comes in to it — and narrowing again
+    // hands the choice back.
+    stub.camera.width = 2400;
+    stub.scale.emit("resize");
+    expect(stub.camera.zoom).toBeGreaterThan(whole);
+    // Whole on screen — at this shape it is the floor's height that runs out.
+    expect(stub.camera.zoom).toBeCloseTo(800 / 1344);
+    stub.camera.width = 1200;
+    stub.scale.emit("resize");
+    expect(stub.camera.zoom).toBe(whole);
+  });
+
   it("still refits a live scene on resize", () => {
     const stub = stubScene();
     controllerFor(stub.scene).init();
     const fitted = stub.camera.zoom;
 
-    // A smaller viewport covers the map at a different zoom, and a live
+    // A smaller viewport fits the lobby at a different zoom, and a live
     // scene must still hear about it — the teardown must not cost us this.
     stub.camera.width = 600;
     stub.camera.height = 400;
