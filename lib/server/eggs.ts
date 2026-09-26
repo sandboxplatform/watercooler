@@ -23,26 +23,32 @@ const log = createLogger("Eggs");
 /**
  * How long an egg lies there before it is gone.
  *
- * Long enough that somebody who saw where it landed can finish what they
- * were doing and walk over, and short enough that an afternoon of clucking
- * does not leave a field nobody can cross without treading on one. The
- * ball goes home after ninety seconds because there is one of it and the
- * court wants it back; an egg belongs to whoever finds it, so it is given
- * a great deal longer.
+ * Three hours. The residents startle Michael while nobody is online, and
+ * left to themselves they lay about one egg every seven hours — so
+ * somebody logging in after a quiet stretch finds one waiting about a
+ * third of the time. That is the balance being struck: often enough to be
+ * worth looking, rarely enough to be a find rather than a fixture. At the
+ * ten minutes it used to be, it was one login in fifty; at twelve hours,
+ * four in five. The ball goes home after ninety seconds because there is
+ * one of it and the court wants it back; an egg belongs to whoever finds
+ * it, so it is given a great deal longer.
  */
-export const EGG_SPOILS_MS = 10 * 60_000;
+export const EGG_SPOILS_MS = 3 * 60 * 60_000;
 
 /**
  * How many may lie about at once.
  *
- * A ceiling rather than a rule anybody feels: at one egg in a hundred
- * clucks nothing short of a siege reaches it. When it is reached the oldest
- * goes, not the newest — the one somebody has walked past twice already is
- * the one least likely to be collected, and refusing to lay a new one
- * instead would silently switch the whole feature off for as long as the
- * field stayed full.
+ * A ceiling rather than a rule anybody feels, and it has to stay one: an
+ * egg is meant to go when its time is up, not because others were laid
+ * after it. Left to themselves the residents lay about one in seven hours,
+ * and a person chasing Michael without ever stooping lays one every two
+ * minutes or so — so this is well over an hour and a half of that, which
+ * is a siege. When it is reached the oldest goes, not the newest — the one
+ * somebody has walked past twice already is the one least likely to be
+ * collected, and refusing to lay a new one instead would silently switch
+ * the whole feature off for as long as the field stayed full.
  */
-export const NEST_LIMIT = 12;
+export const NEST_LIMIT = 48;
 
 /** An egg, and when it was laid, which is the only part the wire never sees. */
 interface Kept extends LaidEgg {

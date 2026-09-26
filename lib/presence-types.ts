@@ -426,9 +426,9 @@ export interface BasketballBroadcast {
  * going, for the reason `online` and `meetings` are whole lists: it is
  * sent on every change and to everybody arriving, so a browser that
  * missed a message is not left drawing an egg somebody pocketed ten
- * minutes ago. It is a short list — `NEST_LIMIT` at the very most — and
- * it changes a handful of times an hour, which is nothing beside the
- * ball's twenty a second.
+ * minutes ago. It is a short list — `NEST_LIMIT` at the very most, a few
+ * kilobytes — and it changes a handful of times an hour, which is nothing
+ * beside the ball's twenty a second.
  *
  * `taken` is the moment: what somebody just picked up, what they are
  * called and the patch of grass they picked it up off, so every screen on

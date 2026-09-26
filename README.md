@@ -283,7 +283,7 @@ He runs at half again a sprint, so you will not simply out-run him — but
 fresh chance, and only one egg comes out of any one run however many times
 you run him down. Let him go and he drops it where he stops.
 
-It stays where it fell for ten minutes, and it belongs to whoever gets there
+It stays where it fell for three hours, and it belongs to whoever gets there
 first: walk up and press E. A glow and a bobbing arrow hang over it the whole
 time, drawn above the trees — otherwise an egg laid in the wood is an egg
 behind a canopy, which is an egg nobody was ever going to find. There are eight kinds, and which one you have got

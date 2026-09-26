@@ -2924,12 +2924,21 @@ Five decisions in it:
   anybody asks of it is a **tally**, which is bounded by people times six
   where the rows are bounded by nothing.
 - **Two of them go stale and one of them goes first.** `EGG_SPOILS_MS` is
-  ten minutes — long enough to finish what you were doing and walk over,
-  short enough that an afternoon of clucking is not a park you cannot cross.
-  `NEST_LIMIT` is twelve, and reaching it drops the **oldest**: the egg
-  people have walked past twice is the one least likely to be collected, and
-  refusing to lay a new one would switch the feature off for as long as the
-  field stayed full.
+  three hours, and it is set by what somebody logging in after a quiet
+  stretch finds. The residents startle Michael with nobody online and lay
+  about one egg every seven hours between them — measured by running the
+  simulation over forty-eight empty half-days, and random enough to treat
+  as a Poisson rate — so the lifetime is the whole of the odds: ten minutes
+  was one login in fifty with an egg waiting, twelve hours four in five,
+  and three hours is one in three. Often enough to be worth looking, rarely
+  enough to be a find. `NEST_LIMIT` is forty-eight, and reaching it drops
+  the **oldest**: the egg people have walked past twice is the one least
+  likely to be collected, and refusing to lay a new one would switch the
+  feature off for as long as the field stayed full. It is a siege guard
+  and has to stay one — at twelve it would have become what decides how
+  long an egg lasts on a busy day. A restart still clears the field, and a
+  push to `main` is a restart, so an egg laid before a deploy is gone
+  however long it had left.
 
 **Two messages, which is the badges' arrangement.** `eggs` is a fact about
 the world map and goes to that room — the whole field every time, like
