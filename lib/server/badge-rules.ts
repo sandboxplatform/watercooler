@@ -28,7 +28,7 @@ import { RESIDENT_COUNT } from "../world/cast";
 import { EGG_TIER_COUNT } from "../world/eggs";
 import { ORGANISATIONS, TENANTS, type Tenant } from "../world/tenants";
 import { tenantInRoom } from "../world/floors";
-import { parseFloorRoomSlug } from "../rooms";
+import { CAVE_ROOM_SLUG, VOLCANO_ROOM_SLUG, parseFloorRoomSlug } from "../rooms";
 import { isArcadeGameId } from "../arcade/types";
 import { createLogger } from "../logger";
 
@@ -119,6 +119,11 @@ export function onArrival(holder: Holder, room: string, at: Date = new Date()): 
   // on it proof of the crossing.
   const campus = room.startsWith("campus-") ? room.slice("campus-".length) : null;
   if (campus === "apeiron-media") grant(holder, "sea-legs", earned);
+  // And Volcano Island, the same argument off the other dock. The cave
+  // counts as well as the beach: it is under the island, and a reload or a
+  // shared link can land somebody straight in it, which is exactly the
+  // footing a link to the Irish island already puts Sea Legs on.
+  if (room === VOLCANO_ROOM_SLUG || room === CAVE_ROOM_SLUG) grant(holder, "hot-foot", earned);
 
   const tenant = tenantInRoom(room);
   const org =
@@ -288,6 +293,21 @@ export function onOutdoors(holder: Holder, where: Outdoors): EarnedBadge[] {
 export function onRunThrough(holder: Holder): EarnedBadge[] {
   const earned: EarnedBadge[] = [];
   grant(holder, "right-of-way", earned);
+  return earned;
+}
+
+/**
+ * A punch landed on the blob in the volcano's cave.
+ *
+ * Landed, not thrown: the server is the one that checked the puncher was
+ * within arm's length, off the room's own record of where they stand, and
+ * that the blob was not still sailing from somebody else's punch. A swing
+ * at nothing is refused before it gets here, so a browser pressing the
+ * button across the cave earns nothing.
+ */
+export function onPunch(holder: Holder): EarnedBadge[] {
+  const earned: EarnedBadge[] = [];
+  grant(holder, "seeing-stars", earned);
   return earned;
 }
 

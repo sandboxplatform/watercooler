@@ -47,6 +47,8 @@ interface Person {
   id: string;
   /** Every blob message this connection has been sent, in order. */
   heard: BlobBroadcast[];
+  /** Every badge announced to this connection, as the holder's name and the code. */
+  badges: { name: string; code: string }[];
   /** Stand somewhere, by a re-join — the scene's word, not held to walking speed. */
   standAt(at: { x: number; y: number }): void;
   punch(): void;
@@ -64,6 +66,7 @@ async function walkIn(name: string, room: string): Promise<Person> {
     socket,
     id: "",
     heard: [],
+    badges: [],
     standAt: join,
     punch: () => socket.send(JSON.stringify({ type: "blob", action: "punch" })),
   };
@@ -71,6 +74,7 @@ async function walkIn(name: string, room: string): Promise<Person> {
     const message = JSON.parse(raw.toString());
     if (message.type === "welcome") person.id = message.you;
     if (message.type === "blob") person.heard.push(message as BlobBroadcast);
+    if (message.type === "badge") person.badges.push({ name: message.name, code: message.code });
   });
   await new Promise<void>((done) => socket.on("open", () => (join({ x: 60, y: 60 }), done())));
   await until(() => person.id !== "");
@@ -86,6 +90,13 @@ async function until(ready: () => boolean, ms = 4000) {
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("the blob in the cave", () => {
+  it("gives Hot Foot to somebody landing on Volcano Island", async () => {
+    const ann = await walkIn("Ann", VOLCANO_ROOM_SLUG);
+    await until(() => ann.badges.some((b) => b.code === "hot-foot"));
+    expect(ann.badges).toContainEqual({ name: "Ann", code: "hot-foot" });
+    ann.socket.close();
+  });
+
   it("is told to somebody walking in, even while it sits still", async () => {
     const coop = await walkIn("Coop", CAVE_ROOM_SLUG);
     await until(() => coop.heard.length > 0);
@@ -118,6 +129,12 @@ describe("the blob in the cave", () => {
     expect(punched.leap.kind).toBe("knocked");
     // The beach has no use for a blob's leaps.
     expect(nick.heard).toEqual([]);
+    // And the punch that landed is a badge, for the one who threw it —
+    // announced to the whole world, as every badge is.
+    await until(() => nick.badges.some((b) => b.code === "seeing-stars"));
+    expect(nick.badges.filter((b) => b.code === "seeing-stars")).toEqual([
+      { name: "Coop", code: "seeing-stars" },
+    ]);
 
     for (const p of [coop, rob, nick]) p.socket.close();
   }, 20_000);

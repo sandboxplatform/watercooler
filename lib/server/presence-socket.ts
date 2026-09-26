@@ -44,6 +44,7 @@ import {
   onMingle,
   onOutdoors,
   onPingPong,
+  onPunch,
   onRoomFull,
   onRunThrough,
   onWhiteboard,
@@ -1371,6 +1372,11 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           // punch. Nothing happened, so nothing is published.
           if (!leap) return;
           broadcast(CAVE_ROOM_SLUG, blobMessage({ by: player.name, id }));
+          // A crowd round the blob lands a punch every time it comes down,
+          // and the badge is only ever new once — so `once` settles it
+          // before the store is asked, as it does for a rally.
+          const holder = holderOf(id);
+          if (holder && once(holder.person, "seeing-stars")) announce(slug, onPunch(holder));
           return;
         }
 

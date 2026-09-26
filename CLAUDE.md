@@ -641,7 +641,7 @@ dropped without a word.
 
 ### Badges
 
-Thirty-two of them (`lib/badges.ts`), in six groups — Getting about,
+Thirty-four of them (`lib/badges.ts`), in six groups — Getting about,
 Playing, Together, The locals, Eggs, Curios. Three rules run through the
 catalogue, and the last two are what the one before it got wrong.
 
@@ -714,10 +714,12 @@ Where each rule is called from:
 | `onRunThrough`                  | A car's box covering somebody             | The socket's `runOver` |
 | `onEggFound`                    | An egg taken out of the grass             | `presence-socket`      |
 | `onEggLaid`                     | A fright that left one behind             | The socket's `laid`    |
+| `onPunch`                       | A punch that landed on the blob           | `presence-socket`      |
 
-Six of those would otherwise write to the database far too often — a rally
-sends a message a frame, a move arrives twenty times a second and the
-online list refreshes on a timer — so `once(person, code)` in the socket
+Seven of those would otherwise write to the database far too often — a rally
+sends a message a frame, a move arrives twenty times a second, the online
+list refreshes on a timer and a crowd round the blob lands a punch every time
+it comes down — so `once(person, code)` in the socket
 settles each one per run before the store is asked at all.
 
 **The three newest are the three places the world grew.** The map tripled
@@ -3240,6 +3242,15 @@ a second, which is near enough for a mountain.
 which cuts the solid bands from it, and in `scripts/make-world-art.mjs`, which
 draws the mountain to it. `volcano.test.ts` reads the script and insists the
 two agree, because a mismatch is invisible walls in the sky beside the summit.
+
+**Two badges, both off things the server saw.** **Hot Foot** is a join to
+either room — the cave counts, since a shared link can land somebody straight
+in it, which is the footing Sea Legs is already on — and the volcano being
+nobody's keeps it out of the Grand Tour's count. **Seeing Stars** is a punch
+that _landed_: `onPunch` is only reached after `CaveBlob.punch` has checked the
+reach and that the blob was not already sailing, so a swing across the cave
+earns nothing. A curio rather than a local, because Knows Everybody counts the
+cast and the blob is not in it.
 
 ### Fixtures
 

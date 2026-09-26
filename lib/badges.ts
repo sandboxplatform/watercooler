@@ -116,6 +116,17 @@ export const BADGES: readonly Badge[] = [
     hint: "The ferry is moored at the dock on the south shore. Walk aboard and it carries you out to the island.",
     icon: "⛴️",
   },
+  // The other crossing, off the second dock. Beside Sea Legs rather than
+  // folded into it, because they are two boats to two places and nobody who
+  // has been to one has been to the other.
+  {
+    code: "hot-foot",
+    group: "about",
+    title: "Hot Foot",
+    description: "Took the other ferry, across to Volcano Island",
+    hint: "The second dock is at the foot of the east avenue, under a board that says Ferry to Volcano. Walk aboard.",
+    icon: "🌋",
+  },
   {
     code: "back-of-house",
     group: "about",
@@ -352,6 +363,18 @@ export const BADGES: readonly Badge[] = [
     description: "Stood in the highway and let a car go straight through",
     hint: "Nothing collides with a car. Stand in a lane of the highway out east and wait for one to come.",
     icon: "🚗",
+  },
+  // A curio rather than a local: the blob is nobody the cast knows, and
+  // Knows Everybody counts the residents, so it has to stay out of that set.
+  // Named for what happens to the blob, which is the stars it sits there
+  // seeing — the punch is in the icon.
+  {
+    code: "seeing-stars",
+    group: "curios",
+    title: "Seeing Stars",
+    description: "Punched the blob in the volcano's cave",
+    hint: "Walk into the cave at the foot of the volcano. Get close to the blob while it sits still and press E, or A on a controller.",
+    icon: "👊",
   },
   {
     code: "night-shift",

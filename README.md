@@ -595,10 +595,11 @@ Press any name and you get their **profile**: the full concept art they were
 drawn from, what they do, a short and largely unreliable account of who they
 are, and their badges.
 
-**Badges** is the second tab — thirty-two of them, in six groups, and the
+**Badges** is the second tab — thirty-four of them, in six groups, and the
 whole catalogue is listed whether or not anybody has one, because half the
 point of a badge is knowing it is there to be had. They are for going
-places (every organisation in the world; the ferry across to the island; an
+places (every organisation in the world; the ferry across to the island, and
+the other one to the volcano; an
 Operations floor; up the trail into the wood, and east past the last of the
 town), for playing what is standing in the lobbies (a score on every
 machine; first place on a board; a game of ping pong; a basket, one banked
@@ -609,7 +610,8 @@ enough to Michael to startle him; catching him while he is still running;
 finding Doc; meeting every resident there is), for his eggs (your first;
 startling him into laying one; the rainbow; one of every kind), and for a
 few odd ones — drawing on a whiteboard, being here in the small hours,
-standing in the highway while a car goes straight through you, being the
+standing in the highway while a car goes straight through you, punching the
+blob in the volcano's cave, being the
 only person in the whole world.
 
 **Press one and you get the badge itself**: what it is, whether you have

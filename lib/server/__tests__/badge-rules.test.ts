@@ -3,7 +3,7 @@ import { BADGES, BADGE_GROUPS, badgeFor, badgeHolder, isGuestHolder } from "../.
 import { ORGANISATIONS, TENANTS } from "../../world/tenants";
 import { RESIDENT_COUNT, CAST_RESIDENTS } from "../../world/cast";
 import { EGG_KINDS } from "../../world/eggs";
-import { floorRoomSlug, campusRoomSlug } from "../../rooms";
+import { CAVE_ROOM_SLUG, VOLCANO_ROOM_SLUG, campusRoomSlug, floorRoomSlug } from "../../rooms";
 import { RoomStore } from "../room-store";
 
 let store: RoomStore;
@@ -78,6 +78,18 @@ describe("turning up", () => {
     expect(codes(rules.onArrival(coop, campusRoomSlug("apeiron-media"), noon()))).toContain(
       "sea-legs",
     );
+  });
+
+  it("gives Hot Foot for Volcano Island or its cave, and not for the other island", () => {
+    expect(codes(rules.onArrival(coop, campusRoomSlug("apeiron-media"), noon()))).not.toContain(
+      "hot-foot",
+    );
+    expect(codes(rules.onArrival(coop, VOLCANO_ROOM_SLUG, noon()))).toContain("hot-foot");
+    expect(codes(rules.onArrival(coop, CAVE_ROOM_SLUG, noon()))).not.toContain("hot-foot");
+    // Straight into the cave off a shared link is standing on the island too.
+    expect(codes(rules.onArrival(guest, CAVE_ROOM_SLUG, noon()))).toContain("hot-foot");
+    // And the volcano is nobody's, so it is no step towards the Grand Tour.
+    expect(store.countMarks("coop", "org:")).toBe(1);
   });
 });
 
@@ -175,6 +187,12 @@ describe("getting about, out of doors", () => {
     expect(codes(rules.onOutdoors(coop, "wood"))).toEqual(["into-the-woods"]);
     expect(codes(rules.onOutdoors(coop, "wood"))).toEqual([]);
     expect(codes(rules.onOutdoors(coop, "wilderness"))).toEqual(["out-in-the-wild"]);
+  });
+
+  it("gives Seeing Stars for a punch that landed on the blob, once", () => {
+    expect(codes(rules.onPunch(coop))).toEqual(["seeing-stars"]);
+    expect(codes(rules.onPunch(coop))).toEqual([]);
+    expect(codes(rules.onPunch(guest))).toEqual(["seeing-stars"]);
   });
 
   it("gives Right of Way once, however many cars go through", () => {
@@ -290,6 +308,7 @@ describe("the catalogue", () => {
     }
     take(rules.onArrival(someone, floorRoomSlug("sandbox-erp", 3), at(2)));
     take(rules.onArrival(someone, campusRoomSlug("apeiron-media"), at(2)));
+    take(rules.onArrival(someone, VOLCANO_ROOM_SLUG, at(2)));
     take(rules.onAlone(someone));
     take(rules.onRoomFull([someone]));
     take(rules.onMicOn(someone, [someone, someone, someone, someone]));
@@ -302,6 +321,7 @@ describe("the catalogue", () => {
     take(rules.onOutdoors(someone, "wood"));
     take(rules.onOutdoors(someone, "wilderness"));
     take(rules.onRunThrough(someone));
+    take(rules.onPunch(someone));
     take(rules.onEggLaid(someone));
     for (const kind of EGG_KINDS) take(rules.onEggFound(someone, kind.id));
     for (const machine of rules.SCORED_MACHINES) take(rules.onScore(someone, machine, true));
