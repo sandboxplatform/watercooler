@@ -635,7 +635,9 @@ gone — talking is Global Chat.
 West of Blockhouse and Chester the road carries on past four more building
 supply stores — **Targetts**, **Masstown**, **MacCallum** and **Happy
 Harrys** — in the same two staggered ranks, each with its name over the door
-and its stock stacked outside it. Walk in and you are in the shop; a door at
+and its stock stacked outside it. They stand close together, a short walk
+from the plaza, and past the last of them the road runs on through open
+meadow to the edge of the map. Walk in and you are in the shop; a door at
 the back of every one of them goes through to that business's warehouse, and
 that is all there is to them. None of the four runs a field crew, so there is
 no third door.

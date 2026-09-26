@@ -27,6 +27,7 @@
  */
 
 import {
+  SHOPS_FROM,
   SHORE_ROW,
   TILE,
   TOWN_RIGHT,
@@ -174,10 +175,32 @@ const scatter = (a: number, b: number) => {
  * Whether a prop's *picture* hangs over something is `scenery.ts`'s
  * question, since only that file knows how big a tree is drawn.
  */
-export const WILD_PLANTING: readonly { kind: "tree" | "bush"; x: number; y: number }[] = (() => {
+export const WILD_PLANTING = meadow(WILD_FROM, WORLD_COLUMNS);
+
+/**
+ * The same meadow at the other end of the map, west of the shops.
+ *
+ * The four shops out there used to be spread across the whole stretch, a
+ * shop every thirteen columns; drawn in against the town, they left the far
+ * west with nothing standing on it — and a lawn twenty columns wide with a
+ * road across it is somewhere nobody finished rather than somewhere. So it
+ * is the country the town stands in, planted the way the wilderness is,
+ * with the two promenades running on through it and off the edge as the
+ * roads out of town.
+ *
+ * Kept apart from `WILD_PLANTING` because that one is the wilderness —
+ * `inTheWilderness` and its badge are the east, and so is the density
+ * `wilderness.test.ts` holds it to — and this is only ground planted alike.
+ */
+export const WEST_PLANTING = meadow(0, SHOPS_FROM);
+
+function meadow(
+  from: number,
+  to: number,
+): readonly { kind: "tree" | "bush"; x: number; y: number }[] {
   const props: { kind: "tree" | "bush"; x: number; y: number }[] = [];
   for (let row = WOOD_ROWS; row < WORLD_ROWS; row++) {
-    for (let column = WILD_FROM; column < WORLD_COLUMNS; column++) {
+    for (let column = from; column < to; column++) {
       const roll = scatter(column, row);
       if (roll > 0.17) continue;
       if (atSea(column, row)) continue;
@@ -190,4 +213,4 @@ export const WILD_PLANTING: readonly { kind: "tree" | "bush"; x: number; y: numb
     }
   }
   return props;
-})();
+}

@@ -3443,7 +3443,7 @@ it is laid out that way rather than renumbered:
 
 | Stretch        | Columns | What is in it                                                      |
 | -------------- | ------- | ------------------------------------------------------------------ |
-| The shops      | 58      | Four stores along the two roads, and the wood above them           |
+| The shops      | 58      | Meadow, then four stores along the two roads; the wood above them  |
 | The town       | 62      | Everything there was: the head offices, the plaza, the campus gate |
 | The wilderness | 66      | Meadow, the river turning north through it, and the highway        |
 
@@ -3475,6 +3475,19 @@ rather than four times, because a garage added to one of them by hand is a
 side door `buildStoreSpec` puts through to a room nobody generated. Two more
 avenues join the roads out there (`SHOP_AVENUES`), so no doorstep is more
 than a few shops from a way down to the promenade.
+
+**They stand at the town's end of the stretch, not across it.** A shop every
+ten columns (`WEST_SHOPS`), with the same four-column gap between each and
+the next and between Happy Harrys and Blockhouse, so the row reads as one
+street leading into the town. They were a shop every thirteen, spread from
+four columns off the west edge, and Targetts was a minute's walk from the
+plaza. The map kept its width: the twenty-odd columns they gave up are
+meadow (`WEST_PLANTING`, the wilderness's scatter under another name), with
+the two promenades running on through it and off the edge. Four columns
+rather than Blockhouse and Chester's one because `atTheDoor` stands a tree
+beside each shop, and any tighter it is drawn over the next one along — and
+the tree line along the town's top edge gives way to that tree, since a shop
+in the far rank has its feet on the line's own row.
 
 Their fronts are **one drawing with four sets of colours** — `shop()` in
 `scripts/make-world-art.mjs`, varying the walls, the roof, whether there is

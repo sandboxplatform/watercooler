@@ -30,7 +30,7 @@ import {
   WORLD_WIDTH,
   type Rect,
 } from "./tenants";
-import { HIGHWAY, SEA, WILD_PLANTING, shoreAt } from "./wilderness";
+import { HIGHWAY, SEA, WEST_PLANTING, WILD_PLANTING, shoreAt } from "./wilderness";
 import { blockedCells } from "./route";
 import { MAILBOX, MAILBOXES } from "./mailboxes";
 import { COURT, HOOPS, hoopProp } from "./basketball";
@@ -81,9 +81,12 @@ export const EAST_AVENUE = CENTRE + 30 + 6;
  * nothing out there for them to be named after: they join the two roads
  * where the walk between them would otherwise be forty columns. One between
  * the first pair of shops and one between the second, so no doorstep on that
- * road is more than a few shops from a way down to the promenade.
+ * road is more than a few shops from a way down to the promenade — which
+ * makes them the shops' to move: they came east with the shops, and the
+ * three crossings west of the town are now twenty, seventeen and twenty-two
+ * columns apart rather than twenty-six and twenty-eight.
  */
-export const SHOP_AVENUES: readonly number[] = [12, 38];
+export const SHOP_AVENUES: readonly number[] = [29, 49];
 
 /** Every crossing between the two roads, west to east. */
 const AVENUES: readonly number[] = [...SHOP_AVENUES, WEST_AVENUE, CENTRE_AVENUE, EAST_AVENUE];
@@ -518,6 +521,21 @@ const atTheDoor = (b: (typeof BUILDINGS)[number]): PlacedProp[] => {
   ];
 };
 
+/**
+ * The four newer shops' doorsteps. Taken off each building rather than
+ * written out four times over, which is also what keeps them in front of
+ * the door when a shop moves: Blockhouse's and Chester's are the same
+ * arrangement, measured off theirs, from when there were two of them.
+ *
+ * Named because the tree line along the town's top edge has to give way to
+ * them. A shop in the far rank stands with its feet on that line's row, so
+ * the tree beside it is in the line, and wherever the line's 140px step
+ * happens to put a trunk beside it the two stand in each other.
+ */
+const SHOPFRONTS: readonly PlacedProp[] = BUILDINGS.filter((b) => b.org.style === "shop").flatMap(
+  atTheDoor,
+);
+
 /** Every 140px across a stretch. */
 const along = (from: number, to: number, step: number): number[] => {
   const xs: number[] = [];
@@ -552,11 +570,8 @@ const PLACED: readonly PlacedProp[] = [
     .filter((b): b is { x: number; shore: number } => b.shore !== null)
     .map(({ x, shore }): PlacedProp => ({ kind: "bush", x, y: shore * TILE - 12 })),
 
-  // The four newer shops' doorsteps. Taken off each building rather than
-  // written out four times over, which is also what keeps them in front of
-  // the door when a shop moves: Blockhouse's and Chester's are the same
-  // arrangement, measured off theirs, from when there were two of them.
-  ...BUILDINGS.filter((b) => b.org.style === "shop").flatMap(atTheDoor),
+  // The four newer shops' doorsteps — see `SHOPFRONTS`.
+  ...SHOPFRONTS,
 
   // A mailbox outside each customer's building, read off `MAILBOXES` rather
   // than written out six times — the bubble over it is drawn at those same
@@ -570,32 +585,35 @@ const PLACED: readonly PlacedProp[] = [
   // room for and there is nothing here to be relative to. Written out rather
   // than scattered because a park is somewhere somebody laid out — the
   // scatter is for the wood and the meadow, which are not.
-  { kind: "tree", x: 160, y: 2450 },
-  { kind: "tree", x: 400, y: 2620 },
-  { kind: "tree", x: 100, y: 2780 },
-  { kind: "bench", x: 280, y: 2520 },
-  { kind: "lamp", x: 220, y: 2360 },
-  { kind: "lamp", x: 360, y: 2360 },
+  //
+  // Three blocks, the width of the shops above them: from where the meadow
+  // stops to the first crossing, between the two crossings, and from the
+  // second to the lab. Everything west of the first is meadow.
+  { kind: "tree", x: 1072, y: 2450 },
+  { kind: "tree", x: 1312, y: 2620 },
+  { kind: "tree", x: 1012, y: 2780 },
+  { kind: "bench", x: 1192, y: 2520 },
+  { kind: "lamp", x: 1132, y: 2360 },
+  { kind: "lamp", x: 1272, y: 2360 },
 
-  { kind: "tree", x: 820, y: 2460 },
-  { kind: "tree", x: 1150, y: 2700 },
-  { kind: "tree", x: 1520, y: 2430 },
-  { kind: "tree", x: 1700, y: 2650 },
-  { kind: "tree", x: 960, y: 2800 },
-  { kind: "bench", x: 1180, y: 2470 },
-  { kind: "bench", x: 1360, y: 2470 },
-  { kind: "planter", x: 1270, y: 2380 },
-  { kind: "lamp", x: 790, y: 2360 },
-  { kind: "lamp", x: 930, y: 2360 },
-  { kind: "lamp", x: 1620, y: 2360 },
-  { kind: "lamp", x: 1760, y: 2360 },
+  { kind: "tree", x: 1582, y: 2460 },
+  { kind: "tree", x: 1830, y: 2700 },
+  { kind: "tree", x: 2108, y: 2430 },
+  { kind: "tree", x: 2243, y: 2650 },
+  { kind: "tree", x: 1687, y: 2800 },
+  { kind: "bench", x: 1830, y: 2470 },
+  { kind: "bench", x: 2010, y: 2470 },
+  { kind: "planter", x: 1920, y: 2380 },
+  { kind: "lamp", x: 1560, y: 2360 },
+  { kind: "lamp", x: 1680, y: 2360 },
+  { kind: "lamp", x: 2160, y: 2360 },
+  { kind: "lamp", x: 2280, y: 2360 },
 
-  { kind: "tree", x: 2060, y: 2520 },
-  { kind: "tree", x: 2420, y: 2700 },
-  { kind: "tree", x: 2660, y: 2460 },
-  { kind: "bench", x: 2220, y: 2600 },
-  { kind: "lamp", x: 2010, y: 2360 },
-  { kind: "lamp", x: 2150, y: 2360 },
+  { kind: "tree", x: 2540, y: 2520 },
+  { kind: "tree", x: 2740, y: 2780 },
+  { kind: "bench", x: 2640, y: 2640 },
+  { kind: "lamp", x: 2520, y: 2360 },
+  { kind: "lamp", x: 2660, y: 2360 },
 
   // The basketball court's two hoops, standing on their own end lines. Read
   // off `HOOPS` rather than written out, because the ball is judged against
@@ -622,6 +640,10 @@ const PLACED: readonly PlacedProp[] = [
           // east end of it, so it is asked of the map instead.
           !KEEP_CLEAR.some((r) =>
             overlaps(propBounds({ kind: "tree", x, y: TOWN_TOP + 118 }), r),
+          ) &&
+          // Nor where a shop has already stood a tree of its own.
+          !SHOPFRONTS.some((p) =>
+            overlaps(propBody({ kind: "tree", x, y: TOWN_TOP + 118 })!, propBody(p)!),
           ) &&
           (x < TRAIL_HEAD.from || x > TRAIL_HEAD.to),
       ),
@@ -758,7 +780,7 @@ const SCATTERED: readonly PlacedProp[] = (() => {
   // meadow's scatter meeting the shore, and the wood's meeting the tree line
   // under it.
   const bodies: Rect[] = PLACED.map(propBody).filter((r): r is Rect => r !== null);
-  for (const p of [...WOOD_PLANTING, ...WILD_PLANTING]) {
+  for (const p of [...WOOD_PLANTING, ...WILD_PLANTING, ...WEST_PLANTING]) {
     const picture = propBounds(p);
     if (KEEP_CLEAR.some((r) => overlaps(picture, r))) continue;
     if (picture.y < -TILE || picture.x < -TILE || picture.x + picture.width > WORLD_WIDTH + TILE) {

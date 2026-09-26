@@ -448,11 +448,12 @@ export const TILE = 48;
  */
 export const TOWN_COLUMNS = 62;
 /**
- * The stretch west of the town: four more stores along the same two roads.
+ * The stretch west of the town: four more stores along the same two roads,
+ * and open meadow past the last of them.
  *
- * Wide enough that they stand apart rather than in a terrace — a shop every
- * thirteen columns, in two staggered ranks like Blockhouse and Chester —
- * and the wood carries on above them as it does over the town.
+ * The shops stand at the town's end of it rather than spread across the
+ * whole — see `WEST_SHOPS` — and the wood carries on above them as it does
+ * over the town.
  */
 export const WEST_COLUMNS = 58;
 /**
@@ -597,13 +598,31 @@ const ontoCampus = (slug: string): Entrance => ({ kind: "campus", campus: slug }
  * `rank` is in the town's own rows, since that is what `placeBuilding`
  * takes; `column` is a world column, because out here there is no town to
  * be relative to.
+ *
+ * **A shop every ten columns, drawn in against the town.** They were spread
+ * a shop every thirteen across the whole stretch, which put Targetts four
+ * columns off the west edge and a minute's walk from the plaza. Now the four
+ * gaps are the same — four columns between each shop and the next, Happy
+ * Harrys to Blockhouse included — so the row reads as one run of shops
+ * leading into the town rather than as outposts along a road. Four columns
+ * rather than Blockhouse and Chester's one: that is what leaves room for the
+ * tree `atTheDoor` stands beside each shop without it being drawn over the
+ * next one along. The ground they gave up is meadow — see `WEST_PLANTING`.
  */
 const WEST_SHOPS: readonly { org: string; column: number; rank: number }[] = [
-  { org: "targetts", column: 4, rank: 2 },
-  { org: "masstown", column: 17, rank: 8 },
-  { org: "maccallum", column: 30, rank: 2 },
-  { org: "happy-harrys", column: 43, rank: 8 },
+  { org: "targetts", column: 22, rank: 2 },
+  { org: "masstown", column: 32, rank: 8 },
+  { org: "maccallum", column: 42, rank: 2 },
+  { org: "happy-harrys", column: 52, rank: 8 },
 ];
+
+/**
+ * Where the shops' stretch stops being shops, in world columns: three
+ * columns short of Targetts, so the meadow west of it does not crowd its
+ * door. Everything west of this is open country, and the shops' park begins
+ * here — see `WEST_PLANTING` in wilderness.ts.
+ */
+export const SHOPS_FROM = WEST_SHOPS[0].column - 3;
 
 export const BUILDINGS: readonly Building[] = [
   placeBuilding(
