@@ -18,7 +18,7 @@ import { getRoomStore } from "./room-store";
 import { identityOf, isAuthorized, personaFor, type AccessIdentity } from "./access";
 import { mayWear } from "../characters/library";
 import { BOSS_SPRITE_KEY } from "../characters/sprites";
-import { normaliseRoomSlug, WORLD_ROOM_SLUG } from "../rooms";
+import { CAVE_ROOM_SLUG, normaliseRoomSlug, WORLD_ROOM_SLUG } from "../rooms";
 import { describeRoom, hasBoardroom, mayEnterRoom } from "../world/floors";
 import { badgeFor, badgeHolder, type EarnedBadge } from "../badges";
 import { isPongPayload } from "../pong/protocol";
@@ -26,6 +26,7 @@ import { SHARED_BOARD, isStroke, sanitiseStroke } from "../whiteboard";
 import { Basketball } from "./basketball";
 import { Nest } from "./eggs";
 import { Traffic } from "./traffic";
+import { CaveBlob } from "./blob";
 import { eggSpot, type EggTier } from "../world/eggs";
 import { inTheWood } from "../world/wood";
 import { inTheWilderness } from "../world/wilderness";
@@ -236,6 +237,16 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
    * changes. See `TrafficBroadcast`.
    */
   const traffic = new Traffic();
+
+  /**
+   * The blob in the volcano's cave.
+   *
+   * In memory beside the ball, and for its reason: where a blob is hopping
+   * is something happening rather than something kept. Stepped only while
+   * somebody is in the cave, like the traffic — an empty cave is a blob
+   * nobody is watching, and it waits where it was until somebody walks in.
+   */
+  const blob = new CaveBlob();
 
   setRoomBroadcast((slug, message) => broadcast(slug, message));
   setWorldBroadcast((message) => broadcastAll(message));
@@ -796,6 +807,29 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     }
   };
 
+  // ── The blob ──────────────────────────────────────────
+
+  /** The blob's leap, as the wire carries it. */
+  const blobMessage = (punched?: { by: string; id: string }): ServerMessage => ({
+    type: "blob",
+    ...blob.state,
+    elapsed: Math.round(blob.state.elapsed),
+    ...(punched ? { punched } : {}),
+  });
+
+  /**
+   * Hop the blob on, and tell the cave when it sets off.
+   *
+   * Only while somebody is in there — the rooms map forgets a room the
+   * moment it empties, which is the traffic's rule. Only when it sets off,
+   * too: the arc between is the same arithmetic on every screen, so a cave
+   * with a blob sitting in it is a cave with nothing on the wire.
+   */
+  const stepBlob = () => {
+    if (!rooms.get(CAVE_ROOM_SLUG)) return;
+    if (blob.step(TICK_MS)) broadcast(CAVE_ROOM_SLUG, blobMessage());
+  };
+
   // ── The eggs ──────────────────────────────────────────
 
   /**
@@ -902,6 +936,7 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     // is kept in the order it was laid, so this is one comparison.
     if (nest.spoil(Date.now())) publishEggs();
     stepTraffic();
+    stepBlob();
   }, TICK_MS);
   ticker.unref?.();
 
@@ -1053,6 +1088,10 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           send(ws, { type: "eggs", eggs: nest.lying });
           send(ws, { type: "traffic", cars: traffic.onTheRoad });
         }
+        // And the blob, for somebody walking into the cave: it is published
+        // when it sets off, so somebody arriving while it sits would
+        // otherwise see an empty cave until its next hop.
+        if (slug === CAVE_ROOM_SLUG) send(ws, blobMessage());
 
         // Badges, after the room has been told they are here: everything
         // below reads the hub, and a `holderOf` before the join would have
@@ -1316,6 +1355,22 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           publishEggs({
             taken: { tier: egg.tier, by: holder?.name ?? player.name, x: egg.x, y: egg.y },
           });
+          return;
+        }
+
+        if (parsed.type === "blob") {
+          // The blob is in the cave and nowhere else, so a punch from any
+          // other room is a browser swinging at something that is not there.
+          if (slug !== CAVE_ROOM_SLUG) return;
+          const player = room.hub.get(id);
+          if (!player) return;
+          // Where they stand and which way they face, off the room's own
+          // record of them — the message says only that a punch was thrown.
+          const leap = blob.punch({ x: player.x, y: player.y, facing: player.facing });
+          // A swing at nothing, or at a blob still sailing from the last
+          // punch. Nothing happened, so nothing is published.
+          if (!leap) return;
+          broadcast(CAVE_ROOM_SLUG, blobMessage({ by: player.name, id }));
           return;
         }
 

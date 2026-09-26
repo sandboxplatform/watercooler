@@ -19,6 +19,7 @@
 import { isArcadeGameId, type ArcadeGameId } from "../arcade/types";
 import type { Game, OfficeOptions } from "../map/office";
 import { roomsForBoards } from "../map/floor";
+import { VOLCANO_ROOM_SLUG } from "../rooms";
 
 export type OrgStyle =
   | "castle"
@@ -534,13 +535,54 @@ export interface Rect {
 export const SHORE_ROW = WOOD_ROWS + 34;
 /** The dock: the centre avenue carried on past the south road and out over the water, in tiles. */
 export const DOCK: Rect = { x: CENTRE_X / TILE + 14, y: WOOD_ROWS + 32, width: 2, height: 5 };
+/**
+ * The second dock, for the ferry to Volcano Island: the east avenue carried
+ * on past the south road the way the centre avenue is for the first.
+ *
+ * A dock of its own rather than a second boat tied up on the other side of
+ * the first one. Two ferries off one dock would have split the end of it
+ * between them a board apiece, and walking down the middle of it would have
+ * put you aboard whichever boat your feet happened to be nearer — a crossing
+ * decided by a pixel, with nothing on screen to say which. Out here the
+ * buildings are the menu, and a menu with two entries in one place is not.
+ *
+ * Its columns are the east avenue's (`EAST_AVENUE` in `scenery.ts`, which
+ * cannot be imported from here), so walking down that avenue and over the
+ * south road puts you on its planks, as the centre avenue does the first.
+ */
+export const VOLCANO_DOCK: Rect = {
+  x: CENTRE_X / TILE + 36,
+  y: WOOD_ROWS + 32,
+  width: 2,
+  height: 5,
+};
+/** Both docks, for everything that has to keep clear of the planking or stand at its head. */
+export const DOCKS_ON_THE_SHORE: readonly Rect[] = [DOCK, VOLCANO_DOCK];
 /** The ferry's picture. */
 export const BOAT = { width: 192, height: 168 };
 
-export type Entrance = { kind: "lobby"; tenant: Tenant } | { kind: "campus"; campus: string };
+export type Entrance =
+  | { kind: "lobby"; tenant: Tenant }
+  | { kind: "campus"; campus: string }
+  // Across the water to Volcano Island, which is nobody's: not a lobby and
+  // not a campus, because both of those are an organisation's.
+  | { kind: "volcano" };
 
 export interface Building {
-  org: Organisation;
+  /**
+   * Whose front door this is — or null for the one thing on the map you can
+   * walk into that belongs to nobody, which is the ferry to Volcano Island.
+   *
+   * Every other building is an organisation's: a lobby, a shop, a campus
+   * gate, and the Irish ferry, which is Apeiron Media's way onto its island.
+   * The volcano is nobody's island, so its boat is nobody's boat. Nullable
+   * rather than filled with a made-up organisation, because the list of
+   * organisations is what the welcome screen offers as a place to work and
+   * what the Grand Tour counts — and a volcano is neither.
+   */
+  org: Organisation | null;
+  /** A name for it that is always there: the organisation's slug, or what the thing is. */
+  id: string;
   /** The picture's footprint, in pixels. */
   frame: Rect;
   /** The part of the footprint a person cannot walk through. */
@@ -572,6 +614,7 @@ function placeBuilding(
   const doorX = x + (width - doorWidth) / 2;
   return {
     org: org(orgSlug),
+    id: orgSlug,
     frame,
     // The wall is solid; the doorway is a gap in it so you can walk up to it.
     solid: { x, y: frame.y, width, height: height - TILE / 2 },
@@ -701,26 +744,32 @@ export const BUILDINGS: readonly Building[] = [
   ),
   // South: the ferry, moored on the east side of the dock's end. Walking
   // onto the end of the dock boards it, and it sails to the island.
-  ferry(),
+  ferry(DOCK, org("apeiron-media"), "apeiron-media", ontoCampus("apeiron-media")),
+  // And the second, off the east avenue's dock, to Volcano Island. The same
+  // boat moored the same way round, so the two crossings read as the same
+  // service — the board at the head of each dock says which is which.
+  ferry(VOLCANO_DOCK, null, "volcano-ferry", { kind: "volcano" }),
 ];
 
-function ferry(): Building {
+/** A ferry moored on the east side of a dock's end, boarded from the end of the planks. */
+function ferry(dock: Rect, owner: Organisation | null, id: string, entrance: Entrance): Building {
   const frame = {
-    x: (DOCK.x + DOCK.width) * TILE,
+    x: (dock.x + dock.width) * TILE,
     y: SHORE_ROW * TILE - TILE / 2,
     width: BOAT.width,
     height: BOAT.height,
   };
   return {
-    org: org("apeiron-media"),
+    org: owner,
+    id,
     frame,
     // A boat in the water: all of it is solid, since the water is too.
     solid: frame,
     // The end of the dock, both boards wide, where the gangway comes across.
-    door: { x: DOCK.x * TILE, y: (DOCK.y + 3) * TILE, width: DOCK.width * TILE, height: 2 * TILE },
+    door: { x: dock.x * TILE, y: (dock.y + 3) * TILE, width: dock.width * TILE, height: 2 * TILE },
     // Back on the dock at the shore, facing up the avenue.
-    outside: { x: DOCK.x * TILE + TILE, y: SHORE_ROW * TILE - TILE / 2 },
-    entrance: ontoCampus("apeiron-media"),
+    outside: { x: dock.x * TILE + TILE, y: SHORE_ROW * TILE - TILE / 2 },
+    entrance,
     art: "world-boat",
     arrive: "up",
   };
@@ -729,14 +778,23 @@ function ferry(): Building {
 /** Where a person appears on the world map with no building to step out of: by the fountain. */
 export const WORLD_SPAWN = { x: CENTRE_X + 600, y: TOWN_TOP + 655 };
 
-/** The building a slug — a tenant's or an organisation's — comes out of. */
+/**
+ * The building a slug — a tenant's, an organisation's, or the volcano's room
+ * — comes out of.
+ *
+ * The volcano is asked by its room slug, which is what Volcano Island hands
+ * back as `from` when its ferry brings somebody home: the island is not an
+ * organisation, so there is no other name for it to give.
+ */
 export function buildingFrom(slug: string | null | undefined): Building | null {
   if (!slug) return null;
   const tenant = tenantFor(slug);
   return (
-    BUILDINGS.find((b) =>
-      b.entrance.kind === "lobby" ? b.entrance.tenant.slug === slug : b.entrance.campus === slug,
-    ) ?? (tenant ? (BUILDINGS.find((b) => b.org.slug === tenant.org) ?? null) : null)
+    BUILDINGS.find((b) => {
+      if (b.entrance.kind === "lobby") return b.entrance.tenant.slug === slug;
+      if (b.entrance.kind === "campus") return b.entrance.campus === slug;
+      return slug === VOLCANO_ROOM_SLUG;
+    }) ?? (tenant ? (BUILDINGS.find((b) => b.org?.slug === tenant.org) ?? null) : null)
   );
 }
 

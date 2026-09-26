@@ -1,12 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
   BUILDINGS,
+  DOCK,
   ORGANISATIONS,
   TENANTS,
+  TILE,
+  VOLCANO_DOCK,
   WORLD_HEIGHT,
   WORLD_SPAWN,
   WORLD_WIDTH,
   arcadeGameIn,
+  buildingFrom,
   hasCampus,
   hasFloors,
   lobbyGame,
@@ -16,7 +20,7 @@ import {
   tenantUrl,
   tenantsOf,
 } from "../tenants";
-import { normaliseRoomSlug } from "../../rooms";
+import { VOLCANO_ROOM_SLUG, normaliseRoomSlug } from "../../rooms";
 
 const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -133,13 +137,38 @@ describe("the games in the lobbies", () => {
 
 describe("the world map", () => {
   it("gives every organisation one front door, to a lobby or a campus", () => {
-    expect(BUILDINGS.map((b) => b.org.slug).sort()).toEqual(
-      ORGANISATIONS.map((o) => o.slug).sort(),
-    );
+    const owned = BUILDINGS.flatMap((b) => (b.org ? [b.org.slug] : []));
+    expect(owned.sort()).toEqual(ORGANISATIONS.map((o) => o.slug).sort());
     for (const b of BUILDINGS) {
+      if (!b.org) continue;
       if (b.entrance.kind === "lobby") expect(hasCampus(b.org.slug)).toBe(false);
-      else expect(b.entrance.campus).toBe(b.org.slug);
+      else if (b.entrance.kind === "campus") expect(b.entrance.campus).toBe(b.org.slug);
+      else throw new Error(`${b.id} is an organisation's, and crosses to the volcano`);
     }
+  });
+
+  /**
+   * The one thing on the map you can walk into that is nobody's: the ferry
+   * to Volcano Island, off the second dock. Owned by nobody, crossing to the
+   * volcano, and found again by the room the island hands back on the way
+   * home — which is the whole of how the map knows which dock to put you on.
+   */
+  it("moors the ferry to Volcano Island at the second dock, belonging to nobody", () => {
+    const ownerless = BUILDINGS.filter((b) => !b.org);
+    expect(ownerless.map((b) => b.id)).toEqual(["volcano-ferry"]);
+    const [ferry] = ownerless;
+    expect(ferry.entrance).toEqual({ kind: "volcano" });
+    expect(ferry.frame.x).toBe((VOLCANO_DOCK.x + VOLCANO_DOCK.width) * TILE);
+    expect(buildingFrom(VOLCANO_ROOM_SLUG)).toBe(ferry);
+    expect(spawnFor(VOLCANO_ROOM_SLUG)).toEqual(ferry.outside);
+    // And the first ferry is still Apeiron Media's, at the first dock.
+    expect(buildingFrom("apeiron-media")?.frame.x).toBe((DOCK.x + DOCK.width) * TILE);
+  });
+
+  it("gives every building a name of its own, owned or not", () => {
+    const ids = BUILDINGS.map((b) => b.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const b of BUILDINGS) if (b.org) expect(b.id).toBe(b.org.slug);
   });
 
   it("keeps every building, door and spawn inside the map", () => {
@@ -175,12 +204,10 @@ describe("the world map", () => {
     expect(spawnFor("castle-atlantic")).toEqual(castle.outside);
     expect(spawnFor("castle-atlantic").y).toBeGreaterThan(castle.door.y + castle.door.height);
     // Out of a store is that store's front door; out of a campus's lobby, the gate.
-    const chester = BUILDINGS.find((b) => b.org.slug === "chester")!;
+    const chester = BUILDINGS.find((b) => b.id === "chester")!;
     expect(chester.entrance).toEqual({ kind: "lobby", tenant: tenantFor("chester-store") });
     expect(spawnFor("chester-store")).toEqual(chester.outside);
-    expect(spawnFor("homestar-sales")).toEqual(
-      BUILDINGS.find((b) => b.org.slug === "homestar")!.outside,
-    );
+    expect(spawnFor("homestar-sales")).toEqual(BUILDINGS.find((b) => b.id === "homestar")!.outside);
     expect(spawnFor("nowhere")).toEqual(WORLD_SPAWN);
     expect(spawnFor(null)).toEqual(WORLD_SPAWN);
   });

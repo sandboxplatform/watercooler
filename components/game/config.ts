@@ -3,6 +3,7 @@ import { EntryScene } from "./scenes/EntryScene";
 import { OfficeScene } from "./scenes/OfficeScene";
 import { WorldScene } from "./scenes/WorldScene";
 import { CampusScene } from "./scenes/CampusScene";
+import { VolcanoScene } from "./scenes/VolcanoScene";
 import { GAME_WIDTH, GAME_HEIGHT } from "@/lib/constants";
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
@@ -12,7 +13,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   pixelArt: true,
   antialias: false,
   roundPixels: true,
-  scene: [EntryScene, OfficeScene, WorldScene, CampusScene],
+  scene: [EntryScene, OfficeScene, WorldScene, CampusScene, VolcanoScene],
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.NO_CENTER,

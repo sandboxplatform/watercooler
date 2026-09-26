@@ -1,6 +1,6 @@
 import type * as PhaserTypes from "phaser";
 import { gameEvents, type RoomArrival } from "@/lib/events";
-import { campusFromPath, isWorldPath } from "@/lib/world/paths";
+import { campusFromPath, isWorldPath, volcanoPlaceFromPath } from "@/lib/world/paths";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("SceneRouter");
@@ -9,6 +9,7 @@ const log = createLogger("SceneRouter");
 type Destination =
   | { key: "WorldScene"; data: { from?: string | null; walkIn?: boolean } }
   | { key: "CampusScene"; data: { campus: string; from?: string | null } }
+  | { key: "VolcanoScene"; data: { place: "island" | "cave"; from?: string | null } }
   | { key: "OfficeScene"; data: Record<string, never> };
 
 /**
@@ -24,6 +25,8 @@ export function destinationFor(location: { pathname: string }, arrival: RoomArri
   }
   const campus = campusFromPath(location.pathname);
   if (campus) return { key: "CampusScene", data: { campus, from: arrival.from } };
+  const volcano = volcanoPlaceFromPath(location.pathname);
+  if (volcano) return { key: "VolcanoScene", data: { place: volcano, from: arrival.from } };
   return { key: "OfficeScene", data: {} };
 }
 

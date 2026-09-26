@@ -26,7 +26,8 @@ One server is one world. Open the link and you are in it, with everyone else who
 
 WaterCooler is a pixel world you share with other people. A plaza with buildings
 round it, lobbies with a game in the corner, floors with desks and boards on the
-walls, an arcade, a ferry to an island. You walk around it, and so does everyone
+walls, an arcade, a ferry to an island and another to a volcano. You walk around
+it, and so does everyone
 else who opened the same server — you see each other move, and Global Chat
 carries your voice to everyone in the world at once.
 
@@ -575,7 +576,7 @@ resident like any other — he says his line and goes back to work.
 
 One server is one world. Everyone who opens the site walks into the same
 places: up to six people on the world map, six in each lobby and on each
-floor, six on a campus or the island. Wherever you are, you see the others
+floor, six on a campus, on either island or in the cave. Wherever you are, you see the others
 there as characters, and with Global Chat on you hear everyone else on it,
 wherever they are. Walking through
 a door or onto the ferry moves you to that place's room, and the people in
@@ -670,6 +671,25 @@ whitewashed house: Apeiron Media, laid out inside like Castle Atlantic, with
 an Oak Island cabinet in the corner where Castle Atlantic keeps its ping pong
 table. Walk back onto the end of the dock to sail home.
 
+### The volcano, and the blob in its cave
+
+There is a second dock further east, at the foot of the avenue between the
+basketball court and the car park, under a board reading "Ferry to Volcano".
+The same boat waits at its end and sails to **Volcano Island**: black sand,
+dead trees, a smoking volcano with lava running down its flanks and pooling
+either side of the one path up from the dock. Every so often the mountain
+rumbles — the screen shakes, smoke pours out and embers fly — and it rumbles
+for everybody on the island at the same moment.
+
+At the foot of the volcano is a cave. Walk in (or click the mountain) and you
+are in a chamber of rock lit by crystals and a pool of lava, and in the middle
+of it, hopping about, is **the blob**. Walk up to it and press **E** — or
+**A** on a controller, or the action button on a phone — to punch it. It goes
+flying away from you, tumbles, lands, and sits there seeing stars for a moment
+before it gets on with hopping. It is one blob for the whole world: everyone
+in the cave sees the same blob hop to the same places and sees who punched it.
+Walk back out through the passage at the bottom to return to the island.
+
 ### Looking around
 
 The scroll wheel zooms, and so does a pinch — two fingers on a phone or any
@@ -698,8 +718,8 @@ around the furniture.
 **Out of doors, click a building and you go inside it.** Anywhere on it — the
 roof, the far wall, the sign — walks your character round to the front door and
 in through it, because out here the buildings are the menu and pointing at one
-means going there rather than standing beside it. The ferry counts as a
-building: click the boat and you sail. Click open ground and you simply walk
+means going there rather than standing beside it. The ferries count as
+buildings: click a boat and you sail, and click the volcano to go into its cave. Click open ground and you simply walk
 there, as before.
 
 **Left Shift toggles sprinting** — it is a switch,

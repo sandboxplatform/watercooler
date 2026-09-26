@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { campusFromPath, campusPath, isOutdoorPath, isWorldPath } from "./paths";
+import {
+  CAVE_PATH,
+  VOLCANO_PATH,
+  campusFromPath,
+  campusPath,
+  isOutdoorPath,
+  isWorldPath,
+  volcanoPlaceFromPath,
+} from "./paths";
 
 describe("addresses", () => {
   it("know the world map, with or without a trailing slash", () => {
@@ -22,9 +30,23 @@ describe("addresses", () => {
     expect(campusFromPath("/world")).toBeNull();
   });
 
+  it("know the volcano and its cave, and nothing that merely starts like them", () => {
+    expect(volcanoPlaceFromPath(VOLCANO_PATH)).toBe("island");
+    expect(volcanoPlaceFromPath("/volcano/")).toBe("island");
+    expect(volcanoPlaceFromPath(CAVE_PATH)).toBe("cave");
+    expect(volcanoPlaceFromPath("/volcano/cave/")).toBe("cave");
+    expect(volcanoPlaceFromPath("/volcanoes")).toBeNull();
+    expect(volcanoPlaceFromPath("/volcano/lair")).toBeNull();
+    expect(volcanoPlaceFromPath("/")).toBeNull();
+  });
+
   it("tell outdoors from a room", () => {
     expect(isOutdoorPath("/world")).toBe(true);
     expect(isOutdoorPath("/campus/homestar")).toBe(true);
+    // Drawn by an outdoor scene, the cave included, which is what the
+    // welcome screen and the router mean by it.
+    expect(isOutdoorPath("/volcano")).toBe(true);
+    expect(isOutdoorPath("/volcano/cave")).toBe(true);
     expect(isOutdoorPath("/r/homestar-sales")).toBe(false);
     expect(isOutdoorPath("/")).toBe(false);
   });

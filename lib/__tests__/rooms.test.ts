@@ -65,6 +65,14 @@ describe("roomFromLocation", () => {
     expect(roomFromLocation({ pathname: "/r/one", search: "?room=two" })).toBe("one");
   });
 
+  it("gives the volcano and its cave a room each, so the blob has one room to be in", () => {
+    expect(roomFromLocation({ pathname: "/volcano", search: "" })).toBe("volcano");
+    expect(roomFromLocation({ pathname: "/volcano/", search: "" })).toBe("volcano");
+    expect(roomFromLocation({ pathname: "/volcano/cave", search: "" })).toBe("volcano-cave");
+    expect(roomFromLocation({ pathname: "/volcano/cave/", search: "" })).toBe("volcano-cave");
+    expect(roomFromLocation({ pathname: "/volcano/lair", search: "" })).toBe("local");
+  });
+
   it("puts everyone on the world map in one room, and each campus in its own", () => {
     expect(roomFromLocation({ pathname: "/world", search: "" })).toBe("world");
     expect(roomFromLocation({ pathname: "/world/", search: "" })).toBe("world");

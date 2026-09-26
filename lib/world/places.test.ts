@@ -11,6 +11,14 @@ describe("saying where a room is", () => {
     });
   });
 
+  it("names the volcano and its cave, which are nobody's campus", () => {
+    expect(describeRoom("volcano")).toEqual({ label: "Volcano Island", kind: "volcano" });
+    expect(describeRoom("volcano-cave")).toEqual({
+      label: "Volcano Island · Cave",
+      kind: "volcano",
+    });
+  });
+
   it("names a building's floors", () => {
     expect(describeRoom("castle-atlantic")).toEqual({
       label: "Castle Atlantic · Lobby",

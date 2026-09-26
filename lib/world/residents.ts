@@ -395,7 +395,7 @@ const OUTSIDE_ROW_LIMIT = 200;
 const onRoad = (road: number) => (road + 1) * WORLD_TILE;
 const onAvenue = onRoad;
 /** Where a building's own path meets the ground in front of its door. */
-const front = (org: string) => BUILDINGS.find((b) => b.org.slug === org)?.outside ?? WORLD_SPAWN;
+const front = (org: string) => BUILDINGS.find((b) => b.org?.slug === org)?.outside ?? WORLD_SPAWN;
 
 /**
  * The places the map means people to stand, by the feet, in world pixels.
@@ -735,7 +735,7 @@ export function outsideSpots(resident: Resident): { x: number; y: number }[] {
  * arrives and leaves at the spawn like anybody with no door of their own.
  */
 export function doorstepOf(resident: Resident): { x: number; y: number } | null {
-  return BUILDINGS.find((b) => b.org.slug === resident.org)?.outside ?? null;
+  return BUILDINGS.find((b) => b.org?.slug === resident.org)?.outside ?? null;
 }
 
 /**

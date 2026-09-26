@@ -3,7 +3,7 @@ import { BUBBLE_ABOVE, CUSTOMER_ORGS, MAILBOX, MAILBOXES, mailboxFor } from "./m
 import { BUILDINGS, ORGANISATIONS, TILE } from "./tenants";
 import { PROPS, propBody, propBounds } from "./scenery";
 
-const buildingFor = (org: string) => BUILDINGS.find((b) => b.org.slug === org)!;
+const buildingFor = (org: string) => BUILDINGS.find((b) => b.org?.slug === org)!;
 
 describe("the mailboxes", () => {
   it("is one to a customer, outside a building that is on the map", () => {

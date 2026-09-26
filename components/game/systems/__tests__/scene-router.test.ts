@@ -26,6 +26,17 @@ describe("the place an address names", () => {
     });
   });
 
+  it("sends the volcano and its cave to the one scene, naming which", () => {
+    expect(destinationFor({ pathname: "/volcano" }, {})).toEqual({
+      key: "VolcanoScene",
+      data: { place: "island", from: undefined },
+    });
+    expect(destinationFor({ pathname: "/volcano/cave" }, { from: "volcano" })).toEqual({
+      key: "VolcanoScene",
+      data: { place: "cave", from: "volcano" },
+    });
+  });
+
   it("sends a lobby and a floor alike to the office", () => {
     expect(destinationFor({ pathname: "/r/sandbox-erp" }, {}).key).toBe("OfficeScene");
     expect(destinationFor({ pathname: "/r/sandbox-erp/floor/3" }, {}).key).toBe("OfficeScene");

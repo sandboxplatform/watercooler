@@ -3,7 +3,7 @@ import { OutdoorScene, type OutdoorPlace } from "./OutdoorScene";
 import type { DoorZone } from "@/lib/doors";
 import { LOBBY, floorUrl } from "@/lib/world/floors";
 import { createLogger } from "@/lib/logger";
-import { campusPath } from "@/lib/world/paths";
+import { VOLCANO_PATH, campusPath } from "@/lib/world/paths";
 import { travelTo } from "@/lib/room-travel";
 import {
   BUILDINGS,
@@ -165,13 +165,28 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
       this,
       b,
       walls,
-      band === undefined ? null : { text: b.org.name.toUpperCase(), y: band, size: "18px" },
+      band === undefined || !b.org
+        ? null
+        : { text: b.org.name.toUpperCase(), y: band, size: "18px" },
     );
-    const target =
-      b.entrance.kind === "lobby"
-        ? floorUrl(b.entrance.tenant, LOBBY, "door")
-        : `${CAMPUS_TARGET}${b.entrance.campus}`;
-    return { name: b.org.slug, target, ...b.door, facing: "up" };
+    return { name: b.id, target: this.targetOf(b), ...b.door, facing: "up" };
+  }
+
+  /**
+   * Where a building's door goes: a lobby's page, a campus, or — for the
+   * second ferry — Volcano Island, which is an address like any other and
+   * needs nothing of `goThrough`. Arriving with no `from` is arriving by
+   * boat, which is what the island takes it to mean.
+   */
+  private targetOf(b: Building): string {
+    switch (b.entrance.kind) {
+      case "lobby":
+        return floorUrl(b.entrance.tenant, LOBBY, "door");
+      case "campus":
+        return `${CAMPUS_TARGET}${b.entrance.campus}`;
+      case "volcano":
+        return VOLCANO_PATH;
+    }
   }
 
   protected goThrough(zone: DoorZone): boolean {

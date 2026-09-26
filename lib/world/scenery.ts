@@ -16,8 +16,10 @@ import {
   BUILDINGS,
   CENTRE_X,
   DOCK,
+  DOCKS_ON_THE_SHORE,
   EAST_X,
   SHORE_ROW,
+  VOLCANO_DOCK,
   TILE,
   TOWN_LEFT,
   TOWN_RIGHT,
@@ -54,7 +56,22 @@ export type Ground =
   | "dock"
   | "court"
   | "trail"
-  | "shingle";
+  | "shingle"
+  // Volcano Island's: black sand underfoot, lava that nobody walks on, and
+  // under the volcano the cave's floor inside walls of living rock. None of
+  // them is on the world map, and every one of them is ground rather than a
+  // picture for the reason the court and the trails are — see `VOLCANO`.
+  | "ash"
+  | "lava"
+  | "rock"
+  | "cave";
+
+/**
+ * The ground nobody stands on: the sea and the river, lava, and the rock a
+ * cave is cut out of. Every run of it along a row becomes a solid — see
+ * `solidGround`.
+ */
+const IMPASSABLE: ReadonlySet<Ground> = new Set<Ground>(["water", "lava", "rock"]);
 
 const CENTRE = CENTRE_X / TILE;
 /** The town's first column: what a column written in the town's own layout is off by. */
@@ -193,13 +210,15 @@ export const COURTS: readonly Rect[] = [COURT];
 export const WATER: readonly Rect[] = [...SEA, ...riverBed()];
 
 /**
- * Planking, in tiles: the dock out over the sea, and nothing else.
+ * Planking, in tiles: the two docks out over the sea, and nothing else —
+ * the centre avenue's, for the ferry to Ireland, and the east avenue's, for
+ * the ferry to Volcano Island.
  *
  * This is also what a bridge over the Gold River would be — the dock is
  * already water walked over on boards — and there is deliberately not one:
  * the far bank of the river is somewhere to look at for now.
  */
-export const DOCKS: readonly Rect[] = [DOCK];
+export const DOCKS: readonly Rect[] = DOCKS_ON_THE_SHORE;
 
 /** A board with words on it, standing on its feet like a prop. */
 export interface Sign {
@@ -209,16 +228,18 @@ export interface Sign {
 }
 
 /**
- * The board at the head of the dock, and nothing else on the map.
+ * The board at the head of each dock, and nothing else on the map.
  *
  * There was one in the wood too, where the walk up from the town meets the
  * river, naming the Gold River. A sign earns its board by telling somebody
- * something they would otherwise get wrong — the dock's says where the boat
- * goes, which is the one thing about it a person cannot see — and a river
- * you are standing in front of is not that.
+ * something they would otherwise get wrong — a dock's says where the boat
+ * goes, which is the one thing about it a person cannot see, and with two
+ * identical boats on one shore it is the only thing that tells them apart.
+ * A river you are standing in front of is not that.
  */
 export const WORLD_SIGNS: readonly Sign[] = [
   { text: "FERRY TO\nIRELAND", x: DOCK.x * TILE - 60, y: (SHORE_ROW - 1) * TILE + 44 },
+  { text: "FERRY TO\nVOLCANO", x: VOLCANO_DOCK.x * TILE - 60, y: (SHORE_ROW - 1) * TILE + 44 },
 ];
 
 const inRect = (r: Rect, x: number, y: number) =>
@@ -254,6 +275,15 @@ export interface GroundPlan {
   court?: readonly Rect[];
   trail?: readonly Rect[];
   shingle?: readonly Rect[];
+  lava?: readonly Rect[];
+  /** The cave's floor, cut out of whatever the base is. */
+  cave?: readonly Rect[];
+  /**
+   * What everything not otherwise named is. Grass on the world map and a
+   * campus; black sand on Volcano Island; rock in the cave, where the floor
+   * is the part that was dug out rather than the part laid down.
+   */
+  base?: Ground;
 }
 
 export function groundGrid(columns: number, rows: number, plan: GroundPlan): Ground[][] {
@@ -267,6 +297,9 @@ export function groundGrid(columns: number, rows: number, plan: GroundPlan): Gro
     court = [],
     trail = [],
     shingle = [],
+    lava = [],
+    cave = [],
+    base = "grass",
   } = plan;
   const isPaved = (x: number, y: number) => paved.some((r) => inRect(r, x, y));
   const grid: Ground[][] = [];
@@ -275,6 +308,9 @@ export function groundGrid(columns: number, rows: number, plan: GroundPlan): Gro
     for (let x = 0; x < columns; x++) {
       if (dock.some((r) => inRect(r, x, y))) row.push("dock");
       else if (water.some((r) => inRect(r, x, y))) row.push("water");
+      // After the water and before everything walked on, for the water's
+      // reason: a path laid up to a lava flow stops at its edge.
+      else if (lava.some((r) => inRect(r, x, y))) row.push("lava");
       else if (court.some((r) => inRect(r, x, y))) row.push("court");
       // After the water, which is the rule the wilderness's coastline is
       // drawn to rather than a thing to remember: the road stops at the sea
@@ -293,7 +329,8 @@ export function groundGrid(columns: number, rows: number, plan: GroundPlan): Gro
       // those tiles up, so the order decides nothing there — see
       // `WOOD_BEACHES`.
       else if (shingle.some((r) => inRect(r, x, y))) row.push("shingle");
-      else if (!isPaved(x, y)) row.push("grass");
+      else if (cave.some((r) => inRect(r, x, y))) row.push("cave");
+      else if (!isPaved(x, y)) row.push(base);
       else if (
         y > 0 &&
         !isPaved(x, y - 1) &&
@@ -338,6 +375,31 @@ export function waterBodies(grid: Ground[][]): Rect[] {
     };
     row.forEach((ground, x) => {
       if (ground === "water") {
+        if (start < 0) start = x;
+      } else flush(x);
+    });
+    flush(row.length);
+  });
+  return bodies;
+}
+
+/**
+ * Everything underfoot that nobody may stand on, as solids: the water, and
+ * on Volcano Island the lava and the rock the cave is cut out of. The same
+ * row-at-a-time runs as `waterBodies`, asked of every impassable ground at
+ * once — the world map has none but water, so it goes on asking that.
+ */
+export function solidGround(grid: Ground[][]): Rect[] {
+  const bodies: Rect[] = [];
+  grid.forEach((row, y) => {
+    let start = -1;
+    const flush = (end: number) => {
+      if (start >= 0)
+        bodies.push({ x: start * TILE, y: y * TILE, width: (end - start) * TILE, height: TILE });
+      start = -1;
+    };
+    row.forEach((ground, x) => {
+      if (IMPASSABLE.has(ground)) {
         if (start < 0) start = x;
       } else flush(x);
     });
@@ -413,6 +475,15 @@ export const PROPS = {
   // would be a metre of kerb nobody can walk along for the sake of something
   // that is not in the way.
   mailbox: { width: MAILBOX.width, height: MAILBOX.height, footprint: { width: 16, height: 12 } },
+  // Volcano Island's, and its cave's — see `lib/world/volcano.ts`. A lump of
+  // black cinder and a tree the lava killed on the sand; a stalagmite and a
+  // cluster of glowing crystal in the cave. All four are solid at the foot
+  // only, for the reason everything else is: the body is what stands on the
+  // ground, and the picture leans over it.
+  cinder: { width: 64, height: 48, footprint: { width: 50, height: 16 } },
+  snag: { width: 64, height: 96, footprint: { width: 14, height: 10 } },
+  stalagmite: { width: 48, height: 72, footprint: { width: 26, height: 14 } },
+  crystal: { width: 48, height: 56, footprint: { width: 30, height: 12 } },
 } as const satisfies Record<string, PropSpec>;
 
 export type PropKind = keyof typeof PROPS;
@@ -532,7 +603,7 @@ const atTheDoor = (b: (typeof BUILDINGS)[number]): PlacedProp[] => {
  * the tree beside it is in the line, and wherever the line's 140px step
  * happens to put a trunk beside it the two stand in each other.
  */
-const SHOPFRONTS: readonly PlacedProp[] = BUILDINGS.filter((b) => b.org.style === "shop").flatMap(
+const SHOPFRONTS: readonly PlacedProp[] = BUILDINGS.filter((b) => b.org?.style === "shop").flatMap(
   atTheDoor,
 );
 
@@ -559,13 +630,17 @@ const PLACED: readonly PlacedProp[] = [
   // The boulder standing in the river at the foot of the shoulder beach,
   // likewise: a marked rock on the far side of water nothing crosses.
   { kind: "boulder", ...WOOD_BOULDER },
-  // Bushes along the shore, the whole way — except at the dock and the
-  // ferry. Their row is read off the coast rather than written as
+  // Bushes along the shore, the whole way — except at the docks and their
+  // ferries. Their row is read off the coast rather than written as
   // `SHORE_ROW`: the shore steps south twice out in the wilderness and then
   // leaves the map altogether, so a row would put the last of them in the
   // water and the rest in a meadow with no sea in sight.
   ...along(80, WORLD_WIDTH - 60, 220)
-    .filter((x) => x < DOCK.x * TILE - 140 || x > (DOCK.x + DOCK.width) * TILE + BOAT.width + 60)
+    .filter((x) =>
+      DOCKS.every(
+        (dock) => x < dock.x * TILE - 140 || x > (dock.x + dock.width) * TILE + BOAT.width + 60,
+      ),
+    )
     .map((x) => ({ x, shore: shoreAt(Math.floor(x / TILE)) }))
     .filter((b): b is { x: number; shore: number } => b.shore !== null)
     .map(({ x, shore }): PlacedProp => ({ kind: "bush", x, y: shore * TILE - 12 })),

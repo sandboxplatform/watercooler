@@ -105,7 +105,7 @@ export const MAILBOXES: readonly Mailbox[] = CUSTOMER_ORGS.map(({ org, customer,
   // `!` with a test behind it, the way `tenants.ts` names an organisation: a
   // customer naming a building that is not on the map is a mistake to fail
   // on rather than a mailbox to quietly not draw.
-  const { frame } = BUILDINGS.find((b) => b.org.slug === org)!;
+  const { frame } = BUILDINGS.find((b) => b.org?.slug === org)!;
   return {
     org,
     customer,

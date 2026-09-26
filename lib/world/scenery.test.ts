@@ -19,6 +19,7 @@ import {
   DOCK,
   SHORE_ROW,
   TILE,
+  VOLCANO_DOCK,
   WORLD_COLUMNS,
   WORLD_HEIGHT,
   WORLD_ROWS,
@@ -27,6 +28,7 @@ import {
   buildingFrom,
 } from "./tenants";
 import { HIGHWAY, shoreAt } from "./wilderness";
+import { VOLCANO_ROOM_SLUG } from "../rooms";
 
 const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
   a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -69,7 +71,7 @@ describe("ground", () => {
         expect(tiles[from][col]).toBe("dock");
         continue;
       }
-      expect(tiles[from][col], `${b.org.slug} door`).toBe("paving");
+      expect(tiles[from][col], `${b.id} door`).toBe("paving");
       for (let y = from; y < 18; y++) expect(tiles[y][col]).not.toBe("grass");
     }
     expect(tiles[Math.floor(WORLD_SPAWN.y / TILE)][Math.floor(WORLD_SPAWN.x / TILE)]).not.toBe(
@@ -219,11 +221,13 @@ describe("the shore", () => {
    * the cars on it having nowhere to go. It steps south twice instead and
    * leaves the map before the road does, which is what this asks.
    */
-  it("is sea from the coast down, except for the dock", () => {
+  it("is sea from the coast down, except for the docks", () => {
     for (let x = 0; x < WORLD_COLUMNS; x++) {
       const shore = shoreAt(x);
       for (let y = SHORE_ROW; y < WORLD_ROWS; y++) {
-        const onDock = x >= DOCK.x && x < DOCK.x + DOCK.width && y < DOCK.y + DOCK.height;
+        const onDock = DOCKS.some(
+          (dock) => x >= dock.x && x < dock.x + dock.width && y < dock.y + dock.height,
+        );
         if (onDock) {
           expect(tiles[y][x], `${x},${y}`).toBe("dock");
           continue;
@@ -240,24 +244,41 @@ describe("the shore", () => {
     expect(tiles[WORLD_ROWS - 1][HIGHWAY.x]).toBe("highway");
   });
 
-  it("runs the dock from the south road out over the water", () => {
-    expect(tiles[DOCK.y - 1][DOCK.x]).toBe("paving");
-    for (let y = DOCK.y; y < DOCK.y + DOCK.height; y++)
-      for (let x = DOCK.x; x < DOCK.x + DOCK.width; x++) expect(tiles[y][x]).toBe("dock");
+  it("runs each dock from the south road out over the water", () => {
+    expect(DOCKS).toEqual([DOCK, VOLCANO_DOCK]);
+    for (const dock of DOCKS) {
+      expect(tiles[dock.y - 1][dock.x]).toBe("paving");
+      for (let y = dock.y; y < dock.y + dock.height; y++)
+        for (let x = dock.x; x < dock.x + dock.width; x++) expect(tiles[y][x]).toBe("dock");
+    }
   });
 
-  it("moors the ferry beside the end of the dock, boarded from the dock", () => {
-    expect(ferry.art).toBe("world-boat");
-    expect(ferry.frame.x).toBe((DOCK.x + DOCK.width) * TILE);
-    expect(ferry.entrance).toEqual({ kind: "campus", campus: "apeiron-media" });
-    const doorCol = Math.floor((ferry.door.x + ferry.door.width / 2) / TILE);
-    const doorRow = Math.floor((ferry.door.y + ferry.door.height - 1) / TILE);
-    expect(tiles[doorRow][doorCol]).toBe("dock");
-    expect(ferry.arrive).toBe("up");
-    // Back on the dock at the shore, out of the boarding zone.
-    expect(
-      overlaps({ x: ferry.outside.x, y: ferry.outside.y, width: 1, height: 1 }, ferry.door),
-    ).toBe(false);
+  /**
+   * The two docks are the ends of two avenues, and their ferries are the
+   * same boat: nothing but the board at the head of each says which goes
+   * where, so the boards are asserted as well as the boats.
+   */
+  it("moors a ferry beside the end of each dock, boarded from the dock", () => {
+    const volcanoFerry = buildingFrom(VOLCANO_ROOM_SLUG)!;
+    for (const [boat, dock, entrance] of [
+      [ferry, DOCK, { kind: "campus", campus: "apeiron-media" }],
+      [volcanoFerry, VOLCANO_DOCK, { kind: "volcano" }],
+    ] as const) {
+      expect(boat.art).toBe("world-boat");
+      expect(boat.frame.x).toBe((dock.x + dock.width) * TILE);
+      expect(boat.entrance).toEqual(entrance);
+      const doorCol = Math.floor((boat.door.x + boat.door.width / 2) / TILE);
+      const doorRow = Math.floor((boat.door.y + boat.door.height - 1) / TILE);
+      expect(tiles[doorRow][doorCol]).toBe("dock");
+      expect(doorCol).toBeGreaterThanOrEqual(dock.x);
+      expect(doorCol).toBeLessThan(dock.x + dock.width);
+      expect(boat.arrive).toBe("up");
+      // Back on the dock at the shore, out of the boarding zone.
+      expect(
+        overlaps({ x: boat.outside.x, y: boat.outside.y, width: 1, height: 1 }, boat.door),
+      ).toBe(false);
+    }
+    expect(WORLD_SIGNS.map((s) => s.text)).toEqual(["FERRY TO\nIRELAND", "FERRY TO\nVOLCANO"]);
   });
 
   it("keeps the sea solid everywhere but the dock", () => {

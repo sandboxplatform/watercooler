@@ -26,7 +26,8 @@ Anything below that still says "agents" means the residents, who are characters
 rather than anything that runs.
 
 The office is one building in a larger world: a world map with campuses, buildings
-with lobbies and floors, an arcade, a ferry to an island. One server is one world —
+with lobbies and floors, an arcade, a ferry to an island and a second to a volcano
+with a blob in its cave. One server is one world —
 everyone who opens the site walks into the same places and sees each other there.
 
 The map is three screens wide in thirds — the **shops** in the west, the
@@ -1141,6 +1142,8 @@ and server, so keep it import-free.
 /r/<slug>/floor/<n>     a floor above it — its own room, same building
 /world                  the world map (a room too, so people can see each other)
 /campus/<slug>          a campus (likewise)
+/volcano                Volcano Island, across the water from the second dock
+/volcano/cave           the cave under its volcano, where the blob is
 ```
 
 A slug reaches the filesystem nowhere any more, but `normaliseRoomSlug` still
@@ -3153,6 +3156,91 @@ are premises that are not customers. Both lists are honest and neither is a
 gap to fill: a mailbox has to stand outside something, and a building nobody
 raises tickets against has nothing to say.
 
+### The volcano, and the blob in its cave
+
+A second dock runs off the south road at the foot of the east avenue
+(`VOLCANO_DOCK`), with the same boat moored to it and a board reading FERRY
+TO VOLCANO. It crosses to **Volcano Island** — black sand, lava pooling either
+side of the one path up, a smoking mountain — and at the foot of the mountain
+is a cave with **one blob in it**, which hops about and which you can punch.
+
+Five files, and the split is the basketball's:
+
+| Where                    | What                                                                      |
+| ------------------------ | ------------------------------------------------------------------------- |
+| `lib/world/volcano.ts`   | The island and the cave, described as data. Pure, shared                  |
+| `lib/world/blob.ts`      | A leap: the arc of a hop or a punch, and how far an arm reaches. Pure     |
+| `lib/server/blob.ts`     | `CaveBlob`: when the next hop is due, and whether a punch landed          |
+| `scenes/VolcanoScene.ts` | Draws either place from its data — one scene for both, as for campuses    |
+| `systems/BlobHop.ts`     | The blob's squash and stretch, the tumble, the stars, the POW, the prompt |
+
+**It is nobody's, so it is not a campus.** A campus is an organisation's yard
+and its buildings are that organisation's lobbies; the volcano has no owner and
+no lobbies. That is also why `Building.org` is nullable: the volcano ferry is
+the one thing on the world map you can walk into that belongs to nobody, and
+filling it with a made-up organisation would put a volcano in the welcome
+screen's list of places to work and in the Grand Tour's count. `id` is the name
+a building always has, and `Entrance` gained `{ kind: "volcano" }`. Coming
+home, the island hands back `from: "volcano"` — its room slug — which is how
+`buildingFrom` finds the right dock to stand you on.
+
+**A second dock rather than a second boat on the first one.** Two ferries off
+one dock would have split its end a board apiece, and walking down the middle
+would have put you on whichever boat your feet were nearer — a crossing decided
+by a pixel. Out here the buildings are the menu, and a menu with two entries in
+one place is not one.
+
+**Two rooms, two addresses.** `/volcano` is `volcano` and `/volcano/cave` is
+`volcano-cave`, so the beach and the cave are different places and the blob has
+exactly one room to be published to. The cave is drawn by an outdoor scene and
+counts for `isOutdoorPath` for that reason alone — the office pack has no cave
+in it — and its ground is **rock with the floor dug out of it** (`base: "rock"`
+in the `GroundPlan`), solid the way the sea is: `solidGround` turns every run of
+water, lava or rock into a body, and `layGround` draws a rock tile's face where
+floor runs up to it from the south.
+
+**Everything the blob does is a leap**, and that is the decision to keep. A hop
+of its own accord is a short one and a punch a long, high one; nothing else
+ever moves it. So the server says where it is going once, when it sets off —
+`{ type: "blob", leap, elapsed }` — and every browser runs `leapAt` against its
+own clock, which is the traffic's arrangement rather than the ball's. A cave
+with a blob sitting in it is a cave with nothing on the wire. It is stepped only
+while somebody is in the cave, and sent to anybody walking in, since a blob
+published only when it sets off is otherwise invisible until its next hop.
+
+Four rules in the punch, all on the server:
+
+| Rule                                        | Why                                                                                     |
+| ------------------------------------------- | --------------------------------------------------------------------------------------- |
+| The browser says only that it punched       | Where from and which way are the room's record, as for the ball                         |
+| Reach from the feet, `PUNCH_REACH_PX`       | The basketball's lesson: a person's `y` is the middle of their frame                    |
+| No second punch while it is still sailing   | Or two people either side of it juggle it without its ever touching the floor           |
+| It stops against the first thing in the way | A punch into a corner is a stride, not a trip through the rock — see the next paragraph |
+
+**It can be punched from somewhere it could not sit.** A hop checks only its
+landing — a blob hopping over a crystal is a better thing to see than a blob
+that will not go near one — so a blob caught mid-air may be over the crystal or
+the lava. `knocked` skips whatever is under it at the start of the line, stops
+at the first obstacle after clear floor, and failing any clear floor at all
+comes down where the interrupted hop was going to land. The ten-minute soak in
+`lib/server/__tests__/blob.test.ts` is what found this: a blob punched over a
+crystal and knocked no distance came down inside it.
+
+**The punch is E, the pad's A, or the HUD's button** — the interact press the
+scene already gathers. Keyboard A is WASD's left, so the prompt says E there
+like every other `Press` in the world, and says A (or ✕) when a controller is
+plugged in, off `confirmLabel`.
+
+**The volcano's rumble is timed off the wall clock** (`systems/Eruption.ts`):
+one every `RUMBLE_EVERY_MS` since the epoch, so everybody on the island feels
+the same one without the server being asked. Browsers' clocks agree to within
+a second, which is near enough for a mountain.
+
+**The cone's outline is written twice** — `CONE` in `lib/world/volcano.ts`,
+which cuts the solid bands from it, and in `scripts/make-world-art.mjs`, which
+draws the mountain to it. `volcano.test.ts` reads the script and insists the
+two agree, because a mismatch is invisible walls in the sky beside the summit.
+
 ### Fixtures
 
 The things in a room you walk up to and press E at — the boards, the games,
@@ -3414,6 +3502,7 @@ lib/
   server/mettara.ts                whose conversation Doc is hooked up to, and which
   server/customers.ts              who the desk's customers are, and whose a ticket is
   server/traffic.ts                which cars are on the highway, and when one sets off
+  server/blob.ts                   the blob in the cave: when it hops, and whether a punch landed
   map/ world/                      map generation and world layout
   map/cubicles.ts                  the People floor: a cubicle each, and a shelf of eggs in it
   world/cast.ts                    who the world is of: roles, concept art, backstories
@@ -3423,6 +3512,8 @@ lib/
   world/wood.ts                    the wood north of the town: the Gold River and its trails
   world/wilderness.ts              the meadow east of the town, the coast, and the highway
   world/traffic.ts                 what a car is, how fast, and which lane — shared by all three layers
+  world/volcano.ts                 Volcano Island and its cave, described as data for VolcanoScene
+  world/blob.ts                    a leap: the arc of a hop or a punch, and how far an arm reaches
   arcade/ pinball/ pong/           the games (Oak Island, Flappy, Snake, Breakout, Solitaire)
   pixel/ characters/               sheet validation, PNG codec, palettes, recolouring
   voice/                           WebRTC voice, one conversation server-wide

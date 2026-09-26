@@ -36,9 +36,7 @@ describe("what a tap on a building hits", () => {
         centreOf(frame),
       ];
       for (const at of corners) {
-        expect(enterableAt(at, BUILDINGS), `${building.org.slug} at ${at.x},${at.y}`).toBe(
-          building,
-        );
+        expect(enterableAt(at, BUILDINGS), `${building.id} at ${at.x},${at.y}`).toBe(building);
       }
     }
   });
@@ -56,7 +54,7 @@ describe("what a tap on a building hits", () => {
       for (let j = i + 1; j < BUILDINGS.length; j++) {
         expect(
           overlaps(BUILDINGS[i].frame, BUILDINGS[j].frame),
-          `${BUILDINGS[i].org.slug} / ${BUILDINGS[j].org.slug}`,
+          `${BUILDINGS[i].id} / ${BUILDINGS[j].id}`,
         ).toBe(false);
       }
     }
@@ -69,7 +67,7 @@ describe("where the walk goes", () => {
     // front of it is a walk that arrives and does nothing at all.
     for (const building of BUILDINGS) {
       const [, doorway] = walkInTo(building);
-      expect(inside(building.door, doorway), building.org.slug).toBe(true);
+      expect(inside(building.door, doorway), building.id).toBe(true);
     }
   });
 
@@ -79,7 +77,7 @@ describe("where the walk goes", () => {
     // be — and on the way back out it would fire again as they left.
     for (const building of BUILDINGS) {
       const [approach] = walkInTo(building);
-      expect(inside(building.door, approach), building.org.slug).toBe(false);
+      expect(inside(building.door, approach), building.id).toBe(false);
     }
   });
 
@@ -90,7 +88,7 @@ describe("where the walk goes", () => {
     for (const building of BUILDINGS) {
       const [approach] = walkInTo(building);
       for (const solid of solids) {
-        expect(inside(solid, approach), `${building.org.slug} at ${approach.x},${approach.y}`).toBe(
+        expect(inside(solid, approach), `${building.id} at ${approach.x},${approach.y}`).toBe(
           false,
         );
       }
@@ -101,13 +99,13 @@ describe("where the walk goes", () => {
     // The far corner of Sandbox ERP's picture, which is nearer to Castle
     // Atlantic's door than to its own — the whole reason this is a hit test
     // on the picture rather than a walk to the nearest doorway.
-    const office = BUILDINGS.find((b) => b.org.slug === "sandbox-erp")!;
+    const office = BUILDINGS.find((b) => b.id === "sandbox-erp")!;
     const tapped = enterableAt({ x: office.frame.x + 8, y: office.frame.y + 8 }, BUILDINGS)!;
     expect(tapped).toBe(office);
     expect(office.entrance).toEqual({ kind: "lobby", tenant: tenantFor("sandbox-erp") });
     const [, doorway] = walkInTo(tapped);
     expect(inside(office.door, doorway)).toBe(true);
-    const castle = BUILDINGS.find((b) => b.org.slug === "castle-atlantic")!;
+    const castle = BUILDINGS.find((b) => b.id === "castle-atlantic")!;
     expect(inside(castle.door, doorway)).toBe(false);
   });
 

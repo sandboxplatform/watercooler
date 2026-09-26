@@ -218,6 +218,20 @@ export interface EggMessage {
   action: "take";
 }
 
+/**
+ * A punch at the blob in the volcano's cave.
+ *
+ * It says nothing else, for the basketball's reason: where the puncher is
+ * standing and which way they face are the room's own record of them, so
+ * whether it lands and where it sends the blob are the server's alone. A
+ * message that said how hard, or which way, would be a message that could
+ * punch it across the cave from the far wall.
+ */
+export interface BlobMessage {
+  type: "blob";
+  action: "punch";
+}
+
 /** A move in a game of ping pong, on its way to the other player. */
 export interface PongRelayMessage {
   type: "pong";
@@ -298,6 +312,7 @@ export type ClientMessage =
   | BoardedMessage
   | BasketballMessage
   | EggMessage
+  | BlobMessage
   | MeetingMessage;
 
 // ── Server → client ────────────────────────────────────
@@ -481,6 +496,30 @@ export interface TrafficBroadcast {
 }
 
 /**
+ * The blob's latest leap, to everyone standing in the volcano's cave.
+ *
+ * Sent when it **sets off** — on each hop, on each punch, and to anybody
+ * walking in — and never in between, which is the traffic's arrangement: a
+ * leap is a parabola between two known points over a known time, so every
+ * browser runs it against its own clock from `elapsed` and draws the blob in
+ * the same place the server has it. See `lib/world/blob.ts`.
+ *
+ * `elapsed` is how far into the leap it already was when this was sent,
+ * which is nothing for a fresh hop and anything at all for somebody walking
+ * in on one — including long past the end of it, for a blob sitting still.
+ *
+ * `punched` is the moment: who landed one, so every screen in the cave can
+ * mark the same punch. Nothing counts them.
+ */
+export interface BlobBroadcast {
+  type: "blob";
+  leap: import("./world/blob").Leap;
+  elapsed: number;
+  /** Who landed it: their name for everybody, and their connection so their own screen can jolt. */
+  punched?: { by: string; id: string };
+}
+
+/**
  * Somebody's basket gained an egg — to **everybody**, wherever they are.
  *
  * The same split the badges are under, and for the same reason: the field
@@ -589,6 +628,7 @@ export type ServerMessage =
   | BasketballBroadcast
   | EggsBroadcast
   | TrafficBroadcast
+  | BlobBroadcast
   | EggFoundMessage
   | MeetingsMessage;
 
@@ -606,6 +646,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     type === "boarded" ||
     type === "basketball" ||
     type === "egg" ||
+    type === "blob" ||
     type === "meeting"
   );
 }

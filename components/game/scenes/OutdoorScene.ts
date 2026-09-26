@@ -24,7 +24,9 @@ import { cutOutdoorFrames, preloadOutdoors } from "./outdoors";
 import { legible } from "../systems/legible";
 
 /**
- * Out of doors: the world map and the campuses.
+ * Out of doors: the world map, the campuses, and Volcano Island with the
+ * cave under it — which is no more out of doors than a lobby is, and is
+ * drawn out here because nothing in the office pack is a cave.
  *
  * The two are the same place in every way but the drawing of it. You arrive
  * out of a door and take a few steps down the path, you walk with the keys

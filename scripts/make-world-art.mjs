@@ -517,7 +517,7 @@ function pond() {
 }
 
 // ── Props: one sheet, each prop in a named rectangle ──
-const props = canvas(2304, 128);
+const props = canvas(2560, 128);
 const frames = {};
 let cursor = 0;
 function slot(name, w, h, draw) {
@@ -1447,6 +1447,230 @@ slot("mailbox", 40, 72, (set, d) => {
   d.rect(RIGHT + 1, TOP - 1, RIGHT + 8, TOP + 8, P.ink);
   d.rect(RIGHT + 1, TOP, RIGHT + 7, TOP + 7, P.red);
 });
+
+// ── Volcano Island ──
+//
+// The island across the water from the second dock, and the cave under its
+// volcano — see `lib/world/volcano.ts`. Its own ramps rather than the town's,
+// because nothing out there is the town's: black sand and basalt in place of
+// grass and slabs, lava for water, and in the cave a purple-brown rock lit by
+// cyan crystal. Still three tones and an ink outline to everything, so the
+// people walking about on it look like they belong on it.
+const V = {
+  ash: [64, 57, 61, 255],
+  ashDark: [50, 45, 50, 255],
+  ashLit: [84, 76, 78, 255],
+  grain: [110, 99, 96, 255],
+  obsidian: [30, 28, 38, 255],
+  basalt: [70, 62, 70, 255],
+  basaltLit: [98, 88, 94, 255],
+  basaltDark: [46, 41, 49, 255],
+  basaltDeep: [30, 27, 34, 255],
+  lavaDeep: [166, 40, 24, 255],
+  lava: [222, 86, 30, 255],
+  lavaLit: [250, 160, 48, 255],
+  lavaHot: [255, 224, 122, 255],
+  rock: [54, 47, 60, 255],
+  rockLit: [74, 66, 80, 255],
+  rockDark: [38, 34, 44, 255],
+  rockDeep: [24, 22, 30, 255],
+  face: [88, 78, 92, 255],
+  faceLit: [108, 97, 110, 255],
+  cave: [80, 72, 82, 255],
+  caveDark: [64, 58, 68, 255],
+  caveLit: [98, 90, 100, 255],
+  crystal: [110, 214, 226, 255],
+  crystalLit: [214, 252, 255, 255],
+  crystalDark: [52, 128, 164, 255],
+  gel: [120, 208, 92, 255],
+  gelLit: [192, 244, 152, 255],
+  gelDark: [72, 148, 62, 255],
+  gelDeep: [44, 102, 46, 255],
+};
+
+/** A thick stroke from one point to another, a disc at every step: branches and streaks. */
+function stroke(set, x0, y0, x1, y1, r, c) {
+  const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)));
+  for (let i = 0; i <= steps; i++) {
+    const x = Math.round(x0 + ((x1 - x0) * i) / steps);
+    const y = Math.round(y0 + ((y1 - y0) * i) / steps);
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r) set(x + dx, y + dy, c);
+  }
+}
+
+/**
+ * A lump of black cinder on the sand, pitted, with a crack still glowing in
+ * it. Two lumps rather than one oval, because a single ellipse on the ground
+ * is a saucer; the smaller one leaning on the larger is a rock.
+ */
+slot("cinder", 64, 48, (set, d) => {
+  d.ellipse(32, 44, 27, 5, P.shadow);
+  d.ellipse(26, 31, 21, 13, P.ink);
+  d.ellipse(44, 35, 14, 9, P.ink);
+  d.ellipse(26, 31, 19, 11, V.basaltDark);
+  d.ellipse(44, 35, 12, 7, V.basaltDark);
+  d.ellipse(23, 28, 14, 8, V.basalt);
+  d.ellipse(42, 33, 8, 4, V.basalt);
+  d.ellipse(19, 24, 7, 3, V.basaltLit);
+  d.ellipse(39, 31, 3, 2, V.basaltLit);
+  for (const [px, py] of [
+    [16, 30],
+    [30, 24],
+    [34, 34],
+    [24, 37],
+    [12, 27],
+    [48, 36],
+  ]) {
+    set(px, py, V.basaltDeep);
+    set(px + 1, py, V.basaltDeep);
+  }
+  // The crack: a short run, its hot middle a shade brighter.
+  for (let i = 0; i < 8; i++) set(26 + i, 31 + (i >> 2), i % 3 === 1 ? V.lavaHot : V.lavaLit);
+  for (let i = 0; i < 4; i++) set(30 + (i >> 1), 33 + i, V.lava);
+});
+
+/**
+ * A tree the lava killed: a trunk and a few bare branches, nothing on them.
+ *
+ * Bleached rather than charred. Burnt black is what happened to it, and on
+ * black sand it is also a tree nobody can see — the grey of old driftwood
+ * is what a dead tree on a beach actually looks like, and it carries.
+ */
+const DEADWOOD = [150, 138, 128, 255];
+const DEADWOOD_LIT = [184, 172, 160, 255];
+const DEADWOOD_DARK = [104, 94, 90, 255];
+slot("snag", 64, 96, (set, d) => {
+  d.ellipse(32, 92, 16, 4, P.shadow);
+  const limbs = [
+    [32, 90, 32, 36, 4],
+    [32, 60, 16, 38, 2],
+    [32, 50, 50, 26, 2],
+    [18, 40, 12, 22, 1],
+    [46, 30, 54, 16, 1],
+    [32, 38, 26, 14, 2],
+  ];
+  // Outlines first, so every limb's ink sits under every other's fill.
+  for (const [x0, y0, x1, y1, r] of limbs) stroke(set, x0, y0, x1, y1, r + 1, P.ink);
+  for (const [x0, y0, x1, y1, r] of limbs) stroke(set, x0, y0, x1, y1, r, DEADWOOD);
+  // Light down the left of the trunk, shade down the right, and the foot
+  // blackened where the flow went past it.
+  stroke(set, 30, 88, 30, 40, 1, DEADWOOD_LIT);
+  stroke(set, 35, 88, 35, 40, 0, DEADWOOD_DARK);
+  for (let y = 78; y < 91; y++) d.rect(28, y, 37, y + 1, y > 84 ? V.basaltDark : V.basalt);
+  set(33, 82, V.lavaLit);
+  set(34, 83, V.lava);
+});
+
+/**
+ * A stalagmite, with a smaller one beside it: cave rock, lit from the left,
+ * lumpy where it grew in fits and starts. A clean cone was the first go, and
+ * a clean cone on a cave floor is a traffic cone.
+ */
+slot("stalagmite", 48, 72, (set, d) => {
+  d.ellipse(24, 68, 18, 4, P.shadow);
+  const spire = (cx, top, foot, base) => {
+    for (let y = top; y < foot; y++) {
+      const s = (y - top) / (foot - top);
+      // Swelling towards the foot, with a knuckle here and there.
+      const half = Math.max(1, Math.round(base * s ** 0.8 + Math.sin(s * 11) * 1.2));
+      d.rect(cx - half - 1, y, cx + half + 1, y + 1, P.ink);
+      for (let x = cx - half; x < cx + half; x++) {
+        const t = (x - (cx - half)) / (half * 2);
+        set(x, y, t < 0.32 ? V.faceLit : t < 0.72 ? V.face : V.rockLit);
+      }
+    }
+    d.rect(cx - 1, top - 1, cx + 1, top, P.ink);
+  };
+  spire(33, 34, 68, 8);
+  spire(20, 6, 68, 13);
+  // A drip of damp down the lit side of the big one.
+  d.rect(15, 26, 16, 50, V.caveLit);
+  set(15, 51, V.caveLit);
+});
+
+/** Crystal growing out of the cave floor: three cyan prisms, glowing. */
+slot("crystal", 48, 56, (set, d) => {
+  d.ellipse(24, 50, 22, 8, [110, 214, 226, 50]);
+  d.ellipse(24, 52, 16, 4, P.shadow);
+  const prism = (cx, top, foot, half) => {
+    for (let y = top; y < foot; y++) {
+      // Pointed: the tip narrows over its first few rows.
+      const w = Math.min(half, Math.round(((y - top) / 5) * half));
+      if (w <= 0) continue;
+      d.rect(cx - w - 1, y, cx + w + 1, y + 1, P.ink);
+      d.rect(cx - w, y, cx, y + 1, V.crystalLit);
+      d.rect(cx, y, cx + w, y + 1, V.crystal);
+      set(cx + w - 1, y, V.crystalDark);
+    }
+    d.rect(cx - half - 1, foot, cx + half + 1, foot + 1, P.ink);
+  };
+  prism(15, 22, 50, 5);
+  prism(34, 18, 50, 5);
+  prism(24, 6, 51, 7);
+});
+
+/**
+ * The blob: a dome of green jelly with a flat bottom, a shine on its top and
+ * two big eyes. Hurt, the eyes screw shut and the mouth goes wide.
+ *
+ * No shadow of its own: the scene draws one on the floor under it, which is
+ * what says how high it is — the same arrangement as the basketball's.
+ */
+function blobFrame(hurt) {
+  return (set, d) => {
+    const CX = 22;
+    const TOP = 4;
+    const FOOT = 35;
+    const RX = 20;
+    const MID = 20;
+    const half = (y) =>
+      y < MID
+        ? Math.round(RX * Math.sqrt(Math.max(0, 1 - ((MID - y) / (MID - TOP)) ** 2)))
+        : y > FOOT - 4
+          ? RX - (y - (FOOT - 4))
+          : RX;
+    for (let y = TOP; y <= FOOT; y++) {
+      const w = half(y);
+      if (w <= 0) continue;
+      d.rect(CX - w - 1, y, CX + w + 1, y + 1, P.ink);
+    }
+    d.rect(CX - 6, TOP - 1, CX + 6, TOP, P.ink);
+    for (let y = TOP + 1; y < FOOT; y++) {
+      const w = half(y) - 1;
+      if (w <= 0) continue;
+      d.rect(CX - w, y, CX + w, y + 1, V.gel);
+      // Darker toward the bottom and the right, where the light does not reach.
+      if (y > FOOT - 8) d.rect(CX - w, y, CX + w, y + 1, V.gelDark);
+      d.rect(CX + w - 3, y, CX + w, y + 1, V.gelDark);
+    }
+    d.rect(CX - 16, FOOT - 1, CX + 16, FOOT, V.gelDeep);
+    // The shine.
+    d.ellipse(CX - 8, TOP + 8, 5, 3, V.gelLit);
+    set(CX - 11, TOP + 7, [255, 255, 255, 255]);
+    set(CX - 10, TOP + 7, [255, 255, 255, 255]);
+    if (!hurt) {
+      for (const ex of [CX - 6, CX + 5]) {
+        d.ellipse(ex, 19, 3, 4, [255, 255, 255, 255]);
+        d.rect(ex, 18, ex + 2, 22, P.ink);
+        set(ex, 18, [255, 255, 255, 255]);
+      }
+      d.rect(CX - 2, 26, CX + 3, 27, V.gelDeep);
+    } else {
+      // Screwed shut: a > and a <.
+      for (let i = 0; i < 3; i++) {
+        set(CX - 8 + i, 17 + i, P.ink);
+        set(CX - 8 + i, 21 - i, P.ink);
+        set(CX + 7 - i, 17 + i, P.ink);
+        set(CX + 7 - i, 21 - i, P.ink);
+      }
+      d.ellipse(CX, 27, 3, 2, V.gelDeep);
+      d.rect(CX - 1, 27, CX + 2, 28, P.ink);
+    }
+  };
+}
+slot("blob", 44, 36, blobFrame(false));
+slot("blob-hurt", 44, 36, blobFrame(true));
 
 frames.fountain.animateWith = "fountain2";
 
@@ -2533,6 +2757,288 @@ function siteOfficeOperations() {
   });
 }
 
+/** Volcano Island's sand: black grains, a few lighter, the odd glint of obsidian. */
+function ash() {
+  const c = canvas(48, 48);
+  c.rect(0, 0, 48, 48, V.ash);
+  for (let y = 0; y < 48; y++)
+    for (let x = 0; x < 48; x++) {
+      const h = hash(x * 3 + 11, y * 5 + 7);
+      if (h < 0.1) c.set(x, y, V.ashDark);
+      else if (h < 0.15) c.set(x, y, V.ashLit);
+      else if (h < 0.165) c.set(x, y, V.grain);
+      else if (h < 0.172) c.set(x, y, V.obsidian);
+    }
+  return c;
+}
+
+/**
+ * A hash for the noise lattice below, mixed with `Math.imul` so it stays in
+ * 32 bits. The sheet's own `hash` multiplies in floating point, which is
+ * fine for scattering speckles and skewed for small whole numbers — every
+ * value off a lattice of eight came out under a half, and the noise over it
+ * flattened into stripes.
+ */
+function latticeHash(x, y) {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+/**
+ * Value noise that tiles: a lattice of `cells` by `cells` random heights over
+ * the 48-pixel tile, wrapped at the edges and smoothly interpolated between.
+ * What organic ground wants and a per-pixel hash cannot give — patches and
+ * veins the size of something, running on from one tile into the next.
+ */
+function tiledNoise(x, y, cells, seed) {
+  const size = 48 / cells;
+  const gx = x / size;
+  const gy = y / size;
+  const x0 = Math.floor(gx);
+  const y0 = Math.floor(gy);
+  const fx = gx - x0;
+  const fy = gy - y0;
+  const wrap = (n) => ((n % cells) + cells) % cells;
+  const at = (i, j) => latticeHash(wrap(i) + seed * 31, wrap(j));
+  const ease = (t) => t * t * (3 - 2 * t);
+  const top = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * ease(fx);
+  const bottom = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * ease(fx);
+  return top + (bottom - top) * ease(fy);
+}
+
+/**
+ * Lava: two frames, the bright veins shifting between them so it moves.
+ *
+ * Veins rather than glints: the hot seams are where a tiling noise crosses
+ * its middle, which draws them as lines that wander and run on from one tile
+ * into the next — a flow is a thing that runs on. The first go was two sine
+ * waves and came out as polka dots. The second frame is the same field with
+ * the seams taken at a slightly different height, so they creep rather than
+ * jump.
+ */
+function lava(frame) {
+  const c = canvas(48, 48);
+  for (let y = 0; y < 48; y++)
+    for (let x = 0; x < 48; x++) {
+      const n = tiledNoise(x, y, 4, 7) * 0.65 + tiledNoise(x, y, 8, 11) * 0.35;
+      const seam = Math.abs(n - (0.5 + frame * 0.04));
+      const tone =
+        seam < 0.018
+          ? V.lavaHot
+          : seam < 0.05
+            ? V.lavaLit
+            : n > 0.66
+              ? V.lavaDeep
+              : n < 0.3
+                ? V.lavaLit
+                : V.lava;
+      c.set(x, y, tone);
+      // Scraps of crust riding on the cooler patches.
+      if (n > 0.62 && hash(x + frame * 5, y + 13) < 0.05) c.set(x, y, V.basaltDark);
+    }
+  return c;
+}
+
+/** The cooled crust along the edge of a flow where it meets the sand; turned for the other sides. */
+function crust() {
+  const c = canvas(48, 48);
+  for (let x = 0; x < 48; x++) {
+    const depth = 3 + Math.floor(hash(x, 9) * 3);
+    for (let y = 0; y < depth; y++) c.set(x, y, y === depth - 1 ? V.basalt : V.basaltDark);
+    c.set(x, depth, [255, 224, 122, 200]);
+    if (hash(x, 10) < 0.5) c.set(x, depth + 1, [250, 160, 48, 120]);
+  }
+  return c;
+}
+
+/** The top of a cave wall: rock, speckled, with a crack or two across it. */
+function rockTop() {
+  const c = canvas(48, 48);
+  c.rect(0, 0, 48, 48, V.rock);
+  for (let y = 0; y < 48; y++)
+    for (let x = 0; x < 48; x++) {
+      const h = hash(x * 7 + 3, y * 3 + 17);
+      if (h < 0.12) c.set(x, y, V.rockDark);
+      else if (h < 0.18) c.set(x, y, V.rockLit);
+    }
+  for (let i = 0; i < 10; i++) c.set(6 + i, 12 + (i >> 2), V.rockDeep);
+  for (let i = 0; i < 8; i++) c.set(30 + (i >> 1), 30 + i, V.rockDeep);
+  return c;
+}
+
+/**
+ * The face of a cave wall where the floor runs up to it: the top of it for
+ * the first few rows, then the rock standing up — lighter, since it faces the
+ * way the light comes from — in cracked, uneven slabs, and the shadow it
+ * throws at its foot. Slabs from a tiling noise rather than bands across it,
+ * which the first go had and which read as panelling.
+ */
+function rockFace() {
+  const c = rockTop();
+  for (let y = 10; y < 44; y++)
+    for (let x = 0; x < 48; x++) {
+      const n = tiledNoise(x, y * 0.7, 4, 3) * 0.7 + tiledNoise(x, y, 8, 5) * 0.3;
+      const crack = Math.abs(n - 0.5) < 0.02;
+      c.set(x, y, crack ? V.rockDark : n > 0.6 ? V.faceLit : n < 0.38 ? V.rockLit : V.face);
+      if (!crack && hash(x * 5 + 1, y * 7 + 2) < 0.05) c.set(x, y, V.rockLit);
+    }
+  c.rect(0, 10, 48, 11, V.rockDeep);
+  c.rect(0, 11, 48, 12, V.faceLit);
+  c.rect(0, 44, 48, 48, V.rockDeep);
+  return c;
+}
+
+/** The cave's floor: stone worn flat, a shade lighter than the walls, with pebbles. */
+function caveFloor() {
+  const c = canvas(48, 48);
+  c.rect(0, 0, 48, 48, V.cave);
+  for (let y = 0; y < 48; y++)
+    for (let x = 0; x < 48; x++) {
+      const h = hash(x * 11 + 5, y * 13 + 1);
+      if (h < 0.08) c.set(x, y, V.caveDark);
+      else if (h < 0.11) c.set(x, y, V.caveLit);
+    }
+  for (const [px, py] of [
+    [8, 10],
+    [30, 6],
+    [20, 28],
+    [40, 34],
+    [6, 40],
+  ]) {
+    c.disc(px, py, 1, V.caveLit);
+    c.set(px + 1, py + 1, V.caveDark);
+  }
+  return c;
+}
+
+/**
+ * The volcano: a cone of basalt twelve tiles across, lit from the left, with
+ * a glowing crater at the top, gullies running down it from the rim, lava
+ * running down both flanks to meet the flows on the ground, and the cave's
+ * mouth at the foot of it.
+ *
+ * The flanks flare: steep under the summit and spreading at the foot, which
+ * is the one thing that makes a cone a mountain rather than a lampshade — a
+ * straight edge from the rim to the ground was the first go at this, and it
+ * was a bucket upside down. `CONE` is that curve, and it is written twice:
+ * here, and in `lib/world/volcano.ts`, which cuts the solid bands from it. A
+ * `.mjs` cannot import a `.ts`, which is the arrangement the basketball's
+ * board already lives under; change one and change the other, or the island
+ * has invisible walls in the sky.
+ */
+const CONE = { summitY: 40, summitHalf: 74, baseY: 431, baseHalf: 278, flare: 1.7 };
+function coneHalf(y) {
+  const s = Math.min(1, Math.max(0, (y - CONE.summitY) / (CONE.baseY - CONE.summitY)));
+  return CONE.summitHalf + (CONE.baseHalf - CONE.summitHalf) * s ** CONE.flare;
+}
+function volcano() {
+  const W = 576;
+  const H = 432;
+  const c = canvas(W, H);
+  const cx = W / 2;
+  /** Across the flank at a height: 0 at the left edge, 1 at the right. */
+  const across = (t, y) => cx + (t - 0.5) * 2 * coneHalf(y);
+  c.ellipse(cx, H - 4, 274, 8, P.shadow);
+
+  // The cone, a row at a time, with a ragged edge and three bands of light.
+  for (let y = CONE.summitY; y <= CONE.baseY; y++) {
+    const half = coneHalf(y);
+    const l = Math.round(cx - half + (hash(1, y) - 0.5) * 4);
+    const r = Math.round(cx + half + (hash(2, y) - 0.5) * 4);
+    for (let x = l; x <= r; x++) {
+      const t = (x - l) / Math.max(1, r - l) + (hash(x, y) - 0.5) * 0.1;
+      c.set(x, y, t < 0.3 ? V.basaltLit : t < 0.68 ? V.basalt : V.basaltDark);
+      if (hash(x * 3, y * 7) < 0.025) c.set(x, y, V.basaltDeep);
+    }
+    c.set(l - 1, y, P.ink);
+    c.set(r + 1, y, P.ink);
+  }
+
+  // Gullies: from the rim to the foot, each keeping its place across the
+  // flank, so they fan out from the summit the way a mountain's do. A dark
+  // line with the light catching its left lip.
+  for (const [t, phase] of [
+    [0.1, 0.4],
+    [0.24, 1.3],
+    [0.4, 2.1],
+    [0.52, 0.2],
+    [0.66, 2.7],
+    [0.8, 1.1],
+    [0.92, 1.9],
+  ]) {
+    for (let y = CONE.summitY + 14; y < CONE.baseY - 4; y++) {
+      const wobble = Math.sin((y / 38) * Math.PI + phase) * 3;
+      const x = Math.round(across(t, y) + wobble);
+      if (hash(x, y) < 0.12) continue;
+      c.set(x, y, V.basaltDeep);
+      c.set(x - 1, y, t < 0.5 ? V.basaltLit : V.basalt);
+    }
+  }
+
+  // The crater: a rim of dark rock round a bowl of lava, hottest in the middle.
+  const cy = CONE.summitY + 8;
+  c.ellipse(cx, cy, CONE.summitHalf + 4, 15, P.ink);
+  c.ellipse(cx, cy, CONE.summitHalf + 2, 13, V.basaltDark);
+  c.ellipse(cx - 18, cy - 7, 40, 4, V.basaltLit);
+  c.ellipse(cx, cy + 1, 60, 9, V.lavaDeep);
+  c.ellipse(cx, cy + 1, 48, 7, V.lava);
+  c.ellipse(cx, cy + 1, 32, 4, V.lavaLit);
+  c.ellipse(cx, cy + 1, 14, 2, V.lavaHot);
+
+  // Lava down both flanks: a rivulet spilling over the rim, drifting out
+  // across the flank as it goes and widening towards the foot, where it
+  // meets the flow on the ground — see `lava` in `lib/world/volcano.ts`.
+  const flow = (tFrom, tTo, yTo, phase) => {
+    const path = [];
+    for (let y = cy + 6; y <= yTo; y++) {
+      const s = (y - cy) / (yTo - cy);
+      const t = tFrom + (tTo - tFrom) * s;
+      const x = across(t, y) + Math.sin(s * Math.PI * 4 + phase) * 5;
+      path.push([Math.round(x), y, 1 + Math.round(s * 2.4)]);
+    }
+    for (const [x, y, w] of path) c.rect(x - w - 1, y, x + w + 2, y + 1, V.lavaDeep);
+    for (const [x, y, w] of path) {
+      c.rect(x - w, y, x + w + 1, y + 1, V.lava);
+      c.set(x, y, hash(x, y) < 0.5 ? V.lavaHot : V.lavaLit);
+    }
+  };
+  flow(0.3, 0.08, H - 4, 0.3);
+  flow(0.7, 0.92, H - 4, 2.2);
+  flow(0.55, 0.62, 190, 1.2);
+
+  // The cave's mouth: an arch of dark at the foot, a rim of fallen stone
+  // round it, and the faintest warmth at the back where the cave goes in.
+  const mouthTop = H - 64;
+  for (let y = mouthTop; y < H; y++) {
+    const rise = y - mouthTop;
+    const half = rise < 26 ? Math.round(32 * Math.sqrt(1 - ((26 - rise) / 26) ** 2)) : 32;
+    c.rect(cx - half - 2, y, cx + half + 2, y + 1, P.ink);
+    const warmth = Math.max(0, (y - (H - 22)) / 22);
+    const dark = [
+      Math.round(14 + 50 * warmth),
+      Math.round(12 + 18 * warmth),
+      Math.round(18 + 8 * warmth),
+      255,
+    ];
+    c.rect(cx - half, y, cx + half, y + 1, dark);
+  }
+  for (const [bx, by, br] of [
+    [cx - 40, H - 10, 7],
+    [cx + 40, H - 12, 8],
+    [cx - 32, H - 44, 5],
+    [cx + 33, H - 46, 5],
+    [cx - 14, mouthTop - 3, 5],
+    [cx + 12, mouthTop - 4, 6],
+  ]) {
+    c.disc(bx, by, br + 1, P.ink);
+    c.disc(bx, by, br, V.basalt);
+    c.disc(bx - 1, by - 1, br - 2, V.basaltLit);
+  }
+  return c;
+}
+
 /** The same picture at twice the size, each pixel doubled: still pixel art. */
 function doubled(c) {
   const out = canvas(c.w * 2, c.h * 2);
@@ -2637,3 +3143,12 @@ save("dock_48.png", dock());
 save("boat_192x168.png", boat());
 save("site_irish.png", siteIrish());
 save("site_irish_2x.png", doubled(siteIrish()));
+// Volcano Island's ground, and the volcano.
+save("ash_48.png", ash());
+save("lava_48.png", lava(0));
+save("lava2_48.png", lava(1));
+save("crust_48.png", crust());
+save("rock_48.png", rockTop());
+save("rock_face_48.png", rockFace());
+save("cave_48.png", caveFloor());
+save("volcano_576x432.png", volcano());

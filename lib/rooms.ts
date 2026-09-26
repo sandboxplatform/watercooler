@@ -80,14 +80,24 @@ export function campusRoomSlug(campus: string): string {
   return normaliseRoomSlug(`campus-${campus}`);
 }
 
+/**
+ * Volcano Island and the cave under its volcano: two rooms, so the people
+ * on the beach and the people in the cave are in different places — and so
+ * the blob in the cave has exactly one room to be published to.
+ */
+export const VOLCANO_ROOM_SLUG = "volcano";
+export const CAVE_ROOM_SLUG = "volcano-cave";
+
 /** The room an outdoor address names, or null for anywhere else. */
 export function outdoorRoomFromPath(pathname: string): string | null {
   if (pathname === "/world" || pathname === "/world/") return WORLD_ROOM_SLUG;
+  if (pathname === "/volcano" || pathname === "/volcano/") return VOLCANO_ROOM_SLUG;
+  if (pathname === "/volcano/cave" || pathname === "/volcano/cave/") return CAVE_ROOM_SLUG;
   const campus = pathname.match(/^\/campus\/([a-z0-9-]+)\/?$/);
   return campus ? campusRoomSlug(campus[1]) : null;
 }
 
-/** Which room this browser is in, taken from /r/<slug>[/floor/<n>], /world, /campus/<slug> or ?room=<slug>. */
+/** Which room this browser is in, taken from /r/<slug>[/floor/<n>], /world, /campus/<slug>, /volcano[/cave] or ?room=<slug>. */
 export function roomFromLocation(location: { pathname: string; search: string }): string {
   const path = parseRoomPath(location.pathname);
   if (path) return path.floor !== null ? floorRoomSlug(path.slug, path.floor) : path.slug;

@@ -12,9 +12,9 @@ import {
 } from "@/lib/world/scenery";
 
 /**
- * What the world map and the campuses draw alike: the ground, the water
- * and its foam, the props, the signs and the ferry. Both scenes lay their
- * pictures from the same sheet, so the pieces live here once.
+ * What the world map, the campuses and the volcano draw alike: the ground,
+ * the water and its foam, the props, the signs and the ferry. Every outdoor
+ * scene lays its pictures from the same sheet, so the pieces live here once.
  */
 
 export const PROPS_KEY = "world-props";
@@ -25,7 +25,7 @@ const FOAM_KEY = "world-foam";
 const WATER_ANIM = "world-water";
 const FOUNTAIN_ANIM = "world-fountain";
 
-const GROUND: Record<Exclude<Ground, "water">, string> = {
+const GROUND: Record<Exclude<Ground, "water" | "lava">, string> = {
   grass: "world-grass",
   paving: "world-paving",
   kerb: "world-kerb",
@@ -35,7 +35,35 @@ const GROUND: Record<Exclude<Ground, "water">, string> = {
   court: "world-court",
   trail: "world-trail",
   shingle: "world-shingle",
+  ash: "world-ash",
+  rock: "world-rock",
+  cave: "world-cave",
 };
+
+/**
+ * Volcano Island's moving and edged ground: two frames of lava, the dark
+ * crust laid along a flow where it meets the sand (turned for each side,
+ * the way the sea's foam is), and the face of the rock where a cave wall
+ * stands over the floor.
+ *
+ * Loaded by `VolcanoScene` alone — see `preloadVolcanoGround` — since nothing
+ * on the world map or a campus is made of any of it.
+ */
+const LAVA_KEY = "world-lava";
+const LAVA2_KEY = "world-lava2";
+const CRUST_KEY = "world-crust";
+const ROCK_FACE_KEY = "world-rock-face";
+const LAVA_ANIM = "world-lava";
+/** The pictures of the volcano's own ground, on top of the outdoor pack. */
+export function preloadVolcanoGround(scene: Phaser.Scene) {
+  scene.load.image(GROUND.ash, asset("/sprites/world/ash_48.png"));
+  scene.load.image(GROUND.rock, asset("/sprites/world/rock_48.png"));
+  scene.load.image(ROCK_FACE_KEY, asset("/sprites/world/rock_face_48.png"));
+  scene.load.image(GROUND.cave, asset("/sprites/world/cave_48.png"));
+  scene.load.image(LAVA_KEY, asset("/sprites/world/lava_48.png"));
+  scene.load.image(LAVA2_KEY, asset("/sprites/world/lava2_48.png"));
+  scene.load.image(CRUST_KEY, asset("/sprites/world/crust_48.png"));
+}
 
 /**
  * The grass, eight tiles square, which is what the map is carpeted with.
@@ -124,15 +152,34 @@ export function layGround(scene: Phaser.Scene, grid: Ground[][]) {
   const isWater = (tx: number, ty: number) => grid[ty]?.[tx] === "water";
   const columns = grid[0]?.length ?? 0;
   const block = GRASS_BLOCK * TILE;
-  for (let y = 0; y < grid.length * TILE; y += block)
-    for (let x = 0; x < columns * TILE; x += block)
-      scene.add.image(x, y, GRASS_BLOCK_KEY).setOrigin(0, 0).setDepth(-1);
+  // Only where there is grass to carpet. Volcano Island is black sand and
+  // its cave is rock, so a carpet under either would be a few dozen
+  // pictures on the display list that no pixel of the place ever shows.
+  if (grid.some((row) => row.includes("grass"))) {
+    for (let y = 0; y < grid.length * TILE; y += block)
+      for (let x = 0; x < columns * TILE; x += block)
+        scene.add.image(x, y, GRASS_BLOCK_KEY).setOrigin(0, 0).setDepth(-1);
+  }
   grid.forEach((row, ty) =>
     row.forEach((ground, tx) => {
       const x = tx * TILE;
       const y = ty * TILE;
       // The carpet is already grass; anything else is laid over it.
       if (ground === "grass") return;
+      if (ground === "lava") {
+        layLava(scene, grid, tx, ty);
+        return;
+      }
+      if (ground === "rock") {
+        // A wall seen from above is its top; where the floor runs up to it
+        // from the south, what shows is its face. The cave is looked at the
+        // way every room in this world is, so a wall with floor below it
+        // stands up out of it rather than lying flat.
+        const below = grid[ty + 1]?.[tx];
+        const key = below !== undefined && below !== "rock" ? ROCK_FACE_KEY : GROUND.rock;
+        scene.add.image(x, y, key).setOrigin(0, 0).setDepth(0);
+        return;
+      }
       if (ground !== "water") {
         scene.add.image(x, y, GROUND[ground]).setOrigin(0, 0).setDepth(0);
         return;
@@ -155,6 +202,40 @@ export function layGround(scene: Phaser.Scene, grid: Ground[][]) {
       }
     }),
   );
+}
+
+/**
+ * A tile of lava, moving, with a crust of cooled rock along any edge where
+ * it meets the ground — which is the sea's foam in another colour, and laid
+ * the same way. Not against the rock of a cave wall, which is the same
+ * stone the crust is: a seam of it drawn between the two reads as a line.
+ */
+function layLava(scene: Phaser.Scene, grid: Ground[][], tx: number, ty: number) {
+  if (!scene.anims.exists(LAVA_ANIM)) {
+    scene.anims.create({
+      key: LAVA_ANIM,
+      frames: [{ key: LAVA_KEY }, { key: LAVA2_KEY }],
+      frameRate: 2,
+      repeat: -1,
+    });
+  }
+  const x = tx * TILE;
+  const y = ty * TILE;
+  scene.add.sprite(x, y, LAVA_KEY).setOrigin(0, 0).setDepth(0).play(LAVA_ANIM);
+  const edges: [number, number, number][] = [
+    [tx, ty - 1, 0],
+    [tx + 1, ty, 90],
+    [tx, ty + 1, 180],
+    [tx - 1, ty, 270],
+  ];
+  for (const [nx, ny, angle] of edges) {
+    const next = grid[ny]?.[nx];
+    if (next === undefined || next === "lava" || next === "rock") continue;
+    scene.add
+      .image(x + TILE / 2, y + TILE / 2, CRUST_KEY)
+      .setAngle(angle)
+      .setDepth(1);
+  }
 }
 
 /**

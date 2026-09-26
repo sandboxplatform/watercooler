@@ -33,7 +33,7 @@ describe("the wilderness", () => {
     expect(WILD_FROM).toBeLessThan(WORLD_COLUMNS);
     expect(WORLD_COLUMNS - WILD_FROM).toBeGreaterThan(WORLD_COLUMNS / 4);
     for (const b of BUILDINGS) {
-      expect(b.frame.x, b.org.slug).toBeLessThan(WILD_FROM * TILE);
+      expect(b.frame.x, b.id).toBeLessThan(WILD_FROM * TILE);
     }
   });
 
