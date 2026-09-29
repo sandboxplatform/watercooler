@@ -197,7 +197,7 @@ export default function Welcome() {
           </h2>
           <p className="welcome__lead">
             {needsSignIn
-              ? "Sign in to walk in. Your desk, your character and your record are kept under your email."
+              ? "Sign in to walk in, or go on as a guest."
               : visitor
                 ? "You are visiting. Tell us who you are and what you look like — then walk out onto the world map."
                 : worksNowhere
@@ -228,8 +228,8 @@ export default function Welcome() {
               </button>
             </div>
             <p className="welcome__hint welcome__hint--block">
-              A guest is kept in this browser only: nothing about you is saved, and your desk and
-              character do not follow you to another device.
+              A guest is kept in this browser only: nothing about you is saved — no desk, no badges,
+              no eggs — and your character does not follow you to another device.
             </p>
           </section>
         ) : (
@@ -330,7 +330,7 @@ export default function Welcome() {
                 {refusal ? (
                   <span className="welcome__error">{refusal}</span>
                 ) : visitor ? (
-                  "Kept in this browser only. You are visiting, so you have no office and no desk."
+                  "Kept in this browser only. You are visiting: no desk, and no badges or eggs to keep."
                 ) : worksNowhere ? (
                   "You work nowhere yet, so you have no desk."
                 ) : account ? (

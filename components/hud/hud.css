@@ -2149,11 +2149,14 @@
   outline: none;
 }
 
-/* A name somebody typed rather than somebody the world knows — and two
-   guests may well be the same name. */
-.badges__guest {
+/* The one line a guest is told at the top of the catalogue: none of it is
+   theirs to earn. Muted, like the eggs panel's note, because it is an
+   explanation rather than a thing to press. */
+.badges__note {
+  margin: 0 0 8px;
+  font-size: var(--fs-xs);
+  line-height: 1.7;
   color: var(--pixel-muted);
-  font-size: var(--fs-3xs);
 }
 
 /* ── Eggs: your basket, and every kind there is ────────

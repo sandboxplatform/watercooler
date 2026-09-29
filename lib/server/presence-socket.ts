@@ -20,7 +20,7 @@ import { mayWear } from "../characters/library";
 import { BOSS_SPRITE_KEY } from "../characters/sprites";
 import { CAVE_ROOM_SLUG, normaliseRoomSlug, WORLD_ROOM_SLUG } from "../rooms";
 import { describeRoom, hasBoardroom, mayEnterRoom } from "../world/floors";
-import { badgeFor, badgeHolder, type EarnedBadge } from "../badges";
+import { badgeFor, badgeHolder, isGuestHolder, type EarnedBadge } from "../badges";
 import { isPongPayload } from "../pong/protocol";
 import { SHARED_BOARD, isStroke, sanitiseStroke } from "../whiteboard";
 import { Basketball } from "./basketball";
@@ -408,8 +408,10 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
     const { people, locals } = onlineList();
     broadcastAll({ type: "online", people, locals });
     // The one moment Holding the Fort can become true, and the only list
-    // that knows: one person in every room the server has open.
-    if (people.length === 1) {
+    // that knows: one person in every room the server has open. Read off
+    // the list rather than through `holderOf`, so a guest alone in the
+    // world is turned away here in so many words.
+    if (people.length === 1 && !isGuestHolder(people[0].person)) {
       const alone = people[0];
       if (once(alone.person, "holding-the-fort")) {
         announce(alone.room, onAlone({ person: alone.person, name: alone.name }));
@@ -478,20 +480,23 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
   };
 
   /**
-   * Whose badge shelf a connection writes to.
+   * Whose badge shelf and egg basket a connection writes to.
    *
    * The identity from the cookie, which is the person; the name from the
    * room, which is what they are called today. Null before they have
-   * joined anywhere, since there is nothing to call them yet.
+   * joined anywhere, since there is nothing to call them yet — and null for
+   * a guest, who keeps nothing (`isGuestHolder`). Every badge rule and the
+   * egg in the grass go through here, so that one answer is what turns the
+   * lot off for them: no rule fires, nothing is announced, and an egg a
+   * guest bends down for stays where it is for somebody who can keep it.
    */
   const holderOf = (id: string): Holder | null => {
     const slug = roomOf.get(id);
     const player = slug ? rooms.get(slug)?.hub.get(id) : null;
     if (!player) return null;
-    return {
-      person: badgeHolder(identityByConnection.get(id) ?? "visitor", player.name),
-      name: player.name,
-    };
+    const person = badgeHolder(identityByConnection.get(id) ?? "visitor", player.name);
+    if (isGuestHolder(person)) return null;
+    return { person, name: player.name };
   };
 
   /**
@@ -1341,21 +1346,23 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
           if (slug !== WORLD_ROOM_SLUG) return;
           const player = room.hub.get(id);
           if (!player) return;
+          // Asked before anything is taken rather than after, because a
+          // guest has no basket: an egg lifted out of the grass for somebody
+          // with nowhere to put it is an egg taken from whoever could have
+          // kept it. Their browser offers no `Press E` over one either; this
+          // is the part that holds.
+          const holder = holderOf(id);
+          if (!holder) return;
           const egg = nest.take({ x: player.x, y: player.y });
           // Nothing within reach, which is the ordinary answer to E being
           // pressed in an empty field. Nothing is published, because
           // nothing happened.
           if (!egg) return;
-          const holder = holderOf(id);
           const at = new Date().toISOString();
-          if (holder) {
-            getRoomStore().collectEgg(holder.person, holder.name, egg.tier, egg.id);
-            tellEveryoneEgg(holder, egg.tier, at);
-            announce(slug, onEggFound(holder, egg.tier));
-          }
-          publishEggs({
-            taken: { tier: egg.tier, by: holder?.name ?? player.name, x: egg.x, y: egg.y },
-          });
+          getRoomStore().collectEgg(holder.person, holder.name, egg.tier, egg.id);
+          tellEveryoneEgg(holder, egg.tier, at);
+          announce(slug, onEggFound(holder, egg.tier));
+          publishEggs({ taken: { tier: egg.tier, by: holder.name, x: egg.x, y: egg.y } });
           return;
         }
 
@@ -1565,6 +1572,8 @@ export function attachPresenceSocket(server: import("http").Server, path = "/api
         publishEggs({ laid: egg.id });
         // Whoever walked up to him gets the credit, which is a badge
         // nobody can hand themselves: the fright is the server's to see.
+        // A guest's fright still lays one — the egg is the park's, for
+        // whoever comes along — and earns the guest nothing.
         const holder = startledBy ? holderOf(startledBy) : null;
         if (holder) announce(room, onEggLaid(holder));
       },

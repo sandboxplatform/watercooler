@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
 import WebSocket from "ws";
 import type { BlobBroadcast } from "../../presence-types";
+import type { AccessIdentity } from "../../identity";
 
 /**
  * The blob, over real sockets against a real server.
@@ -19,6 +20,8 @@ import type { BlobBroadcast } from "../../presence-types";
 // Codes have to exist before the access module reads the environment, which
 // is why the imports below are awaited rather than written at the top.
 process.env.ACCESS_CODE = "test-visitors-share-this-one";
+process.env.ACCESS_CODE_COOP = "test-coop-alone";
+process.env.ACCESS_CODE_SARA = "test-sara-alone";
 
 const { attachPresenceSocket } = await import("../presence-socket");
 const { ACCESS_COOKIE, mintToken } = await import("../access");
@@ -26,7 +29,9 @@ const { FEET_BELOW_CENTRE } = await import("../../world/basketball");
 const { leapAt } = await import("../../world/blob");
 const { CAVE_ROOM_SLUG, VOLCANO_ROOM_SLUG } = await import("../../rooms");
 
-const cookie = () => `${ACCESS_COOKIE}=${mintToken("visitor")}`;
+// The shared code unless a case says otherwise: a guest keeps nothing, so
+// whoever is meant to earn a badge below comes in on a code of their own.
+const cookie = (who: AccessIdentity) => `${ACCESS_COOKIE}=${mintToken(who)}`;
 
 let server: Server;
 let port: number;
@@ -54,9 +59,13 @@ interface Person {
   punch(): void;
 }
 
-async function walkIn(name: string, room: string): Promise<Person> {
+async function walkIn(
+  name: string,
+  room: string,
+  who: AccessIdentity = "visitor",
+): Promise<Person> {
   const socket = new WebSocket(`ws://127.0.0.1:${port}/api/room/socket`, {
-    headers: { cookie: cookie(), origin: `http://127.0.0.1:${port}` },
+    headers: { cookie: cookie(who), origin: `http://127.0.0.1:${port}` },
   });
   const join = (at: { x: number; y: number }) =>
     socket.send(
@@ -91,9 +100,18 @@ const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("the blob in the cave", () => {
   it("gives Hot Foot to somebody landing on Volcano Island", async () => {
+    const sara = await walkIn("Sara", VOLCANO_ROOM_SLUG, "sara");
+    await until(() => sara.badges.some((b) => b.code === "hot-foot"));
+    expect(sara.badges).toContainEqual({ name: "Sara", code: "hot-foot" });
+    sara.socket.close();
+  });
+
+  it("gives a guest nothing for the crossing", async () => {
     const ann = await walkIn("Ann", VOLCANO_ROOM_SLUG);
-    await until(() => ann.badges.some((b) => b.code === "hot-foot"));
-    expect(ann.badges).toContainEqual({ name: "Ann", code: "hot-foot" });
+    // Arriving is announced in the same breath as the join, so a moment
+    // is long enough for a badge that was going to come.
+    await pause(300);
+    expect(ann.badges.filter((b) => b.name === "Ann")).toEqual([]);
     ann.socket.close();
   });
 
@@ -106,7 +124,8 @@ describe("the blob in the cave", () => {
   });
 
   it("is punched by whoever stands next to it, for the whole cave to see — and nobody outside", async () => {
-    const coop = await walkIn("Coop", CAVE_ROOM_SLUG);
+    // On his own code, since the punch is a badge and a guest keeps none.
+    const coop = await walkIn("Coop", CAVE_ROOM_SLUG, "coop");
     const rob = await walkIn("Rob", CAVE_ROOM_SLUG);
     const nick = await walkIn("Nick", VOLCANO_ROOM_SLUG);
     await until(() => coop.heard.length > 0);

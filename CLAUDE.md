@@ -662,16 +662,42 @@ the new place, and the wall read "7 of 4 earned in this room" because it
 was also counting badges a retired agent had won. They hang on a profile
 now, and a profile is one person wherever they are standing.
 
-| Holder    | Keyed on                  | Because                                                              |
-| --------- | ------------------------- | -------------------------------------------------------------------- |
-| A persona | Their `AccessIdentity`    | The code names exactly one person, so it follows them to any browser |
-| A visitor | `guest:<lowercased name>` | The shared code names nobody; their name is the only handle there is |
-| A local   | — they hold none          | A resident is how a badge is _got_, not somebody who gets one        |
+| Holder    | Keyed on               | Because                                                              |
+| --------- | ---------------------- | -------------------------------------------------------------------- |
+| A persona | Their `AccessIdentity` | The code names exactly one person, so it follows them to any browser |
+| A visitor | — they hold none       | A guest is passing through, and a typed name is nobody in particular |
+| A local   | — they hold none       | A resident is how a badge is _got_, not somebody who gets one        |
 
-The guest case is weak on purpose and marked as weak: two people who both
-call themselves Guest share a shelf, and the panel prints `guest` beside
-such a name. Sign-in is the finer-grained answer, exactly as it is for the
-door.
+**A guest keeps nothing** — no badge, no mark towards one, no egg, and no
+desk, which was already true since the desks come off the cast. They are a
+temporary user. `badgeHolder` still names them `guest:<lowercased name>`,
+because the People panel opens a profile by it, but nothing is ever filed
+under that id: it was the whole of a visitor's identity, so two people who
+both called themselves Guest shared one shelf and one person who typed a
+different name the next day started another. A record kept under it was a
+record of nobody. `isGuestHolder` is the rule, and it is asked in three
+places for the usual reason:
+
+| Where               | What it does                                                                   |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `holderOf`          | Null for a guest, so no rule on the socket fires and an egg stays in the grass |
+| `awardMachineScore` | The two scores that arrive over HTTP go on the board and on no shelf           |
+| The room store      | `awardBadge`, `mark` and `collectEgg` refuse a guest whoever the caller is     |
+
+Holding the Fort is the one rule read off the online list rather than
+through `holderOf`, so it asks `isGuestHolder` itself. The high score tables
+are left alone: they keep a name rather than a person, and a guest's score
+still goes up on the machine. Migration 8 took out what guests had kept
+before the rule — see **Storage**.
+
+The browser says so rather than leaving a guest to find out: the profile
+card, the Badges and Eggs tabs, both cards and the welcome screen each
+carry a line, and the egg's `Press E` is `GUEST_EGG_PROMPT` for them. Who
+is a guest there is `person` on the online list — the server's answer,
+worked out from the cookie — so `selfPerson` in `eggs-client` needs no
+second ask of `/api/me`; until the list arrives the egg offers nothing
+either way. **Signing in changes none of it**: a signed-in person on the
+shared code is still `visitor` to the socket, exactly as for the door.
 
 **Nothing is granted on a browser's word.** Every rule in
 `lib/server/badge-rules.ts` fires off something the server saw for itself —
@@ -889,9 +915,10 @@ Two things about the window:
   same reason: the two ends are in different trees and neither is the
   other's parent.
 - **Somebody with no cast entry still gets one.** A visitor is a name, a
-  look and whatever they have earned, which is a real profile. What they do
+  look and where they are standing, which is a real profile. What they do
   not get is a backstory and a picture, and the card says so rather than
-  showing a broken image.
+  showing a broken image — nor a shelf or a basket, since a guest keeps
+  nothing, and the card says that in place of either.
 
 **It is a fourth place to edit when somebody joins the world**, after the
 three under the access table above, and `cast.test.ts` is what makes that
@@ -2967,6 +2994,17 @@ off the room's own record of where that person is standing. A message that
 named an egg could name one across the map, and the tier — the whole point
 of an egg — would be a thing a browser had an opinion about.
 
+**A guest's hand in the grass takes nothing**, and the order is the point:
+`holderOf` is asked _before_ `nest.take`, not after it. A guest has no
+basket (see **Badges**), and an egg lifted out of the field for somebody
+with nowhere to put it is gone from the park and in nobody's basket — which
+is exactly what the code did before, since the take came first and the
+holder was only asked about the badge. So it stays lying there, nothing is
+published, and the scene shows a guest `GUEST_EGG_PROMPT` where anybody
+else sees `Press E`. A guest's fright still lays one; the egg is the park's.
+`egg-socket.test.ts` seeds the field with one egg to drive this, since
+waiting on Michael is minutes.
+
 **A press of E goes to every `extra`, not to the first that wants it.** The
 world map now runs two of them, so `OutdoorPlace.extras` is a list; the ball
 and an egg a step apart never argue over a press, because neither acts on
@@ -3442,6 +3480,13 @@ basket is a person's. One row per egg rather than a count per kind — an egg
 is a thing that happened at a time — and everything read back off it is a
 tally, which is bounded by people times the ladder where the rows are
 bounded by nothing.
+
+Migration 8 **deletes rows and changes no shape**: every badge, mark and
+egg filed under a `guest:` holder, from before a guest kept nothing. Left
+in, they would have gone on being listed against every badge and every
+kind of egg in the world, and nothing in a row can say whose it was — so
+there is nobody to give them back to, which is migration 5's argument.
+(Migration 7 dropped the old desk register; see **Floors**.)
 
 **The room store's shape is versioned.** `MIGRATIONS` in
 `lib/server/room-store.ts` is every change to it in order, the index being

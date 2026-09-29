@@ -118,6 +118,12 @@ The shared code makes you a **visitor**: you pick a name and one of the five
 characters that ship with the game, and start out on the world map. Visitors work
 nowhere, so they choose no office and have no desk.
 
+A visitor is a **guest**, and a guest keeps nothing: no badges, no eggs, no desk.
+You can walk everywhere a visitor may go, play everything and talk to anybody, but
+nothing about the visit is kept — an egg you bend down for stays in the grass for
+somebody who can take it home. A name typed into the welcome screen is not a
+person, so a record kept under one would be a record of nobody.
+
 Someone who works here gets a code of their own instead — `ACCESS_CODE_COOP`,
 `ACCESS_CODE_ROB`, `ACCESS_CODE_HUNTER`, `ACCESS_CODE_NATHAN`,
 `ACCESS_CODE_SARA`, `ACCESS_CODE_ANDREW`, `ACCESS_CODE_CAMPBELL`,
@@ -308,7 +314,8 @@ grass for everyone on the map to see.
 Your basket is the **Eggs** tab in the column, and it shows on your profile
 beside your badges. Four badges go with them: your first egg, startling him
 into laying one, finding the rainbow, and — the long one — an egg of every
-kind there is.
+kind there is. A guest has no basket, and is told so over the egg instead of
+`Press E`.
 
 And it shows on a shelf in your cubicle — see below.
 
@@ -620,6 +627,8 @@ else has it, and the rest of its group to read along. The toast that pops
 up over the office when somebody earns one can be pressed too, which is
 the point of it — that notice is six seconds long and it used to be the
 whole of what you were ever told.
+
+Badges are for people with a code of their own; a guest earns none.
 
 Nothing is earned by doing anything for the hundredth time, and nothing is
 earned on your browser's say-so: every badge fires off something the server

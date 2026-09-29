@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
 import WebSocket from "ws";
 import type { EggsBroadcast } from "../../presence-types";
+import type { AccessIdentity } from "../../identity";
 
 /**
  * The eggs, over a real socket against a real server.
@@ -22,18 +23,42 @@ import type { EggsBroadcast } from "../../presence-types";
  * and the chance is the simulation's own randomness. The two halves of it
  * are covered where they can be made to happen on demand: the roll and the
  * spot in `residents.test.ts`, which drives the simulation with a random
- * of its own, and the field in `eggs.test.ts`.
+ * of its own, and the field in `eggs.test.ts`. What this file needs of an
+ * egg is one lying there to be taken, so the field starts with one in it.
  */
 
 // Codes have to exist before the access module reads the environment, which
 // is why the imports below are awaited rather than written at the top.
 process.env.ACCESS_CODE = "test-visitors-share-this-one";
+process.env.ACCESS_CODE_COOP = "test-coop-alone";
+
+/**
+ * Where the one egg this file lays by hand is lying, well clear of where
+ * everybody else stands — so "nothing at your feet" below is still true.
+ */
+const { SEEDED } = vi.hoisted(() => ({ SEEDED: { x: 1500, y: 900 } }));
+
+/**
+ * A field with one egg already in it, which is the whole of what a take
+ * needs and the one thing this file cannot wait for Michael to provide.
+ */
+vi.mock("../eggs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../eggs")>();
+  const { eggSpot } = await import("../../world/eggs");
+  class Seeded extends actual.Nest {
+    constructor() {
+      super();
+      this.lay(eggSpot(SEEDED), 0, Date.now());
+    }
+  }
+  return { ...actual, Nest: Seeded };
+});
 
 const { attachPresenceSocket } = await import("../presence-socket");
 const { ACCESS_COOKIE, mintToken } = await import("../access");
 const { WORLD_ROOM_SLUG } = await import("../../rooms");
 
-const cookie = () => `${ACCESS_COOKIE}=${mintToken("visitor")}`;
+const cookie = (who: AccessIdentity) => `${ACCESS_COOKIE}=${mintToken(who)}`;
 
 let server: Server;
 let port: number;
@@ -54,23 +79,32 @@ interface Player {
   id: string;
   /** Every field frame this connection has been sent, in order. */
   frames: EggsBroadcast[];
+  /** Whose baskets this connection has been told an egg went into. */
+  found: string[];
   take(): void;
 }
 
-async function walkIn(name: string, room: string): Promise<Player> {
+async function walkIn(
+  name: string,
+  room: string,
+  who: AccessIdentity = "visitor",
+  at = { x: 900, y: 900 },
+): Promise<Player> {
   const socket = new WebSocket(`ws://127.0.0.1:${port}/api/room/socket`, {
-    headers: { cookie: cookie(), origin: `http://127.0.0.1:${port}` },
+    headers: { cookie: cookie(who), origin: `http://127.0.0.1:${port}` },
   });
   const player: Player = {
     socket,
     id: "",
     frames: [],
+    found: [],
     take: () => socket.send(JSON.stringify({ type: "egg", action: "take" })),
   };
   socket.on("message", (raw) => {
     const message = JSON.parse(raw.toString());
     if (message.type === "welcome") player.id = message.you;
     if (message.type === "eggs") player.frames.push(message as EggsBroadcast);
+    if (message.type === "egg-found") player.found.push(message.person);
   });
   await new Promise<void>((done) =>
     socket.on("open", () => {
@@ -80,8 +114,7 @@ async function walkIn(name: string, room: string): Promise<Player> {
           room,
           name,
           spriteKey: "player",
-          x: 900,
-          y: 900,
+          ...at,
           facing: "down",
         }),
       );
@@ -153,5 +186,36 @@ describe("the eggs on the world map", () => {
     await pause(300);
     expect(coop.frames).toHaveLength(told);
     coop.socket.close();
+  });
+
+  /**
+   * A guest keeps nothing, and an egg is not something a guest can hold
+   * for a moment and drop: bending down for one leaves it in the grass for
+   * whoever comes along with somewhere to put it. Taking it and then
+   * keeping nothing would be the quiet version of this bug — the egg gone
+   * from the park and in nobody's basket.
+   */
+  it("leaves an egg lying for a guest, for somebody who can keep it", async () => {
+    const ann = await walkIn("Ann", WORLD_ROOM_SLUG, "visitor", SEEDED);
+    await until(() => ann.frames.length > 0);
+    const egg = ann.frames[0].eggs[0];
+    expect(egg).toBeDefined();
+    ann.take();
+    await pause(300);
+    // Nothing happened, so nothing is published and nobody is told.
+    expect(ann.frames).toHaveLength(1);
+    expect(ann.found).toEqual([]);
+
+    const coop = await walkIn("Coop", WORLD_ROOM_SLUG, "coop", SEEDED);
+    await until(() => coop.frames.length > 0);
+    expect(coop.frames[0].eggs.map((e) => e.id)).toContain(egg.id);
+    coop.take();
+    await until(() => coop.frames.some((f) => f.taken));
+    expect(coop.frames.find((f) => f.taken)?.taken?.by).toBe("Coop");
+    expect(coop.frames[coop.frames.length - 1].eggs.map((e) => e.id)).not.toContain(egg.id);
+    await until(() => ann.found.length > 0);
+    expect(ann.found).toEqual(["coop"]);
+
+    for (const p of [ann, coop]) p.socket.close();
   });
 });

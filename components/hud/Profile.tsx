@@ -33,9 +33,9 @@ import { asset } from "@/lib/assets";
  * other's parent, and the bus is what this app uses for exactly that.
  *
  * Somebody with no cast entry still gets one — a visitor is a name, a look
- * and whatever they have earned, which is a real profile and worth showing.
+ * and where they are standing, which is a real profile and worth showing.
  * What they do not get is a backstory and a picture, because nobody has
- * drawn them one.
+ * drawn them one — nor a shelf or a basket, because a guest keeps nothing.
  */
 
 /** What is known about whoever is being looked at, from wherever it comes. */
@@ -195,6 +195,19 @@ export default function Profile() {
               and stand next to them.
             </p>
           </div>
+        ) : guest ? (
+          /*
+            A guest's shelf does not exist either, for the other reason: they
+            are passing through. Said rather than shown as a wall of grey,
+            which would read as a list of things they have yet to do.
+          */
+          <div className="profile__shelf">
+            <div className="profile__shelf-name">Badges</div>
+            <p className="profile__none">
+              Guests keep nothing — no badges, no eggs, no desk. {subject.name} is visiting on the
+              shared code, and nothing about a visit is kept.
+            </p>
+          </div>
         ) : (
           <div className="profile__shelf">
             <div className="profile__shelf-name">
@@ -269,8 +282,9 @@ export default function Profile() {
           two read as one list only until somebody has four of something.
           A resident gets none of this for the reason they get no badges:
           Michael is where eggs come from, not somebody who collects them.
+          And a guest, who keeps nothing, has said so on the shelf above.
         */}
-        {!resident && basket.length > 0 && (
+        {!resident && !guest && basket.length > 0 && (
           <div className="profile__shelf">
             <div className="profile__shelf-name">
               Eggs

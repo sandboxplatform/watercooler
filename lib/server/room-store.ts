@@ -17,6 +17,7 @@ import { mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { createLogger } from "../logger";
 import { normaliseEmail, type Account, type AccountProfile, type SignedIn } from "../accounts";
+import { isGuestHolder } from "../badges";
 import { personIdForEmail } from "./person-id";
 
 const log = createLogger("RoomStore");
@@ -276,6 +277,24 @@ const MIGRATIONS: readonly Migration[] = [
       // keyboard right now is presence rather than a register.
       db.exec("DROP INDEX IF EXISTS people_home");
       db.exec("DROP TABLE IF EXISTS people");
+    },
+  },
+  {
+    name: "forget the guests",
+    up: (db) => {
+      // A guest keeps nothing now — no badge, no mark, no egg — and what
+      // they kept before goes with the rule rather than lingering under it.
+      // Every row here was filed under a name somebody typed on the shared
+      // code, so two people called Guest shared one shelf and nothing in a
+      // row can say whose it was. Left in, they would go on being listed
+      // against every badge and every kind of egg in the world: a record,
+      // kept for good, of people the world has decided not to remember.
+      //
+      // Deleted rather than carried anywhere, for the reason migration 5
+      // kept nothing: there is nobody to give them back to.
+      db.exec("DELETE FROM badges WHERE person LIKE 'guest:%'");
+      db.exec("DELETE FROM badge_marks WHERE person LIKE 'guest:%'");
+      db.exec("DELETE FROM eggs WHERE person LIKE 'guest:%'");
     },
   },
 ];
@@ -627,10 +646,15 @@ export class RoomStore {
    * can treat a true result as "announce this" without tracking state.
    *
    * No room: a badge is the person's and follows them through every door.
-   * The name is kept alongside so a row reads on its own — the roster knows
-   * what Coop is called, but a visitor is only ever what they typed.
+   * The name is kept alongside so a row reads on its own, whoever is in
+   * the world when somebody looks.
+   *
+   * Never for a guest, and that is said here as well as on the socket: this
+   * is where a record is kept, so it is the one place a guest's cannot be
+   * written from whichever caller forgets. See `isGuestHolder`.
    */
   awardBadge(person: string, code: string, name: string): boolean {
+    if (isGuestHolder(person)) return false;
     const result = this.stmt(
       `INSERT OR IGNORE INTO badges (person, code, name, earned_at) VALUES (?, ?, ?, ?)`,
     ).run(person, code, name.slice(0, 32), new Date().toISOString());
@@ -647,9 +671,10 @@ export class RoomStore {
    * The set, not the count: every badge built on more than one moment asks
    * "have they done each of these", so two visits to the same lobby must
    * count once. Returns true when the mark is new, which is the only moment
-   * worth re-checking a badge on.
+   * worth re-checking a badge on. Never for a guest, like the badge itself.
    */
   mark(person: string, mark: string): boolean {
+    if (isGuestHolder(person)) return false;
     return (
       this.stmt("INSERT OR IGNORE INTO badge_marks (person, mark) VALUES (?, ?)").run(person, mark)
         .changes > 0
@@ -684,11 +709,17 @@ export class RoomStore {
    * world when somebody looks. `id` is the egg's own, minted when it was
    * laid, so collecting the same egg twice — which the field will not
    * allow anyway — cannot double it.
+   *
+   * Answers whether it went in, which is never for a guest: a guest has no
+   * basket, and the socket leaves the egg in the grass rather than asking.
    */
-  collectEgg(person: string, name: string, tier: string, id: string, at = new Date()): void {
-    this.stmt(
-      `INSERT OR IGNORE INTO eggs (id, person, name, tier, found_at) VALUES (?, ?, ?, ?, ?)`,
-    ).run(id, person, name.slice(0, 32), tier, at.toISOString());
+  collectEgg(person: string, name: string, tier: string, id: string, at = new Date()): boolean {
+    if (isGuestHolder(person)) return false;
+    return (
+      this.stmt(
+        `INSERT OR IGNORE INTO eggs (id, person, name, tier, found_at) VALUES (?, ?, ?, ?, ?)`,
+      ).run(id, person, name.slice(0, 32), tier, at.toISOString()).changes > 0
+    );
   }
 
   /**

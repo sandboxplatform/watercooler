@@ -149,6 +149,18 @@ describe("desks", () => {
   });
 
   /**
+   * And nobody else, which is the half that makes a guest a guest: a desk
+   * stands for somebody the cast names, and a name typed on the shared code
+   * is nobody the cast names. It used to be otherwise — every browser that
+   * walked in registered one — which is how the floor filled with Coops.
+   */
+  it("gives a desk to nobody the cast does not name, so never to a guest", () => {
+    const desks = TENANTS.flatMap((t) => peopleAt(t.slug).map((who) => who.id));
+    const people = new Set(CAST.filter((who) => who.kind === "person").map((who) => who.id));
+    expect(desks.filter((id) => !people.has(id))).toEqual([]);
+  });
+
+  /**
    * A campus is several buildings and a person works for the organisation,
    * so Campbell's desk is in the first of Homestar's blocks rather than in
    * every one of them. One building's floor is where to look for him.

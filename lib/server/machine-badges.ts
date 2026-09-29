@@ -11,12 +11,16 @@
  *
  * Whoever plays with no socket up gets their badge and no announcement,
  * which is the right way round: the shelf is what lasts.
+ *
+ * A guest gets their score on the board and nothing on a shelf. The high
+ * score table keeps a name rather than a person, and is the machine's
+ * rather than anybody's record, so it is left as it was.
  */
 
 import { identityOf } from "./access";
 import { onScore } from "./badge-rules";
 import { currentWorldBroadcast } from "./room-broadcast";
-import { badgeHolder } from "../badges";
+import { badgeHolder, isGuestHolder } from "../badges";
 
 /** One row of a high score table, as both machines keep them. */
 interface ScoreRow {
@@ -46,6 +50,7 @@ export function awardMachineScore(options: {
 }): void {
   const { cookie, machine, player, score, table, room } = options;
   const holder = { person: badgeHolder(identityOf(cookie), player), name: player };
+  if (isGuestHolder(holder.person)) return;
   const best = table[0];
   const first = !!best && best.player === player && best.score === Math.max(0, Math.round(score));
 

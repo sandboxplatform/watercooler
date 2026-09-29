@@ -82,10 +82,17 @@ describe("the egg basket", () => {
   it("keeps two baskets apart", () => {
     const store = new RoomStore(":memory:");
     store.collectEgg("coop", "Coop", "jade", "a");
-    store.collectEgg("guest:ann", "Ann", "jade", "b");
+    store.collectEgg("rob", "Rob", "jade", "b");
     const jade = store.eggTallies().filter((t) => t.tier === "jade");
-    expect(jade.map((t) => t.person).sort()).toEqual(["coop", "guest:ann"]);
+    expect(jade.map((t) => t.person).sort()).toEqual(["coop", "rob"]);
     expect(jade.every((t) => t.count === 1)).toBe(true);
+  });
+
+  /** A guest keeps nothing, and this is the one place a basket is written. */
+  it("keeps no basket for a guest", () => {
+    const store = new RoomStore(":memory:");
+    expect(store.collectEgg("guest:ann", "Ann", "jade", "a")).toBe(false);
+    expect(store.eggTallies()).toEqual([]);
   });
 
   /** The same egg twice is one egg: its id is the one it was laid with. */

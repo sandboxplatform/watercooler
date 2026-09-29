@@ -36,7 +36,6 @@ function Holders({ tallies }: { tallies: EggTally[] }) {
         >
           {castMember(tally.person)?.name ?? tally.name}
           {tally.count > 1 && <span className="eggs__many">×{tally.count}</span>}
-          {isGuestHolder(tally.person) && <span className="badges__guest">guest</span>}
         </button>
       ))}
     </div>
@@ -83,10 +82,28 @@ function Basket({ mine }: { mine: EggTally[] }) {
   );
 }
 
+/**
+ * A guest's, which is no basket at all: they keep nothing, so the slots
+ * would only ever be empty, and an empty basket with a line underneath
+ * saying "walk up and press E" is a promise the server will not keep.
+ */
+function NoBasket() {
+  return (
+    <div className="eggs__basket">
+      <div className="badges__count">No basket for guests</div>
+      <div className="eggs__how">
+        You are visiting on the shared code, so the eggs in the grass are for somebody else to keep.
+        Guests keep nothing.
+      </div>
+    </div>
+  );
+}
+
 export default function EggsPanel() {
   const all = useEggTallies();
   const me = useSelfPerson();
   const mine = useMemo(() => basketOf(all, me), [all, me]);
+  const guest = !!me && isGuestHolder(me);
 
   const byTier = useMemo(() => {
     const map = new Map<string, EggTally[]>();
@@ -106,7 +123,7 @@ export default function EggsPanel() {
 
   return (
     <div className="app-sidebar__scroll eggs">
-      <Basket mine={mine} />
+      {guest ? <NoBasket /> : <Basket mine={mine} />}
 
       <section className="badges__group">
         <div className="badges__group-name">Every kind there is</div>

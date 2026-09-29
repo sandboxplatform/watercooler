@@ -229,6 +229,41 @@ describe("a database an older build left behind", () => {
   });
 });
 
+/**
+ * A guest keeps nothing, and what one kept before the rule goes with it —
+ * or every badge and every kind of egg in the world would go on listing
+ * people the world has decided not to remember.
+ */
+describe("a database holding what guests earned before they kept nothing", () => {
+  it("forgets the guests' badges, marks and eggs, and nobody else's", () => {
+    // Everything up to the version before, then the rows, then back down a
+    // step so the next open climbs the last rung with them in it.
+    const before = new RoomStore(path);
+    before.awardBadge("coop", "walked-in", "Coop");
+    before.mark("coop", "org:mettara");
+    before.collectEgg("coop", "Coop", "jade", "coops-egg");
+    before.close();
+    const db = new DatabaseSync(path);
+    db.exec(`
+      INSERT INTO badges (person, code, name, earned_at)
+        VALUES ('guest:ann', 'walked-in', 'Ann', '2026-01-01T00:00:00.000Z');
+      INSERT INTO badge_marks (person, mark) VALUES ('guest:ann', 'org:mettara');
+      INSERT INTO eggs (id, person, name, tier, found_at)
+        VALUES ('anns-egg', 'guest:ann', 'Ann', 'rainbow', '2026-01-01T00:00:00.000Z');
+      PRAGMA user_version = ${SCHEMA_VERSION - 1};
+    `);
+    db.close();
+
+    const store = open();
+
+    expect(versionOf(path)).toBe(SCHEMA_VERSION);
+    expect(store.listBadges().map((b) => b.person)).toEqual(["coop"]);
+    expect(store.countMarks("guest:ann", "org:")).toBe(0);
+    expect(store.countMarks("coop", "org:")).toBe(1);
+    expect(store.eggTallies().map((t) => t.person)).toEqual(["coop"]);
+  });
+});
+
 describe("a database from a build that has not been written yet", () => {
   it("is refused rather than written to", () => {
     open();

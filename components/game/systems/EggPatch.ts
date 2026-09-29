@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
-import { onEggs, takeEgg, type EggNews, type EggTaken } from "@/lib/eggs-client";
-import { eggKind, eggWithinReach, type LaidEgg } from "@/lib/world/eggs";
+import { onEggs, selfPerson, takeEgg, type EggNews, type EggTaken } from "@/lib/eggs-client";
+import { GUEST_EGG_PROMPT, eggKind, eggWithinReach, type LaidEgg } from "@/lib/world/eggs";
+import { isGuestHolder } from "@/lib/badges";
 import { PRESS_E_STYLE } from "@/lib/constants";
 import type { Facing } from "@/lib/presence-types";
 import { PROPS_KEY } from "../scenes/outdoors";
@@ -15,7 +16,8 @@ import { burstAt, type EggBurst } from "../utils/egg-burst";
  * are the server's — where each one is and what kind it is were decided
  * there, and picking one up is asking rather than taking — so what lives
  * here is the drawing of them, the `Press E` when you are standing over
- * one, and the shout when somebody finds a good one.
+ * one (a line saying it is not theirs, for a guest, who keeps nothing),
+ * and the shout when somebody finds a good one.
  *
  * It is the second thing the world map runs of its own, beside the
  * basketball, and it deliberately reads a press the same way: E, the pad's
@@ -205,14 +207,25 @@ export class EggPatch {
       this.shoutUntil = 0;
     }
 
-    const nearest = this.nearest(at);
-    if (nearest) this.prompt.setPosition(nearest.x, nearest.y - 30).setVisible(true);
-    else this.prompt.setVisible(false);
+    // Who we are is the online list's word, and it arrives a moment after
+    // the map does. Until then nothing is offered either way: `Press E` to
+    // a guest is a promise the server will not keep, and the guest's line
+    // over Coop's egg is wrong the other way round.
+    const me = selfPerson();
+    const nearest = me ? this.nearest(at) : null;
+    const guest = !!me && isGuestHolder(me);
+    if (nearest) {
+      const words = guest ? GUEST_EGG_PROMPT : "Press E";
+      // Only on a change: setting a Text's words redraws its texture.
+      if (this.prompt.text !== words) this.prompt.setText(words);
+      this.prompt.setPosition(nearest.x, nearest.y - 30).setVisible(true);
+    } else this.prompt.setVisible(false);
 
     // Only ever on something within reach, so a press meant for the ball
     // a step away is not swallowed here — and the server checks the same
     // distance again, because this side is a convenience and not a rule.
-    if (pressed && nearest) takeEgg();
+    // Nor for a guest, whom the server would refuse in any case.
+    if (pressed && nearest && !guest) takeEgg();
   }
 
   /** The one we would pick up, by the rule the server will apply. */

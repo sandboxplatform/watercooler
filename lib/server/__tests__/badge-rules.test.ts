@@ -16,7 +16,7 @@ vi.mock("../room-store", async (importOriginal) => {
 const rules = await import("../badge-rules");
 
 const coop = { person: "coop", name: "Coop" };
-const guest = { person: "guest:ann", name: "Ann" };
+const andrew = { person: "andrew", name: "Andrew" };
 
 /** Every code granted by one call, for the assertions below. */
 const codes = (earned: { code: string }[]) => earned.map((b) => b.code);
@@ -41,8 +41,45 @@ describe("who a badge belongs to", () => {
     expect(isGuestHolder(badgeHolder("coop", "Coop"))).toBe(false);
   });
 
-  it("gives a nameless visitor a shelf rather than an empty key", () => {
+  it("gives a nameless visitor a handle rather than an empty key", () => {
     expect(badgeHolder("visitor", "   ")).toBe("guest:guest");
+  });
+});
+
+/**
+ * A guest is a temporary user: nothing is kept for them. The socket never
+ * asks on their behalf — `holderOf` answers null — so this is the store's
+ * half of it, which holds whichever caller forgets.
+ */
+describe("a guest", () => {
+  const ann = { person: "guest:ann", name: "Ann" };
+
+  it("earns nothing, wherever they go and whatever they do", () => {
+    expect(rules.onArrival(ann, "sandbox-erp", at(2))).toEqual([]);
+    expect(rules.onArrival(ann, CAVE_ROOM_SLUG, noon())).toEqual([]);
+    expect(rules.onScore(ann, "pinball", true)).toEqual([]);
+    expect(rules.onBasket(ann, { banked: true, far: true })).toEqual([]);
+    expect(rules.onMingle(ann, "michael")).toEqual([]);
+    expect(rules.onEggFound(ann, "rainbow")).toEqual([]);
+    expect(rules.onAlone(ann)).toEqual([]);
+    expect(store.listBadges()).toEqual([]);
+  });
+
+  it("marks nothing towards a badge either", () => {
+    for (const org of ORGANISATIONS) rules.onArrival(ann, org.slug, noon());
+    expect(store.countMarks(ann.person, "org:")).toBe(0);
+  });
+
+  it("is left out of a moment everybody else in the room shares", () => {
+    const earned = rules.onRoomFull([coop, ann]);
+    expect(earned.map((b) => b.person)).toEqual(["coop"]);
+  });
+
+  it("has no basket to put an egg in", () => {
+    expect(store.collectEgg(ann.person, ann.name, "jade", "an-egg")).toBe(false);
+    expect(store.eggTallies()).toEqual([]);
+    // And the egg is still anybody else's to have.
+    expect(store.collectEgg("coop", "Coop", "jade", "an-egg")).toBe(true);
   });
 });
 
@@ -54,12 +91,12 @@ describe("turning up", () => {
 
   it("keeps two people's shelves apart", () => {
     rules.onArrival(coop, "sandbox-erp", noon());
-    expect(codes(rules.onArrival(guest, "sandbox-erp", noon()))).toContain("walked-in");
+    expect(codes(rules.onArrival(andrew, "sandbox-erp", noon()))).toContain("walked-in");
   });
 
   it("gives Night Shift in the small hours and not at noon", () => {
     expect(codes(rules.onArrival(coop, "sandbox-erp", at(2)))).toContain("night-shift");
-    expect(codes(rules.onArrival(guest, "sandbox-erp", at(13)))).not.toContain("night-shift");
+    expect(codes(rules.onArrival(andrew, "sandbox-erp", at(13)))).not.toContain("night-shift");
   });
 
   it("reads a floor as a lift ride, and the third one as Operations", () => {
@@ -87,7 +124,7 @@ describe("turning up", () => {
     expect(codes(rules.onArrival(coop, VOLCANO_ROOM_SLUG, noon()))).toContain("hot-foot");
     expect(codes(rules.onArrival(coop, CAVE_ROOM_SLUG, noon()))).not.toContain("hot-foot");
     // Straight into the cave off a shared link is standing on the island too.
-    expect(codes(rules.onArrival(guest, CAVE_ROOM_SLUG, noon()))).toContain("hot-foot");
+    expect(codes(rules.onArrival(andrew, CAVE_ROOM_SLUG, noon()))).toContain("hot-foot");
     // And the volcano is nobody's, so it is no step towards the Grand Tour.
     expect(store.countMarks("coop", "org:")).toBe(1);
   });
@@ -101,7 +138,7 @@ describe("the badges built on a set of places", () => {
 
     // And the one before last did not, which is the half that would pass by
     // accident if the count were wrong in the generous direction.
-    const partway = slugs.slice(0, -1).flatMap((s) => codes(rules.onArrival(guest, s, noon())));
+    const partway = slugs.slice(0, -1).flatMap((s) => codes(rules.onArrival(andrew, s, noon())));
     expect(partway).not.toContain("grand-tour");
   });
 
@@ -124,7 +161,7 @@ describe("playing", () => {
     expect(codes(rules.onScore(coop, "pinball", true))).toEqual(
       expect.arrayContaining(["insert-coin", "top-of-the-board"]),
     );
-    expect(codes(rules.onScore(guest, "pinball", false))).toEqual(["insert-coin"]);
+    expect(codes(rules.onScore(andrew, "pinball", false))).toEqual(["insert-coin"]);
   });
 
   it("gives Swish for a basket, once, however many go in", () => {
@@ -137,12 +174,12 @@ describe("playing", () => {
       expect.arrayContaining(["swish", "off-the-board"]),
     );
     expect(codes(rules.onBasket(coop, { banked: true, far: false }))).toEqual([]);
-    expect(codes(rules.onBasket(guest, { banked: false, far: true }))).toEqual(
+    expect(codes(rules.onBasket(andrew, { banked: false, far: true }))).toEqual(
       expect.arrayContaining(["swish", "full-court"]),
     );
     // A lay-up afterwards is still just a lay-up: neither is a tally, and
     // neither is handed over by having sunk a basket of another kind.
-    expect(codes(rules.onBasket(guest, LAY_UP))).toEqual([]);
+    expect(codes(rules.onBasket(andrew, LAY_UP))).toEqual([]);
   });
 
   it("gives Played the Lot for every machine that is actually in a lobby", () => {
@@ -192,7 +229,7 @@ describe("getting about, out of doors", () => {
   it("gives Seeing Stars for a punch that landed on the blob, once", () => {
     expect(codes(rules.onPunch(coop))).toEqual(["seeing-stars"]);
     expect(codes(rules.onPunch(coop))).toEqual([]);
-    expect(codes(rules.onPunch(guest))).toEqual(["seeing-stars"]);
+    expect(codes(rules.onPunch(andrew))).toEqual(["seeing-stars"]);
   });
 
   it("gives Right of Way once, however many cars go through", () => {
@@ -203,7 +240,7 @@ describe("getting about, out of doors", () => {
 
 describe("together", () => {
   it("gives Round Table only once four people are in Global Chat", () => {
-    const three = [coop, guest, { person: "rob", name: "Rob" }];
+    const three = [coop, andrew, { person: "rob", name: "Rob" }];
     expect(codes(rules.onMicOn(coop, three))).toEqual(["on-mic"]);
     const four = [...three, { person: "sara", name: "Sara" }];
     const earned = codes(rules.onMicOn({ person: "sara", name: "Sara" }, four));
@@ -211,14 +248,14 @@ describe("together", () => {
   });
 
   it("gives the host Called to Order and everyone else at the table a seat", () => {
-    const earned = rules.onMeetingCalled(coop, [guest]);
+    const earned = rules.onMeetingCalled(coop, [andrew]);
     expect(earned.find((b) => b.person === "coop")?.code).toBe("called-to-order");
-    expect(earned.find((b) => b.person === "guest:ann")?.code).toBe("took-a-seat");
+    expect(earned.find((b) => b.person === "andrew")?.code).toBe("took-a-seat");
   });
 
   it("shares Full House with everybody standing in the room", () => {
-    const earned = rules.onRoomFull([coop, guest]);
-    expect(earned.map((b) => b.person).sort()).toEqual(["coop", "guest:ann"]);
+    const earned = rules.onRoomFull([coop, andrew]);
+    expect(earned.map((b) => b.person).sort()).toEqual(["andrew", "coop"]);
   });
 });
 
@@ -243,7 +280,7 @@ describe("the eggs", () => {
 
     // And nine of one kind is not a clutch, which is the half that would
     // pass by accident if it counted eggs rather than kinds.
-    const same = Array.from({ length: 9 }).flatMap(() => codes(rules.onEggFound(guest, "plain")));
+    const same = Array.from({ length: 9 }).flatMap(() => codes(rules.onEggFound(andrew, "plain")));
     expect(same).not.toContain("whole-clutch");
   });
 

@@ -33,6 +33,9 @@
  * way to be somewhere is to have walked there. What a browser cannot do
  * is arrive.
  *
+ * **And none of it is for a guest.** Somebody on the shared code is
+ * passing through: no desk, no shelf, no basket. See `isGuestHolder`.
+ *
  * Every entry also carries a `hint`, which is the half a list has no room
  * for: what to go and do. `BadgeCard` is the only thing that shows it.
  */
@@ -416,14 +419,13 @@ export interface EarnedBadge {
 }
 
 /**
- * Who a badge belongs to.
+ * Who somebody is, to a badge, a basket and a profile.
  *
  * A personal code names exactly one person, so the identity *is* the
  * holder and their badges follow them to any browser they open. The shared
  * code names nobody, so the only handle on a visitor is what they typed
- * into the welcome screen — which is a weak identity and deliberately
- * marked as one: two people who both call themselves Guest share a shelf.
- * Sign-in is the finer-grained answer, exactly as it is for the door.
+ * into the welcome screen — which is enough to open a profile by, and
+ * nothing is ever kept under it. See `isGuestHolder`.
  */
 export function badgeHolder(identity: string, name: string): string {
   if (identity && identity !== "visitor") return identity;
@@ -431,7 +433,21 @@ export function badgeHolder(identity: string, name: string): string {
   return `guest:${trimmed || "guest"}`;
 }
 
-/** Whether a holder id is a visitor's rather than somebody the world knows. */
+/**
+ * Whether a holder id is a guest's: somebody on the shared code.
+ *
+ * **A guest keeps nothing.** No badge, no mark towards one, no egg — and no
+ * desk, which was already true, since the desks come off the cast. They are
+ * a temporary user, and the reason is the handle above: a name typed into
+ * a box is not a person. Two people who both called themselves Guest used
+ * to share a shelf, and one person who typed a different name the next day
+ * started another, so a record kept under it was a record of nobody.
+ *
+ * Asked in three places on the server, because hiding a prompt is
+ * decoration: `holderOf` on the socket, so no rule fires and an egg stays
+ * in the grass; `awardMachineScore`, for the two scores that arrive over
+ * HTTP; and the room store, which refuses to write one whoever asks.
+ */
 export function isGuestHolder(person: string): boolean {
   return person.startsWith("guest:");
 }

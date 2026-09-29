@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { BADGES, BADGE_GROUPS, badgeFor, isGuestHolder } from "@/lib/badges";
 import { useBadges } from "@/lib/badges-client";
+import { useSelfPerson } from "@/lib/eggs-client";
 import { castMember } from "@/lib/world/cast";
 import { gameEvents } from "@/lib/events";
 import type { EarnedBadge } from "@/lib/badges";
@@ -51,10 +52,6 @@ function Holders({ earned }: { earned: EarnedBadge[] }) {
           title={`${castMember(item.person)?.name ?? item.name} — ${when(item.earnedAt)}`}
         >
           {castMember(item.person)?.name ?? item.name}
-          {/* A guest is a name somebody typed rather than somebody the world
-              knows, and two of them may be the same name. Marked so a shelf
-              of them does not read as the cast. */}
-          {isGuestHolder(item.person) && <span className="badges__guest">guest</span>}
         </button>
       ))}
     </div>
@@ -63,6 +60,8 @@ function Holders({ earned }: { earned: EarnedBadge[] }) {
 
 export default function BadgesPanel() {
   const all = useBadges();
+  const me = useSelfPerson();
+  const guest = !!me && isGuestHolder(me);
 
   const byCode = useMemo(() => {
     const map = new Map<string, EarnedBadge[]>();
@@ -83,6 +82,15 @@ export default function BadgesPanel() {
       <div className="badges__count">
         {claimed} of {BADGES.length} found in this world
       </div>
+      {/* Still the whole catalogue for a guest — it is the world's, and it
+          is how somebody finds out what a code of their own would be for —
+          but said once at the top, or every row reads as a thing to do. */}
+      {guest && (
+        <p className="badges__note">
+          You are visiting on the shared code, so none of these are yours to earn. Guests keep
+          nothing.
+        </p>
+      )}
 
       {BADGE_GROUPS.map((group) => {
         const inGroup = BADGES.filter((badge) => badge.group === group.id);

@@ -5,6 +5,7 @@ import WebSocket from "ws";
 import { TILE, TOWN_RIGHT, WOOD_ROWS } from "../../world/tenants";
 import { MOVE_BUDGET_WINDOW_MS } from "../../presence-types";
 import type { BadgeMessage } from "../../presence-types";
+import type { AccessIdentity } from "../../identity";
 
 /**
  * The two badges for the parts of the map the world grew into, over a real
@@ -26,14 +27,20 @@ import type { BadgeMessage } from "../../presence-types";
  * position is already an argument.
  */
 
-// The code has to exist before the access module reads the environment.
+// The codes have to exist before the access module reads the environment.
 process.env.ACCESS_CODE = "test-visitors-share-this-one";
+process.env.ACCESS_CODE_COOP = "test-coop-alone";
+process.env.ACCESS_CODE_ROB = "test-rob-alone";
+process.env.ACCESS_CODE_NATHAN = "test-nathan-alone";
+process.env.ACCESS_CODE_SARA = "test-sara-alone";
 
 const { attachPresenceSocket } = await import("../presence-socket");
 const { ACCESS_COOKIE, mintToken } = await import("../access");
 const { WORLD_ROOM_SLUG, floorRoomSlug } = await import("../../rooms");
 
-const cookie = () => `${ACCESS_COOKIE}=${mintToken("visitor")}`;
+// Each on a code of their own: a guest keeps nothing, so a badge earned on
+// the shared code is one this file could never see.
+const cookie = (who: AccessIdentity) => `${ACCESS_COOKIE}=${mintToken(who)}`;
 
 /** The first row of the town: everything above it is wood. */
 const WOOD_FOOT = WOOD_ROWS * TILE;
@@ -76,9 +83,15 @@ const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
  * works — so each case below starts somewhere honest and the badge is
  * decided by the moves after it.
  */
-async function walkIn(name: string, room: string, x: number, y: number): Promise<Player> {
+async function walkIn(
+  who: AccessIdentity,
+  name: string,
+  room: string,
+  x: number,
+  y: number,
+): Promise<Player> {
   const socket = new WebSocket(`ws://127.0.0.1:${port}/api/room/socket`, {
-    headers: { cookie: cookie(), origin: `http://127.0.0.1:${port}` },
+    headers: { cookie: cookie(who), origin: `http://127.0.0.1:${port}` },
   });
   const player: Player = {
     socket,
@@ -114,7 +127,7 @@ describe("the wood and the wilderness, over a socket", () => {
   it("grants Into the Woods to somebody who walks up over the tree line", async () => {
     // Standing on the town's own top row, a stride below the wood.
     const x = TOWN_RIGHT / 2;
-    const player = await walkIn("Walker", WORLD_ROOM_SLUG, x, WOOD_FOOT + 40);
+    const player = await walkIn("rob", "Walker", WORLD_ROOM_SLUG, x, WOOD_FOOT + 40);
     expect(codes(player)).not.toContain("into-the-woods");
 
     await step(player, x, WOOD_FOOT - 40);
@@ -129,8 +142,25 @@ describe("the wood and the wilderness, over a socket", () => {
     player.close();
   });
 
+  it("keeps nothing for a guest, however far into the trees they walk", async () => {
+    const x = TOWN_RIGHT / 2;
+    const player = await walkIn("visitor", "Passing", WORLD_ROOM_SLUG, x, WOOD_FOOT + 40);
+    await step(player, x, WOOD_FOOT - 40);
+
+    // Nothing at all, rather than nothing in the wood: a guest's arrival
+    // on the map is no more theirs to keep than the trees are.
+    expect(codes(player)).toEqual([]);
+    player.close();
+  });
+
   it("grants Out in the Wild east of the town, and both up in its corner", async () => {
-    const player = await walkIn("Rambler", WORLD_ROOM_SLUG, TOWN_RIGHT - 40, WOOD_FOOT - 40);
+    const player = await walkIn(
+      "nathan",
+      "Rambler",
+      WORLD_ROOM_SLUG,
+      TOWN_RIGHT - 40,
+      WOOD_FOOT - 40,
+    );
     // Up in the wood already, which is one of the two on the first move.
     await step(player, TOWN_RIGHT - 40, WOOD_FOOT - 80);
     expect(codes(player)).toContain("into-the-woods");
@@ -149,7 +179,7 @@ describe("the wood and the wilderness, over a socket", () => {
     // where they end up is a stride from where they were — and reading the
     // claim instead of the clamp is exactly the bug this is here for.
     const x = TOWN_RIGHT / 2;
-    const player = await walkIn("Teleporter", WORLD_ROOM_SLUG, x, WOOD_FOOT + 3000);
+    const player = await walkIn("sara", "Teleporter", WORLD_ROOM_SLUG, x, WOOD_FOOT + 3000);
     await step(player, x, 40);
 
     expect(codes(player)).not.toContain("into-the-woods");
@@ -161,7 +191,7 @@ describe("the wood and the wilderness, over a socket", () => {
     // small numbers land inside the wood's rectangle every time — the wood
     // is a fact about the outdoor map, so the guard is the room and not
     // the geometry.
-    const player = await walkIn("Upstairs", floorRoomSlug("sandbox-erp", 3), 400, 300);
+    const player = await walkIn("coop", "Upstairs", floorRoomSlug("sandbox-erp", 3), 400, 300);
     await step(player, 420, 280);
 
     expect(codes(player)).not.toContain("into-the-woods");

@@ -69,7 +69,6 @@ function Holders({ tallies, onPick }: { tallies: readonly EggTally[]; onPick: ()
         >
           {castMember(tally.person)?.name ?? tally.name}
           {tally.count > 1 && <span className="eggs__many">×{tally.count}</span>}
-          {isGuestHolder(tally.person) && <span className="badges__guest">guest</span>}
         </button>
       ))}
     </div>
@@ -105,6 +104,7 @@ export default function EggCard() {
     () => basketOf(all, me).find((t) => t.tier === tier)?.count ?? 0,
     [all, me, tier],
   );
+  const guest = !!me && isGuestHolder(me);
 
   const kind = tier ? eggKind(tier) : undefined;
   if (!kind) return null;
@@ -153,9 +153,11 @@ export default function EggCard() {
           <p className="entry-card__lore">{kind.lore}</p>
 
           <div className="entry-card__yours">
-            {mine === 0
-              ? "None in your basket."
-              : `${mine} in your basket${mine > 1 ? " — you have a small pile" : ""}.`}
+            {guest
+              ? "Guests keep no basket."
+              : mine === 0
+                ? "None in your basket."
+                : `${mine} in your basket${mine > 1 ? " — you have a small pile" : ""}.`}
             <span className="entry-card__world">
               {found === 0 ? "none found anywhere" : `${found} found in this world`}
             </span>

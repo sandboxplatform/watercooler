@@ -273,6 +273,16 @@ export const EGG_CHANCE = 4 / 100;
  */
 export const EGG_REACH_PX = 44;
 
+/**
+ * What a guest is shown over an egg, where anybody else is shown `Press E`.
+ *
+ * A guest keeps nothing (see `isGuestHolder`), so the server leaves the egg
+ * in the grass whatever they press. Saying so where they are standing is
+ * the lift's arrangement: a beacon they walked across the park for and a
+ * prompt that never came would read as the egg being broken.
+ */
+export const GUEST_EGG_PROMPT = "Guests can't collect eggs";
+
 /** One egg lying in the grass, as the server holds it and the wire carries it. */
 export interface LaidEgg {
   id: string;

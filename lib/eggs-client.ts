@@ -231,7 +231,16 @@ export function useSelfPerson(): string | null {
   return useSyncExternalStore(subscribeOnline, selfPerson, () => null);
 }
 
-function selfPerson(): string | null {
+/**
+ * The same answer without the hook, for the game layer.
+ *
+ * The field in the grass is drawn by Phaser, and whether to offer somebody
+ * an egg is a question about them: a guest is shown the egg and told it is
+ * not theirs to keep. It is the server's word rather than the page's —
+ * `person` on the online list is worked out from the cookie — so it needs
+ * no second ask of `/api/me`.
+ */
+export function selfPerson(): string | null {
   const self = getSelfId();
   if (!self) return null;
   return onlinePeople().find((p) => p.id === self)?.person ?? null;

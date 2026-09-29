@@ -74,7 +74,6 @@ function Holders({ earned, onPick }: { earned: readonly EarnedBadge[]; onPick: (
           title={`${castMember(item.person)?.name ?? item.name} — ${when(item.earnedAt)}`}
         >
           {castMember(item.person)?.name ?? item.name}
-          {isGuestHolder(item.person) && <span className="badges__guest">guest</span>}
         </button>
       ))}
     </div>
@@ -113,6 +112,10 @@ export default function BadgeCard() {
     () => new Set(all.filter((item) => item.person === me).map((item) => item.code)),
     [all, me],
   );
+
+  // The directions below still show for a guest: they are the world's, and
+  // they are how somebody learns what a code of their own would be for.
+  const guest = !!me && isGuestHolder(me);
 
   const badge = code ? badgeFor(code) : undefined;
   if (!badge) return null;
@@ -156,7 +159,11 @@ export default function BadgeCard() {
                   got ? "entry-card__chip--got" : "entry-card__chip--key"
                 }`}
               >
-                {got ? `Earned ${when(got.earnedAt)}` : "Not yet earned"}
+                {got
+                  ? `Earned ${when(got.earnedAt)}`
+                  : guest
+                    ? "Guests keep none"
+                    : "Not yet earned"}
               </span>
               {group && <span className="entry-card__chip">{group.title}</span>}
               <span className="entry-card__chip">
