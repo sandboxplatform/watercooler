@@ -213,9 +213,10 @@ export const ZOOM_DEFAULT = 0.82;
 /**
  * How far out the wheel or a pinch can take the camera.
  *
- * The world map and a campus go all the way. A room stops sooner — at the
- * whole of the widest room in view (`zoomFloor` in `lib/camera.ts`) — and
- * reaches this only on a screen small enough to need it, which is a phone.
+ * Nothing goes here as a matter of course. A room stops at the whole of the
+ * widest room in view (`zoomFloor` in `lib/camera.ts`), and a place out of
+ * doors where its edges reach the screen's (`outdoorFloor`) — so both reach
+ * this only on a screen small enough to need it, which is a phone.
  * It was 0.5, and rooms stopped at the lobby's fit besides, so Operations —
  * seventy-three tiles long — could only ever be looked at a lobby's width at
  * a time, and a phone, pinned at 0.5 before it had been touched, had nowhere

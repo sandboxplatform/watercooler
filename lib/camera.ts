@@ -61,6 +61,47 @@ export function zoomFloor(
 }
 
 /**
+ * How far out a place out of doors may stand back: until another of its
+ * edges comes onto the screen, and no further.
+ *
+ * On the world map that is the top and the bottom. It is wider than it is
+ * deep against any ordinary screen, so pulling back brings the wood's top
+ * edge and the sea's bottom one on together, long before either end of the
+ * map — and every turn of the wheel past that point is a band of background
+ * above the trees and another under the water, with nothing more of the
+ * world in either. It used to go all the way to `min`, which on a 1080p
+ * monitor was a strip of black at the top and the bottom of the map.
+ *
+ * "Another" edge, because a small place already shows some of its edges
+ * where it opens. The island is narrower than a monitor and taller than one,
+ * so it opens with background either side and its top and bottom off screen:
+ * it may stand back until those are on too, which is the whole island, and
+ * then stops. A campus or the cave opens whole, so there is nothing further
+ * to bring into view and it stays where it opened.
+ *
+ * Never past the zoom a place opens at, for the reason `zoomFloor` gives: a
+ * stop above that would snap the camera in on the first turn of the wheel.
+ *
+ * @param place the place's own size, in pixels
+ * @param opens the zoom this place opens at in this viewport
+ */
+export function outdoorFloor(
+  viewW: number,
+  viewH: number,
+  place: { width: number; height: number },
+  opens: number,
+  min: number,
+  max: number,
+): number {
+  const clamp = (zoom: number) => Math.min(max, Math.max(min, zoom));
+  if (place.width <= 0 || place.height <= 0 || viewW <= 0 || viewH <= 0) return clamp(opens);
+  // The zoom at which each side of the place meets the screen's, for the
+  // sides that are still off it where the place opens.
+  const offScreen = [viewW / place.width, viewH / place.height].filter((meets) => meets < opens);
+  return clamp(offScreen.length ? Math.max(...offScreen) : opens);
+}
+
+/**
  * The zoom to open a place at: the one the person left it on, if it still
  * fits, and otherwise the fitted one.
  *

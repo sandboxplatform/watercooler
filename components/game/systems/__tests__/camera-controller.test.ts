@@ -209,13 +209,21 @@ describe("CameraController", () => {
     expect(stub.camera.zoom).toBe(ZOOM_MAX);
   });
 
-  /** The world map is bigger than any screen, so standing back is what it is for. */
-  it("lets the world map go all the way out", () => {
+  /**
+   * The world map is bigger than any screen, so standing back is what it is
+   * for — until its edges reach the screen's. Past that it was a band of
+   * background over the wood and another under the sea.
+   */
+  it("lets the world map stand back until it fills the screen, and no further", () => {
     const stub = stubScene();
     controllerFor(stub.scene).init();
+    const opens = stub.camera.zoom;
 
     for (let i = 0; i < 40; i++) stub.canvasEvents.emit("wheel", wheel(200));
-    expect(stub.camera.zoom).toBe(ZOOM_MIN);
+    const fills = Math.max(stub.camera.width / 2976, stub.camera.height / 1872);
+    expect(stub.camera.zoom).toBeCloseTo(fills);
+    expect(stub.camera.zoom).toBeLessThan(opens);
+    expect(stub.camera.zoom).toBeGreaterThan(ZOOM_MIN);
   });
 
   /**

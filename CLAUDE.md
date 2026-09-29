@@ -4273,24 +4273,35 @@ so a call, in tests that call it several times over.
 and signs are the same size out of doors as in — never under `ZOOM_OPEN_MIN`,
 which is half size and where a phone opens.
 
-**Every place zooms in to `ZOOM_MAX`; out of doors goes out to `ZOOM_MIN`,
-and every room stops at the whole of the widest room.** That is Operations,
+**Every place zooms in to `ZOOM_MAX`; out of doors stops where the place's
+edges reach the screen's, and every room stops at the whole of the widest
+room.** That is Operations,
 seventy-three tiles of corridor, and seeing it end to end is as much as anybody
 standing indoors needs — past that a room is a stamp in a screen of black.
 `zoomFloor` in `lib/camera.ts` is the stop, off the viewport, so it is the
 same sight on any screen: a monitor stops a little over half and a phone well
 down at `ZOOM_MIN`. `widestRoom` in `lib/world/floors.ts` is the room, read
 off the tenants rather than written down, and `floors.test.ts` holds it to
-every map on disk. The world map and a campus pass no frame and go the whole
-way, since a map bigger than any screen is exactly what standing back is for.
-A place pulled back past its own size is drawn in the middle of the screen
-with background round it (`updateCameraBounds`).
+every map on disk. A place pulled back past its own size is drawn in the
+middle of the screen with background round it (`updateCameraBounds`).
+
+**Out of doors the place is its own stop** — `outdoorFloor`, which lets the
+camera stand back until **another** of the place's edges comes onto the
+screen, and no further. The world map is wider than it is deep against any
+ordinary screen, so its top and bottom arrive together long before either
+end: on a 1080p monitor that is a little over a quarter, with the wood's
+edge at the top of the screen and the sea at the bottom. It used to go the
+whole way to `ZOOM_MIN`, which was the same map with a band of black over
+the trees and another under the water. "Another" because a small place
+already shows some edges where it opens: the island has background either
+side and may stand back until its top and bottom are on too; a campus and
+the cave open whole and stay where they opened. On a phone the world map
+would only fill the screen below `ZOOM_MIN`, so that is still where it stops.
 
 **One stop for every room, not one per room**, and that is the part to keep.
 It used to be two rules and a narrower range. A room stopped at the lobby's
-fit, so Operations could only ever be looked at a lobby's width at a time; the
-world map stopped where it just filled the viewport; and a phone opened at the
-old floor of 0.5 and could not be pinched out at all. Stopping each room at
+fit, so Operations could only ever be looked at a lobby's width at a time, and
+a phone opened at the old floor of 0.5 and could not be pinched out at all. Stopping each room at
 its own whole was tried next and taken out again: a lobby opens whole on a
 desktop, so its wheel did nothing, which reads as the zoom being broken rather
 than as there being nothing more to see. Then nothing stopped a room at all,

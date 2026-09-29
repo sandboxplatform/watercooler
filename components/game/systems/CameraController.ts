@@ -9,7 +9,7 @@ import {
   ZOOM_SAVE_DEBOUNCE_MS,
   CAMERA_DRAG_THRESHOLD,
 } from "@/lib/constants";
-import { frameZoom, reopenZoom, zoomFloor } from "@/lib/camera";
+import { frameZoom, outdoorFloor, reopenZoom, zoomFloor } from "@/lib/camera";
 import { loadWorldZoom, saveWorldZoom } from "@/lib/persistence";
 
 export class CameraController {
@@ -44,11 +44,12 @@ export class CameraController {
 
   /**
    * The widest room in the world, where this camera stops pulling back — or
-   * null to go all the way to `ZOOM_MIN`.
+   * null to stop at the place's own edges instead (`outdoorFloor`).
    *
    * Rooms pass it and the outdoors does not. Past the whole of Operations
-   * there is nothing indoors left to see, only background; the world map is
-   * bigger than any screen, so standing back is what it is for.
+   * there is nothing indoors left to see, only background; out of doors the
+   * place is its own stop, since the world map is bigger than any screen and
+   * standing back is what it is for — until its edges reach the screen's.
    */
   private zoomOutTo: { width: number; height: number } | null;
 
@@ -143,8 +144,8 @@ export class CameraController {
    * Fit the lobby to the viewport. Called at start and whenever the
    * viewport changes. Every place starts at this scale, so people and
    * signs are the same size out of doors as in; the wheel and a pinch then
-   * go in to `ZOOM_MAX` everywhere, and out to `ZOOM_MIN` outdoors or to the
-   * whole of the widest room indoors.
+   * go in to `ZOOM_MAX` everywhere, and out to the place's own edges outdoors
+   * or to the whole of the widest room indoors.
    *
    * Once somebody has chosen a zoom — or the world map has remembered one —
    * a resize keeps it instead. Refitting would throw away a setting the
@@ -165,8 +166,15 @@ export class CameraController {
 
   /** How far out the wheel and a pinch may take this camera, in this viewport. */
   private leastZoom(cam: Phaser.Cameras.Scene2D.Camera): number {
-    if (!this.zoomOutTo) return ZOOM_MIN;
-    return zoomFloor(cam.width, cam.height, this.zoomOutTo, ZOOM_MIN, ZOOM_MAX);
+    if (this.zoomOutTo) return zoomFloor(cam.width, cam.height, this.zoomOutTo, ZOOM_MIN, ZOOM_MAX);
+    return outdoorFloor(
+      cam.width,
+      cam.height,
+      { width: this.mapWidth, height: this.mapHeight },
+      frameZoom(cam.width, cam.height, ZOOM_OPEN_MIN, ZOOM_MAX),
+      ZOOM_MIN,
+      ZOOM_MAX,
+    );
   }
 
   /** A zoom the person settled on: held through a resize, and kept for next time. */
