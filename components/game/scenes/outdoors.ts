@@ -9,12 +9,21 @@ import {
   type PlacedProp,
   type PropSpec,
   type Sign,
-} from "@/lib/world/scenery";
+} from "@/lib/world/ground";
+import { PIXEL_FONT } from "../config/drawing";
+import { cull } from "../systems/culling";
+import { addSolid } from "../utils/solids";
+
+export { addSolid };
 
 /**
  * What the world map, the campuses and the volcano draw alike: the ground,
  * the water and its foam, the props, the signs and the ferry. Every outdoor
  * scene lays its pictures from the same sheet, so the pieces live here once.
+ *
+ * Everything laid here stands still, so all of it is culled — filed by the
+ * squares of the map it covers and only drawn while near the camera (see
+ * `systems/culling`). The ground culls itself, being a tilemap layer.
  */
 
 export const PROPS_KEY = "world-props";
@@ -22,8 +31,9 @@ export const BOAT_KEY = "world-boat";
 const WATER_KEY = "world-water";
 const WATER2_KEY = "world-water2";
 const FOAM_KEY = "world-foam";
-const WATER_ANIM = "world-water";
 const FOUNTAIN_ANIM = "world-fountain";
+/** How often the sea's two frames swap, which is the speed it always moved at. */
+const WATER_FRAME_RATE = 1.5;
 
 const GROUND: Record<Exclude<Ground, "water" | "lava">, string> = {
   grass: "world-grass",
@@ -53,7 +63,8 @@ const LAVA_KEY = "world-lava";
 const LAVA2_KEY = "world-lava2";
 const CRUST_KEY = "world-crust";
 const ROCK_FACE_KEY = "world-rock-face";
-const LAVA_ANIM = "world-lava";
+/** How often the lava's two frames swap. */
+const LAVA_FRAME_RATE = 2;
 /** The pictures of the volcano's own ground, on top of the outdoor pack. */
 export function preloadVolcanoGround(scene: Phaser.Scene) {
   scene.load.image(GROUND.ash, asset("/sprites/world/ash_48.png"));
@@ -102,7 +113,7 @@ export function preloadOutdoors(scene: Phaser.Scene) {
   scene.load.json("world-props-frames", asset("/sprites/world/props.json"));
 }
 
-/** Name the rectangles of the props sheet, and set up what moves: the fountain and the sea. */
+/** Name the rectangles of the props sheet, and set up what moves: the fountain. */
 export function cutOutdoorFrames(scene: Phaser.Scene) {
   const props = scene.textures.get(PROPS_KEY);
   const frames = scene.cache.json.get("world-props-frames") as Record<string, Rect> | undefined;
@@ -120,15 +131,15 @@ export function cutOutdoorFrames(scene: Phaser.Scene) {
       repeat: -1,
     });
   }
-  if (!scene.anims.exists(WATER_ANIM)) {
-    scene.anims.create({
-      key: WATER_ANIM,
-      frames: [{ key: WATER_KEY }, { key: WATER2_KEY }],
-      frameRate: 1.5,
-      repeat: -1,
-    });
-  }
 }
+
+/** The four sides of a cell, and the turn a picture laid along each takes. */
+const EDGES: readonly [number, number, number][] = [
+  [0, -1, 0],
+  [1, 0, 90],
+  [0, 1, 180],
+  [-1, 0, 270],
+];
 
 /**
  * Lay the ground: a carpet of grass, and then every cell that is not grass
@@ -139,17 +150,20 @@ export function cutOutdoorFrames(scene: Phaser.Scene) {
  * the town-sized map that was four thousand pictures on the display list
  * before anything was standing on them. The map is three times as wide now
  * and four cells in five of it are grass: thirteen thousand, of which ten
- * thousand would have been the same green square. Phaser walks the whole
- * display list every frame whether a thing is on camera or not, so that is
- * paid sixty times a second for the life of the scene.
- *
- * Eight tiles to a block and the blocks laid under everything at depth -1,
- * which takes it back to about what the town cost. The overhang past the
+ * thousand would have been the same green square. Eight tiles to a block
+ * and the blocks laid under everything at depth -1. The overhang past the
  * last whole block is left alone: it is grass, the camera is clamped to the
  * map, and cutting it would mean a second, part-width picture per edge.
+ *
+ * **And what is not grass is one tilemap layer**, not a picture per cell.
+ * The world map has some two and a half thousand cells of paving, road and
+ * water, and the water was a sprite apiece each running its own two-frame
+ * animation — twelve hundred animations stepped every frame to move in step
+ * with one another. A layer is one thing on the display list, draws only
+ * the cells in view, and animates by swapping the picture its water tiles
+ * are cut from, once, on a timer at the rate the sprites ran at.
  */
 export function layGround(scene: Phaser.Scene, grid: Ground[][]) {
-  const isWater = (tx: number, ty: number) => grid[ty]?.[tx] === "water";
   const columns = grid[0]?.length ?? 0;
   const block = GRASS_BLOCK * TILE;
   // Only where there is grass to carpet. Volcano Island is black sand and
@@ -158,16 +172,29 @@ export function layGround(scene: Phaser.Scene, grid: Ground[][]) {
   if (grid.some((row) => row.includes("grass"))) {
     for (let y = 0; y < grid.length * TILE; y += block)
       for (let x = 0; x < columns * TILE; x += block)
-        scene.add.image(x, y, GRASS_BLOCK_KEY).setOrigin(0, 0).setDepth(-1);
+        cull(scene, scene.add.image(x, y, GRASS_BLOCK_KEY).setOrigin(0, 0).setDepth(-1));
   }
+
+  // Which picture each cell is, and a line of foam or crust along any edge
+  // where water or lava meets the land.
+  const keys: string[] = [];
+  const gids = new Map<string, number>();
+  const cells: [number, number, number][] = [];
+  const put = (key: string, tx: number, ty: number) => {
+    let gid = gids.get(key);
+    if (gid === undefined) {
+      keys.push(key);
+      gids.set(key, (gid = keys.length));
+    }
+    cells.push([gid, tx, ty]);
+  };
   grid.forEach((row, ty) =>
     row.forEach((ground, tx) => {
-      const x = tx * TILE;
-      const y = ty * TILE;
       // The carpet is already grass; anything else is laid over it.
       if (ground === "grass") return;
       if (ground === "lava") {
-        layLava(scene, grid, tx, ty);
+        put(LAVA_KEY, tx, ty);
+        edge(scene, grid, tx, ty, CRUST_KEY, (next) => next !== "lava" && next !== "rock");
         return;
       }
       if (ground === "rock") {
@@ -176,66 +203,89 @@ export function layGround(scene: Phaser.Scene, grid: Ground[][]) {
         // way every room in this world is, so a wall with floor below it
         // stands up out of it rather than lying flat.
         const below = grid[ty + 1]?.[tx];
-        const key = below !== undefined && below !== "rock" ? ROCK_FACE_KEY : GROUND.rock;
-        scene.add.image(x, y, key).setOrigin(0, 0).setDepth(0);
+        put(below !== undefined && below !== "rock" ? ROCK_FACE_KEY : GROUND.rock, tx, ty);
         return;
       }
       if (ground !== "water") {
-        scene.add.image(x, y, GROUND[ground]).setOrigin(0, 0).setDepth(0);
+        put(GROUND[ground], tx, ty);
         return;
       }
-      scene.add.sprite(x, y, WATER_KEY).setOrigin(0, 0).setDepth(0).play(WATER_ANIM);
+      put(WATER_KEY, tx, ty);
       // Foam where the water laps at the land — but not at the map's edge,
       // where the sea just carries on.
-      const edges: [number, number, number][] = [
-        [tx, ty - 1, 0],
-        [tx + 1, ty, 90],
-        [tx, ty + 1, 180],
-        [tx - 1, ty, 270],
-      ];
-      for (const [nx, ny, angle] of edges) {
-        if (grid[ny]?.[nx] === undefined || isWater(nx, ny)) continue;
-        scene.add
-          .image(x + TILE / 2, y + TILE / 2, FOAM_KEY)
-          .setAngle(angle)
-          .setDepth(1);
-      }
+      edge(scene, grid, tx, ty, FOAM_KEY, (next) => next !== "water");
     }),
   );
+  if (cells.length === 0) return;
+
+  const map = scene.make.tilemap({
+    tileWidth: TILE,
+    tileHeight: TILE,
+    width: columns,
+    height: grid.length,
+  });
+  const tilesets = new Map<string, Phaser.Tilemaps.Tileset>();
+  for (const key of keys) {
+    // A picture that never loaded is a cell left as grass rather than a
+    // missing-texture box; the loader has already said which file failed.
+    if (!scene.textures.exists(key)) continue;
+    const tileset = map.addTilesetImage(key, key, TILE, TILE, 0, 0, gids.get(key));
+    if (tileset) tilesets.set(key, tileset);
+  }
+  const layer = map.createBlankLayer("ground", [...tilesets.values()], 0, 0);
+  if (!layer) return;
+  layer.setDepth(0);
+  for (const [gid, tx, ty] of cells) {
+    if (tilesets.has(keys[gid - 1])) layer.putTileAt(gid, tx, ty, false);
+  }
+  animateTiles(scene, tilesets.get(WATER_KEY), WATER_KEY, WATER2_KEY, WATER_FRAME_RATE);
+  animateTiles(scene, tilesets.get(LAVA_KEY), LAVA_KEY, LAVA2_KEY, LAVA_FRAME_RATE);
 }
 
 /**
- * A tile of lava, moving, with a crust of cooled rock along any edge where
- * it meets the ground — which is the sea's foam in another colour, and laid
- * the same way. Not against the rock of a cave wall, which is the same
- * stone the crust is: a seam of it drawn between the two reads as a line.
+ * Lay a picture along each side of a cell whose neighbour asks for one —
+ * the sea's foam, the lava's crust. Not at the map's edge, where the ground
+ * just carries on.
  */
-function layLava(scene: Phaser.Scene, grid: Ground[][], tx: number, ty: number) {
-  if (!scene.anims.exists(LAVA_ANIM)) {
-    scene.anims.create({
-      key: LAVA_ANIM,
-      frames: [{ key: LAVA_KEY }, { key: LAVA2_KEY }],
-      frameRate: 2,
-      repeat: -1,
-    });
+function edge(
+  scene: Phaser.Scene,
+  grid: Ground[][],
+  tx: number,
+  ty: number,
+  key: string,
+  meets: (next: Ground) => boolean,
+) {
+  for (const [dx, dy, angle] of EDGES) {
+    const next = grid[ty + dy]?.[tx + dx];
+    if (next === undefined || !meets(next)) continue;
+    cull(
+      scene,
+      scene.add
+        .image(tx * TILE + TILE / 2, ty * TILE + TILE / 2, key)
+        .setAngle(angle)
+        .setDepth(1),
+    );
   }
-  const x = tx * TILE;
-  const y = ty * TILE;
-  scene.add.sprite(x, y, LAVA_KEY).setOrigin(0, 0).setDepth(0).play(LAVA_ANIM);
-  const edges: [number, number, number][] = [
-    [tx, ty - 1, 0],
-    [tx + 1, ty, 90],
-    [tx, ty + 1, 180],
-    [tx - 1, ty, 270],
-  ];
-  for (const [nx, ny, angle] of edges) {
-    const next = grid[ny]?.[nx];
-    if (next === undefined || next === "lava" || next === "rock") continue;
-    scene.add
-      .image(x + TILE / 2, y + TILE / 2, CRUST_KEY)
-      .setAngle(angle)
-      .setDepth(1);
-  }
+}
+
+/** Swap a tileset between two pictures of itself, for as long as the scene runs. */
+function animateTiles(
+  scene: Phaser.Scene,
+  tileset: Phaser.Tilemaps.Tileset | undefined,
+  first: string,
+  second: string,
+  frameRate: number,
+) {
+  if (!tileset || !scene.textures.exists(second)) return;
+  let showing = first;
+  scene.time.addEvent({
+    delay: 1000 / frameRate,
+    loop: true,
+    callback: () => {
+      showing = showing === first ? second : first;
+      tileset.setImage(scene.textures.get(showing));
+    },
+  });
 }
 
 /**
@@ -246,7 +296,7 @@ function layLava(scene: Phaser.Scene, grid: Ground[][], tx: number, ty: number) 
  * centre circle is drawn on top of it rather than under the paint.
  */
 export function placeCourtLines(scene: Phaser.Scene, at: { x: number; y: number }) {
-  scene.add.image(at.x, at.y, COURT_LINES_KEY).setOrigin(0, 0).setDepth(1);
+  cull(scene, scene.add.image(at.x, at.y, COURT_LINES_KEY).setOrigin(0, 0).setDepth(1));
 }
 
 /**
@@ -261,22 +311,8 @@ export function placeCourtLines(scene: Phaser.Scene, at: { x: number; y: number 
  */
 export function placeHighwayMarks(scene: Phaser.Scene, road: Rect) {
   for (let y = road.y; y < road.y + road.height; y += TILE) {
-    scene.add.image(road.x, y, HIGHWAY_MARKS_KEY).setOrigin(0, 0).setDepth(1);
+    cull(scene, scene.add.image(road.x, y, HIGHWAY_MARKS_KEY).setOrigin(0, 0).setDepth(1));
   }
-}
-
-/** An invisible wall the size of a rectangle. */
-export function addSolid(walls: Phaser.Physics.Arcade.StaticGroup, r: Rect) {
-  const wall = walls.create(
-    r.x + r.width / 2,
-    r.y + r.height / 2,
-    undefined,
-    undefined,
-    false,
-  ) as Phaser.Physics.Arcade.Sprite;
-  wall.body!.setSize(r.width, r.height);
-  wall.setVisible(false);
-  (wall.body as Phaser.Physics.Arcade.StaticBody).enable = true;
 }
 
 /** A prop on its feet; whoever's feet are lower stands in front. */
@@ -291,7 +327,7 @@ export function placeProp(
     : spec.texture
       ? scene.add.image(prop.x, prop.y, spec.texture)
       : scene.add.image(prop.x, prop.y, PROPS_KEY, prop.kind);
-  image.setOrigin(0.5, 1).setDepth(prop.y);
+  cull(scene, image.setOrigin(0.5, 1).setDepth(prop.y));
   const body = propBody(prop);
   if (body) addSolid(walls, body);
 }
@@ -302,18 +338,24 @@ export function placeSign(
   sign: Sign,
   walls: Phaser.Physics.Arcade.StaticGroup,
 ) {
-  scene.add.image(sign.x, sign.y, PROPS_KEY, "board").setOrigin(0.5, 1).setDepth(sign.y);
-  scene.add
-    .text(sign.x, sign.y - 58, sign.text, {
-      fontFamily: '"Press Start 2P", monospace',
-      fontSize: "11px",
-      color: "#1b1b2a",
-      align: "center",
-      lineSpacing: 4,
-    })
-    .setOrigin(0.5, 0.5)
-    .setDepth(sign.y + 1)
-    .setResolution(2);
+  cull(
+    scene,
+    scene.add.image(sign.x, sign.y, PROPS_KEY, "board").setOrigin(0.5, 1).setDepth(sign.y),
+  );
+  cull(
+    scene,
+    scene.add
+      .text(sign.x, sign.y - 58, sign.text, {
+        fontFamily: PIXEL_FONT,
+        fontSize: "11px",
+        color: "#1b1b2a",
+        align: "center",
+        lineSpacing: 4,
+      })
+      .setOrigin(0.5, 0.5)
+      .setDepth(sign.y + 1)
+      .setResolution(2),
+  );
   addSolid(walls, signBody(sign));
 }
 
@@ -343,21 +385,24 @@ export function placeBuilding(
 ) {
   const { frame, art, solid } = building;
   const foot = frame.y + frame.height;
-  scene.add.image(frame.x, frame.y, art).setOrigin(0, 0).setDepth(foot);
+  cull(scene, scene.add.image(frame.x, frame.y, art).setOrigin(0, 0).setDepth(foot));
   addSolid(walls, solid);
   if (!sign) return;
-  scene.add
-    .text(frame.x + frame.width / 2, frame.y + sign.y, sign.text, {
-      fontFamily: '"Press Start 2P", monospace',
-      fontSize: sign.size,
-      color: "#1b1b2a",
-      align: "center",
-      backgroundColor: "#e0b870",
-      padding: { x: 6, y: 3 },
-    })
-    .setOrigin(0.5, 0.5)
-    .setDepth(foot + 1)
-    .setResolution(2);
+  cull(
+    scene,
+    scene.add
+      .text(frame.x + frame.width / 2, frame.y + sign.y, sign.text, {
+        fontFamily: PIXEL_FONT,
+        fontSize: sign.size,
+        color: "#1b1b2a",
+        align: "center",
+        backgroundColor: "#e0b870",
+        padding: { x: 6, y: 3 },
+      })
+      .setOrigin(0.5, 0.5)
+      .setDepth(foot + 1)
+      .setResolution(2),
+  );
 }
 
 /**
@@ -374,6 +419,6 @@ export function placeBoat(
   walls: Phaser.Physics.Arcade.StaticGroup,
 ) {
   const foot = at.y + BOAT.height;
-  scene.add.image(at.x, at.y, BOAT_KEY).setOrigin(0, 0).setDepth(foot);
+  cull(scene, scene.add.image(at.x, at.y, BOAT_KEY).setOrigin(0, 0).setDepth(foot));
   addSolid(walls, { x: at.x, y: at.y, width: BOAT.width, height: BOAT.height });
 }

@@ -24,11 +24,9 @@ import { BUILDINGS } from "./tenants";
 /**
  * The mailbox's picture, in pixels.
  *
- * Written here rather than in `PROPS`, because three things want it: the
- * prop's own entry in `scenery.ts`, the bubble that hangs above it, and
- * `make-world-art.mjs`, which draws it and writes the numbers a third time
- * because a `.mjs` cannot import a `.ts` — the arrangement the eggs' shell
- * tones and the basketball board's measurements are already under.
+ * Written here rather than in `PROPS`, because two things want it: the
+ * prop's own entry in `ground.ts` — which `make-world-art.mjs` draws the
+ * picture to — and the bubble that hangs above it.
  */
 export const MAILBOX = { width: 40, height: 72 } as const;
 

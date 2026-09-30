@@ -7,10 +7,12 @@
  * face — where the file lives is a detail the picker does not need to know.
  */
 
+import { asset } from "@/lib/assets";
+
 // From lib, not from components/game: the presence socket reaches this file,
 // and the server's runtime image carries no components/.
 import { BOSS_SPRITE_KEY, BOSS_SPRITE_PATH, WORKER_SPRITES } from "./sprites";
-import { RESIDENTS } from "@/lib/world/residents";
+import { RESIDENTS } from "@/lib/world/roster";
 
 export interface RosterCharacter {
   /** Stable id used in URLs. Library ids are `library-<key>`. */
@@ -38,7 +40,7 @@ const selectable: RosterCharacter[] = WORKER_SPRITES.filter((s) => !RESERVED.has
     key: s.key,
     name: s.label,
     sheetUrl: s.path,
-    portraitUrl: `/api/characters/${LIBRARY_PREFIX}${s.key}/portrait`,
+    portraitUrl: libraryPortrait(`${LIBRARY_PREFIX}${s.key}`, s.path),
     source: "library" as const,
     notes: "Ships with the game.",
   }),
@@ -49,7 +51,7 @@ const THE_BOSS: RosterCharacter = {
   key: BOSS_SPRITE_KEY,
   name: "The Boss",
   sheetUrl: BOSS_SPRITE_PATH,
-  portraitUrl: `/api/characters/${LIBRARY_PREFIX}${BOSS_SPRITE_KEY}/portrait`,
+  portraitUrl: libraryPortrait(`${LIBRARY_PREFIX}${BOSS_SPRITE_KEY}`, BOSS_SPRITE_PATH),
   source: "library" as const,
   notes: "The default look for a person walking in.",
 };
@@ -160,4 +162,15 @@ export function generatedSheetPath(key: string): string | null {
 export function sheetPathFor(key: string): string | null {
   if (key === BOSS_SPRITE_KEY) return BOSS_SPRITE_PATH;
   return WORKER_SPRITES.find((sprite) => sprite.key === key)?.path ?? generatedSheetPath(key);
+}
+
+/**
+ * A library face, carrying its sheet's content hash off the asset manifest.
+ * The portrait is served immutable for a year, and a sheet is redrawn in
+ * place under the same id, so without the hash the URL never changed and
+ * the old face was kept. A declaration, so the lists above can call it.
+ */
+function libraryPortrait(id: string, sheet: string): string {
+  const version = new URLSearchParams(asset(sheet).split("?")[1] ?? "").get("v");
+  return `/api/characters/${id}/portrait${version ? `?v=${version}` : ""}`;
 }

@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
+import { pressPrompt } from "../config/drawing";
 import { gameEvents } from "@/lib/events";
 import { asset } from "@/lib/assets";
-import { PRESS_E_STYLE } from "@/lib/constants";
 import { addSign } from "../utils/signs";
 import { keepLegible } from "./legible";
 import type { POIDef } from "../utils/MapHelpers";
@@ -16,16 +16,14 @@ import { FIXTURES, FIXTURE_ART, type FixtureId, type FixtureSpec } from "@/lib/f
  * open event, and know which panels are open so the character stands still
  * under them.
  *
- * The scene keeps the boss's terminal to itself. It looks like a fixture
- * and is not one: it is only there when the room has seats, it defers to a
- * worker standing nearby, and its prompt hangs off the corner of the seat
- * rather than over a thing. Forcing it into the registry would mean three
- * optional fields used by one entry.
+ * Only the fixtures in the tiles. The one that is a person — Doc — moves,
+ * so his prompt comes off the roster rather than the map: see
+ * `systems/TalkTo`.
  */
 
 /** The art stands with the room's other props. */
 const FIXTURE_DEPTH = 4;
-/** Prompts float over everything; the same depth the terminal's uses. */
+/** Prompts float over the room: over its props, its overhead layer and its people. */
 const PROMPT_DEPTH = 20;
 
 /**
@@ -122,13 +120,7 @@ export class FixtureManager {
   createPrompts() {
     for (const entry of this.placed) {
       if (!entry.zones.length) continue;
-      entry.prompt = this.scene.add
-        .text(0, 0, entry.spec.prompt, PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
-        .setResolution(window.devicePixelRatio * 2)
-        .setOrigin(0.5, 1)
-        .setDepth(PROMPT_DEPTH)
-        .setVisible(false);
-      entry.prompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+      entry.prompt = pressPrompt(this.scene, entry.spec.prompt, { depth: PROMPT_DEPTH });
       // Grows upward from its anchor, so it clears the thing it is about
       // whatever size it is drawn at.
       keepLegible(this.scene, entry.prompt);

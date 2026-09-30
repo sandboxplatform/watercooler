@@ -1,6 +1,5 @@
 import * as Phaser from "phaser";
-
-import { PRESS_E_STYLE } from "@/lib/constants";
+import { pressPrompt } from "../config/drawing";
 import { gameEvents } from "@/lib/events";
 import { fixture, type FixtureId } from "@/lib/fixtures";
 import { docConversation } from "@/lib/mettara-client";
@@ -25,9 +24,6 @@ import type { ScenePresence } from "./scene-presence";
  * to do with, so `OfficeScene` and `OutdoorScene` both run one of these —
  * the two scenes that have people in them at all.
  */
-
-/** Over everything, which out of doors is a bigger number than it looks. */
-const OVER_EVERYTHING = 10_000;
 
 /**
  * Somebody worth walking up to, and what opening them is pointed at.
@@ -78,18 +74,10 @@ export class TalkTo {
       // simply nothing to do.
       if (!spec.person) continue;
 
-      const prompt = scene.add
-        .text(0, 0, spec.prompt, PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
-        .setResolution(window.devicePixelRatio * 2)
-        .setOrigin(0.5, 1)
-        // A flat number, and a big one, because the two places this runs
-        // stack things differently: a room puts its people at one depth and
-        // the world map gives everyone a depth off their own feet, which
-        // runs to thousands. A constant right for one would draw this
-        // through the scenery in the other.
-        .setDepth(OVER_EVERYTHING)
-        .setVisible(false);
-      prompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+      // Over everything, because the two places this runs stack things
+      // differently: a room puts its people at one depth and the world map
+      // gives everyone a depth off their own feet, which runs to thousands.
+      const prompt = pressPrompt(scene, spec.prompt);
       // A label floating over the world, so it keeps the size it was
       // written however far out the camera stands.
       keepLegible(scene, prompt);

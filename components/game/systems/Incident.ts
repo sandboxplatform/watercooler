@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { PANEL_DARK, PIXEL_FONT } from "../config/drawing";
 import { ink, MARKER_DARK, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMarker";
 
 /**
@@ -42,7 +43,7 @@ const ALARM = 0xef4444;
 const GLOW = 0xff9b9b;
 
 /** Darker than the band above it, so the plinth reads as what it stands on. */
-const PLINTH = 0x2a2a3e;
+const PLINTH = PANEL_DARK;
 
 /**
  * The picture, measured up from the floor it stands on.
@@ -107,7 +108,7 @@ export const INCIDENT: FloorMarkerSpec = {
     into.add(
       scene.add
         .text(0, BAND_TOP + BAND_H / 2, WORD, {
-          fontFamily: '"Press Start 2P", monospace',
+          fontFamily: PIXEL_FONT,
           fontSize: "8px",
           color: ink(ALARM),
         })

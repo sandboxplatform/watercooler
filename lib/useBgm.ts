@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { DEFAULT_BGM_VOLUME } from "@/lib/constants";
 import { loadBgmVolume, saveBgmVolume } from "@/lib/persistence";
 
@@ -22,13 +22,23 @@ function getAudio(): HTMLAudioElement {
   return sharedAudio;
 }
 
+/**
+ * Whether a game has the music stepped aside for its own song.
+ *
+ * Kept so the unlock below does not start the room's music over a game's:
+ * the first key somebody presses may well be the E that opened the game.
+ */
+let steppedAside = false;
+
 /** Step the room's music aside for a game's own song. */
 export function pauseBgm() {
+  steppedAside = true;
   sharedAudio?.pause();
 }
 
 /** Bring it back, if the person had it on. */
 export function resumeBgm() {
+  steppedAside = false;
   if (!sharedAudio || readStoredVolume() <= 0) return;
   sharedAudio.play().catch(() => {});
 }
@@ -67,6 +77,53 @@ function subscribeVolume(listener: () => void): () => void {
   };
 }
 
+/**
+ * Start the music, and keep trying until the browser lets it.
+ *
+ * Mounted once, somewhere that is always on screen. It used to live inside
+ * `useBgm`, whose only caller is the footer of the People column — which is
+ * not mounted while the column is shut, so the music did not start until
+ * somebody opened it, and a session spent with the column away was silent.
+ *
+ * A browser refuses `play()` before the page has had a gesture, so the
+ * first try usually fails and the first press or tap is what starts it.
+ */
+export function useBgmPlayback(): void {
+  useEffect(() => {
+    // Read the store directly: this runs during hydration, when the hook's
+    // snapshot is still the server's rather than the saved setting.
+    const stored = readStoredVolume();
+    const audio = getAudio();
+    audio.volume = stored;
+    // Off is off: turning it up later plays it from the slider, which is a
+    // gesture of its own.
+    if (stored <= 0) return;
+
+    let listening = true;
+    const stop = () => {
+      if (!listening) return;
+      listening = false;
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+    const tryPlay = () => {
+      // Playing already — the slider started it — is as good as unlocked.
+      if (!audio.paused) return stop();
+      if (steppedAside || readStoredVolume() <= 0) return;
+      audio.play().then(stop, () => {});
+    };
+    function unlock() {
+      tryPlay();
+    }
+
+    tryPlay();
+    window.addEventListener("pointerdown", unlock, { passive: true });
+    window.addEventListener("keydown", unlock);
+    return stop;
+  }, []);
+}
+
+/** The volume, and a way to set it. The music itself is `useBgmPlayback`'s. */
 export function useBgm(): BgmState {
   // The persisted volume lives in localStorage, which does not exist during
   // SSR. Reading it in the render body would make the client's first paint
@@ -74,45 +131,13 @@ export function useBgm(): BgmState {
   // which React reports as a hydration mismatch. useSyncExternalStore renders
   // the server snapshot during hydration and swaps to the stored value after.
   const volume = useSyncExternalStore(subscribeVolume, readStoredVolume, getServerVolume);
-  const volumeRef = useRef(volume);
-
-  useEffect(() => {
-    volumeRef.current = volume;
-  }, [volume]);
-
-  useEffect(() => {
-    // Read the store directly: this runs once, and during hydration `volume`
-    // is still the server snapshot rather than the user's saved setting.
-    const stored = readStoredVolume();
-    const audio = getAudio();
-    audio.volume = stored;
-    if (stored > 0) {
-      audio.play().catch(() => {});
-    }
-  }, []);
-
-  useEffect(() => {
-    if (volume <= 0) return;
-    const audio = getAudio();
-    if (audio.paused) {
-      const unlock = () => {
-        if (volumeRef.current > 0) audio.play().catch(() => {});
-      };
-      window.addEventListener("pointerdown", unlock, { once: true, passive: true });
-      window.addEventListener("keydown", unlock, { once: true });
-      return () => {
-        window.removeEventListener("pointerdown", unlock);
-        window.removeEventListener("keydown", unlock);
-      };
-    }
-  }, [volume]);
 
   const changeVolume = useCallback((percent: number) => {
     const v = clampVolume(percent / 100);
     writeStoredVolume(v);
     const audio = getAudio();
     audio.volume = v;
-    if (v > 0 && audio.paused) {
+    if (v > 0 && audio.paused && !steppedAside) {
       audio.play().catch(() => {});
     }
   }, []);

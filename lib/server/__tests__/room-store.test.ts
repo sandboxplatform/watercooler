@@ -1,68 +1,51 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { DatabaseSync } from "node:sqlite";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { RoomStore } from "../room-store";
-
-const ROOM = "test-room";
 
 let store: RoomStore;
 beforeEach(() => {
   store = new RoomStore(":memory:");
 });
 
-describe("snapshots", () => {
-  it("returns an empty world for a room that has never been used", () => {
-    expect(store.getSnapshot("brand-new")).toEqual({ seats: [] });
+describe("the handle", () => {
+  let dir: string;
+  let opened: RoomStore | null = null;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "watercooler-store-"));
+  });
+  afterEach(() => {
+    opened?.close();
+    opened = null;
+    rmSync(dir, { recursive: true, force: true });
   });
 
-  it("round-trips seats", () => {
-    store.replaceSeats(ROOM, [{ seatId: "seat-0", label: "Alice", roleTitle: "QA" }]);
-
-    const snapshot = store.getSnapshot(ROOM);
-    expect(snapshot.seats).toEqual([{ seatId: "seat-0", label: "Alice", roleTitle: "QA" }]);
+  it("answers the health probe", () => {
+    expect(store.ping()).toBe(true);
   });
 
-  it("keeps rooms isolated from each other", () => {
-    store.replaceSeats("room-a", [{ seatId: "seat-0", label: "Ann" }]);
-    store.replaceSeats("room-b", [{ seatId: "seat-0", label: "Ben" }]);
-
-    expect(store.getSnapshot("room-a").seats).toEqual([{ seatId: "seat-0", label: "Ann" }]);
-    expect(store.getSnapshot("room-b").seats).toEqual([{ seatId: "seat-0", label: "Ben" }]);
-  });
-});
-
-describe("replacement semantics", () => {
-  it("replaces a slice rather than merging into it", () => {
-    store.replaceSeats(ROOM, [{ seatId: "seat-0" }, { seatId: "seat-1" }]);
-    store.replaceSeats(ROOM, [{ seatId: "seat-2" }]);
-
-    const ids = store.getSnapshot(ROOM).seats.map((s) => (s as { seatId: string }).seatId);
-    expect(ids).toEqual(["seat-2"]);
-  });
-
-  it("skips rows with no id instead of failing the whole write", () => {
-    store.replaceSeats(ROOM, [{ seatId: "seat-0" }, { label: "no id here" }, { seatId: "seat-1" }]);
-
-    const ids = store.getSnapshot(ROOM).seats.map((s) => (s as { seatId: string }).seatId);
-    expect(ids).toEqual(["seat-0", "seat-1"]);
-  });
-});
-
-describe("per-entity writes", () => {
-  it("upserts a seat so renaming crew is one small write", () => {
-    // The reason these exist: with whole-slice writes, a second person
-    // editing at the same time would send a list missing this change and
-    // erase it.
-    store.upsertSeat(ROOM, { seatId: "seat-0", label: "Alice" });
-    store.upsertSeat(ROOM, { seatId: "seat-1", label: "Bob" });
-    store.upsertSeat(ROOM, { seatId: "seat-0", label: "Carol" });
-
-    const seats = store.getSnapshot(ROOM).seats as Record<string, unknown>[];
-    expect(seats).toHaveLength(2);
-    expect(seats.find((s) => s.seatId === "seat-0")?.label).toBe("Carol");
-  });
-
-  it("ignores writes with no id rather than throwing", () => {
-    expect(() => store.upsertSeat(ROOM, { label: "nameless" })).not.toThrow();
-    expect(store.getSnapshot(ROOM).seats).toEqual([]);
+  /**
+   * NORMAL is safe under WAL and spares an fsync a write; the timeout is
+   * what makes a second connection wait its turn rather than fail with
+   * "database is locked" the instant the first is mid-write.
+   */
+  it("opens a file in WAL, synchronous NORMAL, with a busy timeout", () => {
+    const file = join(dir, "room.sqlite");
+    opened = new RoomStore(file);
+    opened.ping();
+    const db = new DatabaseSync(file);
+    const journal = db.prepare("PRAGMA journal_mode").get() as { journal_mode: string };
+    db.close();
+    expect(journal.journal_mode).toBe("wal");
+    // synchronous and busy_timeout are per connection, so they are read off
+    // the store's own: 1 is NORMAL.
+    const own = (opened as unknown as { db: DatabaseSync }).db;
+    expect((own.prepare("PRAGMA synchronous").get() as { synchronous: number }).synchronous).toBe(
+      1,
+    );
+    expect((own.prepare("PRAGMA busy_timeout").get() as { timeout: number }).timeout).toBe(5000);
   });
 });
 

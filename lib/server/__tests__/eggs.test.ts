@@ -101,3 +101,28 @@ describe("the ones nobody came for", () => {
     expect(new Nest().spoil(Number.MAX_SAFE_INTEGER)).toBe(false);
   });
 });
+
+describe("looking before lifting", () => {
+  it("names the nearest egg in reach and leaves it lying there", () => {
+    const nest = new Nest();
+    const egg = nest.lay(eggSpot({ x: 400, y: 300 }), 0, 0);
+    expect(nest.nearest({ x: 400, y: 300 })?.id).toBe(egg.id);
+    expect(nest.count).toBe(1);
+    expect(nest.nearest({ x: 900, y: 300 })).toBeNull();
+  });
+
+  it("hands back the wire's four fields, not what is kept", () => {
+    const nest = new Nest();
+    nest.lay(eggSpot({ x: 400, y: 300 }), 0, 0);
+    const keys = Object.keys(nest.nearest({ x: 400, y: 300 }) ?? {}).sort();
+    expect(keys).toEqual(["id", "tier", "x", "y"]);
+  });
+
+  it("lifts one out by id, once", () => {
+    const nest = new Nest();
+    const egg = nest.lay(eggSpot({ x: 400, y: 300 }), 0, 0);
+    expect(nest.remove(egg.id)).toBe(true);
+    expect(nest.remove(egg.id)).toBe(false);
+    expect(nest.count).toBe(0);
+  });
+});

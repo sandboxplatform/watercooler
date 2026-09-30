@@ -33,8 +33,8 @@ import {
   type Rect,
 } from "./tenants";
 import { HIGHWAY, SEA, WEST_PLANTING, WILD_PLANTING, shoreAt } from "./wilderness";
-import { blockedCells } from "./route";
-import { MAILBOX, MAILBOXES } from "./mailboxes";
+import { blockedCells, coversPoint } from "./route";
+import { MAILBOXES } from "./mailboxes";
 import { COURT, HOOPS, hoopProp } from "./basketball";
 import {
   WOOD_BEACHES,
@@ -45,33 +45,38 @@ import {
   riverBanks,
   riverBed,
 } from "./wood";
+import {
+  groundGrid,
+  propBody,
+  propBounds,
+  propPicture,
+  signBody,
+  tilesOf,
+  waterBodies,
+  type Ground,
+  type PlacedProp,
+  type Sign,
+} from "./ground";
 
-export type Ground =
-  | "grass"
-  | "paving"
-  | "kerb"
-  | "asphalt"
-  | "highway"
-  | "water"
-  | "dock"
-  | "court"
-  | "trail"
-  | "shingle"
-  // Volcano Island's: black sand underfoot, lava that nobody walks on, and
-  // under the volcano the cave's floor inside walls of living rock. None of
-  // them is on the world map, and every one of them is ground rather than a
-  // picture for the reason the court and the trails are — see `VOLCANO`.
-  | "ash"
-  | "lava"
-  | "rock"
-  | "cave";
-
-/**
- * The ground nobody stands on: the sea and the river, lava, and the rock a
- * cave is cut out of. Every run of it along a row becomes a solid — see
- * `solidGround`.
- */
-const IMPASSABLE: ReadonlySet<Ground> = new Set<Ground>(["water", "lava", "rock"]);
+// The vocabulary of an outdoor place lives in `ground.ts`; everything that
+// imported it from here goes on doing so.
+export {
+  PROPS,
+  groundGrid,
+  propBody,
+  propBounds,
+  propPicture,
+  signBody,
+  solidGround,
+  tilesOf,
+  waterBodies,
+  type Ground,
+  type GroundPlan,
+  type PlacedProp,
+  type PropKind,
+  type PropSpec,
+  type Sign,
+} from "./ground";
 
 const CENTRE = CENTRE_X / TILE;
 /** The town's first column: what a column written in the town's own layout is off by. */
@@ -220,13 +225,6 @@ export const WATER: readonly Rect[] = [...SEA, ...riverBed()];
  */
 export const DOCKS: readonly Rect[] = DOCKS_ON_THE_SHORE;
 
-/** A board with words on it, standing on its feet like a prop. */
-export interface Sign {
-  text: string;
-  x: number;
-  y: number;
-}
-
 /**
  * The board at the head of each dock, and nothing else on the map.
  *
@@ -242,257 +240,36 @@ export const WORLD_SIGNS: readonly Sign[] = [
   { text: "FERRY TO\nVOLCANO", x: VOLCANO_DOCK.x * TILE - 60, y: (SHORE_ROW - 1) * TILE + 44 },
 ];
 
-const inRect = (r: Rect, x: number, y: number) =>
-  x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
-
-/** A pixel rectangle as whole tiles. */
-export const tilesOf = (r: Rect): Rect => ({
-  x: r.x / TILE,
-  y: r.y / TILE,
-  width: r.width / TILE,
-  height: r.height / TILE,
-});
+let tiles: Ground[][] | null = null;
 
 /**
- * The ground tile at every cell. Paving gets a kerb along any edge that
- * meets grass above it — but not where it meets a building, since a path
- * runs straight up to the door, and not where it meets the basketball
- * court: a kerb between two hard surfaces is a stone lip drawn across the
- * middle of the tarmac. The court stands in the middle of its block today
- * and touches no road, so that last rule says where the court may go
- * rather than describing the map as it is. Dock planking lies over the
- * water, so it is decided first.
+ * The world map's ground, cell by cell. Worked out once and kept, like
+ * `worldSolids`: none of it moves, and the grid asks every one of thirteen
+ * thousand cells against every list above — which the scene and
+ * `worldWater` were each paying for again. Frozen, rows and all, because
+ * it is shared.
  */
-export interface GroundPlan {
-  /** Slabs: the roads, the plaza, the paths to the doors. */
-  paved: readonly Rect[];
-  /** The buildings' footprints, which is what keeps a kerb from being drawn at a doorstep. */
-  built: readonly Rect[];
-  asphalt?: readonly Rect[];
-  highway?: readonly Rect[];
-  water?: readonly Rect[];
-  dock?: readonly Rect[];
-  court?: readonly Rect[];
-  trail?: readonly Rect[];
-  shingle?: readonly Rect[];
-  lava?: readonly Rect[];
-  /** The cave's floor, cut out of whatever the base is. */
-  cave?: readonly Rect[];
-  /**
-   * What everything not otherwise named is. Grass on the world map and a
-   * campus; black sand on Volcano Island; rock in the cave, where the floor
-   * is the part that was dug out rather than the part laid down.
-   */
-  base?: Ground;
-}
-
-export function groundGrid(columns: number, rows: number, plan: GroundPlan): Ground[][] {
-  const {
-    paved,
-    built,
-    asphalt = [],
-    highway = [],
-    water = [],
-    dock = [],
-    court = [],
-    trail = [],
-    shingle = [],
-    lava = [],
-    cave = [],
-    base = "grass",
-  } = plan;
-  const isPaved = (x: number, y: number) => paved.some((r) => inRect(r, x, y));
-  const grid: Ground[][] = [];
-  for (let y = 0; y < rows; y++) {
-    const row: Ground[] = [];
-    for (let x = 0; x < columns; x++) {
-      if (dock.some((r) => inRect(r, x, y))) row.push("dock");
-      else if (water.some((r) => inRect(r, x, y))) row.push("water");
-      // After the water and before everything walked on, for the water's
-      // reason: a path laid up to a lava flow stops at its edge.
-      else if (lava.some((r) => inRect(r, x, y))) row.push("lava");
-      else if (court.some((r) => inRect(r, x, y))) row.push("court");
-      // After the water, which is the rule the wilderness's coastline is
-      // drawn to rather than a thing to remember: the road stops at the sea
-      // rather than being laid over it, and the sea stops short of the road.
-      else if (highway.some((r) => inRect(r, x, y))) row.push("highway");
-      else if (asphalt.some((r) => inRect(r, x, y))) row.push("asphalt");
-      // After the water, so a trail laid up to the river stops at the bank
-      // rather than being drawn across it. Nothing crosses the Gold River
-      // today; when something does it will be planking, which is decided
-      // first of all, above.
-      else if (trail.some((r) => inRect(r, x, y))) row.push("trail");
-      // And the shingle after the water for the same reason: a beach is laid
-      // along the bank by the rows the water leaves dry, so a bend that moves
-      // takes the beach with it rather than drawing it over the river. Where
-      // a beach squares off a step in the bank the water has already given
-      // those tiles up, so the order decides nothing there — see
-      // `WOOD_BEACHES`.
-      else if (shingle.some((r) => inRect(r, x, y))) row.push("shingle");
-      else if (cave.some((r) => inRect(r, x, y))) row.push("cave");
-      else if (!isPaved(x, y)) row.push(base);
-      else if (
-        y > 0 &&
-        !isPaved(x, y - 1) &&
-        !built.some((b) => inRect(b, x, y - 1)) &&
-        !court.some((r) => inRect(r, x, y - 1))
-      )
-        row.push("kerb");
-      else row.push("paving");
-    }
-    grid.push(row);
-  }
-  return grid;
-}
-
 export function groundTiles(): Ground[][] {
-  return groundGrid(WORLD_COLUMNS, WORLD_ROWS, {
-    paved: PAVED,
-    built: BUILDINGS.map((b) => tilesOf(b.frame)),
-    asphalt: ASPHALT,
-    highway: HIGHWAYS,
-    water: WATER,
-    dock: DOCKS,
-    court: COURTS,
-    trail: TRAILS,
-    shingle: BEACHES,
-  });
+  return (tiles ??= Object.freeze(
+    groundGrid(WORLD_COLUMNS, WORLD_ROWS, {
+      paved: PAVED,
+      built: BUILDINGS.map((b) => tilesOf(b.frame)),
+      asphalt: ASPHALT,
+      highway: HIGHWAYS,
+      water: WATER,
+      dock: DOCKS,
+      court: COURTS,
+      trail: TRAILS,
+      shingle: BEACHES,
+    }).map((row) => Object.freeze(row)),
+  ) as Ground[][]);
 }
 
-/**
- * The water as solids, in pixels: one body per run of water tiles along a
- * row, with the dock left out so it can be walked. Nobody walks on the
- * sea, and a walk that is planned around it stays dry.
- */
-export function waterBodies(grid: Ground[][]): Rect[] {
-  const bodies: Rect[] = [];
-  grid.forEach((row, y) => {
-    let start = -1;
-    const flush = (end: number) => {
-      if (start >= 0)
-        bodies.push({ x: start * TILE, y: y * TILE, width: (end - start) * TILE, height: TILE });
-      start = -1;
-    };
-    row.forEach((ground, x) => {
-      if (ground === "water") {
-        if (start < 0) start = x;
-      } else flush(x);
-    });
-    flush(row.length);
-  });
-  return bodies;
-}
+let water: Rect[] | null = null;
 
-/**
- * Everything underfoot that nobody may stand on, as solids: the water, and
- * on Volcano Island the lava and the rock the cave is cut out of. The same
- * row-at-a-time runs as `waterBodies`, asked of every impassable ground at
- * once — the world map has none but water, so it goes on asking that.
- */
-export function solidGround(grid: Ground[][]): Rect[] {
-  const bodies: Rect[] = [];
-  grid.forEach((row, y) => {
-    let start = -1;
-    const flush = (end: number) => {
-      if (start >= 0)
-        bodies.push({ x: start * TILE, y: y * TILE, width: (end - start) * TILE, height: TILE });
-      start = -1;
-    };
-    row.forEach((ground, x) => {
-      if (IMPASSABLE.has(ground)) {
-        if (start < 0) start = x;
-      } else flush(x);
-    });
-    flush(row.length);
-  });
-  return bodies;
-}
-
-/** The world's water, as solids. */
+/** The world's water, as solids. Kept, like the ground it is read off. */
 export function worldWater(): Rect[] {
-  return waterBodies(groundTiles());
-}
-
-/** A sign's board stands on the ground like a prop, and is as solid at the foot. */
-export function signBody(sign: Sign): Rect {
-  return propBody({ kind: "board", x: sign.x, y: sign.y })!;
-}
-
-// ── Props ──────────────────────────────────────────────
-
-export interface PropSpec {
-  /** Texture key, when the prop is not on the props sheet. */
-  texture?: string;
-  width: number;
-  height: number;
-  /** The solid part at the foot, centred on the prop's feet. Absent means walk-through. */
-  footprint?: { width: number; height: number };
-  /** Drawn frames with a second pose, shown in turn. */
-  animate?: boolean;
-}
-
-export const PROPS = {
-  tree: { width: 96, height: 120, footprint: { width: 22, height: 22 } },
-  bush: { width: 64, height: 48, footprint: { width: 48, height: 18 } },
-  lamp: { width: 32, height: 96, footprint: { width: 14, height: 10 } },
-  bench: { width: 96, height: 48, footprint: { width: 92, height: 26 } },
-  fountain: {
-    width: 144,
-    height: 96,
-    footprint: { width: 132, height: 52 },
-    animate: true,
-  },
-  planter: { width: 64, height: 48, footprint: { width: 52, height: 20 } },
-  signpost: { width: 48, height: 96, footprint: { width: 12, height: 10 } },
-  pond: { texture: "world-pond", width: 288, height: 192, footprint: { width: 268, height: 140 } },
-  van: { texture: "van", width: 96, height: 144, footprint: { width: 88, height: 130 } },
-  sheep: { width: 48, height: 40, footprint: { width: 30, height: 10 } },
-  board: { width: 144, height: 88, footprint: { width: 112, height: 10 } },
-  // The cabin on the far bank of the Gold River. Solid like any other prop,
-  // and solid is the whole of it: there is no door to walk into and nothing
-  // to press at, because it is across water nothing crosses. Its footprint
-  // is the walls rather than the picture — the roof overhangs both ends and
-  // the chimney stands off the top, neither of which is anything to bump
-  // into.
-  cabin: { width: 64, height: 72, footprint: { width: 48, height: 16 } },
-  // The boulder in the Gold River, off the corner of the shoulder beach —
-  // see `WOOD_BOULDER` in wood.ts. Solid like any other rock, and the
-  // footprint buys nothing at all here, because the tile it stands in is
-  // water and water is already solid: it is there so that a rock is a rock
-  // the day somebody plants a crossing beside it. The body is the slab at
-  // the waterline rather than the picture, which leans out over it.
-  boulder: { width: 64, height: 56, footprint: { width: 48, height: 12 } },
-  // The two ends of the basketball court, mirrored. Only the pole is solid:
-  // the board is over your head and the rim is out over the court, so
-  // walling off the whole picture would take a tile and a half of the end
-  // line out of play for the sake of something nobody can walk into.
-  hoopWest: { width: 112, height: 128, footprint: { width: 16, height: 12 } },
-  hoopEast: { width: 112, height: 128, footprint: { width: 16, height: 12 } },
-  // The mailbox outside a customer's building — see `lib/world/mailboxes.ts`,
-  // which is where its size is written, because the bubble that hangs over it
-  // is measured off the same number. Solid at the post and nowhere else: the
-  // box itself is at chest height, so a footprint the width of the picture
-  // would be a metre of kerb nobody can walk along for the sake of something
-  // that is not in the way.
-  mailbox: { width: MAILBOX.width, height: MAILBOX.height, footprint: { width: 16, height: 12 } },
-  // Volcano Island's, and its cave's — see `lib/world/volcano.ts`. A lump of
-  // black cinder and a tree the lava killed on the sand; a stalagmite and a
-  // cluster of glowing crystal in the cave. All four are solid at the foot
-  // only, for the reason everything else is: the body is what stands on the
-  // ground, and the picture leans over it.
-  cinder: { width: 64, height: 48, footprint: { width: 50, height: 16 } },
-  snag: { width: 64, height: 96, footprint: { width: 14, height: 10 } },
-  stalagmite: { width: 48, height: 72, footprint: { width: 26, height: 14 } },
-  crystal: { width: 48, height: 56, footprint: { width: 30, height: 12 } },
-} as const satisfies Record<string, PropSpec>;
-
-export type PropKind = keyof typeof PROPS;
-
-export interface PlacedProp {
-  kind: PropKind;
-  /** Feet: bottom centre, in world pixels. */
-  x: number;
-  y: number;
+  return (water ??= Object.freeze(waterBodies(groundTiles())) as Rect[]);
 }
 
 const treeLine = (y: number, xs: number[]): PlacedProp[] => xs.map((x) => ({ kind: "tree", x, y }));
@@ -846,6 +623,11 @@ const PLACED: readonly PlacedProp[] = [
  * it while one on the south side has to be a good two tiles back. Canopies
  * lean over the path from above, which is what a wood looks like.
  */
+/** The square the scatter files trunks under, in pixels: `coversPoint`'s own. */
+const SCATTER_BUCKET = 96;
+/** Wider than the map is squares across, so a row and a column make one key. */
+const SCATTER_STRIDE = 100_000;
+
 const SCATTERED: readonly PlacedProp[] = (() => {
   const planted: PlacedProp[] = [];
   // Seeded with what is already standing, so the scatter fits round the
@@ -854,7 +636,33 @@ const SCATTERED: readonly PlacedProp[] = (() => {
   // and the four props that came out of it stacked were all at a seam: the
   // meadow's scatter meeting the shore, and the wood's meeting the tree line
   // under it.
-  const bodies: Rect[] = PLACED.map(propBody).filter((r): r is Rect => r !== null);
+  //
+  // Bucketed by the square they stand in rather than kept as one list: every
+  // candidate used to be tested against every trunk already planted, which
+  // is two and a half thousand candidates against a list that grows to two
+  // thousand — a fifth of a second at module load, on a module the scenes
+  // import. Filed under every square a body touches, so two that overlap
+  // always share one and the answer is the same.
+  const bodies = new Map<number, Rect[]>();
+  const squares = (r: Rect, visit: (key: number) => boolean | void) => {
+    const x1 = Math.floor((r.x + r.width) / SCATTER_BUCKET);
+    const y1 = Math.floor((r.y + r.height) / SCATTER_BUCKET);
+    for (let by = Math.floor(r.y / SCATTER_BUCKET); by <= y1; by++) {
+      for (let bx = Math.floor(r.x / SCATTER_BUCKET); bx <= x1; bx++) {
+        if (visit(by * SCATTER_STRIDE + bx) === true) return true;
+      }
+    }
+    return false;
+  };
+  const plant = (body: Rect) =>
+    squares(body, (key) => {
+      const here = bodies.get(key);
+      if (here) here.push(body);
+      else bodies.set(key, [body]);
+    });
+  const crowded = (body: Rect) =>
+    squares(body, (key) => bodies.get(key)?.some((other) => overlaps(body, other)));
+  for (const body of PLACED.map(propBody)) if (body) plant(body);
   for (const p of [...WOOD_PLANTING, ...WILD_PLANTING, ...WEST_PLANTING]) {
     const picture = propBounds(p);
     if (KEEP_CLEAR.some((r) => overlaps(picture, r))) continue;
@@ -862,9 +670,9 @@ const SCATTERED: readonly PlacedProp[] = (() => {
       continue;
     }
     const body = propBody(p);
-    if (body && bodies.some((other) => overlaps(body, other))) continue;
+    if (body && crowded(body)) continue;
     planted.push(p);
-    if (body) bodies.push(body);
+    if (body) plant(body);
   }
   return planted;
 })();
@@ -879,19 +687,6 @@ const SCATTERED: readonly PlacedProp[] = (() => {
  */
 export const SCENERY: readonly PlacedProp[] = [...SCATTERED, ...PLACED];
 
-/** The picture's rectangle. */
-export function propBounds(p: PlacedProp): Rect {
-  const spec: PropSpec = PROPS[p.kind];
-  return { x: p.x - spec.width / 2, y: p.y - spec.height, width: spec.width, height: spec.height };
-}
-
-/** The part a person cannot walk through, or null for a walk-through prop. */
-export function propBody(p: PlacedProp): Rect | null {
-  const foot = (PROPS[p.kind] as PropSpec).footprint;
-  if (!foot) return null;
-  return { x: p.x - foot.width / 2, y: p.y - foot.height, width: foot.width, height: foot.height };
-}
-
 // ── Can you still get everywhere? ──────────────────────
 
 /**
@@ -904,13 +699,18 @@ export function propBody(p: PlacedProp): Rect | null {
  * whether a handful of places are in it, and `worldWanderSpots()` asks
  * which of a lattice of candidates are — and a second flood for the second
  * question is fifty thousand cells walked twice.
+ *
+ * `seen` is a byte a cell, 1 where the flood got to, rather than a set of
+ * indexes: a flood is every cell of the map, and fifty thousand of them in a
+ * `Set` fed by a queue shifted from the front was most of what one cost. A
+ * start off the grid reaches nothing.
  */
 export function reachedFrom(
   bounds: { width: number; height: number },
   solids: readonly Rect[],
   from: { x: number; y: number },
   cell = 24,
-): { cols: number; rows: number; seen: Set<number> } {
+): { cols: number; rows: number; seen: Uint8Array } {
   const cols = Math.ceil(bounds.width / cell);
   const rows = Math.ceil(bounds.height / cell);
   // Painted once rather than asked per cell, which is the route planner's
@@ -920,31 +720,35 @@ export function reachedFrom(
   // second or so a call, and this is called several times over in the
   // tests that hold the map together.
   const cells = blockedCells(solids, cols, rows, cell);
-  const key = (cx: number, cy: number) => cy * cols + cx;
-  const start = { cx: Math.floor(from.x / cell), cy: Math.floor(from.y / cell) };
-  const seen = new Set<number>([key(start.cx, start.cy)]);
-  const queue = [start];
-  while (queue.length) {
-    const { cx, cy } = queue.shift()!;
-    for (const [dx, dy] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ]) {
-      const nx = cx + dx;
-      const ny = cy + dy;
+  const seen = new Uint8Array(cols * rows);
+  const sx = Math.floor(from.x / cell);
+  const sy = Math.floor(from.y / cell);
+  if (sx < 0 || sy < 0 || sx >= cols || sy >= rows) return { cols, rows, seen };
+  const queue = new Int32Array(cols * rows);
+  let head = 0;
+  let tail = 0;
+  seen[sy * cols + sx] = 1;
+  queue[tail++] = sy * cols + sx;
+  while (head < tail) {
+    const at = queue[head++];
+    const cx = at % cols;
+    const cy = (at - cx) / cols;
+    for (let n = 0; n < 4; n++) {
+      const nx = cx + FLOOD_DX[n];
+      const ny = cy + FLOOD_DY[n];
       if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-      if (seen.has(key(nx, ny)) || blocked(cells, cols, nx, ny)) continue;
-      seen.add(key(nx, ny));
-      queue.push({ cx: nx, cy: ny });
+      const next = ny * cols + nx;
+      if (seen[next] === 1 || cells[next] === 1) continue;
+      seen[next] = 1;
+      queue[tail++] = next;
     }
   }
   return { cols, rows, seen };
 }
 
-const blocked = (cells: Uint8Array, cols: number, cx: number, cy: number) =>
-  cells[cy * cols + cx] === 1;
+/** East, west, south and north. */
+const FLOOD_DX = [1, -1, 0, 0] as const;
+const FLOOD_DY = [0, 0, 1, -1] as const;
 
 /**
  * Whether a person can walk from `from` to every one of `targets` with the
@@ -958,7 +762,7 @@ export function allReachable(
   cell = 24,
 ): boolean {
   const { cols, seen } = reachedFrom(bounds, solids, from, cell);
-  return targets.every((t) => seen.has(Math.floor(t.y / cell) * cols + Math.floor(t.x / cell)));
+  return targets.every((t) => seen[Math.floor(t.y / cell) * cols + Math.floor(t.x / cell)] === 1);
 }
 
 /**
@@ -978,7 +782,7 @@ export function allReachable(
  */
 let solids: Rect[] | null = null;
 export function worldSolids(): Rect[] {
-  return (solids ??= [
+  return (solids ??= Object.freeze([
     ...BUILDINGS.map((b) => b.solid),
     ...SCENERY.map(propBody).filter((r): r is Rect => r !== null),
     ...WORLD_SIGNS.map(signBody),
@@ -987,18 +791,7 @@ export function worldSolids(): Rect[] {
     // nobody may stand on, because standing there is being drawn in it —
     // see `riverBanks`.
     ...riverBanks(),
-  ]);
-}
-
-/** The whole picture a prop is drawn from: bottom-centred on its position. */
-export function propPicture(p: PlacedProp): Rect {
-  const spec = PROPS[p.kind] as PropSpec;
-  return {
-    x: p.x - spec.width / 2,
-    y: p.y - spec.height,
-    width: spec.width,
-    height: spec.height,
-  };
+  ]) as Rect[]);
 }
 
 /**
@@ -1013,13 +806,15 @@ export function propPicture(p: PlacedProp): Rect {
  * So this asks about the pictures, which are bigger than the bodies: no
  * building frame, no prop, and nothing solid either. Somewhere a person can
  * stand and be looked at.
+ *
+ * Asked of `standingRoom` through `coversPoint`, which buckets it: walking
+ * five thousand rectangles one by one was a fifth of a millisecond a point,
+ * and the row by the fountain and the sweep of the map ask thousands. Edges
+ * count as covered, which is `coversPoint`'s rule and the safe one here: a
+ * point on a picture's bottom edge is somebody standing at its very foot.
  */
 export function clearToStand(at: { x: number; y: number }): boolean {
-  const holds = (r: Rect) =>
-    at.x >= r.x && at.x < r.x + r.width && at.y >= r.y && at.y < r.y + r.height;
-  if (BUILDINGS.some((b) => holds(b.frame))) return false;
-  if (SCENERY.some((p) => holds(propPicture(p)))) return false;
-  return !worldSolids().some(holds);
+  return !coversPoint(standingRoom(), at.x, at.y);
 }
 
 let standing: Rect[] | null = null;
@@ -1034,12 +829,11 @@ let standing: Rect[] | null = null;
  * standing room does it a few thousand times over.
  */
 export function standingRoom(): Rect[] {
-  if (standing) return standing;
-  return (standing = [
+  return (standing ??= Object.freeze([
     ...BUILDINGS.map((b) => b.frame),
     ...SCENERY.map(propPicture),
     ...worldSolids(),
-  ]);
+  ]) as Rect[]);
 }
 
 /** Whether every building's door on the world map can be reached from the spawn. */

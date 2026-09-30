@@ -12,8 +12,8 @@
  * whole rather than paged or filtered.
  */
 
-import { NextResponse } from "next/server";
 import { getRoomStore } from "@/lib/server/room-store";
+import { guarded } from "@/lib/server/route";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("BadgesAPI");
@@ -21,10 +21,9 @@ const log = createLogger("BadgesAPI");
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  try {
-    return NextResponse.json({ badges: getRoomStore().listBadges() });
-  } catch (err) {
-    log.error("could not read the badges:", (err as Error).message);
-    return NextResponse.json({ error: "Failed to read the badges" }, { status: 500 });
-  }
+  return guarded(
+    "read the badges",
+    () => Response.json({ badges: getRoomStore().listBadges() }),
+    log,
+  );
 }

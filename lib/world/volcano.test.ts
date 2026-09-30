@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  CONE,
   VOLCANO_ART,
   VOLCANO_CAVE,
   VOLCANO_ISLAND,
@@ -176,17 +175,6 @@ describe("the island", () => {
     expect(widths).toEqual([...widths].sort((a, b) => a - b));
     expect(widths[0]).toBeLessThan(VOLCANO_ART.width / 2);
     expect(widths[widths.length - 1]).toBeGreaterThan(VOLCANO_ART.width * 0.8);
-  });
-
-  it("agrees with the art script about the shape of the cone", () => {
-    // The script draws the mountain to its own copy of this outline, which
-    // is the only way a `.mjs` can have it. Two copies that disagree is a
-    // mountain with walls in the sky beside it, and nothing else would say.
-    const script = readFileSync(join(process.cwd(), "scripts", "make-world-art.mjs"), "utf8");
-    const line = script.match(/const CONE = (\{[^}]*\});/);
-    expect(line, "CONE in make-world-art.mjs").not.toBeNull();
-    const art = Function(`return (${line![1]});`)() as typeof CONE;
-    expect(art).toEqual(CONE);
   });
 
   it("is drawn from a picture the size the layout thinks it is", () => {

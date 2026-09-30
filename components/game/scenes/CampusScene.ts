@@ -7,7 +7,7 @@ import { WORLD_PATH } from "@/lib/world/paths";
 import { travelTo } from "@/lib/room-travel";
 import { TILE, organisationFor } from "@/lib/world/tenants";
 import { campusFor, campusSpawnFor, type Campus, type CampusBuilding } from "@/lib/world/campus";
-import { groundGrid, propBody, signBody, tilesOf, waterBodies } from "@/lib/world/scenery";
+import { groundGrid, propBody, signBody, tilesOf, waterBodies } from "@/lib/world/ground";
 import { asset } from "@/lib/assets";
 import { addSolid, layGround, placeBoat, placeBuilding, placeProp, placeSign } from "./outdoors";
 

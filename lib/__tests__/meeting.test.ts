@@ -33,6 +33,8 @@ vi.mock("../room-socket", () => ({
     sent.push(message);
     return true;
   },
+  onRoomOpen: () => () => {},
+  isRoomSocketOpen: () => false,
 }));
 
 const { meetingFor, meetingIn, setMeeting, useMeetings } = await import("../meeting");

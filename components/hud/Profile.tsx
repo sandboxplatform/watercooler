@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { useCallback, useMemo } from "react";
 import { BADGES, BADGE_GROUPS, badgeFor, isGuestHolder } from "@/lib/badges";
 import { badgesOf, useBadges } from "@/lib/badges-client";
 import { basketOf, useEggTallies } from "@/lib/eggs-client";
@@ -15,6 +14,8 @@ import { SPRITE_PATH } from "@/components/game/config/animations";
 import CharacterPortrait from "./CharacterPortrait";
 import EggMark from "./EggMark";
 import { gameEvents } from "@/lib/events";
+import { useBusWindow } from "@/lib/hooks/useBusWindow";
+import CardWindow from "./CardWindow";
 import { asset } from "@/lib/assets";
 
 /**
@@ -70,14 +71,13 @@ function useSubject(person: string | null): Subject | null {
   }, [person, online, locals]);
 }
 
+/** Anybody may be opened: somebody with no cast entry still gets a card. */
+const anybody = (person: string | null) => person;
+
 export default function Profile() {
-  const [person, setPerson] = useState<string | null>(null);
+  const { value: person, close } = useBusWindow("open-profile", anybody);
   const subject = useSubject(person);
   const all = useBadges();
-
-  useEffect(() => gameEvents.on("open-profile", setPerson), []);
-
-  const close = useCallback(() => setPerson(null), []);
 
   /**
    * Hands over to the badge rather than stacking on top of it, which is
@@ -94,15 +94,6 @@ export default function Profile() {
     [close],
   );
 
-  useEffect(() => {
-    if (!person) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [person, close]);
-
   const earned = useMemo(() => (person ? badgesOf(all, person) : []), [all, person]);
   const tallies = useEggTallies();
   const basket = useMemo(() => basketOf(tallies, person), [tallies, person]);
@@ -116,167 +107,158 @@ export default function Profile() {
   const guest = isGuestHolder(subject.person);
 
   return (
-    <div className="profile" role="dialog" aria-label={`${subject.name}'s profile`}>
-      {/* The backdrop closes it, like every other window over the office. */}
-      <div className="profile__scrim" onClick={close} />
-      <div className="pixel-panel profile__card">
-        <button type="button" className="profile__close" onClick={close} aria-label="Close">
-          <X size={14} />
-        </button>
-
-        {/*
+    <CardWindow kind="profile" label={`${subject.name}'s profile`} onClose={close}>
+      {/*
           The concept sheet, full bleed across the top. It is drawn on black
           and the panel is dark, so it needs no frame — the picture is the
           header. Somebody with no sheet gets the band without it rather
           than a broken image: a visitor is a real person in this world and
           simply has not been painted.
         */}
-        {member?.art ? (
-          <div className="profile__art">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={asset(member.art)} alt={`Concept art of ${member.name}`} />
-          </div>
-        ) : (
-          <div className="profile__art profile__art--none">
-            <span>No concept art — nobody has drawn them yet</span>
-          </div>
-        )}
+      {member?.art ? (
+        <div className="profile__art">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={asset(member.art)} alt={`Concept art of ${member.name}`} />
+        </div>
+      ) : (
+        <div className="profile__art profile__art--none">
+          <span>No concept art — nobody has drawn them yet</span>
+        </div>
+      )}
 
-        <div className="profile__head">
-          <CharacterPortrait
-            spritePath={sheetPathFor(subject.spriteKey) ?? SPRITE_PATH}
-            name={subject.name}
-            large
-          />
-          <div className="profile__who">
-            <div className="profile__name">{subject.name}</div>
-            <div className="profile__role">
-              {member?.role ?? (guest ? "Visitor" : "In the world")}
-              {org && <span className="profile__org">{org.name}</span>}
-            </div>
-            <div className="profile__chips">
-              {resident && (
-                <span
-                  className="profile__chip profile__chip--local"
-                  title="A character the server walks about"
-                >
-                  Resident
-                </span>
-              )}
-              {guest && (
-                <span className="profile__chip" title="Came in on the shared code">
-                  Guest
-                </span>
-              )}
-              {subject.room ? (
-                <span className="profile__chip profile__chip--here">
-                  {describeRoom(subject.room).label}
-                </span>
-              ) : (
-                <span className="profile__chip profile__chip--away">Not in the world</span>
-              )}
-              {subject.mic && <span className="profile__chip profile__chip--mic">Global Chat</span>}
-            </div>
+      <div className="profile__head">
+        <CharacterPortrait
+          spritePath={sheetPathFor(subject.spriteKey) ?? SPRITE_PATH}
+          name={subject.name}
+          large
+        />
+        <div className="profile__who">
+          <div className="profile__name">{subject.name}</div>
+          <div className="profile__role">
+            {member?.role ?? (guest ? "Visitor" : "In the world")}
+            {org && <span className="profile__org">{org.name}</span>}
+          </div>
+          <div className="profile__chips">
+            {resident && (
+              <span
+                className="profile__chip profile__chip--local"
+                title="A character the server walks about"
+              >
+                Resident
+              </span>
+            )}
+            {guest && (
+              <span className="profile__chip" title="Came in on the shared code">
+                Guest
+              </span>
+            )}
+            {subject.room ? (
+              <span className="profile__chip profile__chip--here">
+                {describeRoom(subject.room).label}
+              </span>
+            ) : (
+              <span className="profile__chip profile__chip--away">Not in the world</span>
+            )}
+            {subject.mic && <span className="profile__chip profile__chip--mic">Global Chat</span>}
           </div>
         </div>
+      </div>
 
-        {member?.backstory && <p className="profile__story">{member.backstory}</p>}
+      {member?.backstory && <p className="profile__story">{member.backstory}</p>}
 
-        {/*
+      {/*
           A resident hands badges out rather than earning them — standing
           beside one is a badge for whoever walked up — so their shelf is
           not empty, it does not exist, and the card says which.
         */}
-        {resident ? (
-          <div className="profile__shelf">
-            <div className="profile__shelf-name">Badges</div>
-            <p className="profile__none">
-              {subject.name} earns none. The locals are how badges are got, not who gets them — go
-              and stand next to them.
-            </p>
-          </div>
-        ) : guest ? (
-          /*
+      {resident ? (
+        <div className="profile__shelf">
+          <div className="profile__shelf-name">Badges</div>
+          <p className="profile__none">
+            {subject.name} earns none. The locals are how badges are got, not who gets them — go and
+            stand next to them.
+          </p>
+        </div>
+      ) : guest ? (
+        /*
             A guest's shelf does not exist either, for the other reason: they
             are passing through. Said rather than shown as a wall of grey,
             which would read as a list of things they have yet to do.
           */
-          <div className="profile__shelf">
-            <div className="profile__shelf-name">Badges</div>
-            <p className="profile__none">
-              Guests keep nothing — no badges, no eggs, no desk. {subject.name} is visiting on the
-              shared code, and nothing about a visit is kept.
-            </p>
+        <div className="profile__shelf">
+          <div className="profile__shelf-name">Badges</div>
+          <p className="profile__none">
+            Guests keep nothing — no badges, no eggs, no desk. {subject.name} is visiting on the
+            shared code, and nothing about a visit is kept.
+          </p>
+        </div>
+      ) : (
+        <div className="profile__shelf">
+          <div className="profile__shelf-name">
+            Badges
+            <span className="profile__tally">
+              {earned.length} of {BADGES.length}
+            </span>
           </div>
-        ) : (
-          <div className="profile__shelf">
-            <div className="profile__shelf-name">
-              Badges
-              <span className="profile__tally">
-                {earned.length} of {BADGES.length}
-              </span>
-            </div>
-            {earned.length === 0 && (
-              <p className="profile__none">
-                Nothing yet. They are earned by going places, playing what is in the lobbies, and
-                turning up when somebody else is about.
-              </p>
-            )}
-            {BADGE_GROUPS.map((group) => {
-              const mine = earned
-                .map((item) => badgeFor(item.code))
-                .filter((badge) => badge?.group === group.id);
-              if (mine.length === 0) return null;
-              return (
-                <div key={group.id} className="profile__group">
-                  <div className="profile__group-name">{group.title}</div>
-                  <div className="profile__badges">
-                    {mine.map((badge) => (
-                      <button
-                        key={badge!.code}
-                        type="button"
-                        className="profile__badge"
-                        title={badge!.description}
-                        onClick={() => openBadge(badge!.code)}
-                      >
-                        <span className="profile__badge-icon">{badge!.icon}</span>
-                        <span className="profile__badge-title">{badge!.title}</span>
-                      </button>
-                    ))}
-                  </div>
+          {earned.length === 0 && (
+            <p className="profile__none">
+              Nothing yet. They are earned by going places, playing what is in the lobbies, and
+              turning up when somebody else is about.
+            </p>
+          )}
+          {BADGE_GROUPS.map((group) => {
+            const mine = earned
+              .map((item) => badgeFor(item.code))
+              .filter((badge) => badge?.group === group.id);
+            if (mine.length === 0) return null;
+            return (
+              <div key={group.id} className="profile__group">
+                <div className="profile__group-name">{group.title}</div>
+                <div className="profile__badges">
+                  {mine.map((badge) => (
+                    <button
+                      key={badge!.code}
+                      type="button"
+                      className="profile__badge"
+                      title={badge!.description}
+                      onClick={() => openBadge(badge!.code)}
+                    >
+                      <span className="profile__badge-icon">{badge!.icon}</span>
+                      <span className="profile__badge-title">{badge!.title}</span>
+                    </button>
+                  ))}
                 </div>
-              );
-            })}
-            {/*
+              </div>
+            );
+          })}
+          {/*
               What is left, in outline. Half the point of a badge is knowing
               it is there to be had, and a shelf of only what has been won
               says nothing about what the world still holds.
             */}
-            {earned.length < BADGES.length && (
-              <>
-                <div className="profile__group-name profile__group-name--locked">
-                  Still out there
-                </div>
-                <div className="profile__badges">
-                  {BADGES.filter((badge) => !earnedCodes.has(badge.code)).map((badge) => (
-                    <button
-                      key={badge.code}
-                      type="button"
-                      className="profile__badge profile__badge--locked"
-                      title={badge.description}
-                      onClick={() => openBadge(badge.code)}
-                    >
-                      <span className="profile__badge-icon">{badge.icon}</span>
-                      <span className="profile__badge-title">{badge.title}</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
+          {earned.length < BADGES.length && (
+            <>
+              <div className="profile__group-name profile__group-name--locked">Still out there</div>
+              <div className="profile__badges">
+                {BADGES.filter((badge) => !earnedCodes.has(badge.code)).map((badge) => (
+                  <button
+                    key={badge.code}
+                    type="button"
+                    className="profile__badge profile__badge--locked"
+                    title={badge.description}
+                    onClick={() => openBadge(badge.code)}
+                  >
+                    <span className="profile__badge-icon">{badge.icon}</span>
+                    <span className="profile__badge-title">{badge.title}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
-        {/*
+      {/*
           And their basket. Not part of the shelf above, because a badge is
           something they did once and an egg is something they have — the
           two read as one list only until somebody has four of something.
@@ -284,42 +266,41 @@ export default function Profile() {
           Michael is where eggs come from, not somebody who collects them.
           And a guest, who keeps nothing, has said so on the shelf above.
         */}
-        {!resident && !guest && basket.length > 0 && (
-          <div className="profile__shelf">
-            <div className="profile__shelf-name">
-              Eggs
-              <span className="profile__tally">{basketSize(basket)}</span>
-            </div>
-            <div className="profile__eggs">
-              {EGG_KINDS.map((kind) => {
-                const count = basket.find((t) => t.tier === kind.id)?.count ?? 0;
-                if (count === 0) return null;
-                return (
-                  <button
-                    key={kind.id}
-                    type="button"
-                    className="profile__egg"
-                    title={kind.note}
-                    onClick={() => {
-                      // Hands over rather than stacking: the egg card is a
-                      // window over the same whole app, and one of them at a
-                      // time is what "over everything" can mean.
-                      close();
-                      gameEvents.emit("open-egg", kind.id);
-                    }}
-                  >
-                    <EggMark kind={kind} size={26} />
-                    <span className="profile__badge-title">
-                      {kind.name}
-                      {count > 1 && <span className="eggs__many">×{count}</span>}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+      {!resident && !guest && basket.length > 0 && (
+        <div className="profile__shelf">
+          <div className="profile__shelf-name">
+            Eggs
+            <span className="profile__tally">{basketSize(basket)}</span>
           </div>
-        )}
-      </div>
-    </div>
+          <div className="profile__eggs">
+            {EGG_KINDS.map((kind) => {
+              const count = basket.find((t) => t.tier === kind.id)?.count ?? 0;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={kind.id}
+                  type="button"
+                  className="profile__egg"
+                  title={kind.note}
+                  onClick={() => {
+                    // Hands over rather than stacking: the egg card is a
+                    // window over the same whole app, and one of them at a
+                    // time is what "over everything" can mean.
+                    close();
+                    gameEvents.emit("open-egg", kind.id);
+                  }}
+                >
+                  <EggMark kind={kind} size={26} />
+                  <span className="profile__badge-title">
+                    {kind.name}
+                    {count > 1 && <span className="eggs__many">×{count}</span>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </CardWindow>
   );
 }

@@ -11,6 +11,7 @@ import {
   SPOOK_SPEED_PX_S,
   WANDER_SPEED_PX_S,
   presenceIdFor,
+  type Whereabouts,
 } from "../residents";
 import {
   PERSONAL_SPACE_PX,
@@ -23,11 +24,12 @@ import {
   hauntsOf,
   outsideSpots,
   residentById,
+  reachable,
   roomToStand,
   yardArea,
-  type Whereabouts,
 } from "../../world/residents";
 import { worldSolids } from "../../world/scenery";
+import { WOOD_WANDER_SPOTS } from "../../world/wood";
 import { EGG_CHANCE } from "../../world/eggs";
 import { openGround, routeAcross, type Point } from "../../world/route";
 import { WORLD_HEIGHT, WORLD_WIDTH, operationsRoomCount, tenantFor } from "../../world/tenants";
@@ -901,6 +903,45 @@ describe("what a resident says when you walk up", () => {
       expect(at.x).toBeLessThanOrEqual(WORLD_WIDTH);
       expect(at.y).toBeLessThanOrEqual(WORLD_HEIGHT);
     }
+    setRoomBroadcast(null);
+  });
+
+  /**
+   * The far bank is open ground from end to end and nobody can get to it, so
+   * a dash that only asked whether its landing was clear picked spots across
+   * the water, found no way there, and left him standing still mid-fright.
+   * Startled from the south on the walk by the bank, every dash he sets off
+   * on has to end somewhere a walker could reach.
+   */
+  it("never bolts for ground across the river", () => {
+    let clock = 0;
+    listening();
+    const { sim, hub } = outside(() => clock, rolls(3));
+    // His walk is the simulation's own; this reaches in to stand him on the
+    // bank and read where each dash is headed, which nothing outside sees.
+    type Walker = { x: number; y: number; target: Point | null; legs: Point[] };
+    const him = (sim as unknown as { states: Map<string, Walker> }).states.get(michael.id)!;
+    const bank = WOOD_WANDER_SPOTS[3];
+    let dashes = 0;
+    for (let round = 0; round < 10; round++) {
+      hub.leave("visitor");
+      clock += SPOOK_MS + 1000;
+      sim.tick(clock);
+      him.x = bank.x;
+      him.y = bank.y;
+      him.target = null;
+      him.legs = [];
+      person(hub, { x: bank.x, y: bank.y + 40 });
+      for (let tick = 0; tick < 20; tick++) {
+        clock += 120;
+        sim.tick(clock);
+        const headed = him.legs[him.legs.length - 1] ?? him.target;
+        if (!headed) continue;
+        dashes += 1;
+        expect(reachable(headed), `${Math.round(headed.x)},${Math.round(headed.y)}`).toBe(true);
+      }
+    }
+    expect(dashes).toBeGreaterThan(50);
     setRoomBroadcast(null);
   });
 

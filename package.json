@@ -25,10 +25,9 @@
     "format:check": "prettier --check .",
     "prepare": "husky",
     "prepublishOnly": "node scripts/prepare-package.mjs",
-    "seed:erp": "tsx scripts/seed-erp.ts",
-    "reseed:erp": "tsx scripts/seed-erp.ts --force",
     "zoho:setup": "node scripts/zoho-setup.mjs",
     "build:map": "tsx scripts/build-map.ts && tsx scripts/build-assets.ts",
+    "build:art": "tsx scripts/make-world-art.mjs",
     "check:sheets": "tsx scripts/check-sheets.ts",
     "check:delivery": "tsx scripts/check-delivery.ts",
     "assets": "tsx scripts/build-assets.ts",
@@ -55,15 +54,12 @@
     "nextjs"
   ],
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.123.0",
     "@next/env": "16.1.6",
     "next-auth": "5.0.0-beta.32",
     "ws": "^8.19.0"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@tanstack/react-virtual": "^3.13.0",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",
@@ -76,10 +72,9 @@
     "next": "16.1.6",
     "phaser": "^3.90.0",
     "prettier": "^3",
-    "puppeteer": "^24.38.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "tailwindcss": "^4",
+    "sharp": "^0.34.5",
     "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^3"

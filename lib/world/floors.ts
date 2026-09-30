@@ -33,7 +33,7 @@ import {
   tenantsOf,
   type Tenant,
 } from "./tenants";
-import { residentsAt } from "./residents";
+import { residentsAt } from "./roster";
 import { CAST } from "./cast";
 import { CUBICLES_HEIGHT, cubicleCount, cubicleWidth } from "../map/cubicles";
 import { OPS_HEIGHT, opsWidth } from "../map/floor";

@@ -14,42 +14,20 @@
  * one is not left with a notice that will never come down.
  */
 
-import { useEffect, useSyncExternalStore } from "react";
-import { onRoomMessage, sendRoom } from "./room-socket";
+import { sendRoom } from "./room-socket";
+import { createSocketStore, useSocketStore } from "./socket-store";
 import type { MeetingNotice } from "./presence-types";
-
-let meetings: MeetingNotice[] = [];
-const listeners = new Set<() => void>();
-let listening = false;
-
-function listen() {
-  if (listening) return;
-  listening = true;
-  onRoomMessage((message) => {
-    if (message.type !== "meetings") return;
-    meetings = message.meetings;
-    for (const listener of listeners) listener();
-  });
-}
-
-function snapshot(): MeetingNotice[] {
-  return meetings;
-}
-
-function subscribe(listener: () => void): () => void {
-  listen();
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
 
 const NONE: MeetingNotice[] = [];
 
+const meetings = createSocketStore<MeetingNotice[]>({
+  initial: NONE,
+  reduce: (state, message) => (message.type === "meetings" ? message.meetings : state),
+});
+
 /** Every meeting this person may know about, as the server last said. */
 export function useMeetings(): MeetingNotice[] {
-  useEffect(listen, []);
-  return useSyncExternalStore(subscribe, snapshot, () => NONE);
+  return useSocketStore(meetings, (all) => all, NONE);
 }
 
 /** The one in a given room, if there is one. */

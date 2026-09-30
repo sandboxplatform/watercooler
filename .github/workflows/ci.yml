@@ -17,8 +17,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           # From .nvmrc, so the version lives in one place. The app needs
-          # Node 22: the room store and the ERP are built on node:sqlite,
-          # which arrived in 22.5 and does not exist before it.
+          # Node 22: the room store is built on node:sqlite, which arrived
+          # in 22.5 and does not exist before it.
           node-version-file: .nvmrc
           cache: pnpm
 
@@ -33,6 +33,16 @@ jobs:
       - name: Type check
         run: pnpm typecheck
 
+      # Next's own compile cache. Keyed on the lockfile and the sources, with
+      # the lockfile alone to fall back on, so an ordinary commit starts from
+      # the last build's cache rather than from nothing.
+      - uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('app/**', 'components/**', 'lib/**', 'next.config.ts') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
       - name: Build
         run: pnpm build
 
@@ -41,6 +51,9 @@ jobs:
       - name: Test
         run: pnpm test:all
 
+      # Not blocking yet: next, ws and the test and lint toolchains all carry
+      # high advisories that need their own upgrades. Make it blocking once
+      # `pnpm audit --audit-level=high` comes back clean.
       - name: Audit dependencies
         run: pnpm audit --audit-level=high
         continue-on-error: true
@@ -65,9 +78,8 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.HEALTH_URL != ''
     runs-on: ubuntu-latest
     # Above the poll's own window, which is twenty-five minutes: this image
-    # runs apt-get, installs the agent CLI from npm, then pnpm install and
-    # next build, and Railway waits on its own health check before moving
-    # traffic. The first attempt at this allowed ten minutes and failed on a
+    # runs pnpm install, next build and apt-get, and Railway waits on its own
+    # health check before moving traffic. The first attempt at this allowed ten minutes and failed on a
     # deploy that was still going.
     timeout-minutes: 35
     permissions:

@@ -50,6 +50,16 @@ export class Traffic {
    */
   constructor(private readonly random: () => number = Math.random) {}
 
+  /**
+   * The cars as kept, for a caller that only looks — the socket asks every
+   * tick whether one is driving through somebody, and a copy of the road
+   * for each asking is an allocation a tick for an answer that is nearly
+   * always no.
+   */
+  get driving(): readonly Readonly<Car>[] {
+    return this.cars;
+  }
+
   /** What is on the road, for the wire and for a browser just arriving. */
   get onTheRoad(): Car[] {
     return this.cars.map(({ id, heading, colour, y }) => ({
@@ -72,7 +82,10 @@ export class Traffic {
     // down once and the two sides cannot disagree about where a car has got
     // to between the messages that say anything at all.
     const before = this.cars.length;
-    this.cars = this.cars.map((car) => drive(car, deltaMs)).filter((car) => !goneBy(car));
+    // An empty road is most ticks, and stepping it should cost nothing.
+    if (before > 0) {
+      this.cars = this.cars.map((car) => drive(car, deltaMs)).filter((car) => !goneBy(car));
+    }
     let changed = this.cars.length !== before;
 
     if (this.nextAt === 0) this.nextAt = now + this.gap();

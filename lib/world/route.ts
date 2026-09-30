@@ -182,74 +182,74 @@ export function routeAcross(
 ): Point[] | null {
   const cols = Math.ceil(bounds.width / cell);
   const rows = Math.ceil(bounds.height / cell);
-  const cellOf = (p: Point) => ({
-    cx: Math.min(cols - 1, Math.max(0, Math.floor(p.x / cell))),
-    cy: Math.min(rows - 1, Math.max(0, Math.floor(p.y / cell))),
-  });
+  const cellOf = (p: Point) =>
+    Math.min(rows - 1, Math.max(0, Math.floor(p.y / cell))) * cols +
+    Math.min(cols - 1, Math.max(0, Math.floor(p.x / cell)));
 
   const goal = cellOf(to);
-  const key = (cx: number, cy: number) => cy * cols + cx;
-
   const cells = blockedCells(solids, cols, rows, cell);
-  const blocked = (cx: number, cy: number) => cells[cy * cols + cx] === 1;
-
-  if (blocked(goal.cx, goal.cy)) return null;
+  if (cells[goal] === 1) return null;
 
   // Somebody standing in a solid walks out of it first, and the route proper
   // starts from open ground. Being in one is not their doing — a prop can be
   // placed over a spot, or a rounding can nudge a foot inside a wall — and
   // refusing to plan from there would leave them stuck for good.
   const stood = cellOf(from);
-  const escape = blocked(stood.cx, stood.cy) ? nearestFree(stood, cols, rows, blocked, key) : stood;
-  if (!escape) return null;
-  const start = escape;
-  const startKey = key(start.cx, start.cy);
+  const search = searchFor(cols, rows);
+  const start = cells[stood] === 1 ? nearestFree(stood, cols, rows, cells, search) : stood;
+  if (start < 0) return null;
 
-  // Breadth-first, so the walk found is as short as the grid allows. `came`
-  // doubles as the visited set.
-  const came = new Map<number, number>([[startKey, -1]]);
-  const queue = [start];
+  // A goal in another part of the map is no way through, and saying so is one
+  // array read rather than a flood of everything the start can reach: the far
+  // bank of the river is open ground from end to end, and a walk asked for
+  // over there used to cost a search of the whole map to find it wanting.
+  const regions = regionsOf(cells, cols, rows);
+  if (regions[start] !== regions[goal]) return null;
+
+  // Breadth-first, so the walk found is as short as the grid allows. The
+  // neighbours are taken in the same order they always were — east, west,
+  // south, north — which is what decides between two walks of equal length.
+  const { came, seen, queue } = search;
+  const stamp = nextStamp(search);
+  seen[start] = stamp;
+  came[start] = -1;
   let head = 0;
-  let found = startKey === key(goal.cx, goal.cy);
-  while (head < queue.length && !found) {
-    const { cx, cy } = queue[head++];
-    for (const [dx, dy] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ]) {
-      const nx = cx + dx;
-      const ny = cy + dy;
+  let tail = 0;
+  queue[tail++] = start;
+  let found = start === goal;
+  while (head < tail && !found) {
+    const at = queue[head++];
+    const cx = at % cols;
+    const cy = (at - cx) / cols;
+    for (let n = 0; n < 4; n++) {
+      const nx = cx + DX[n];
+      const ny = cy + DY[n];
       if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-      const next = key(nx, ny);
-      if (came.has(next) || blocked(nx, ny)) continue;
-      came.set(next, key(cx, cy));
-      if (next === key(goal.cx, goal.cy)) {
+      const next = ny * cols + nx;
+      if (seen[next] === stamp || cells[next] === 1) continue;
+      seen[next] = stamp;
+      came[next] = at;
+      if (next === goal) {
         found = true;
         break;
       }
-      queue.push({ cx: nx, cy: ny });
+      queue[tail++] = next;
     }
   }
   if (!found) return null;
 
   // Back from the goal to the start, then the right way round.
   const cellPath: number[] = [];
-  for (let at: number | undefined = key(goal.cx, goal.cy); at !== undefined && at !== -1; ) {
-    cellPath.push(at);
-    at = came.get(at);
-  }
+  for (let at = goal; at !== -1; at = came[at]) cellPath.push(at);
   cellPath.reverse();
 
   // Keep only the cells where the direction changes: everything between two
   // corners is a straight line, and a walker needs the corners.
   const corners: Point[] = [];
-  for (let i = 1; i < cellPath.length; i++) {
+  for (let i = 1; i < cellPath.length - 1; i++) {
     const previous = cellPath[i - 1];
     const current = cellPath[i];
     const next = cellPath[i + 1];
-    if (next === undefined) break;
     const wasVertical = Math.abs(current - previous) !== 1;
     const isVertical = Math.abs(next - current) !== 1;
     if (wasVertical === isVertical) continue;
@@ -262,46 +262,139 @@ export function routeAcross(
 
   // Out of the solid first, if they were in one, so the walk to the first
   // corner does not cut back through it.
-  if (escape !== stood) {
-    corners.unshift({ x: (escape.cx + 0.5) * cell, y: (escape.cy + 0.5) * cell });
+  if (start !== stood) {
+    const cx = start % cols;
+    corners.unshift({ x: (cx + 0.5) * cell, y: ((start - cx) / cols + 0.5) * cell });
   }
   return corners;
 }
 
+/** East, west, south and north: the order a search takes its neighbours in. */
+const DX = [1, -1, 0, 0] as const;
+const DY = [0, 0, 1, -1] as const;
+
 /**
- * The closest cell not inside a solid, searched outward from a blocked one.
+ * The working memory of a search, one set per shape of grid and reused.
  *
- * Walks the grid without regard for what is solid — the point is to get out
- * of it — and stops at the first cell that is clear. Null when the whole map
- * is solid, which would mean the map was built wrong.
+ * A route across the world map is a flood of up to fifty thousand cells, and
+ * it used to build a `Map` for where each came from and an array of little
+ * objects for the queue, every time. These are typed arrays the size of the
+ * grid, allocated once; `seen` holds the number of the search that last
+ * reached a cell, so starting a new search is bumping a counter rather than
+ * clearing fifty thousand entries. Nothing here is re-entrant, and nothing
+ * needs it to be.
  */
-function nearestFree(
-  from: { cx: number; cy: number },
-  cols: number,
-  rows: number,
-  blocked: (cx: number, cy: number) => boolean,
-  key: (cx: number, cy: number) => number,
-): { cx: number; cy: number } | null {
-  const seen = new Set<number>([key(from.cx, from.cy)]);
-  const queue = [from];
-  let head = 0;
-  while (head < queue.length) {
-    const { cx, cy } = queue[head++];
-    for (const [dx, dy] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ]) {
-      const nx = cx + dx;
-      const ny = cy + dy;
-      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-      const next = key(nx, ny);
-      if (seen.has(next)) continue;
-      seen.add(next);
-      if (!blocked(nx, ny)) return { cx: nx, cy: ny };
-      queue.push({ cx: nx, cy: ny });
+interface Search {
+  came: Int32Array;
+  seen: Uint32Array;
+  queue: Int32Array;
+  stamp: number;
+}
+
+const searches = new Map<string, Search>();
+
+function searchFor(cols: number, rows: number): Search {
+  const shape = `${cols}x${rows}`;
+  let search = searches.get(shape);
+  if (!search) {
+    const size = cols * rows;
+    search = {
+      came: new Int32Array(size),
+      seen: new Uint32Array(size),
+      queue: new Int32Array(size),
+      stamp: 0,
+    };
+    searches.set(shape, search);
+  }
+  return search;
+}
+
+/** A fresh number for a new search, clearing the marks on the rare day it wraps. */
+function nextStamp(search: Search): number {
+  if (search.stamp === 0xffffffff) {
+    search.seen.fill(0);
+    search.stamp = 0;
+  }
+  return ++search.stamp;
+}
+
+/**
+ * Which connected stretch of open ground each cell is in: 0 for a blocked
+ * cell, and the same number for every cell a walker could get between.
+ *
+ * Worked out once per painted grid and kept against it, which is what lets a
+ * route to somewhere unreachable be refused without a search. Numbered in the
+ * order the cells are met, so the answer is the same every time.
+ */
+const labelled = new WeakMap<Uint8Array, Int32Array>();
+
+function regionsOf(cells: Uint8Array, cols: number, rows: number): Int32Array {
+  const kept = labelled.get(cells);
+  if (kept) return kept;
+  const size = cols * rows;
+  const regions = new Int32Array(size);
+  const queue = new Int32Array(size);
+  let region = 0;
+  for (let first = 0; first < size; first++) {
+    if (cells[first] === 1 || regions[first] !== 0) continue;
+    region += 1;
+    regions[first] = region;
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = first;
+    while (head < tail) {
+      const at = queue[head++];
+      const cx = at % cols;
+      const cy = (at - cx) / cols;
+      for (let n = 0; n < 4; n++) {
+        const nx = cx + DX[n];
+        const ny = cy + DY[n];
+        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+        const next = ny * cols + nx;
+        if (cells[next] === 1 || regions[next] !== 0) continue;
+        regions[next] = region;
+        queue[tail++] = next;
+      }
     }
   }
-  return null;
+  labelled.set(cells, regions);
+  return regions;
+}
+
+/**
+ * The closest cell not inside a solid, searched outward from a blocked one;
+ * -1 when the whole map is solid, which would mean the map was built wrong.
+ *
+ * Walks the grid without regard for what is solid — the point is to get out
+ * of it — and stops at the first cell that is clear.
+ */
+function nearestFree(
+  from: number,
+  cols: number,
+  rows: number,
+  cells: Uint8Array,
+  search: Search,
+): number {
+  const { seen, queue } = search;
+  const stamp = nextStamp(search);
+  seen[from] = stamp;
+  let head = 0;
+  let tail = 0;
+  queue[tail++] = from;
+  while (head < tail) {
+    const at = queue[head++];
+    const cx = at % cols;
+    const cy = (at - cx) / cols;
+    for (let n = 0; n < 4; n++) {
+      const nx = cx + DX[n];
+      const ny = cy + DY[n];
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      const next = ny * cols + nx;
+      if (seen[next] === stamp) continue;
+      seen[next] = stamp;
+      if (cells[next] !== 1) return next;
+      queue[tail++] = next;
+    }
+  }
+  return -1;
 }

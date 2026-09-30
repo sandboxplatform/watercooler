@@ -27,6 +27,20 @@ export function isArcadeGameId(value: unknown): value is ArcadeGameId {
   return ARCADE_GAME_IDS.some((id) => id === value);
 }
 
+/**
+ * What each game is called, for the same reason: the sign over a cabinet
+ * names its game, and the fixture registry that letters it is read by every
+ * page. Asking the games themselves put all five, with their drawing code,
+ * in the first chunk of the page. Each game's own `title` reads it from here.
+ */
+export const ARCADE_TITLES: Record<ArcadeGameId, string> = {
+  flappy: "Flappy",
+  snake: "Snake",
+  breakout: "Breakout",
+  "oak-island": "Oak Island",
+  solitaire: "Solitaire",
+};
+
 /** The cabinet's screen, in game pixels; the canvas scales it. */
 export const SCREEN = { width: 320, height: 480 };
 

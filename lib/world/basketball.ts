@@ -81,14 +81,14 @@ export const RIM_RADIUS = 20;
  * meets one square on and the only component a flat wall reverses is the
  * one across it.
  *
- * Every number is read off the picture in `scripts/make-world-art.mjs`,
- * which draws the board at three quarters. Its middle column stands
+ * `scripts/make-world-art.mjs` imports these and draws the board to them,
+ * at three quarters. Its middle column stands
  * `BOARD_BEHIND_RIM` back from the rim, and the face runs between these two
  * heights, measured up from the post's own feet like `RIM_Z`. A board the
  * ball meets where no board is drawn is worse than no board at all, since a
  * rebound out of clear air has nothing on screen to explain it.
  */
-const BOARD_BEHIND_RIM = 26;
+export const BOARD_BEHIND_RIM = 26;
 /**
  * Half the board's width, across the court.
  *
@@ -134,7 +134,7 @@ export interface Hoop {
 }
 
 /** How far the rim hangs out from the post it is bolted to. */
-const RIM_REACH = 30;
+export const RIM_REACH = 30;
 /** How far in from the end line the post stands. */
 const POST_INSET = 20;
 

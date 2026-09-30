@@ -185,11 +185,6 @@ export function misconfiguredCodes(): string[] {
  * that the process is up). `/api/auth/` stays open so Auth.js sign-in can
  * work once it is configured. `/_next/` is the build's own assets, without
  * which the unlock page cannot render itself.
- *
- * Deliberately absent: `/api/mettara/tools` and `/api/internal/dispatch`.
- * Those are machine-to-machine and carry their own, stronger authentication
- * (an HMAC signature and a localhost-plus-secret check); server.ts answers
- * them before the gate is consulted.
  */
 export function isOpenPath(pathname: string): boolean {
   if (pathname === "/unlock" || pathname === "/api/unlock") return true;
@@ -302,14 +297,27 @@ export function readCookie(req: IncomingMessage, name: string): string | undefin
 }
 
 /**
- * The caller's address. Behind Railway's proxy the socket address is the
- * proxy's, so the first hop of x-forwarded-for is the real one. Only trusted
- * for rate limiting, where a spoofed value costs the spoofer their own quota.
+ * The caller's address, for rate limiting and the log and nothing else.
+ *
+ * Behind Railway's proxy the socket address is the proxy's, so the address
+ * comes out of `X-Forwarded-For` — and out of its **last** entry, which is
+ * the one the proxy appended from the connection it actually received. The
+ * first entry is whatever the client chose to send: keyed on that, a guesser
+ * got a fresh ten attempts by putting a new address at the front of each
+ * request, which is no limit at all.
+ *
+ * That assumes exactly one proxy in front, appending, which is how Railway
+ * is built. A second one in front of it (a CDN) would make the last entry
+ * that proxy's address and put every visitor on one quota; with no proxy at
+ * all the header is entirely the client's, and the limit is only as good as
+ * the client's honesty — so a server reachable directly should not be
+ * trusting this header, and this one is not meant to be reached that way.
  */
 export function clientIp(req: IncomingMessage): string {
   const forwarded = req.headers["x-forwarded-for"];
-  const first = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0];
-  return first?.trim() || req.socket.remoteAddress || "unknown";
+  const joined = Array.isArray(forwarded) ? forwarded.join(",") : forwarded;
+  const last = joined?.split(",").at(-1)?.trim();
+  return last || req.socket.remoteAddress || "unknown";
 }
 
 /** Whether this request may pass. Open when no gate is configured. */
@@ -327,14 +335,25 @@ export function identityOf(cookieHeader: string | undefined): AccessIdentity {
   return verifyToken(cookieFrom(cookieHeader, ACCESS_COOKIE)) ?? "visitor";
 }
 
-/** Read one cookie out of a raw Cookie header, for callers without a request. */
+/**
+ * Read one cookie out of a raw Cookie header, for callers without a request.
+ *
+ * A value that is not valid percent-encoding — `wc_access=%` — is no cookie
+ * at all rather than a throw. It used to throw, from inside the gate and the
+ * socket upgrade alike, and neither was waiting for it: the request was left
+ * hanging with no answer, which anybody could do with one header.
+ */
 export function cookieFrom(header: string | undefined, name: string): string | undefined {
   if (!header) return undefined;
   for (const part of header.split(";")) {
     const eq = part.indexOf("=");
     if (eq < 0) continue;
     if (part.slice(0, eq).trim() !== name) continue;
-    return decodeURIComponent(part.slice(eq + 1).trim());
+    try {
+      return decodeURIComponent(part.slice(eq + 1).trim());
+    } catch {
+      return undefined;
+    }
   }
   return undefined;
 }
@@ -381,6 +400,33 @@ function cookieHeader(value: string, maxAge: number, secure: boolean): string {
 
 const attempts = new Map<string, { count: number; firstAt: number }>();
 
+/**
+ * Forget every address whose window has closed, and say how many are left.
+ *
+ * An address was only forgotten when it came back, so one that guessed once
+ * and never returned was held for as long as the server ran — and the key is
+ * whatever the proxy says the caller's address is, of which there are a great
+ * many. Exported for the test; the timer below is what calls it.
+ */
+export function sweepAttempts(now: number = Date.now()): number {
+  for (const [ip, record] of attempts) {
+    if (now - record.firstAt > ATTEMPT_WINDOW_MS) attempts.delete(ip);
+  }
+  return attempts.size;
+}
+
+/**
+ * Started by the first failure rather than on import: a route handler loads
+ * this module into Next's own graph, and a copy that never counts anything
+ * has nothing to sweep. Unref'd, so it never holds a process open.
+ */
+let sweeper: ReturnType<typeof setInterval> | null = null;
+function keepSweeping() {
+  if (sweeper) return;
+  sweeper = setInterval(() => sweepAttempts(), ATTEMPT_WINDOW_MS);
+  sweeper.unref?.();
+}
+
 /** True when this address has spent its attempts for now. */
 export function rateLimited(ip: string): boolean {
   const record = attempts.get(ip);
@@ -393,6 +439,7 @@ export function rateLimited(ip: string): boolean {
 }
 
 export function recordFailure(ip: string): void {
+  keepSweeping();
   const now = Date.now();
   const record = attempts.get(ip);
   if (!record || now - record.firstAt > ATTEMPT_WINDOW_MS) {

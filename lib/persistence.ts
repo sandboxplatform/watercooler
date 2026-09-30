@@ -1,10 +1,9 @@
 /**
  * Device-local preferences.
  *
- * World state — tasks, chat, sessions, seats — lives on the server now; see
- * lib/room-client.ts. What stays here is everything that is a property of this
- * browser rather than of the world: gateway connection settings, music volume,
- * and whether onboarding has been seen.
+ * Everything here is a property of this browser rather than of the world:
+ * the name typed at the door, the music's volume, whether sprinting is on,
+ * how far out the world map was left and how wide the column was dragged.
  */
 
 import { createLogger } from "./logger";
@@ -22,15 +21,6 @@ import {
 
 const log = createLogger("Persistence");
 
-export interface PersistedSeatConfig {
-  seatId: string;
-  label?: string;
-  roleTitle?: string;
-  assigned?: boolean;
-  spriteKey?: string;
-  spritePath?: string;
-}
-
 // ── Generic helpers ────────────────────────────────────
 
 /** Keys were prefixed "agent-town:" before the rename. */
@@ -39,8 +29,8 @@ const CURRENT_PREFIX = "watercooler:";
 
 /**
  * Read a preference, adopting the pre-rename value if this browser still has
- * one. Without this the rename would silently forget everyone's display name,
- * music volume and gateway settings.
+ * one. Without this the rename would silently forget everyone's display name
+ * and music volume.
  */
 export function lsGet<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -120,7 +110,7 @@ export function saveWorldZoom(zoom: number) {
   lsSet(LS_WORLD_ZOOM, zoom);
 }
 
-/** How wide the reader left the chat column. Clamped, in case of a stale value. */
+/** How wide the reader left the column. Clamped, in case of a stale value. */
 export function loadSidebarWidth(): number {
   const stored = lsGet<number>(LS_SIDEBAR_WIDTH, SIDEBAR_DEFAULT_WIDTH);
   if (!Number.isFinite(stored)) return SIDEBAR_DEFAULT_WIDTH;

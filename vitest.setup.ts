@@ -9,9 +9,9 @@ import { join } from "node:path";
  * `voice-reach` and `lift-visibility` each start one. They ran against a
  * single file — one per run, named by the process — and they run at the same
  * time, so SQLite answered whichever asked second "database is locked". That
- * came back as an uncaught exception out of `RoomStore.ensureRoom`, by way of
- * the achievement granted to somebody joining a room, so a run failed with
- * every one of its 1,330 tests passing. Roughly one run in three, which is
+ * came back as an uncaught exception out of the room store, by way of
+ * the badge granted to somebody joining a room, so a run failed with every
+ * one of its tests passing. Roughly one run in three, which is
  * the worst kind: too rare to be a finding and too common to ignore, and it
  * failed CI and the push gate for reasons nothing in the suite explained.
  *
@@ -21,7 +21,7 @@ import { join } from "node:path";
  * the only writer of. Sharing one was never right — an assertion about what a
  * room holds is otherwise an assertion about what the rest of the suite
  * happened to leave there — and it went unnoticed because the writes involved
- * were a joining player's activity line and badge, which nothing asserts on.
+ * were a joining player's badges, which nothing asserts on.
  *
  * A setup file rather than `env` in the config, because `env` is one value for
  * the whole run and this has to be one per file. It has to be *this* rather

@@ -20,7 +20,7 @@ import { ORGANISATIONS } from "@/lib/world/tenants";
  * alone wants `pnpm test:all`. Same category as `exact.test.ts` and the
  * asset manifest.
  */
-const RECORD = "public/characters/examples/customer_domains.json";
+const RECORD = "data/customer_domains.json";
 
 interface Recorded {
   customers: { name: string; account_id: string; domains: string[] }[];

@@ -13,6 +13,7 @@
  */
 
 import { createLogger } from "../logger";
+import { outboundSignal } from "../server/outbound";
 import {
   toBoardSummaries,
   toBoardView,
@@ -27,6 +28,13 @@ const API = "https://api.trello.com/1";
 
 /** Long enough to spare Trello's rate limit, short enough to feel live. */
 export const BOARD_CACHE_MS = 30_000;
+
+/**
+ * How long the list of boards the token can see is held. It is the picker's
+ * list and the table names are resolved against, and it changes when
+ * somebody makes a board — not between two reads of the one on the wall.
+ */
+export const BOARD_LIST_CACHE_MS = 60 * 60 * 1000;
 
 export interface TrelloConfig {
   key: string;
@@ -76,7 +84,11 @@ async function get(
 
   let response: Response;
   try {
-    response = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
+    response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: outboundSignal(),
+    });
   } catch (err) {
     // The path, never the URL: the URL carries the token.
     log.warn(`could not reach Trello for ${path}:`, (err as Error).message);

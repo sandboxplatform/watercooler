@@ -9,12 +9,28 @@
  * ramp and an outline, the way the furniture does, so it sits beside the
  * borrowed café props without a seam.
  *
- *   node scripts/make-world-art.mjs
+ * **The measurements are the world's, imported rather than copied.** A prop's
+ * size, the hoop's rim and board, the eggs' shells, the mailbox and the
+ * volcano's cone are each read by the game as well as drawn here, and they
+ * used to be written down twice — once in the `.ts` the game reads, once
+ * here — held together by tests reading this file as text. Run under tsx,
+ * which is what lets a `.mjs` import a `.ts`:
+ *
+ *   pnpm exec tsx scripts/make-world-art.mjs
  */
 
 import { deflateSync } from "zlib";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
+
+// Imported rather than `import`ed: tsx hands a `.ts` to a static import from
+// a `.mjs` as CommonJS, whose names Node cannot see, and to a dynamic one as
+// the module it is.
+const { PROPS } = await import("../lib/world/ground.ts");
+const { BOARD_BEHIND_RIM, BOARD_BOTTOM_Z, BOARD_TOP_Z, RIM_REACH, RIM_Z } =
+  await import("../lib/world/basketball.ts");
+const { EGG_KINDS } = await import("../lib/world/eggs.ts");
+const { CONE } = await import("../lib/world/volcano.ts");
 
 const OUT = join(process.cwd(), "public", "sprites", "world");
 mkdirSync(OUT, { recursive: true });
@@ -536,7 +552,11 @@ function slot(name, w, h, draw) {
   // would say why. Widen the sheet: nothing measures it but this.
   if (cursor > props.w) throw new Error(`props sheet full at "${name}": widen it`);
 }
-slot("tree", 96, 120, (set, d) => {
+/** A prop the world places, drawn at the size `PROPS` says it stands at. */
+function prop(name, draw) {
+  slot(name, PROPS[name].width, PROPS[name].height, draw);
+}
+prop("tree", (set, d) => {
   d.ellipse(48, 112, 30, 8, P.shadow);
   d.rect(42, 80, 54, 112, P.woodDark);
   d.rect(45, 80, 50, 112, P.wood);
@@ -550,7 +570,7 @@ slot("tree", 96, 120, (set, d) => {
   d.disc(28, 62, 11, P.ink);
   d.disc(28, 62, 9, P.leafDark);
 });
-slot("bush", 64, 48, (set, d) => {
+prop("bush", (set, d) => {
   d.ellipse(32, 44, 24, 5, P.shadow);
   d.ellipse(32, 26, 28, 16, P.ink);
   d.ellipse(32, 26, 26, 14, P.leafDark);
@@ -567,7 +587,7 @@ slot("bush", 64, 48, (set, d) => {
     set(fx + 1, fy + 1, col);
   }
 });
-slot("lamp", 32, 96, (set, d) => {
+prop("lamp", (set, d) => {
   d.ellipse(16, 92, 10, 3, P.shadow);
   d.rect(13, 20, 19, 90, P.steelDark);
   d.rect(14, 20, 16, 90, P.steel);
@@ -579,7 +599,7 @@ slot("lamp", 32, 96, (set, d) => {
   d.rect(10, 10, 16, 14, P.slabLit);
   d.rect(12, 2, 20, 6, P.ink2);
 });
-slot("bench", 96, 48, (set, d) => {
+prop("bench", (set, d) => {
   d.ellipse(48, 44, 40, 4, P.shadow);
   d.rect(6, 30, 12, 44, P.ink);
   d.rect(84, 30, 90, 44, P.ink);
@@ -594,7 +614,7 @@ slot("bench", 96, 48, (set, d) => {
   d.rect(4, 26, 92, 27, P.woodLit);
   d.outline(3, 25, 93, 33);
 });
-slot("fountain", 144, 96, (set, d) => {
+prop("fountain", (set, d) => {
   d.ellipse(72, 88, 66, 8, P.shadow);
   d.ellipse(72, 60, 66, 30, P.ink);
   d.ellipse(72, 60, 64, 28, P.stoneDark);
@@ -611,7 +631,7 @@ slot("fountain", 144, 96, (set, d) => {
   d.rect(70, 4, 74, 20, P.waterLit);
   d.rect(71, 2, 73, 6, P.glassLit);
 });
-slot("fountain2", 144, 96, (set, d) => {
+slot("fountain2", PROPS.fountain.width, PROPS.fountain.height, (set, d) => {
   d.ellipse(72, 88, 66, 8, P.shadow);
   d.ellipse(72, 60, 66, 30, P.ink);
   d.ellipse(72, 60, 64, 28, P.stoneDark);
@@ -628,7 +648,7 @@ slot("fountain2", 144, 96, (set, d) => {
   d.rect(70, 2, 74, 20, P.waterLit);
   d.rect(68, 0, 76, 4, P.glassLit);
 });
-slot("planter", 64, 48, (set, d) => {
+prop("planter", (set, d) => {
   d.ellipse(32, 44, 26, 4, P.shadow);
   d.rect(8, 22, 56, 44, P.wood);
   d.rect(8, 22, 56, 26, P.woodLit);
@@ -654,7 +674,7 @@ slot("planter", 64, 48, (set, d) => {
 // like one of the town's. Logs rather than boards, a steep dark roof, one lit
 // window and a door nobody opens — see `WOOD_CABIN` in lib/world/wood.ts,
 // which is across the water and reachable by nothing.
-slot("cabin", 64, 72, (set, d) => {
+prop("cabin", (set, d) => {
   d.ellipse(32, 69, 24, 3, P.shadow);
   // The walls: courses of logs, the lower ones in shadow.
   d.rect(8, 32, 56, 68, P.wood);
@@ -710,7 +730,7 @@ slot("cabin", 64, 72, (set, d) => {
  * cleanly it reads as a sign rather than as something somebody daubed on a
  * rock, which is the whole of what it is for.
  */
-slot("boulder", 64, 56, (set, d) => {
+prop("boulder", (set, d) => {
   const WATERLINE = 49;
   // A wide slab at the water and a mass narrowing over it: broad where it
   // goes in, so it reads as a rock standing in the river rather than one
@@ -787,7 +807,7 @@ slot("boulder", 64, 56, (set, d) => {
   lap(29, 5, 41);
   lap(23, 3, 13);
 });
-slot("signpost", 48, 96, (set, d) => {
+prop("signpost", (set, d) => {
   d.ellipse(24, 92, 8, 3, P.shadow);
   d.rect(21, 30, 27, 90, P.woodDark);
   d.rect(22, 30, 25, 90, P.wood);
@@ -798,7 +818,7 @@ slot("signpost", 48, 96, (set, d) => {
   d.rect(10, 16, 38, 18, P.ink2);
   d.rect(10, 22, 30, 24, P.ink2);
 });
-slot("sheep", 48, 40, (set, d) => {
+prop("sheep", (set, d) => {
   d.ellipse(24, 37, 14, 3, P.shadow);
   // legs
   for (const lx of [12, 19, 29, 36]) d.rect(lx, 26, lx + 3, 36, P.ink2);
@@ -814,7 +834,7 @@ slot("sheep", 48, 40, (set, d) => {
   set(5, 19, [250, 250, 250, 255]);
   set(6, 19, [250, 250, 250, 255]);
 });
-slot("board", 144, 88, (set, d) => {
+prop("board", (set, d) => {
   d.ellipse(72, 84, 60, 4, P.shadow);
   for (const px of [18, 120]) {
     d.rect(px, 36, px + 6, 82, P.woodDark);
@@ -843,24 +863,23 @@ slot("board", 144, 88, (set, d) => {
  * what keeps the two ends of the court identical furniture rather than two
  * pictures that have to be kept in step.
  *
- * The numbers are the ones in lib/world/basketball.ts and have to stay
- * them: the pole stands at the middle of the frame, on the bottom row, and
- * the rim sits RIM_REACH across and RIM_Z up from it — which is where a
- * falling ball is judged to have gone in. A rim drawn anywhere else is a
- * hoop the ball passes through beside.
+ * The numbers are lib/world/basketball.ts's, imported: the pole stands at
+ * the middle of the frame, on the bottom row, and the rim sits RIM_REACH
+ * across and RIM_Z up from it — which is where a falling ball is judged to
+ * have gone in. A rim drawn anywhere else is a hoop the ball passes through
+ * beside.
  *
- * The board is the same bargain and is now three numbers rather than a
- * picture: a ball bounces off the pane it stands on, so its middle column
- * is BOARD_BEHIND_RIM back from the rim (POST + 4 here, the middle of the
- * skewed face), and its face runs between BOARD_BOTTOM_Z and BOARD_TOP_Z —
- * BASE minus the top edge, and that less TALL. Redraw it taller, lower or
- * further back and the ball comes off thin air beside it.
+ * The board is the same bargain: a ball bounces off the pane it stands on,
+ * so its middle column is BOARD_BEHIND_RIM back from the rim and its face
+ * runs between BOARD_BOTTOM_Z and BOARD_TOP_Z. Its width and its skew are
+ * the picture's own. Move the pane in the game and the drawing moves with
+ * it, rather than the ball coming off thin air beside the board.
  */
 function hoop(dir) {
   const POST = 56;
   const BASE = 128;
-  const RIM_X = POST + 30 * dir;
-  const RIM_Y = BASE - 64;
+  const RIM_X = POST + RIM_REACH * dir;
+  const RIM_Y = BASE - RIM_Z;
   return (set, d) => {
     // An elliptical ring, for the rim: the disc helpers fill, and a filled
     // rim is a plate. Drawn as a band of the normalised radius.
@@ -882,13 +901,18 @@ function hoop(dir) {
     // The board, at three quarters: a column at a time, each one a little
     // lower than the last, so the face turns towards the court. Drawn flat
     // on it read as a white slab on a stick and nothing like a backboard.
-    const BACK = 10;
+    //
+    // Placed off the pane the ball is judged against: the middle column
+    // stands `BOARD_BEHIND_RIM` back from the rim, and the face of that
+    // column runs from `BOARD_TOP_Z` down to `BOARD_BOTTOM_Z`.
     const WIDE = 28;
     const SKEW = 9;
-    const TALL = 40;
+    const BACK = WIDE / 2 - (RIM_REACH - BOARD_BEHIND_RIM);
+    const TALL = BOARD_TOP_Z - BOARD_BOTTOM_Z;
+    const TOP = BASE - BOARD_TOP_Z - Math.round(SKEW / 2);
     for (let i = 0; i <= WIDE; i++) {
       const x = POST + (BACK * -dir + i * dir);
-      const top = 6 + Math.round((i / WIDE) * SKEW);
+      const top = TOP + Math.round((i / WIDE) * SKEW);
       const edge = i === 0 || i === WIDE;
       for (let y = top; y <= top + TALL; y++) {
         const rim = edge || y === top || y === top + TALL;
@@ -926,8 +950,8 @@ function hoop(dir) {
     }
   };
 }
-slot("hoopWest", 112, 128, hoop(1));
-slot("hoopEast", 112, 128, hoop(-1));
+prop("hoopWest", hoop(1));
+prop("hoopEast", hoop(-1));
 /**
  * The basketball, drawn at the size it is judged at — BALL_RADIUS in
  * lib/world/basketball.ts — so a pixel of ground is a pixel of its own
@@ -981,11 +1005,8 @@ slot("ball", 20, 20, (set, d) => {
 /**
  * Michael's eggs, one frame per rung of the ladder.
  *
- * The shells are the `shell` colours in lib/world/eggs.ts, which is a `.ts`
- * this script cannot import — the same arrangement the basketball's board
- * and rim numbers are under, where what is written there is a measurement
- * of what is drawn here. Change a shell in one and change it in the other,
- * or the egg in the grass and the egg in the panel stop being the same egg.
+ * The shells are the `shell` colours in lib/world/eggs.ts, imported, so the
+ * egg in the grass and the egg in the panel cannot drift into two eggs.
  *
  * **The frame is centred on the ground the egg lies on**, not on the egg:
  * the egg's base sits on the middle row and the rest of the frame is empty
@@ -1002,64 +1023,32 @@ slot("ball", 20, 20, (set, d) => {
  * the size that difference can be seen at, which is half as tall again as
  * they were.
  */
-const EGGS = [
-  {
-    id: "plain",
-    mark: "smooth",
-    base: [232, 220, 192],
-    shade: [194, 177, 145],
-    lit: [246, 240, 222],
-  },
-  {
-    id: "speckled",
-    mark: "freckled",
-    base: [221, 208, 174],
-    shade: [138, 111, 74],
-    lit: [239, 230, 204],
-  },
-  {
-    id: "copper",
-    mark: "hammered",
-    base: [192, 122, 68],
-    shade: [142, 83, 38],
-    lit: [226, 164, 110],
-  },
-  {
-    id: "jade",
-    mark: "veined",
-    base: [111, 174, 154],
-    shade: [72, 121, 108],
-    lit: [162, 214, 194],
-  },
-  {
-    id: "gilded",
-    mark: "leafed",
-    base: [233, 180, 28],
-    shade: [156, 116, 16],
-    lit: [255, 234, 148],
-  },
-  {
-    id: "ruby",
-    mark: "cut",
-    base: [192, 36, 64],
-    shade: [115, 18, 42],
-    lit: [244, 112, 140],
-  },
-  {
-    id: "obsidian",
-    mark: "glassy",
-    base: [69, 62, 94],
-    shade: [38, 32, 54],
-    lit: [155, 138, 216],
-  },
-  {
-    id: "rainbow",
-    mark: "banded",
-    base: [122, 168, 224],
-    shade: [180, 94, 168],
-    lit: [242, 224, 122],
-  },
-];
+/** What each rung is marked with, which is the picture's business rather than the ladder's. */
+const MARKS = {
+  plain: "smooth",
+  speckled: "freckled",
+  copper: "hammered",
+  jade: "veined",
+  gilded: "leafed",
+  ruby: "cut",
+  obsidian: "glassy",
+  rainbow: "banded",
+};
+
+/** A `#rrggbb` shell tone as the three channels this script draws with. */
+const channels = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+
+const EGGS = EGG_KINDS.map((kind) => {
+  const mark = MARKS[kind.id];
+  if (!mark) throw new Error(`no marking for the ${kind.id} egg: add one to MARKS`);
+  return {
+    id: kind.id,
+    mark,
+    base: channels(kind.shell.base),
+    shade: channels(kind.shell.shade),
+    lit: channels(kind.shell.lit),
+  };
+});
 
 /** The bands on the one egg nobody can account for, crown to base. */
 const RAINBOW = [
@@ -1401,7 +1390,7 @@ for (const [name, body, dark] of [
  * silhouette that is neither: a dark barrel-topped tin on a pale post, with
  * the flag up in the desk's own warning red.
  */
-slot("mailbox", 40, 72, (set, d) => {
+prop("mailbox", (set, d) => {
   d.ellipse(18, 69, 12, 3, P.shadow);
 
   // The post. Lit down one side, which is what stops a six-pixel column
@@ -1504,7 +1493,7 @@ function stroke(set, x0, y0, x1, y1, r, c) {
  * it. Two lumps rather than one oval, because a single ellipse on the ground
  * is a saucer; the smaller one leaning on the larger is a rock.
  */
-slot("cinder", 64, 48, (set, d) => {
+prop("cinder", (set, d) => {
   d.ellipse(32, 44, 27, 5, P.shadow);
   d.ellipse(26, 31, 21, 13, P.ink);
   d.ellipse(44, 35, 14, 9, P.ink);
@@ -1540,7 +1529,7 @@ slot("cinder", 64, 48, (set, d) => {
 const DEADWOOD = [150, 138, 128, 255];
 const DEADWOOD_LIT = [184, 172, 160, 255];
 const DEADWOOD_DARK = [104, 94, 90, 255];
-slot("snag", 64, 96, (set, d) => {
+prop("snag", (set, d) => {
   d.ellipse(32, 92, 16, 4, P.shadow);
   const limbs = [
     [32, 90, 32, 36, 4],
@@ -1567,7 +1556,7 @@ slot("snag", 64, 96, (set, d) => {
  * lumpy where it grew in fits and starts. A clean cone was the first go, and
  * a clean cone on a cave floor is a traffic cone.
  */
-slot("stalagmite", 48, 72, (set, d) => {
+prop("stalagmite", (set, d) => {
   d.ellipse(24, 68, 18, 4, P.shadow);
   const spire = (cx, top, foot, base) => {
     for (let y = top; y < foot; y++) {
@@ -1590,7 +1579,7 @@ slot("stalagmite", 48, 72, (set, d) => {
 });
 
 /** Crystal growing out of the cave floor: three cyan prisms, glowing. */
-slot("crystal", 48, 56, (set, d) => {
+prop("crystal", (set, d) => {
   d.ellipse(24, 50, 22, 8, [110, 214, 226, 50]);
   d.ellipse(24, 52, 16, 4, P.shadow);
   const prism = (cx, top, foot, half) => {
@@ -2922,13 +2911,11 @@ function caveFloor() {
  * The flanks flare: steep under the summit and spreading at the foot, which
  * is the one thing that makes a cone a mountain rather than a lampshade — a
  * straight edge from the rim to the ground was the first go at this, and it
- * was a bucket upside down. `CONE` is that curve, and it is written twice:
- * here, and in `lib/world/volcano.ts`, which cuts the solid bands from it. A
- * `.mjs` cannot import a `.ts`, which is the arrangement the basketball's
- * board already lives under; change one and change the other, or the island
- * has invisible walls in the sky.
+ * was a bucket upside down. `CONE` is that curve, imported from
+ * `lib/world/volcano.ts`, which cuts the solid bands from the same numbers —
+ * so the mountain drawn and the mountain walked into cannot disagree, and
+ * the island has no invisible walls in the sky.
  */
-const CONE = { summitY: 40, summitHalf: 74, baseY: 431, baseHalf: 278, flare: 1.7 };
 function coneHalf(y) {
   const s = Math.min(1, Math.max(0, (y - CONE.summitY) / (CONE.baseY - CONE.summitY)));
   return CONE.summitHalf + (CONE.baseHalf - CONE.summitHalf) * s ** CONE.flare;

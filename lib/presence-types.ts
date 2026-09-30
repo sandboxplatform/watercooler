@@ -5,8 +5,22 @@
  * and of node built-ins.
  */
 
-/** How many *humans* can be in one place at once. Agent seats are unrelated. */
+/** How many *humans* can be in one room at once. Residents are not counted. */
 export const MAX_HUMAN_PLAYERS = 6;
+
+/**
+ * The ceiling for the open-air places — the world map, a campus yard, the
+ * volcano and its cave — which are exempt from `MAX_HUMAN_PLAYERS`.
+ *
+ * A room's six is a room's size. Outdoors there is no such thing, and a
+ * refusal there has nowhere to put anybody: every visitor spawns on the world
+ * map, a yard and the island are reached by walking out of a door or off a
+ * ferry, and none of them has a lift that could say no first. A seventh
+ * person refused on the map is standing in the world alone, invisible to
+ * everybody else, with a socket reconnecting into the same answer. This is a
+ * guard against a flood rather than a size, which is why it is large.
+ */
+export const OPEN_AIR_CAPACITY = 64;
 
 /** Presence broadcast rate. 20 Hz is smooth once the client interpolates. */
 export const TICK_MS = 50;
@@ -113,7 +127,7 @@ export interface PresencePlayer {
   y: number;
   facing: Facing;
   moving: boolean;
-  /** An agent the server walks about, not a person; never counts as one. */
+  /** A resident the server walks about, not a person; never counts as one. */
   resident?: boolean;
   /** Their microphone is on for voice chat. */
   mic?: boolean;
@@ -164,18 +178,6 @@ export interface MoveMessage {
   y: number;
   facing: Facing;
   moving: boolean;
-}
-
-/**
- * A change to the shared world. One entity at a time: with four people acting
- * at once, sending whole collections means the later write erases the other
- * person's work.
- */
-export type WorldChange = { entity: "seat"; seat: Record<string, unknown> };
-
-export interface WorldMessage {
-  type: "world";
-  change: WorldChange;
 }
 
 /** A mark added to the room's whiteboard, or a request to wipe it. */
@@ -304,7 +306,6 @@ export interface MeetingMessage {
 export type ClientMessage =
   | JoinMessage
   | MoveMessage
-  | WorldMessage
   | BoardMessage
   | PongRelayMessage
   | VoiceRelayMessage
@@ -544,13 +545,6 @@ export interface PongBroadcast {
   payload: import("./pong/protocol").PongPayload;
 }
 
-export interface WorldBroadcast {
-  type: "world";
-  change: WorldChange;
-  /** Who made the change, so the room can say who asked for what. */
-  by?: { id: string; name: string };
-}
-
 /**
  * Something said out loud, drawn as a bubble over the speaker's head.
  *
@@ -618,7 +612,6 @@ export type ServerMessage =
   | PresenceMessage
   | PlayerJoinedMessage
   | PlayerLeftMessage
-  | WorldBroadcast
   | SaidMessage
   | BadgeMessage
   | PongBroadcast
@@ -638,7 +631,6 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   return (
     type === "join" ||
     type === "move" ||
-    type === "world" ||
     type === "board" ||
     type === "pong" ||
     type === "voice" ||
@@ -652,7 +644,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
 }
 
 /** The most a session description may weigh; a real one is a few kilobytes. */
-const SDP_LIMIT = 20_000;
+export const SDP_LIMIT = 20_000;
 
 export function isVoiceSignal(value: unknown): value is VoiceSignal {
   if (typeof value !== "object" || value === null) return false;
@@ -663,14 +655,4 @@ export function isVoiceSignal(value: unknown): value is VoiceSignal {
   }
   if (kind === "ice") return typeof candidate === "object" && candidate !== null;
   return false;
-}
-
-const WORLD_ENTITIES = ["seat"] as const;
-
-export function isWorldChange(value: unknown): value is WorldChange {
-  if (typeof value !== "object" || value === null) return false;
-  const entity = (value as { entity?: unknown }).entity;
-  if (!WORLD_ENTITIES.includes(entity as (typeof WORLD_ENTITIES)[number])) return false;
-  const payload = (value as Record<string, unknown>)[entity as string];
-  return typeof payload === "object" && payload !== null;
 }

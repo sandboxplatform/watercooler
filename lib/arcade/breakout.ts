@@ -5,7 +5,7 @@
  * ball, two more balls, or an extra life.
  */
 
-import { FONT, SCREEN, type ArcadeGame, type ArcadeInput } from "./types";
+import { ARCADE_TITLES, FONT, SCREEN, type ArcadeGame, type ArcadeInput } from "./types";
 
 export const PADDLE_WIDTH = 64;
 export const WIDE_PADDLE_WIDTH = 104;
@@ -346,7 +346,7 @@ export function drawBreakout(ctx: CanvasRenderingContext2D, state: BreakoutState
 
 export const breakout: ArcadeGame<BreakoutState> = {
   id: "breakout",
-  title: "Breakout",
+  title: ARCADE_TITLES.breakout,
   blurb: "Clear the wall. Catch the capsules.",
   keys: "← → or A/D move · Space launches",
   touch: "Drag to move · tap to launch",

@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { listCharacters } from "@/lib/characters/store";
 import {
@@ -41,5 +40,5 @@ export function roster(): RosterCharacter[] {
 export async function GET() {
   const identity = identityOf((await headers()).get("cookie") ?? undefined);
   const characters = identity === "visitor" ? SHARED_CAST : roster();
-  return NextResponse.json({ characters, wearable: looksFor(personaFor(identity)) });
+  return Response.json({ characters, wearable: looksFor(personaFor(identity)) });
 }

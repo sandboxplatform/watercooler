@@ -56,10 +56,8 @@ export interface EggKind {
   /**
    * The shell's three tones, for the HUD.
    *
-   * The same colours are drawn into the sprite by
-   * `scripts/make-world-art.mjs`, which is a `.mjs` and cannot import this
-   * — the same arrangement the basketball's board and rim are under, where
-   * the numbers here are the picture's. Change one, change both.
+   * `scripts/make-world-art.mjs` imports them and draws the sprite in the
+   * same colours, so the egg in the grass and the egg in the panel are one.
    */
   shell: { base: string; shade: string; lit: string };
 }

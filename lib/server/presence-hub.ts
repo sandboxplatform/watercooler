@@ -56,6 +56,13 @@ export function sanitiseName(raw: string): string {
 export class PresenceHub {
   private players = new Map<string, TrackedPlayer>();
   private now: () => number;
+  /**
+   * Whether anything the roster shows has changed since the socket last
+   * asked. A room of people standing still is a room with nothing to say,
+   * and a snapshot sent twenty times a second regardless is most of what
+   * the socket used to put on the wire.
+   */
+  private dirty = false;
   readonly capacity: number;
 
   constructor(options: HubOptions = {}) {
@@ -68,6 +75,36 @@ export class PresenceHub {
     let humans = 0;
     for (const player of this.players.values()) if (!player.resident) humans++;
     return humans;
+  }
+
+  /**
+   * Everybody in it, residents included — the question of whether the room
+   * is empty enough to forget. `count` is the wrong one for that: a room with
+   * Doc in it and nobody else is a room somebody is standing in.
+   */
+  get size(): number {
+    return this.players.size;
+  }
+
+  /**
+   * Whether the roster changed since the last time this was asked, and
+   * forget that it did. Asked once a tick by the socket, which sends a
+   * snapshot only when the answer is yes (and now and then regardless).
+   */
+  takeDirty(): boolean {
+    const dirty = this.dirty;
+    this.dirty = false;
+    return dirty;
+  }
+
+  /**
+   * Each player as kept, for a caller that reads a few fields and keeps
+   * nothing. `snapshot()` builds a fresh object per person to answer the
+   * same question, which the online list used to do for every room on every
+   * refresh to read four fields off each.
+   */
+  forEach(visit: (player: Readonly<PresencePlayer>) => void): void {
+    for (const player of this.players.values()) visit(player);
   }
 
   /**
@@ -105,6 +142,7 @@ export class PresenceHub {
       lastMoveAt: at,
     };
     this.players.set(id, player);
+    this.dirty = true;
     return { ok: true, player: strip(player) };
   }
 
@@ -133,13 +171,17 @@ export class PresenceHub {
     player.moving = false;
     player.lastSeen = now;
     player.lastMoveAt = now;
+    this.dirty = true;
     return strip(player);
   }
 
-  /** Their microphone went on or off. */
-  setMic(id: string, on: boolean): void {
+  /** Their microphone went on or off. Answers whether that was a change. */
+  setMic(id: string, on: boolean): boolean {
     const player = this.players.get(id);
-    if (player) player.mic = on;
+    if (!player || Boolean(player.mic) === on) return false;
+    player.mic = on;
+    this.dirty = true;
+    return true;
   }
 
   /**
@@ -150,13 +192,16 @@ export class PresenceHub {
    */
   setHidden(id: string, hidden: boolean): void {
     const player = this.players.get(id);
-    if (player) player.hidden = hidden;
+    if (!player || Boolean(player.hidden) === hidden) return;
+    player.hidden = hidden;
+    this.dirty = true;
   }
 
   leave(id: string): PresencePlayer | null {
     const player = this.players.get(id);
     if (!player) return null;
     this.players.delete(id);
+    this.dirty = true;
     return strip(player);
   }
 
@@ -327,6 +372,10 @@ export class PresenceHub {
     const dx = update.x - player.x;
     const dy = update.y - player.y;
     const distance = Math.hypot(dx, dy);
+    // Only a change is news: the same frame again is nothing to broadcast.
+    if (distance > 0 || player.facing !== update.facing || player.moving !== update.moving) {
+      this.dirty = true;
+    }
 
     if (distance > budget && distance > 0) {
       // Move as far along their intended direction as walking allows
@@ -359,6 +408,7 @@ export class PresenceHub {
       if (player.resident) continue;
       if (at - player.lastSeen > IDLE_TIMEOUT_MS) {
         this.players.delete(id);
+        this.dirty = true;
         dropped.push(strip(player));
       }
     }

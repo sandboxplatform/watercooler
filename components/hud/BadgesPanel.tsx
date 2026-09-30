@@ -1,10 +1,10 @@
 "use client";
 
+import Holders, { shortDate } from "./Holders";
 import { useMemo } from "react";
 import { BADGES, BADGE_GROUPS, badgeFor, isGuestHolder } from "@/lib/badges";
 import { useBadges } from "@/lib/badges-client";
 import { useSelfPerson } from "@/lib/eggs-client";
-import { castMember } from "@/lib/world/cast";
 import { gameEvents } from "@/lib/events";
 import type { EarnedBadge } from "@/lib/badges";
 
@@ -31,32 +31,6 @@ import type { EarnedBadge } from "@/lib/badges";
  * The holders stay pressable and still open a profile: they are buttons
  * inside the row rather than part of it, so the two do not fight.
  */
-
-function when(at: string): string {
-  const date = new Date(at);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-/** The holders of one badge, newest first, as names you can press. */
-function Holders({ earned }: { earned: EarnedBadge[] }) {
-  if (earned.length === 0) return null;
-  return (
-    <div className="badges__holders">
-      {earned.map((item) => (
-        <button
-          key={item.person}
-          type="button"
-          className="badges__holder"
-          onClick={() => gameEvents.emit("open-profile", item.person)}
-          title={`${castMember(item.person)?.name ?? item.name} — ${when(item.earnedAt)}`}
-        >
-          {castMember(item.person)?.name ?? item.name}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 export default function BadgesPanel() {
   const all = useBadges();
@@ -115,7 +89,13 @@ export default function BadgesPanel() {
                       <span className="badges__title">{badge.title}</span>
                       <span className="badges__detail">{badge.description}</span>
                     </button>
-                    <Holders earned={earned} />
+                    <Holders
+                      holders={earned.map((b) => ({
+                        person: b.person,
+                        name: b.name,
+                        note: shortDate(b.earnedAt),
+                      }))}
+                    />
                   </div>
                 </div>
               );

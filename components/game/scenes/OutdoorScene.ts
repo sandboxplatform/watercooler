@@ -1,11 +1,12 @@
 import * as Phaser from "phaser";
 import { Player } from "../entities/Player";
-import { TapNavigator, isTap } from "../systems/TapNavigator";
+import { TapNavigator } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
 import { CameraController } from "../systems/CameraController";
 import { attachPresence, type ScenePresence } from "../systems/scene-presence";
 import { TalkTo } from "../systems/TalkTo";
-import { dialogOpen } from "@/lib/gamepad/dialogs";
+import { culler } from "../systems/culling";
+import { feetOf, onTap, padVelocity } from "../systems/walker";
 import { Pathfinder } from "../utils/Pathfinder";
 import { ensureSheet } from "../utils/sheets";
 import { buildSpriteFrames } from "../utils/MapHelpers";
@@ -123,6 +124,10 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
   /** What a tap can be aimed at, from the place's own layout. */
   protected entrances: readonly Enterable[] = [];
   protected pathfinder: Pathfinder | null = null;
+  /** The same map with no clearance, built the first time the padded one finds nothing. */
+  private barePathfinder: Pathfinder | null = null;
+  /** What the route planners are built over, for building the bare one late. */
+  private solids: { width: number; height: number; rects: Rect[] } | null = null;
   protected leaving = false;
   /** The steps taken on coming out of a door, before the keys are the player's. */
   protected arrival = new ArrivalWalk();
@@ -149,6 +154,8 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
   private eKey: Phaser.Input.Keyboard.Key | null = null;
   /** Set for one frame by the HUD's own action button, which has no key. */
   private virtualInteract = false;
+  /** Where the feet are, filled in again each time it is asked. */
+  private feetAt = { x: 0, y: 0 };
 
   /** Named for the console, so a scene's lines say which place they are from. */
   protected abstract readonly log: Logger;
@@ -194,10 +201,18 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     const walls = this.physics.add.staticGroup();
     const place = this.layOut(data, walls);
     if (!place) return;
+    // What the place costs to draw: everything on the display list, and how
+    // much of it is only drawn while near the camera.
+    this.log.info(
+      `${this.children.length} on the display list, ${culler(this).size} of them culled; ` +
+        `${walls.getLength()} solids off it`,
+    );
 
     this.zones = place.doors;
     this.entrances = place.entrances;
     this.pathfinder = new Pathfinder(place.width, place.height, place.solids, PF_PADDING);
+    this.solids = { width: place.width, height: place.height, rects: place.solids };
+    this.barePathfinder = null;
 
     this.player = new Player(this, place.spawn.x, place.spawn.y, place.spawn.facing);
     this.arrival.reset();
@@ -241,7 +256,11 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     this.cameraController.init();
 
     this.gamepad = new GamepadInput(this);
-    this.initTapToWalk();
+    onTap(
+      this,
+      () => this.cameraController.pinching,
+      (world) => this.walkTo(world),
+    );
     this.eKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E, false) ?? null;
     this.extras = place.extras ?? [];
     gameEvents.emit("place-changed", place.label);
@@ -270,7 +289,13 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     });
     // Stopped for another scene, or taken down with the game: either way the
     // listeners go, or a dead scene keeps trying to draw people.
+    //
+    // Whichever comes first takes the other with it. The scene object is
+    // reused for every visit, so a DESTROY listener left behind by each
+    // SHUTDOWN was one more closure over a dead visit per door.
     const letGo = () => {
+      this.events.off(Phaser.Scenes.Events.SHUTDOWN, letGo);
+      this.events.off(Phaser.Scenes.Events.DESTROY, letGo);
       unsubLook();
       unsubInteract();
       for (const extra of this.extras) extra.destroy();
@@ -282,24 +307,6 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, letGo);
     this.events.once(Phaser.Scenes.Events.DESTROY, letGo);
-  }
-
-  private initTapToWalk() {
-    let down: { x: number; y: number; at: number } | null = null;
-    this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
-      down = { x: p.x, y: p.y, at: p.downTime };
-    });
-    this.input.on("pointerup", (p: Phaser.Input.Pointer) => {
-      const start = down;
-      down = null;
-      // A pinch is two fingers Phaser reports as ordinary pointers, and one
-      // of them barely moves — which is a tap, and would send the character
-      // walking off while somebody is only trying to look closer.
-      if (this.cameraController.pinching) return;
-      if (!start || !isTap(start, { x: p.x, y: p.y, at: p.upTime })) return;
-      const world = p.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
-      this.walkTo({ x: world.x, y: world.y });
-    });
   }
 
   /**
@@ -320,23 +327,43 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
       const [approach, doorway] = walkInTo(building);
       // The doorway is inside the pathfinder's padding, so it is planned to
       // the standing room and the last step is walked straight at the door.
-      const path = this.pathfinder?.findPath(from.x, from.y, approach.x, approach.y);
+      const path = this.route(from, approach);
       this.navigator.follow([...(path?.length ? path : [approach]), doorway]);
       return;
     }
     // Around the furniture if we can; straight at it if the spot is boxed in.
-    const path = this.pathfinder?.findPath(from.x, from.y, target.x, target.y);
+    const path = this.route(from, target);
     this.navigator.follow(path?.length ? path : [target]);
   }
 
-  protected feet() {
-    const body = this.player.sprite.body as Phaser.Physics.Arcade.Body;
-    return { x: body.center.x, y: body.center.y };
+  /**
+   * A way from one point to another, padded if there is one and bare if not.
+   *
+   * The padded grid keeps the body clear of every trunk, and in the wood
+   * that closes gaps a person fits through: a cell is shut if any of it
+   * touches a solid grown by half a body, so a passage has to be a good
+   * deal wider than the body to stay open. Where it shuts one, the bare
+   * grid still has the way through, and walking it brushes a tree or two —
+   * which the physics slides the character along — where the fallback
+   * after it walks a straight line into the wood.
+   */
+  private route(from: { x: number; y: number }, to: { x: number; y: number }) {
+    const padded = this.pathfinder?.findPath(from.x, from.y, to.x, to.y);
+    if (padded?.length || !this.solids) return padded;
+    this.barePathfinder ??= new Pathfinder(
+      this.solids.width,
+      this.solids.height,
+      this.solids.rects,
+    );
+    return this.barePathfinder.findPath(from.x, from.y, to.x, to.y);
   }
 
-  /** The pad's push on the character; nothing while a dialog has the screen. */
+  protected feet() {
+    return feetOf(this.player, this.feetAt);
+  }
+
   private padVelocity() {
-    return dialogOpen() ? { vx: 0, vy: 0 } : this.gamepad.velocity(this.player.speed);
+    return padVelocity(this.player, this.gamepad);
   }
 
   /**
@@ -373,15 +400,23 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     for (const extra of this.extras) extra.update(delta, at, pressed && !took);
   }
 
-  /** Sort against the props by where the feet are. */
+  /**
+   * Sort against the props by where the feet are — when they have moved.
+   * Setting a depth re-sorts the whole display list even to the value it
+   * already had, which out here is thousands of things every frame for
+   * somebody standing still.
+   */
   private sortByFeet() {
-    this.player.sprite.setDepth((this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom);
+    const feet = (this.player.sprite.body as Phaser.Physics.Arcade.Body).bottom;
+    if (this.player.sprite.depth !== feet) this.player.sprite.setDepth(feet);
   }
 
   update(_time: number, delta: number) {
     if (this.leaving) return;
     // Keep the lettering the size it was written, whatever the camera is at.
     legible(this).update();
+    // And draw only what is near where the camera is looking.
+    culler(this).update(this.cameras.main);
     // Read the pad every frame, or it never reports anything out here.
     this.gamepad.poll();
     this.presence?.update(delta);

@@ -1,9 +1,9 @@
 "use client";
 
+import Holders from "./Holders";
 import { useMemo } from "react";
 import { EGG_KINDS, basketSize, oneIn, type EggKind, type EggTally } from "@/lib/world/eggs";
 import { basketOf, useEggTallies, useSelfPerson } from "@/lib/eggs-client";
-import { castMember } from "@/lib/world/cast";
 import { isGuestHolder } from "@/lib/badges";
 import { gameEvents } from "@/lib/events";
 import EggMark from "./EggMark";
@@ -21,26 +21,6 @@ import EggMark from "./EggMark";
  * is the one question a shared list cannot answer: a badge you either
  * have or you have not, and an egg you have four of.
  */
-
-function Holders({ tallies }: { tallies: EggTally[] }) {
-  if (tallies.length === 0) return null;
-  return (
-    <div className="badges__holders">
-      {tallies.map((tally) => (
-        <button
-          key={tally.person}
-          type="button"
-          className="badges__holder"
-          onClick={() => gameEvents.emit("open-profile", tally.person)}
-          title={`${castMember(tally.person)?.name ?? tally.name} — ${tally.count}`}
-        >
-          {castMember(tally.person)?.name ?? tally.name}
-          {tally.count > 1 && <span className="eggs__many">×{tally.count}</span>}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /** Your own, at the top: one slot per rung, filled in as you find them. */
 function Basket({ mine }: { mine: EggTally[] }) {
@@ -165,7 +145,14 @@ export default function EggsPanel() {
                   <span className="eggs__odds">1 in {oneIn(kind.id)}</span>
                 </div>
                 <div className="badges__detail">{kind.note}</div>
-                <Holders tallies={holders} />
+                <Holders
+                  holders={holders.map((t) => ({
+                    person: t.person,
+                    name: t.name,
+                    note: String(t.count),
+                    count: t.count,
+                  }))}
+                />
               </div>
             </div>
           );

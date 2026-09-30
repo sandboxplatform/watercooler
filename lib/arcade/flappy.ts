@@ -3,7 +3,7 @@
  * the right with a gap to thread; each one passed is a point.
  */
 
-import { FONT, SCREEN, type ArcadeGame, type ArcadeInput } from "./types";
+import { ARCADE_TITLES, FONT, SCREEN, type ArcadeGame, type ArcadeInput } from "./types";
 
 export const GRAVITY = 1500;
 export const FLAP = -430;
@@ -169,7 +169,7 @@ export function drawFlappy(ctx: CanvasRenderingContext2D, state: FlappyState) {
 
 export const flappy: ArcadeGame<FlappyState> = {
   id: "flappy",
-  title: "Flappy",
+  title: ARCADE_TITLES.flappy,
   blurb: "Thread the pipes. One flap at a time.",
   keys: "Space, ↑ or W to flap",
   touch: "Tap anywhere to flap",

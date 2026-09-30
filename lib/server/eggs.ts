@@ -110,24 +110,42 @@ export class Nest {
    * of E.
    */
   take(at: { x: number; y: number }): LaidEgg | null {
+    const egg = this.nearest(at);
+    if (egg) this.remove(egg.id);
+    return egg;
+  }
+
+  /**
+   * The egg `take` would hand over, left lying where it is.
+   *
+   * The socket writes the egg into a basket before lifting it out of the
+   * grass, so a write that fails leaves the egg for the next person rather
+   * than taking it from the park and putting it nowhere.
+   */
+  nearest(at: { x: number; y: number }): LaidEgg | null {
     // Against their feet rather than their middle, which is the line an
     // egg lies on — the same crossing `eggWithinReach` makes, and picking
     // the nearest against the other line would now and then hand somebody
     // the further of two eggs.
     const feet = eggSpot(at);
     let best = Infinity;
-    let found = -1;
-    for (let i = 0; i < this.eggs.length; i++) {
-      const egg = this.eggs[i];
+    let found: Kept | null = null;
+    for (const egg of this.eggs) {
       if (!eggWithinReach(egg, at)) continue;
       const d2 = (egg.x - feet.x) ** 2 + (egg.y - feet.y) ** 2;
       if (d2 >= best) continue;
       best = d2;
-      found = i;
+      found = egg;
     }
-    if (found < 0) return null;
-    const [egg] = this.eggs.splice(found, 1);
-    return egg;
+    return found && { id: found.id, tier: found.tier, x: found.x, y: found.y };
+  }
+
+  /** Lift one out of the grass by id. Answers whether it was there. */
+  remove(id: string): boolean {
+    const index = this.eggs.findIndex((egg) => egg.id === id);
+    if (index < 0) return false;
+    this.eggs.splice(index, 1);
+    return true;
   }
 
   /**

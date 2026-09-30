@@ -276,3 +276,57 @@ describe("sanitiseName", () => {
     expect(sanitiseName("   ")).toBe("Guest");
   });
 });
+
+describe("whether there is anything to send", () => {
+  it("is dirty after a join, and clean once asked", () => {
+    join("a");
+    expect(hub.takeDirty()).toBe(true);
+    expect(hub.takeDirty()).toBe(false);
+  });
+
+  it("stays clean for the same frame again, and not for a step", () => {
+    join("a");
+    hub.takeDirty();
+    clock += 50;
+    hub.move("a", { x: 100, y: 100, facing: "down", moving: false });
+    expect(hub.takeDirty()).toBe(false);
+    clock += 50;
+    hub.move("a", { x: 104, y: 100, facing: "right", moving: true });
+    expect(hub.takeDirty()).toBe(true);
+  });
+
+  it("counts a microphone or a lift only when it changes", () => {
+    join("a");
+    hub.takeDirty();
+    expect(hub.setMic("a", true)).toBe(true);
+    expect(hub.takeDirty()).toBe(true);
+    expect(hub.setMic("a", true)).toBe(false);
+    hub.setHidden("a", false);
+    expect(hub.takeDirty()).toBe(false);
+    hub.setHidden("a", true);
+    expect(hub.takeDirty()).toBe(true);
+  });
+
+  it("is dirty when somebody leaves", () => {
+    join("a");
+    hub.takeDirty();
+    hub.leave("a");
+    expect(hub.takeDirty()).toBe(true);
+  });
+});
+
+describe("size, which counts residents too", () => {
+  it("is everybody in the hub, where count is the people", () => {
+    join("a");
+    hub.join("resident:doc", { name: "Doc", ...spawn, resident: true });
+    expect(hub.count).toBe(1);
+    expect(hub.size).toBe(2);
+  });
+
+  it("visits each player as kept, without a snapshot", () => {
+    join("a", "Ann");
+    const seen: string[] = [];
+    hub.forEach((player) => seen.push(player.name));
+    expect(seen).toEqual(["Ann"]);
+  });
+});

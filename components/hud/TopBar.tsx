@@ -1,16 +1,9 @@
 "use client";
 
-import type { SeatState } from "@/types/game";
-import CharacterPortrait from "./CharacterPortrait";
 import AccountButton from "./AccountButton";
 
-interface TopBarProps {
-  seats: SeatState[];
-  onSeatClick?: (seatId: string) => void;
-}
-
 /**
- * The strip along the top: who is working, and the account.
+ * The strip along the top: the account, and nothing else.
  *
  * The left corner used to carry the game's name and the building and floor
  * you were standing in. Both are gone. An Operations floor puts its rooms
@@ -18,32 +11,13 @@ interface TopBarProps {
  * on top of the thing you walked up there to read — and the floor already
  * says where you are, on a sign on its own wall, which is where a room in
  * this game is supposed to tell you anything.
+ *
+ * The middle carried a pill per seat, and the seats had nothing in them:
+ * no generated map stands a worker anywhere, so the row was always empty.
  */
-export default function TopBar({ seats, onSeatClick }: TopBarProps) {
-  const assignedSeats = seats.filter((s) => s.assigned);
-
+export default function TopBar() {
   return (
     <div className="layout-top">
-      {/* Center: agent pills (each pill is its own floating element) */}
-      <div className="layout-topbar__agents">
-        {assignedSeats.map((seat) => (
-          <button
-            key={seat.seatId}
-            type="button"
-            className="topbar-agent-pill"
-            onClick={() => onSeatClick?.(seat.seatId)}
-            title={seat.roleTitle ? `${seat.label} — ${seat.roleTitle}` : seat.label}
-          >
-            <div className="topbar-agent-pill__avatar">
-              <CharacterPortrait spritePath={seat.spritePath} name={seat.label} />
-            </div>
-            <span className="topbar-agent-pill__name">{seat.label}</span>
-            <span className={`pixel-dot pixel-dot--${seat.assigned ? "green" : "gray"}`} />
-          </button>
-        ))}
-      </div>
-
-      {/* Right: the account, and nothing else */}
       <div className="layout-topbar__tools">
         {/*
           The door, the music and the Character button were all in this row,

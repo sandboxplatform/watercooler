@@ -36,11 +36,14 @@ function fakeStream() {
 /** Hand out streams on demand, so a test can hold the prompt open. */
 let pending: ((stream: MediaStream) => void) | null = null;
 let rejectWith: ((err: Error) => void) | null = null;
+/** Every audio source node made, so a test can see whether it was let go of. */
+let sources: { connect: () => void; disconnect: () => void }[] = [];
 
 beforeEach(() => {
   vi.resetModules();
   pending = null;
   rejectWith = null;
+  sources = [];
   // `navigator` is getter-only on node's global, so it has to be stubbed
   // rather than assigned.
   vi.stubGlobal("RTCPeerConnection", class {});
@@ -53,7 +56,9 @@ beforeEach(() => {
         return { fftSize: 1024, connect() {}, getFloatTimeDomainData() {} };
       }
       createMediaStreamSource() {
-        return { connect() {}, disconnect() {} };
+        const source = { connect: vi.fn(), disconnect: vi.fn() };
+        sources.push(source);
+        return source;
       }
     },
   );
@@ -123,5 +128,25 @@ describe("the microphone, switched off while it is being asked for", () => {
     await voiceChat.disable();
     expect(voiceChat.snapshot().status).toBe("off");
     expect(track.stop).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the microphone's place in the audio graph", () => {
+  /**
+   * The source node was made, connected and never kept, so every time the
+   * microphone went off and on another source and analyser were left behind
+   * reading a stream that had stopped.
+   */
+  it("is taken out again when the microphone goes off", async () => {
+    vi.useFakeTimers();
+    const { voiceChat } = await import("../voice-chat");
+    for (let round = 0; round < 3; round++) {
+      const enabling = voiceChat.enable();
+      pending!(fakeStream().stream);
+      await enabling;
+      await voiceChat.disable();
+    }
+    expect(sources).toHaveLength(3);
+    for (const source of sources) expect(source.disconnect).toHaveBeenCalledTimes(1);
   });
 });

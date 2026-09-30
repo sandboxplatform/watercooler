@@ -5,57 +5,48 @@
  * score is that somebody else has to look at it.
  */
 
-import { NextResponse } from "next/server";
-import { DEFAULT_ROOM, getRoomStore } from "@/lib/server/room-store";
-import { normaliseRoomSlug } from "@/lib/rooms";
+import { getRoomStore } from "@/lib/server/room-store";
 import { isArcadeGameId } from "@/lib/arcade";
 import { awardMachineScore } from "@/lib/server/machine-badges";
+import { guarded, refuse, roomParam } from "@/lib/server/route";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("ArcadeAPI");
 
 export const dynamic = "force-dynamic";
 
-function roomOf(request: Request): string {
-  return normaliseRoomSlug(new URL(request.url).searchParams.get("room") ?? DEFAULT_ROOM);
-}
-
 export async function GET(request: Request) {
   const game = new URL(request.url).searchParams.get("game");
-  if (!isArcadeGameId(game)) return NextResponse.json({ error: "Unknown game" }, { status: 400 });
-  try {
-    return NextResponse.json({ scores: getRoomStore().topArcadeScores(roomOf(request), game) });
-  } catch (err) {
-    log.error("could not read the high scores:", (err as Error).message);
-    return NextResponse.json({ error: "Failed to read the high scores" }, { status: 500 });
-  }
+  if (!isArcadeGameId(game)) return refuse("Unknown game", 400);
+  return guarded(
+    "read the high scores",
+    () => Response.json({ scores: getRoomStore().topArcadeScores(roomParam(request), game) }),
+    log,
+  );
 }
 
 export async function POST(request: Request) {
-  try {
-    const body = (await request.json()) as { game?: unknown; player?: unknown; score?: unknown };
-    const score = Number(body.score);
-    const player = typeof body.player === "string" ? body.player.trim() : "";
-    if (!isArcadeGameId(body.game)) {
-      return NextResponse.json({ error: "Unknown game" }, { status: 400 });
-    }
-    if (!Number.isFinite(score) || score < 0) {
-      return NextResponse.json({ error: "A score has to be a number" }, { status: 400 });
-    }
-    const room = roomOf(request);
-    const who = player || "Guest";
-    const scores = getRoomStore().recordArcadeScore(room, body.game, who, score);
-    awardMachineScore({
-      cookie: request.headers.get("cookie") ?? undefined,
-      machine: body.game,
-      player: who,
-      score,
-      table: scores,
-      room,
-    });
-    return NextResponse.json({ scores });
-  } catch (err) {
-    log.error("could not record the score:", (err as Error).message);
-    return NextResponse.json({ error: "Failed to record the score" }, { status: 500 });
-  }
+  return guarded(
+    "record the score",
+    async () => {
+      const body = (await request.json()) as { game?: unknown; player?: unknown; score?: unknown };
+      const score = Number(body.score);
+      const player = typeof body.player === "string" ? body.player.trim() : "";
+      if (!isArcadeGameId(body.game)) return refuse("Unknown game", 400);
+      if (!Number.isFinite(score) || score < 0) return refuse("A score has to be a number", 400);
+      const room = roomParam(request);
+      const who = player || "Guest";
+      const scores = getRoomStore().recordArcadeScore(room, body.game, who, score);
+      awardMachineScore({
+        cookie: request.headers.get("cookie") ?? undefined,
+        machine: body.game,
+        player: who,
+        score,
+        table: scores,
+        room,
+      });
+      return Response.json({ scores });
+    },
+    log,
+  );
 }

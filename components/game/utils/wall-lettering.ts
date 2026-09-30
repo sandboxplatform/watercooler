@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { TILE, WALL_ROWS } from "@/lib/map/office";
+import { PIXEL_FONT } from "../config/drawing";
 
 /**
  * Lettering painted on a wall: the building's name, the room's name, the
@@ -68,4 +69,46 @@ export function letterOnWall(wallTop: number, lines: readonly WallLine[], gap = 
     for (const piece of pieces) piece.setY(y);
     y += tallest(pieces) + gap;
   }
+}
+
+/** The two inks paint comes in: a room's or a person's name, and the line under it. */
+export const WALL_NAME = { size: "16px", color: "#3a3a50" } as const;
+export const WALL_DETAIL = { size: "12px", color: "#565972" } as const;
+
+/** One line of paint: its words, its ink, and how wide it may run before it wraps. */
+export interface Paint {
+  text: string;
+  ink: { size: string; color: string };
+  wrap?: number;
+}
+
+/**
+ * Letter these lines centred on `x`, down the middle of the wall whose top
+ * row is `wallTop`.
+ *
+ * The building's name, the room's, a board's, a person's and their role:
+ * every one was the same text style, depth and resolution written out
+ * again, which is how one of them ends up a pixel different from the rest.
+ * What differs is the words, the ink and the room to wrap in.
+ */
+export function paintOnWall(
+  scene: Phaser.Scene,
+  x: number,
+  wallTop: number,
+  lines: readonly Paint[],
+): Phaser.GameObjects.Text[] {
+  const texts = lines.map((line) =>
+    scene.add
+      .text(x, 0, line.text, {
+        fontFamily: PIXEL_FONT,
+        fontSize: line.ink.size,
+        color: line.ink.color,
+        align: "center",
+        ...(line.wrap === undefined ? {} : { wordWrap: { width: line.wrap } }),
+      })
+      .setDepth(3)
+      .setResolution(2),
+  );
+  letterOnWall(wallTop, texts);
+  return texts;
 }

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { MessagesSquare, X } from "lucide-react";
 
 import { usePanel } from "@/lib/hooks/usePanel";
+import PanelOverlay from "./PanelOverlay";
 import { docConversation } from "@/lib/mettara-client";
 
 import FullscreenButton, { useFullscreen } from "./FullscreenButton";
@@ -52,16 +53,11 @@ export default function DocChat() {
   if (!open) return null;
 
   return (
-    <div
+    <PanelOverlay
       ref={overlayRef}
       className="pinball-overlay board-overlay"
-      onClick={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (window.matchMedia("(pointer: coarse)").matches) return;
-        close();
-      }}
-      role="dialog"
-      aria-label="Doc"
+      label="Doc"
+      onClose={close}
     >
       <div className="pixel-panel board-panel">
         <div className="pinball-head arcade-head">
@@ -102,6 +98,6 @@ export default function DocChat() {
           <span>Mettara, in a window · nothing here is read by the office</span>
         </div>
       </div>
-    </div>
+    </PanelOverlay>
   );
 }

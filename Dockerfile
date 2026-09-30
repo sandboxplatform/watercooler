@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-# Node 24 matches local development and ships the built-in SQLite the room
-# store is built on.
-FROM node:24-slim AS base
+# Node 22, the version .nvmrc pins and CI and local development run: the
+# built-in SQLite the room store is built on arrived in 22.5.
+FROM node:22-slim AS base
 ENV PNPM_HOME="/pnpm" PATH="/pnpm:$PATH"
 RUN corepack enable
 
@@ -58,8 +58,6 @@ COPY --from=build /app/scripts/start.mjs ./scripts/start.mjs
 # Mounted storage: without this the room database is wiped on each deploy and
 # the office resets
 ENV ROOM_DB_PATH=/data/watercooler.sqlite
-# The company's data lives on the volume too, and is seeded on first boot
-ENV ERP_DB_PATH=/data/erp.sqlite
 
 # Which commit this image is, for /api/health and the start-up log. Railway
 # sets RAILWAY_GIT_COMMIT_SHA itself on a deploy it triggered from the
@@ -71,4 +69,7 @@ ARG GIT_SHA=""
 ENV GIT_SHA=${GIT_SHA}
 
 EXPOSE 3000
-CMD ["pnpm", "start"]
+# Node itself as PID 1 rather than pnpm, which was one more process between
+# the host's SIGTERM and the server. The launcher passes the signal on and
+# exits with the server's own code.
+CMD ["node", "scripts/start.mjs"]

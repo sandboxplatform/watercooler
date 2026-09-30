@@ -3,7 +3,6 @@ import { gameEvents } from "@/lib/events";
 import { anyoneNear, DoorLatch, type DoorZone, type Point } from "@/lib/doors";
 import { createLogger } from "@/lib/logger";
 import type { Player } from "../entities/Player";
-import type { Worker } from "../entities/Worker";
 
 const log = createLogger("Doors");
 
@@ -35,28 +34,29 @@ interface DoorEntry {
  * Doorways: the animation as someone approaches, and the event when they walk
  * through.
  *
- * Positions used to be two hardcoded coordinates and the doors did nothing but
- * animate. They now come from the map's transitions layer and carry a target,
- * because these are meant to lead to other rooms. Nothing loads a room yet —
- * the event is the seam that a later scene plugs into.
+ * Positions come from the map's transitions layer and each carries a target.
+ * Walking in says so with `transition-entered`, and the scene decides what
+ * that door leads to — the room next door, the lift, or out.
  */
 export class DoorManager {
   private scene: Phaser.Scene;
   private player: Player;
   private doors: DoorEntry[] = [];
-  private getWorkers: () => Worker[];
+  /** The zones on their own, for the latch, kept rather than mapped out every frame. */
+  private zones: DoorZone[] = [];
+  /** Who can open a door: the player, and nobody else since the workers went. */
+  private bodies: Point[] = [{ x: 0, y: 0 }];
   private latch = new DoorLatch();
 
-  constructor(scene: Phaser.Scene, player: Player, getWorkers: () => Worker[]) {
+  constructor(scene: Phaser.Scene, player: Player) {
     this.scene = scene;
     this.player = player;
-    this.getWorkers = getWorkers;
   }
 
   initDoors(zones: DoorZone[]) {
     this.ensureAnimations();
 
-    for (const zone of this.doors.map((d) => d.zone)) void zone;
+    this.zones = zones;
     this.doors = zones.map((zone) => {
       const texture = TEXTURES[zone.name] ?? "anim-door";
       if (!this.scene.textures.exists(texture)) {
@@ -119,17 +119,18 @@ export class DoorManager {
    * centre is still in the tile behind it. Everything positional in this scene
    * measures from the body, and doorways have to as well.
    */
-  private static footing(sprite: Phaser.GameObjects.Sprite): Point {
+  private static footing(sprite: Phaser.GameObjects.Sprite, out: Point): Point {
     const body = sprite.body as Phaser.Physics.Arcade.Body | null;
-    return body ? { x: body.center.x, y: body.center.y } : { x: sprite.x, y: sprite.y };
+    out.x = body ? body.center.x : sprite.x;
+    out.y = body ? body.center.y : sprite.y;
+    return out;
   }
 
   updateDoors() {
-    const player = DoorManager.footing(this.player.sprite);
-    const bodies = [player, ...this.getWorkers().map((w) => DoorManager.footing(w.sprite))];
+    const player = DoorManager.footing(this.player.sprite, this.bodies[0]);
 
     for (const door of this.doors) {
-      const near = anyoneNear(door.zone, bodies, OPEN_RADIUS);
+      const near = anyoneNear(door.zone, this.bodies, OPEN_RADIUS);
       if (near === door.open) continue;
       door.open = near;
       if (!door.sprite) continue;
@@ -137,10 +138,7 @@ export class DoorManager {
       door.sprite.play(near ? `${texture}-open` : `${texture}-close`);
     }
 
-    for (const zone of this.latch.step(
-      this.doors.map((d) => d.zone),
-      player,
-    )) {
+    for (const zone of this.latch.step(this.zones, player)) {
       log.info(`entered ${zone.name} → ${zone.target}`);
       gameEvents.emit("transition-entered", zone.name, zone.target);
     }

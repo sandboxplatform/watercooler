@@ -55,7 +55,20 @@ export interface Panel {
   show: () => void;
 }
 
+/** An open that happened before the panel was mounted to hear it. */
+export interface FirstOpen {
+  subject: string | null;
+}
+
 interface PanelOptions {
+  /**
+   * For a panel loaded on its first open (`components/hud/lazy-panel`): the
+   * open that loaded it, replayed as it mounts, since it arrived while
+   * nobody here was listening. Null for one that loaded and was given up
+   * on, which mounts shut. Left out, the panel reads its `?<param>=1`
+   * shortcut itself as it always did — a lazy one's shell has read it.
+   */
+  initial?: FirstOpen | null;
   /**
    * Run as it opens: load what it shows, start a game, reset a menu. Read
    * fresh each time rather than subscribed against, so it need not be
@@ -98,6 +111,10 @@ export function usePanel(id: FixtureId, options: PanelOptions = {}): Panel {
     gameEvents.emit(spec.closes);
   }, [spec.closes]);
 
+  // Replayed once, not once per effect run: a development build runs every
+  // effect twice, and two replays would start a game twice.
+  const replayed = useRef(false);
+
   // Opening: the scene says when somebody walked up and pressed E, and the
   // query parameter goes through the same event, so there is one way in.
   useEffect(() => {
@@ -108,7 +125,16 @@ export function usePanel(id: FixtureId, options: PanelOptions = {}): Panel {
       latest.current.onOpen?.(which ?? null);
       setOpen(true);
     });
-    if (new URLSearchParams(window.location.search).get(spec.param) === "1") {
+    const { initial } = latest.current;
+    if (initial !== undefined) {
+      // Through the event again rather than straight into the state, so the
+      // open is the same open in every way — the scene holding the
+      // character still is idempotent about hearing it twice.
+      if (initial && !replayed.current) {
+        replayed.current = true;
+        gameEvents.emit(spec.opens, initial.subject);
+      }
+    } else if (new URLSearchParams(window.location.search).get(spec.param) === "1") {
       gameEvents.emit(spec.opens);
     }
     return unsubscribe;

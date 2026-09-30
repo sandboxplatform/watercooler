@@ -8,8 +8,12 @@
  * what `pnpm start` and the Docker image run; this file is the separate
  * entry point the published package uses, and it serves everything to
  * whoever can reach the port. It is meant for `npx` on your own machine —
- * localhost, one person — which is the same footing as `pnpm dev` without a
- * code. Do not put it on an address other people can reach.
+ * localhost, one person — and it binds to loopback unless `HOSTNAME` says
+ * otherwise. Do not put it on an address other people can reach.
+ *
+ * Nor is there a presence socket: it is Next's handler and nothing else, so
+ * nobody else is in the world with you — no other people, no residents and
+ * no voice chat.
  *
  * The gate is not duplicated here on purpose: it lives in TypeScript that
  * this file cannot import (the package ships no tsx), and a second
@@ -41,9 +45,14 @@ process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(requiredServerFile
 const { default: next } = await import("next");
 
 const port = parseInt(process.env.PORT ?? "3000", 10);
+// Loopback unless told otherwise. This server has no door on it, so the one
+// thing it must not do by default is answer on every interface the machine
+// has — a laptop on café wifi would be serving the world to everybody else
+// on the network. HOSTNAME is the way to widen it.
+const hostname = process.env.HOSTNAME ?? "127.0.0.1";
 
 process.chdir(__dirname);
-const app = next({ dev: false, dir: __dirname });
+const app = next({ dev: false, dir: __dirname, hostname, port });
 const handle = app.getRequestHandler();
 
 app
@@ -53,19 +62,20 @@ app
       handle(req, res);
     });
 
-    server.listen(port, () => {
+    server.listen(port, hostname, () => {
       log.info("");
       log.info("  \x1b[36m\x1b[1mWaterCooler\x1b[0m is running!");
       log.info("");
-      log.info(`  > Local:   \x1b[4mhttp://localhost:${port}\x1b[0m`);
+      log.info(`  > Local:   \x1b[4mhttp://${hostname}:${port}\x1b[0m`);
       log.info("");
       // Said with log.error so it is seen even in production, where info is
-      // silenced: somebody putting this on a public address should not have
-      // to read the source to learn that ACCESS_CODE does nothing here.
+      // silenced: somebody running this should not have to read the source
+      // to learn what it is and what it is not.
       log.error(
-        "This server has no access code: everything is open to whoever can reach it. " +
-          "It is meant for localhost. To run it where others can reach it, use the " +
-          "gated server (`pnpm start` / the Docker image), which honours ACCESS_CODE.",
+        "This is the single-machine server: one person, on this computer. It has no " +
+          "access code and no presence socket, so nobody else is in the world with you — " +
+          "no other people, no residents and no voice chat. For the shared world, run " +
+          "the gated server (`pnpm start` / the Docker image), which honours ACCESS_CODE.",
       );
     });
   })

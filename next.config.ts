@@ -44,14 +44,23 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // A browser that has seen this refuses plain HTTP to the host for a year.
+  // On the deployment that is the point — the access cookie is `Secure`, and
+  // a first request by `http://` is otherwise the one somebody can sit in the
+  // middle of. In development it would be a year of refusing
+  // `http://localhost:3000`, so it is production only.
+  ...(process.env.NODE_ENV === "production"
+    ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }]
+    : []),
 ];
 
 /**
  * How long the browser may keep the world's assets.
  *
  * Everything in `public/` is served with `max-age=0` by default, which
- * means a browser revalidates every one of them on every page load — and a
- * room change *is* a page load. Around thirty conditional requests each
+ * means a browser revalidates every one of them on every page load. A room
+ * change is no longer one (`lib/room-travel.ts`), but a reload, a bookmark
+ * and a shared link all land cold: around thirty conditional requests each
  * time is invisible on localhost and adds up over the internet, and the
  * music is three and a half megabytes that were being fetched again.
  *
@@ -121,7 +130,7 @@ const nextConfig: NextConfig = {
    * to run it — `"next start" does not work with "output: standalone"
    * configuration. Use "node .next/standalone/server.js" instead.` Taking
    * that advice would start Next's own server in place of ours: no presence
-   * socket, no agent bridge, and no door on the whole world. The warning is
+   * socket and no door on the whole world. The warning is
    * good general advice and wrong here, which is the worst kind to leave in
    * a log for someone to act on at three in the morning.
    *

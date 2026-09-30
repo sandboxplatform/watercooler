@@ -1,7 +1,8 @@
 /**
  * Starts the production server, on any operating system.
  *
- *   pnpm start
+ *   pnpm start                  on a machine
+ *   node scripts/start.mjs      in the image, where it is PID 1
  *
  * The script used to be `NODE_ENV=production tsx server.ts`, which is shell
  * syntax that cmd.exe does not have: on Windows `pnpm start` answered with
@@ -34,9 +35,24 @@ const child = spawn(process.execPath, [tsx, "server.ts", ...process.argv.slice(2
   env: { ...process.env, NODE_ENV: process.env.NODE_ENV ?? "production" },
 });
 
+/**
+ * Pass a stop on to the server rather than dying under it.
+ *
+ * In the image this process is PID 1, so the host's SIGTERM arrives here and
+ * nowhere else: left to Node's default it ended the launcher and the server
+ * was killed with it, mid-write, instead of being asked to finish. Forwarded,
+ * the server gets to shut down in its own time, and this waits for it below.
+ */
+const STOPS = ["SIGTERM", "SIGINT"];
+const forward = (signal) => child.kill(signal);
+for (const signal of STOPS) process.on(signal, forward);
+
 // Carry the child's fate: a host watching this process for a crash loop, or
-// a shell reading $?, should see what the server saw.
+// a shell reading $?, should see what the server saw. A server killed by a
+// signal is re-raised here, which needs the forwarding taken off first or
+// the launcher would only forward it to a child that has already gone.
 child.on("exit", (code, signal) => {
+  for (const stop of STOPS) process.off(stop, forward);
   if (signal) process.kill(process.pid, signal);
   else process.exit(code ?? 0);
 });

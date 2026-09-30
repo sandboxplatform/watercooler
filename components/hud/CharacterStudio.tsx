@@ -10,46 +10,48 @@ import { useCharacterRoster } from "@/lib/characters/roster";
 import { textureKeyFor, type RosterCharacter } from "@/lib/characters/library";
 import { rememberCharacter, rememberedKey, subscribeToChoice } from "@/lib/characters/choice";
 
-/** Portrait frame, shown at the same 2.4x the seat manager uses. */
+/** Portrait frame, drawn at 2.4x. */
 const PORTRAIT_SCALE = 2.4;
 
 /**
  * Who you are in the office.
  *
  * A picker, deliberately nothing more: the roster is the set of premade
- * characters, the same set an agent can be given in the seat manager, and a
+ * characters, and a
  * person chooses one of them. The choice is remembered in this browser and
  * put back on at the next visit.
+ *
+ * Mounted only while it is up, and loaded the first time it is: the page
+ * holds `open` and renders this behind a lazy import, so nothing in here
+ * is fetched, subscribed or even downloaded by somebody who never opens it.
  */
-export default function CharacterStudio({ open, onClose }: { open: boolean; onClose: () => void }) {
-  // What this person may put on, which is not the roster a seat is dressed
-  // from: somebody whose own code names their sheet has only that one, and
-  // the HUD does not offer them this picker at all.
-  const { wearable: characters, error, refresh } = useCharacterRoster();
+export default function CharacterStudio({ onClose }: { onClose: () => void }) {
+  // What this person may put on: somebody whose own code names their sheet
+  // has only that one, and the HUD does not offer them this picker at all.
+  // Not read on mount — the effect below reads it afresh, once.
+  const { wearable: characters, error, refresh } = useCharacterRoster(false);
   // Storage is the source of truth for what is worn: the scene writes it on a
   // successful load and clears it on a failed one, and this follows either.
   const wearing = useSyncExternalStore(subscribeToChoice, rememberedKey, () => null);
 
+  // Afresh each time it opens, in case a character has been added since.
   useEffect(() => {
-    if (open) void refresh();
-  }, [open, refresh]);
+    void refresh();
+  }, [refresh]);
 
   useEffect(() => {
-    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [onClose]);
 
   const wear = (character: RosterCharacter) => {
     const key = textureKeyFor(character);
     gameEvents.emit("player-sprite-chosen", key, character.sheetUrl);
     rememberCharacter({ key, path: character.sheetUrl });
   };
-
-  if (!open) return null;
 
   // Rendered into the body rather than in place. The HUD layer sets
   // `z-index: 20` on a positioned element, which makes it a stacking context:

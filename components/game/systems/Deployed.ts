@@ -1,4 +1,5 @@
 import { ink, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMarker";
+import { PANEL_DARK, PIXEL_FONT } from "../config/drawing";
 
 /**
  * The crates stacked in the far corner of a project room: work that has
@@ -66,7 +67,7 @@ const SHIPPED = 0x4bce97;
  * the stack a stack from across the room.
  */
 const CRATE = MARKER_EDGE;
-const PALLET = 0x2a2a3e;
+const PALLET = PANEL_DARK;
 
 /**
  * The picture, measured up from the floor it stands on.
@@ -157,7 +158,7 @@ export const DEPLOYED: FloorMarkerSpec = {
     into.add(
       scene.add
         .text(0, LOW_TOP + LOW_H / 2, WORD, {
-          fontFamily: '"Press Start 2P", monospace',
+          fontFamily: PIXEL_FONT,
           fontSize: "8px",
           color: ink(SHIPPED),
         })

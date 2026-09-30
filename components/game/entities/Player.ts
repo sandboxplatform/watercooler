@@ -108,6 +108,7 @@ export class Player {
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       kb.off("keydown", onKeyDown);
       unsubSprint();
+      this.destroy();
     });
 
     // What the mode is now, not only what it becomes: this character was
@@ -245,7 +246,21 @@ export class Player {
   private syncMark() {
     if (!this.voiceMark) return;
     this.voiceMark.setPosition(this.sprite.x, this.sprite.y - FRAME_HEIGHT / 2 + MARK_ABOVE_HEAD);
-    this.voiceMark.setDepth(this.sprite.depth + 1);
+    // Only when it moved: setting a depth re-sorts the whole display list,
+    // even to the value it already had.
+    const depth = this.sprite.depth + 1;
+    if (this.voiceMark.depth !== depth) this.voiceMark.setDepth(depth);
+  }
+
+  /**
+   * What the scene does not take down by itself: the bubble, which is a
+   * node in the page rather than anything on the display list. A room
+   * change is no page load, so one left behind per door was a pile of
+   * empty divs over the canvas by the end of an afternoon.
+   */
+  destroy() {
+    this.bubble?.destroy();
+    this.bubble = null;
   }
 
   /** Show what this player just said, above their own head. */

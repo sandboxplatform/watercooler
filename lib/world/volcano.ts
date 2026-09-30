@@ -33,7 +33,7 @@ import {
   type GroundPlan,
   type PlacedProp,
   type Sign,
-} from "./scenery";
+} from "./ground";
 import type { Enterable } from "./entrances";
 import { CAVE_PATH, VOLCANO_PATH, WORLD_PATH } from "./paths";
 import { CAVE_ROOM_SLUG, VOLCANO_ROOM_SLUG } from "../rooms";
@@ -105,11 +105,10 @@ export const VOLCANO_ART = { width: 576, height: 432 };
  * The cone's outline, in the picture's own pixels: how wide it is at the
  * crater and at the foot, and how hard its flanks flare between the two.
  *
- * Written twice — here, and as `CONE` in `scripts/make-world-art.mjs`, which
- * draws the mountain to it. A `.mjs` cannot import a `.ts`, which is the
- * arrangement the basketball's board already lives under; change one and
- * change the other, or the island grows invisible walls in the sky beside
- * the summit. `volcano.test.ts` holds this copy to the picture's size.
+ * `scripts/make-world-art.mjs` imports it and draws the mountain to it, so
+ * the cone that is drawn and the cone that is solid are one outline and the
+ * island has no invisible walls in the sky. `volcano.test.ts` holds it to
+ * the picture's size.
  */
 export const CONE = { summitY: 40, summitHalf: 74, baseY: 431, baseHalf: 278, flare: 1.7 };
 

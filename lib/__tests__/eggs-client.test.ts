@@ -36,6 +36,8 @@ vi.mock("../room-socket", () => ({
     sent.push(message);
     return true;
   },
+  onRoomOpen: () => () => {},
+  isRoomSocketOpen: () => false,
 }));
 
 const { onEggs, takeEgg, resetEggs } = await import("../eggs-client");

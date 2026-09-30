@@ -1,8 +1,7 @@
 import * as Phaser from "phaser";
 import { Player } from "../entities/Player";
-import { resetWanderClock } from "../entities/Worker";
 import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED } from "../config/animations";
-import { EMOTE_SHEET_KEY, EMOTE_SHEET_PATH, EMOTE_FRAME_SIZE } from "../config/emotes";
+import { PIXEL_FONT } from "../config/drawing";
 import { Pathfinder } from "../utils/Pathfinder";
 import {
   buildSpriteFrames,
@@ -11,7 +10,6 @@ import {
   parseTransitions,
   buildCollisionRects,
   renderTileObjectLayer,
-  type AnimatedProp,
 } from "../utils/MapHelpers";
 import { gameEvents } from "@/lib/events";
 import { travelTo } from "@/lib/room-travel";
@@ -25,75 +23,35 @@ import {
   LIFT_REFUSAL,
   mapFileFor,
   mayRideLift,
-  occupantsOf,
   widestRoom,
   type Address,
 } from "@/lib/world/floors";
 import { UNKNOWN_IDENTITY, type AccessIdentity } from "@/lib/identity";
 import { ArrivalWalk } from "@/lib/arrival";
-import { MAX_DESKS, deskBox, deskOrigin } from "@/lib/world/desks";
 import { HELP_COUNTER, TILE } from "@/lib/map/office";
-import {
-  SUPPORT_BOARD,
-  opsProjectFlow,
-  opsProjectSign,
-  opsDeployed,
-  opsIncident,
-  opsMachine,
-  opsRefined,
-  opsRoadblock,
-  opsTesting,
-  opsSign,
-  opsSupportPulse,
-  opsSupportSign,
-  opsLastWeekCounts,
-  opsWeekCounts,
-} from "@/lib/map/floor";
-import {
-  ROOM_NAMES,
-  cubicleShelf,
-  cubicleSign,
-  peopleFurnishings,
-  roomSign,
-  type FurnishingArt,
-} from "@/lib/map/cubicles";
-import { castMember } from "@/lib/world/cast";
-import { EggShelf, cutEggFrames, loadEggArt } from "../systems/EggShelf";
-import { DeskWeek, SupportPulse } from "../systems/SupportPulse";
-import { ProjectFlow } from "../systems/ProjectFlow";
-import { DEPLOYED } from "../systems/Deployed";
-import { INCIDENT } from "../systems/Incident";
-import { MACHINE } from "../systems/Machine";
-import { FloorMarker } from "../systems/FloorMarker";
-import { REFINED } from "../systems/Refined";
-import { ROADBLOCK } from "../systems/Roadblock";
-import { TESTING } from "../systems/Testing";
+import { opsSign } from "@/lib/map/floor";
+import { loadEggArt } from "../systems/EggShelf";
 import { legible } from "../systems/legible";
-import {
-  hasCampus,
-  hasFloors,
-  operationsBoards,
-  operationsRoomCount,
-  projectBoards,
-  tenantFor,
-} from "@/lib/world/tenants";
+import { hasCampus, hasFloors, operationsRoomCount, tenantFor } from "@/lib/world/tenants";
 import { GARAGE_BAYS } from "@/lib/map/premises";
 import { ensureSheet } from "../utils/sheets";
-import { letterOnWall } from "../utils/wall-lettering";
+import { WALL_DETAIL, WALL_NAME, paintOnWall } from "../utils/wall-lettering";
+import { addSolid } from "../utils/solids";
 import { createLogger } from "@/lib/logger";
 import { PLAYER_SPAWN_OFFSET_X, PF_PADDING } from "@/lib/constants";
 
 import { CameraController } from "../systems/CameraController";
-import { WorkerManager } from "../systems/WorkerManager";
-import { TapNavigator, isTap } from "../systems/TapNavigator";
+import { TapNavigator } from "../systems/TapNavigator";
 import { GamepadInput } from "../systems/GamepadInput";
 import { dialogOpen, typingInAField } from "@/lib/gamepad/dialogs";
 import { attachPresence, type ScenePresence } from "../systems/scene-presence";
 import { TalkTo } from "../systems/TalkTo";
 import { DoorManager } from "../systems/DoorManager";
 import { FixtureManager } from "../systems/FixtureManager";
+import { furnishFloor } from "../systems/PeopleFloor";
+import { furnishOperationsFloor, onOperationsFloor } from "../systems/OperationsFloor";
+import { feetOf, onTap, padVelocity } from "../systems/walker";
 import { addSign } from "../utils/signs";
-import { initSceneEventBridge } from "../systems/SceneEventBridge";
 import { asset } from "@/lib/assets";
 
 /** The body's centre sits this far below the sprite's centre. */
@@ -102,6 +60,31 @@ const BODY_BELOW_CENTRE = 33;
 const ARRIVAL_STEPS = 96;
 
 const log = createLogger("OfficeScene");
+
+/**
+ * Who the door let this browser in as, asked once a page.
+ *
+ * Straight to the API rather than through the HUD's copy of the answer: the
+ * game layer holds no React, and going over the event bus would mean racing
+ * the HUD's own fetch — miss that one emit and the identity would never
+ * arrive. Once a page rather than once a room, because the answer is the
+ * cookie's and a cookie changes only with a page load; it used to be asked
+ * again at every door and every lift ride. A failed ask is not kept, so the
+ * next room asks again, and leaves the safe default in place meanwhile.
+ */
+let whoIAm: Promise<AccessIdentity | null> | null = null;
+
+function askWhoIAm(): Promise<AccessIdentity | null> {
+  whoIAm ??= fetch("/api/me")
+    .then((res) => res.json() as Promise<{ access?: { identity?: AccessIdentity } }>)
+    .then((body) => body.access?.identity ?? null)
+    .catch(() => {
+      log.warn("could not ask who this is; treating them as a visitor");
+      whoIAm = null;
+      return null;
+    });
+  return whoIAm;
+}
 
 export class OfficeScene extends Phaser.Scene {
   private player!: Player;
@@ -133,18 +116,17 @@ export class OfficeScene extends Phaser.Scene {
    * residents came to be drawn as each other.
    */
   private presence: ScenePresence | null = null;
+  /** Everything this visit subscribed to or set going, taken down on the way out. */
   private cleanupPresence: (() => void) | null = null;
-
-  /** sessionKey -> seatId: when a character executes a task, that session binds to the character */
+  /** Where the feet are, filled in again each time it is asked. */
+  private feetAt = { x: 0, y: 0 };
 
   private cameraController!: CameraController;
-  private workerManager!: WorkerManager;
   private doorManager!: DoorManager;
   /** Everything in the room you walk up to and press E at. */
   private fixtures!: FixtureManager;
   /** The people in the room worth walking up to, which is Doc and his conversation. */
   private talk: TalkTo | null = null;
-  private cleanupEventBridge: (() => void) | null = null;
 
   constructor() {
     super({ key: "OfficeScene" });
@@ -173,27 +155,16 @@ export class OfficeScene extends Phaser.Scene {
     // touched it because the bytes were already local; the decode was the
     // cost, and it was most of the black screen on entering a building.
     //
-    // Everyone else arrives through `ensureSheet`: the seats via
-    // WorkerManager, which already checks for the texture and fetches what is
-    // missing, and other people via scene-presence as they turn up. Loading
-    // the remembered look *here* rather than leaving it to `wearCharacter` is
-    // what keeps the player from appearing as the default for a frame first.
+    // Everyone else arrives through `ensureSheet`, via scene-presence as they
+    // turn up. Loading the remembered look *here* rather than leaving it to
+    // `wearCharacter` is what keeps the player from appearing as the default
+    // for a frame first.
     const mine = rememberedCharacter();
     if (mine && mine.key !== SPRITE_KEY) this.load.image(mine.key, asset(mine.path));
-
-    this.load.spritesheet(EMOTE_SHEET_KEY, asset(EMOTE_SHEET_PATH), {
-      frameWidth: EMOTE_FRAME_SIZE,
-      frameHeight: EMOTE_FRAME_SIZE,
-    });
 
     this.load.spritesheet("boss-arrow", asset("/sprites/arrow_down_48x48.png"), {
       frameWidth: 48,
       frameHeight: 48,
-    });
-
-    this.load.spritesheet("anim-cauldron", asset("/sprites/animated_witch_cauldron_48x48.png"), {
-      frameWidth: 96,
-      frameHeight: 96,
     });
 
     this.load.spritesheet("anim-door", asset("/sprites/animated_door_big_4_48x48.png"), {
@@ -201,17 +172,17 @@ export class OfficeScene extends Phaser.Scene {
       frameHeight: 144,
     });
 
-    // Generated by scripts/make-elevator-sprite.mjs — two tiles wide, because
-    // a lift car is, and the same five-frame format as the swing door.
     // Every fixture's art in one pass, off config/fixtures.ts.
     FixtureManager.preload(this);
-    // Furniture, not a board: the counter Doc works in Sandbox ERP's lobby.
+    // Furniture, not a board: the counter in Sandbox ERP's lobby.
     this.load.image("help-desk-counter", asset("/sprites/help_desk_counter_192x96.png"));
     this.load.image("van", asset("/sprites/world/van_96x144.png"));
     // The eggs on the cubicle shelves, and only where there are shelves:
     // the People floor of a building somebody has a desk in.
     const here = addressFromLocation(window.location);
     if (here && cubiclesOn(here)) loadEggArt(this);
+    // Generated by scripts/make-elevator-sprite.mjs — two tiles wide, because
+    // a lift car is, and the same five-frame format as the swing door.
     this.load.spritesheet("anim-elevator", asset("/sprites/animated_elevator_96x144.png"), {
       frameWidth: 96,
       frameHeight: 144,
@@ -247,19 +218,7 @@ export class OfficeScene extends Phaser.Scene {
     map.createLayer("furniture", allTilesets);
     map.createLayer("objects", allTilesets);
 
-    const animatedProps: AnimatedProp[] = [
-      {
-        tilesetName: "11_Halloween_48x48",
-        anchorLocalId: 130,
-        skipLocalIds: new Set([130, 131, 146, 147]),
-        spriteKey: "anim-cauldron",
-        frameWidth: 96,
-        frameHeight: 96,
-        endFrame: 11,
-        frameRate: 8,
-      },
-    ];
-    renderTileObjectLayer(this, map, "props", allTilesets, 5, animatedProps);
+    renderTileObjectLayer(this, map, "props", allTilesets, 5);
     renderTileObjectLayer(this, map, "props-over", allTilesets, 11);
 
     const overheadLayer = map.createLayer("overhead", allTilesets);
@@ -268,16 +227,7 @@ export class OfficeScene extends Phaser.Scene {
     const collisionGroup = this.physics.add.staticGroup();
     const collisionRects = buildCollisionRects(map, collisionGroup);
 
-    const pathfinder = new Pathfinder(
-      map.widthInPixels,
-      map.heightInPixels,
-      collisionRects,
-      PF_PADDING,
-    );
-
-    this.pathfinder = pathfinder;
-
-    const { bossSpawn, workerSpawns } = parseSpawns(map);
+    const { bossSpawn } = parseSpawns(map);
     const pois = parsePOIs(map);
 
     // Furniture, not a fixture: the counter has nothing to press E at.
@@ -315,12 +265,22 @@ export class OfficeScene extends Phaser.Scene {
 
     this.physics.add.collider(this.player.sprite, collisionGroup);
 
-    // Upstairs, everyone with a desk gets one, with their name on it.
+    // Upstairs, everyone with a desk gets one, with their name on it. The
+    // desks go into the room's walls, and come back as solids the map
+    // knows nothing of, so the one route planner is built after them.
     const address = addressFromLocation(window.location);
-    const stopShelves =
-      address?.floor.kind === "floor" ? this.furnishFloor(address, map, collisionRects) : null;
+    const floor =
+      address?.floor.kind === "floor" ? furnishFloor(this, address, collisionGroup) : null;
+    this.pathfinder = new Pathfinder(
+      map.widthInPixels,
+      map.heightInPixels,
+      [...collisionRects, ...(floor?.solids ?? [])],
+      PF_PADDING,
+    );
 
-    this.identityKnown = this.askWhoIAm();
+    this.identityKnown = askWhoIAm().then((identity) => {
+      if (identity) this.identity = identity;
+    });
 
     // Arriving by a doorway — the lift, the front door, the door from the
     // room next door: start in it and walk out of it, rather than appear at
@@ -397,19 +357,18 @@ export class OfficeScene extends Phaser.Scene {
       // Below it, which no other sign in the room is. Above the art is
       // where whoever works the counter stands, and above them is the
       // whiteboard, so a sign up there labels the wrong thing twice.
-      this.addSign(
+      addSign(
+        this,
         { x: (dx + sw / 2) * TILE, y: (dy + sh) * TILE },
         "HELP DESK",
         (dy + sh) * TILE + 20,
         "below",
       );
     }
-    // The building's name on the wall, so a glance says whose lobby this is.
+    // The building's name on the wall, so a glance says whose lobby this is,
+    // and whatever an Operations floor hangs and stands up besides.
     if (address) this.addWallSign(address);
-    if (address) this.addSupportSign(address);
-    const stopPulse = address ? this.addSupportPulse(address) : null;
-    const stopWeek = address ? this.addDeskWeek(address) : null;
-    const stopFlow = address ? this.addProjectRooms(address) : null;
+    const stopOps = address ? furnishOperationsFloor(this, address) : null;
 
     this.input.keyboard?.disableGlobalCapture();
     this.initTapToWalk();
@@ -427,12 +386,9 @@ export class OfficeScene extends Phaser.Scene {
     );
     this.cameraController.init();
 
-    this.workerManager = new WorkerManager(this, workerSpawns, pois, pathfinder);
+    this.doorManager = new DoorManager(this, this.player);
+    this.doorManager.initDoors(zones);
 
-    this.doorManager = new DoorManager(this, this.player, () => this.workerManager.workers);
-    this.doorManager.initDoors(parseTransitions(map));
-
-    resetWanderClock();
     this.gamepad = new GamepadInput(this);
     // Every fixture's open and close events, in one subscription with one
     // teardown — see FixtureManager.subscribe for why that matters here.
@@ -505,10 +461,8 @@ export class OfficeScene extends Phaser.Scene {
     // it draws a resident's remark. What the browser shows for its own
     // badge is the toast.
     this.cleanupPresence = () => {
-      stopPulse?.();
-      stopWeek?.();
-      stopFlow?.();
-      stopShelves?.();
+      stopOps?.();
+      floor?.stop?.();
       unsubSprite();
       unsubDoor();
       unsubFixtures();
@@ -517,37 +471,16 @@ export class OfficeScene extends Phaser.Scene {
     };
     this.initInteraction();
 
-    this.cleanupEventBridge = initSceneEventBridge(this.workerManager);
-
-    gameEvents.emit("seats-discovered", workerSpawns);
-
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
-    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanup());
-  }
-
-  // ── Boss seat ──────────────────────────────────────────
-
-  /**
-   * One desk per occupant of this floor, in slot order, each with a
-   * nameplate. The desks are solid, for walking and for the pathfinder,
-   * which is rebuilt to know about them.
-   */
-  /**
-   * Ask the door who it let in, for the lift.
-   *
-   * Straight to the API rather than through the HUD's copy of the answer:
-   * the game layer holds no React, and going over the event bus would mean
-   * racing the HUD's own fetch — miss that one emit and the identity would
-   * never arrive. A failed ask leaves the safe default in place.
-   */
-  private async askWhoIAm() {
-    try {
-      const res = await fetch("/api/me");
-      const body = (await res.json()) as { access?: { identity?: AccessIdentity } };
-      if (body.access?.identity) this.identity = body.access.identity;
-    } catch {
-      log.warn("could not ask who this is; treating them as a visitor");
-    }
+    // Whichever comes first takes the other with it. The scene object is
+    // reused for every room, so a DESTROY listener left behind by each
+    // SHUTDOWN was one more closure over a room nobody was in per door.
+    const cleanup = () => {
+      this.events.off(Phaser.Scenes.Events.SHUTDOWN, cleanup);
+      this.events.off(Phaser.Scenes.Events.DESTROY, cleanup);
+      this.cleanup();
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup);
+    this.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
   }
 
   /**
@@ -580,247 +513,6 @@ export class OfficeScene extends Phaser.Scene {
     gameEvents.emit("open-elevator");
   }
 
-  /**
-   * Furnish a floor above the lobby, and hand back whatever has to be torn
-   * down with the scene.
-   *
-   * Two quite different rooms come through here. The People floor of a
-   * building somebody has a desk in is a bank of cubicles, and gets the
-   * whole of `furnishCubicles`; every other floor above a lobby is the
-   * plain rectangle it always was, with desks drawn in slot order.
-   */
-  private furnishFloor(
-    address: Address,
-    map: Phaser.Tilemaps.Tilemap,
-    collisionRects: { x: number; y: number; width: number; height: number }[],
-  ): (() => void) | null {
-    this.cutFurnitureFrames();
-    const cubicles = cubiclesOn(address);
-    if (cubicles) return this.furnishCubicles(address, cubicles, map, collisionRects);
-
-    // Who sits here is known without asking: the people on Floor 1 and the
-    // residents on Floor 2 are both read off the cast.
-    const occupants = occupantsOf(address.tenant, address.floor).slice(0, MAX_DESKS);
-
-    const solids = this.physics.add.staticGroup();
-    const boxes = occupants.map((who, slot) => {
-      const at = deskOrigin(slot);
-      // The two offsets are where these landed while the frames were whole
-      // tiles with the art padded inside them: 12 across and 6 across, 9
-      // down. Same pixels, said out loud.
-      this.add
-        .image(at.x + 12, at.y + 24, "modern_office", "desk")
-        .setOrigin(0, 0)
-        .setDepth(4);
-      this.add
-        .image(at.x + 32, at.y + 9, "modern_office", "laptop")
-        .setOrigin(0, 0)
-        .setDepth(4);
-      this.add
-        .text(at.x + 48, at.y + 20, who.name, {
-          fontFamily: '"Press Start 2P", monospace',
-          fontSize: "8px",
-          color: "#ffe9a8",
-          backgroundColor: "rgba(0,0,0,0.7)",
-          padding: { x: 4, y: 2 },
-        })
-        .setOrigin(0.5, 1)
-        .setDepth(12)
-        .setResolution(2);
-      const box = deskBox(slot);
-      const body = solids.create(
-        box.x + box.width / 2,
-        box.y + box.height / 2,
-        undefined,
-        undefined,
-        false,
-      ) as Phaser.Physics.Arcade.Sprite;
-      body.body!.setSize(box.width, box.height);
-      body.setVisible(false);
-      (body.body as Phaser.Physics.Arcade.StaticBody).enable = true;
-      return box;
-    });
-    this.physics.add.collider(this.player.sprite, solids);
-    this.pathfinder = new Pathfinder(
-      map.widthInPixels,
-      map.heightInPixels,
-      [...collisionRects, ...boxes],
-      PF_PADDING,
-    );
-    log.info(
-      `${occupants.length} desk(s) on ${address.tenant.name} floor ${address.floor.kind === "floor" ? address.floor.level : 0}`,
-    );
-    return null;
-  }
-
-  /**
-   * The furniture cut out of the office tileset, named once.
-   *
-   * Nine rectangles of somebody else's sheet, which is why they are
-   * written down together rather than beside the things that draw them:
-   * the numbers were measured off the picture and mean nothing on their
-   * own, so the one place to look for "which desk is that" is here.
-   *
-   * Named rather than delivered as sprites, unlike the lift, the counter
-   * and the games — those are generated because the pack has nothing like
-   * them. It has all of this.
-   *
-   * Every rect is the art's **tight** bounds rather than the tile it sits
-   * in, because a cubicle stands its furniture on the bottom edge of a
-   * footprint and a rect with two empty rows under it is a vending
-   * machine hovering. The desk and the laptop were whole tiles before,
-   * drawn from a corner with the padding measured into the call — so the
-   * two offsets on the plain floor below are that same padding, taken out
-   * of the rect and put where it can be seen.
-   */
-  private cutFurnitureFrames() {
-    const sheet = this.textures.get("modern_office");
-    const cut: Record<FurnishingArt | "laptop", [number, number, number, number]> = {
-      desk: [300, 864, 75, 63],
-      laptop: [630, 825, 39, 63],
-      plant: [294, 624, 36, 66],
-      sofa: [3, 828, 93, 72],
-      armchair: [288, 738, 48, 54],
-      lowtable: [240, 864, 48, 63],
-      cooler: [579, 744, 42, 90],
-      vending: [15, 1119, 69, 102],
-      shelf: [339, 747, 90, 87],
-      copier: [384, 1155, 93, 54],
-    };
-    for (const [name, [x, y, w, h]] of Object.entries(cut)) {
-      if (!sheet.has(name)) sheet.add(name, 0, x, y, w, h);
-    }
-  }
-
-  /**
-   * A People floor: a cubicle per person, and the two rooms off the
-   * corridor.
-   *
-   * Every cubicle is furnished the same — a desk, a plant and a shelf —
-   * because the map is named by how many there are and two buildings with
-   * the same-sized bank share it. What occupancy decides is what is drawn
-   * on top of it: the name lettered on the back wall, and the eggs
-   * standing on the shelf.
-   *
-   * The pictures are stood on the footprints `lib/map/cubicles.ts` made
-   * solid, off the same functions the spec was built from, so the art and
-   * the boxes cannot drift apart — which is the arrangement the boards on
-   * an Operations floor are already under.
-   *
-   * Hands back one teardown for every shelf, since each holds a
-   * subscription to the baskets.
-   */
-  private furnishCubicles(
-    address: Address,
-    cubicles: number,
-    map: Phaser.Tilemaps.Tilemap,
-    collisionRects: { x: number; y: number; width: number; height: number }[],
-  ): () => void {
-    cutEggFrames(this);
-    const people = occupantsOf(address.tenant, address.floor);
-
-    for (const piece of peopleFurnishings(cubicles)) {
-      this.standFurniture(piece.art, piece);
-      // Every cubicle desk carries a laptop, as the plain floor's do: a
-      // little right of centre and standing on the desktop rather than on
-      // the floor, which is the eight pixels.
-      if (piece.art === "desk") {
-        this.add
-          .image(
-            (piece.tx + piece.tw / 2) * TILE + 10,
-            (piece.ty + piece.th) * TILE - 8,
-            "modern_office",
-            "laptop",
-          )
-          .setOrigin(0.5, 1)
-          .setDepth(4);
-      }
-    }
-
-    // Each room's name, on the stretch of its own wall beside its doorway.
-    ROOM_NAMES.forEach((name, i) => {
-      const at = roomSign(cubicles, i as 0 | 1);
-      const text = this.add
-        .text(at.tx * TILE, 0, name, {
-          fontFamily: '"Press Start 2P", monospace',
-          fontSize: "16px",
-          color: "#3a3a50",
-          align: "center",
-          wordWrap: { width: at.cols * TILE },
-        })
-        .setDepth(3)
-        .setResolution(2);
-      letterOnWall(at.ty * TILE, [text]);
-    });
-
-    const shelves: Array<() => void> = [];
-    for (let slot = 0; slot < cubicles; slot++) {
-      const who = people[slot] ?? null;
-      const sign = cubicleSign(cubicles, slot);
-      const shelf = cubicleShelf(cubicles, slot);
-      // A spare cubicle letters nothing. "VACANT" on the wall is a label
-      // for an absence, and the desk with nobody's name over it says it
-      // already.
-      if (who && sign) {
-        const name = this.add
-          .text(sign.tx * TILE, 0, who.name.toUpperCase(), {
-            fontFamily: '"Press Start 2P", monospace',
-            fontSize: "16px",
-            color: "#3a3a50",
-            align: "center",
-            wordWrap: { width: sign.cols * TILE },
-          })
-          .setDepth(3)
-          .setResolution(2);
-        const role = this.add
-          .text(sign.tx * TILE, 0, (castMember(who.id)?.role ?? "").toUpperCase(), {
-            fontFamily: '"Press Start 2P", monospace',
-            fontSize: "12px",
-            color: "#565972",
-            align: "center",
-            wordWrap: { width: sign.cols * TILE },
-          })
-          .setDepth(3)
-          .setResolution(2);
-        letterOnWall(sign.ty * TILE, [name, role]);
-      }
-      if (shelf) shelves.push(new EggShelf(this).place(shelf, TILE, who?.id ?? null));
-    }
-
-    // Everything on this floor is solid, and all of it came off the spec —
-    // so the walker and the pathfinder read the map's own boxes rather
-    // than a second list built here. The plain floor below cannot do that:
-    // its desks are drawn per occupant and the map knows nothing of them.
-    this.pathfinder = new Pathfinder(
-      map.widthInPixels,
-      map.heightInPixels,
-      collisionRects,
-      PF_PADDING,
-    );
-    log.info(`${people.length} of ${cubicles} cubicle(s) taken on ${address.tenant.name} floor 1`);
-    return () => {
-      for (const stop of shelves) stop();
-    };
-  }
-
-  /**
-   * One piece of it, standing on the bottom edge of its own footprint.
-   *
-   * Bottom-centred rather than drawn from a corner, because the art is
-   * cut tight: a picture taller than the tiles it stands on grows up the
-   * room, which is what a vending machine does and what a footprint on
-   * the floor means.
-   */
-  private standFurniture(
-    art: FurnishingArt,
-    at: { tx: number; ty: number; tw: number; th: number },
-  ) {
-    this.add
-      .image((at.tx + at.tw / 2) * TILE, (at.ty + at.th) * TILE, "modern_office", art)
-      .setOrigin(0.5, 1)
-      .setDepth(4);
-  }
-
   /** What a doorway in the top wall leads to, lettered above it. */
   private addDoorSign(zone: { name: string; target: string; x: number; y: number; width: number }) {
     // A store's rooms are named by what they are, whatever the store is
@@ -831,7 +523,7 @@ export class OfficeScene extends Phaser.Scene {
       zone.target === "world" ? "EXIT" : (short ?? to?.location ?? zone.name).toUpperCase();
     this.add
       .text(zone.x + zone.width / 2, zone.y + 30, label, {
-        fontFamily: '"Press Start 2P", monospace',
+        fontFamily: PIXEL_FONT,
         fontSize: "12px",
         color: "#ffe9a8",
         backgroundColor: "rgba(27,27,42,0.85)",
@@ -847,198 +539,14 @@ export class OfficeScene extends Phaser.Scene {
     if (!this.textures.exists("van")) return;
     for (const bay of GARAGE_BAYS) {
       this.add.image(bay.x, bay.y, "van").setOrigin(0, 0).setDepth(4);
-      const body = collisionGroup.create(
-        bay.x + 48,
-        bay.y + 72,
-        undefined,
-        undefined,
-        false,
-      ) as Phaser.Physics.Arcade.Sprite;
-      body.body!.setSize(88, 130);
-      body.setVisible(false);
-      (body.body as Phaser.Physics.Arcade.StaticBody).enable = true;
+      addSolid(collisionGroup, { x: bay.x + 4, y: bay.y + 7, width: 88, height: 130 });
     }
   }
 
-  /** The tenant's name and where you are, lettered large on the top wall. */
   /**
-   * "SUPPORT", lettered on the wall of the room the support queue hangs in.
-   *
-   * Nothing else on this floor is named, and nothing else needs to be: a
-   * project room is whichever project is on the board in it. Support is a
-   * job rather than a project, the queue is the only board that stands for
-   * one, and Doc works in there — so the room says so.
-   *
-   * A building running no support queue has no such room and gets no sign,
-   * which is Castle Atlantic.
-   *
-   * The middle of the wall, at the size the building's own name is drawn
-   * downstairs. It was two tiles at the left end and twelve pixels to fit
-   * them, which is the compromise the whiteboard's frame forced: seven
-   * letters at sixteen pixels want nearer three tiles, and the letter that
-   * did not fit ended up behind the board. With the whiteboard next door
-   * the middle of the wall is four clear tiles, so the name is drawn like
-   * every other name in the world — `opsSupportSign` is where it hangs.
+   * The tenant's name and where you are, lettered large on a wall, so a
+   * glance says whose building this is.
    */
-  private addSupportSign(address: Address) {
-    const ops = address.floor.kind === "floor" && address.floor.level === 3;
-    if (!ops || !operationsBoards(address.tenant).includes(SUPPORT_BOARD)) return;
-    const at = opsSupportSign(operationsRoomCount(address.tenant));
-    const name = this.add
-      .text(at.tx * TILE, 0, "SUPPORT", {
-        fontFamily: '"Press Start 2P", monospace',
-        fontSize: "16px",
-        color: "#3a3a50",
-      })
-      .setDepth(3)
-      .setResolution(2);
-    letterOnWall(at.ty * TILE, [name]);
-  }
-
-  /**
-   * The five counts, lit up on Support's wall beside the queue they count.
-   *
-   * The same condition as the sign above, and for the same reason: they are
-   * the support desk counted, so they hang where the queue hangs and a
-   * building running none has neither the room nor the numbers. Hands back
-   * the board's own teardown, since it keeps a timer.
-   */
-  private addSupportPulse(address: Address): (() => void) | null {
-    const ops = address.floor.kind === "floor" && address.floor.level === 3;
-    if (!ops || !operationsBoards(address.tenant).includes(SUPPORT_BOARD)) return null;
-    const board = new SupportPulse(this);
-    return board.place(opsSupportPulse(operationsRoomCount(address.tenant)), TILE);
-  }
-
-  /**
-   * The five stage counts, at the other end of the project board's wall.
-   *
-   * Only where the building names the stages it runs, which is what put the
-   * footprint in the map: the same condition, so the picture and the point
-   * of interest are either both there or neither is. Hands back the board's
-   * own teardown, since it keeps a timer.
-   */
-  /**
-   * The two weeks, lettered on the corridor wall outside Support.
-   *
-   * The same condition as the plate inside — it is the same desk — and one
-   * more: `opsWeekCounts` answers null on a floor with no clear stretch of
-   * that wall to letter, which the plate does not care about because it
-   * hangs on the room's own. `opsLastWeekCounts` answers null one floor
-   * sooner, since it wants a second stretch, and this week is lettered on
-   * its own where there is none.
-   *
-   * Both go to the one object rather than to two, so the wall is one read
-   * on one timer. Hands back its teardown, since it keeps one.
-   */
-  private addDeskWeek(address: Address): (() => void) | null {
-    const ops = address.floor.kind === "floor" && address.floor.level === 3;
-    if (!ops || !operationsBoards(address.tenant).includes(SUPPORT_BOARD)) return null;
-    const rooms = operationsRoomCount(address.tenant);
-    const week = opsWeekCounts(rooms);
-    if (!week) return null;
-    return new DeskWeek(this).place({ week, last: opsLastWeekCounts(rooms) }, TILE);
-  }
-
-  /**
-   * A project room apiece: the board's name lettered in the middle of its
-   * wall, and its stage counts running to the right-hand corner.
-   *
-   * One room to a board is the whole point of the arrangement — walking the
-   * corridor and looking in says what is on the go, where one wall with a
-   * picker on it said only what somebody last chose. So the name is not
-   * decoration: it is the only thing telling you which of the three rooms
-   * you are standing in.
-   *
-   * Lettered where Support letters its own, at the size the building's name
-   * is drawn downstairs, because they are the same kind of thing — the name
-   * of the room you are in, on the wall you are looking at.
-   *
-   * A building that names no board letters nothing: there is one board,
-   * whatever the office picked, and a room with PROJECT BOARD written over
-   * a project board says less than the sign already hanging on it.
-   *
-   * And six things standing on the floor. Five of them are a production
-   * line across the middle of the room, in the order those things happen
-   * to work: the rack of refined work waiting, the machine making it, the
-   * roadblock it stops at, the rig checking it, the crates it goes out in.
-   * The sixth is a beacon in the near corner, off the line, for a room with
-   * an incident on it — nothing on the board happens to that.
-   *
-   * A stuck card is still standing in a stage, a shipped one has left them
-   * all and an incident was never in any, so none of those three could be
-   * a bay at all. The other three could each have been one and are better
-   * not: a bar cannot move, and that work is waiting, being made and being
-   * checked is the thing those three stages have to say. So the wall
-   * letters the stages work waits in and the floor carries the three it
-   * happens in — see `wallLanes` in `lib/trello/flow.ts`. See
-   * `systems/FloorMarker`. All six read the same answer as the counts
-   * beside them (`systems/room-flow`), so a room showing every one of them
-   * is still one request.
-   *
-   * Hands back one teardown for every plate and every marker, since each
-   * keeps a timer.
-   */
-  private addProjectRooms(address: Address): (() => void) | null {
-    const ops = address.floor.kind === "floor" && address.floor.level === 3;
-    if (!ops) return null;
-    const rooms = operationsRoomCount(address.tenant);
-    const stops = projectBoards(address.tenant).flatMap((board, i) => {
-      const slot = i + 1;
-      if (board.board) this.addProjectSign(rooms, slot, board.board);
-      if (board.lanes.length === 0) return [];
-      const at = opsProjectFlow(rooms, slot);
-      const waiting = opsRefined(rooms, slot);
-      const making = opsMachine(rooms, slot);
-      const stuck = opsRoadblock(rooms, slot);
-      const checking = opsTesting(rooms, slot);
-      const shipped = opsDeployed(rooms, slot);
-      const burning = opsIncident(rooms, slot);
-      return [
-        ...(at ? [new ProjectFlow(this).place(at, TILE, slot)] : []),
-        // The same read as the counts beside them, and none of them drawn
-        // until there is something to say — see `systems/FloorMarker`.
-        //
-        // **In the order they stand, left to right**, because that is the
-        // order they are drawn in: every marker is at one depth, Phaser
-        // sorts the display list stably, so the last one added is the one
-        // in front. The machine and the rig are each four pixels wider than
-        // the step, so those are the seams where getting it backwards would
-        // show — a neighbour drawn over the belt rather than under it.
-        ...(waiting ? [new FloorMarker(this, REFINED).place(waiting, TILE, slot)] : []),
-        ...(making ? [new FloorMarker(this, MACHINE).place(making, TILE, slot)] : []),
-        ...(stuck ? [new FloorMarker(this, ROADBLOCK).place(stuck, TILE, slot)] : []),
-        ...(checking ? [new FloorMarker(this, TESTING).place(checking, TILE, slot)] : []),
-        ...(shipped ? [new FloorMarker(this, DEPLOYED).place(shipped, TILE, slot)] : []),
-        ...(burning ? [new FloorMarker(this, INCIDENT).place(burning, TILE, slot)] : []),
-      ];
-    });
-    if (!stops.length) return null;
-    return () => {
-      for (const stop of stops) stop();
-    };
-  }
-
-  /** The board's name, painted on the middle of its own room's wall. */
-  private addProjectSign(rooms: number, slot: number, name: string) {
-    const at = opsProjectSign(rooms, slot);
-    if (!at) return;
-    const text = this.add
-      .text(at.tx * TILE, 0, name.toUpperCase(), {
-        fontFamily: '"Press Start 2P", monospace',
-        fontSize: "16px",
-        color: "#3a3a50",
-        align: "center",
-        // The clear stretch the wall has, which the room works out: a long
-        // board name wraps rather than being lettered across the pictures
-        // either side of it or out through its own doorway.
-        wordWrap: { width: at.cols * TILE },
-      })
-      .setDepth(3)
-      .setResolution(2);
-    letterOnWall(at.ty * TILE, [text]);
-  }
-
   private addWallSign(address: Address) {
     // A People floor letters nothing of its own, because there is no wall
     // left that is not already somebody's: the top one is the cubicles'
@@ -1054,55 +562,14 @@ export class OfficeScene extends Phaser.Scene {
     // map is behind the rooms — so it writes its name on the wall the
     // corridor actually looks at. Either way both lines are centred on the
     // band of that wall, as every other piece of paint in the world is.
-    const ops =
-      address.floor.kind === "floor" && address.floor.level === 3
-        ? opsSign(operationsRoomCount(address.tenant))
-        : null;
+    const ops = onOperationsFloor(address) ? opsSign(operationsRoomCount(address.tenant)) : null;
     const x = ops ? ops.tx * TILE : lobby ? 15 * 48 : 17 * 48;
-    const wallTop = ops ? ops.ty * TILE : 0;
-    const name = this.add
-      .text(x, 0, address.tenant.name.toUpperCase(), {
-        fontFamily: '"Press Start 2P", monospace',
-        fontSize: "16px",
-        color: "#3a3a50",
-      })
-      .setDepth(3)
-      .setResolution(2);
-    // Wrapped to the wall it has, so "Building Supply Warehouse" takes two lines.
-    const where = this.add
-      .text(
-        x,
-        0,
-        [address.tenant.location, describeFloor(address)].filter(Boolean).join(" · ").toUpperCase(),
-        {
-          fontFamily: '"Press Start 2P", monospace',
-          fontSize: "12px",
-          color: "#565972",
-          align: "center",
-          wordWrap: { width: lobby ? 340 : 200 },
-        },
-      )
-      .setDepth(3)
-      .setResolution(2);
-    letterOnWall(wallTop, [name, where]);
-  }
-
-  /**
-   * A label and a bobbing arrow for something worth walking to. Above it
-   * by default, given the top of its picture; or on the floor below it,
-   * where the picture is on a wall.
-   */
-  /**
-   * Doors, wall names and the help desk counter. A fixture's own sign is
-   * hung by FixtureManager, off the same helper.
-   */
-  private addSign(
-    at: { x: number; y: number },
-    label: string,
-    edge: number,
-    side: "above" | "below" = "above",
-  ) {
-    addSign(this, at, label, edge, side);
+    const where = [address.tenant.location, describeFloor(address)].filter(Boolean).join(" · ");
+    paintOnWall(this, x, ops ? ops.ty * TILE : 0, [
+      { text: address.tenant.name.toUpperCase(), ink: WALL_NAME },
+      // Wrapped to the wall it has, so "Building Supply Warehouse" takes two lines.
+      { text: where.toUpperCase(), ink: WALL_DETAIL, wrap: lobby ? 340 : 200 },
+    ]);
   }
 
   /** The "Press E" over everything in the room you can walk up to, and the key. */
@@ -1118,9 +585,6 @@ export class OfficeScene extends Phaser.Scene {
   // ── Cleanup ────────────────────────────────────────────
 
   private cleanup() {
-    this.cleanupEventBridge?.();
-    this.cleanupEventBridge = null;
-
     this.cleanupPresence?.();
     this.cleanupPresence = null;
     this.presence?.detach();
@@ -1128,8 +592,6 @@ export class OfficeScene extends Phaser.Scene {
 
     this.talk?.destroy();
     this.talk = null;
-
-    this.workerManager?.destroyAll();
   }
 
   // ── Update ─────────────────────────────────────────────
@@ -1146,46 +608,29 @@ export class OfficeScene extends Phaser.Scene {
   /**
    * Walk to where the player tapped, and do whatever is there when we arrive.
    *
-   * A tap has to be told apart from dragging the camera, which uses the same
-   * pointer: anything that wandered or was held is a drag. On a phone this is
-   * the only way to move at all, and on a desktop it sits happily alongside
-   * the keys — either takes over from the other.
+   * On a phone this is the only way to move at all, and on a desktop it sits
+   * happily alongside the keys — either takes over from the other.
    */
   private initTapToWalk() {
-    let down: { x: number; y: number; at: number } | null = null;
-
-    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      // A press that starts on the worker menu belongs to the menu: it closes
-      // itself on release, and without this the same gesture would then read
-      // as a tap on the floor underneath it
-      down = { x: pointer.x, y: pointer.y, at: pointer.downTime };
-
-      // Touching the office means you have finished typing. A canvas cannot
-      // hold focus of its own, so without this the chat box keeps it — and
-      // the scene stands down entirely while a text field is focused, which
-      // would leave the character unable to move by any means at all.
-      const focused = document.activeElement as HTMLElement | null;
-      if (focused && (focused.tagName === "TEXTAREA" || focused.tagName === "INPUT")) {
-        focused.blur();
-      }
-    });
-
-    this.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
-      const start = down;
-      down = null;
-      if (!start) return;
-      // A pinch is two fingers Phaser reports as ordinary pointers, and one
-      // of them barely moves — which is a tap, and would send the character
-      // walking off while somebody is only trying to look closer.
-      if (this.cameraController.pinching) return;
-      if (!isTap(start, { x: pointer.x, y: pointer.y, at: pointer.upTime })) return;
-
-      // Anything with a panel over the office is driving its own input
-      if (this.fixtures.anyOpen()) return;
-
-      const world = pointer.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
-      this.walkTo(world.x, world.y);
-    });
+    onTap(
+      this,
+      () => this.cameraController.pinching,
+      (world) => {
+        // Anything with a panel over the office is driving its own input.
+        if (this.fixtures.anyOpen()) return;
+        this.walkTo(world.x, world.y);
+      },
+      () => {
+        // Touching the office means you have finished with whatever field
+        // had the keys. A canvas cannot hold focus of its own, and the scene
+        // stands down entirely while a text field is focused, which would
+        // leave the character unable to move by any means at all.
+        const focused = document.activeElement as HTMLElement | null;
+        if (focused && (focused.tagName === "TEXTAREA" || focused.tagName === "INPUT")) {
+          focused.blur();
+        }
+      },
+    );
 
     // The office is somewhere you tap, so a long press must not offer to
     // select the canvas or hand the phone's own menu instead
@@ -1193,15 +638,6 @@ export class OfficeScene extends Phaser.Scene {
     this.game.canvas.oncontextmenu = (event) => event.preventDefault();
   }
 
-  /**
-   * Where the character actually stands.
-   *
-   * The sprite is a whole person tall and its middle is around their chest;
-   * the physics body is a small box at their feet, a good two-thirds of a
-   * tile lower. Routes are walked by the body, so they have to be planned
-   * and steered from it — measuring from the sprite instead puts the feet
-   * below the path, and in a tight spot that means walking into the wall.
-   */
   /**
    * Swaps the player's sprite sheet at runtime.
    *
@@ -1214,8 +650,8 @@ export class OfficeScene extends Phaser.Scene {
     ensureSheet(this, spriteKey, spritePath, (ok) => {
       if (!ok) {
         log.error(`sheet ${spriteKey} failed to load from ${spritePath}`);
-        // Forget it, or the studio keeps saying "you're wearing this" about
-        // a look that never went on and the button stays disabled.
+        // Forget it, or the picker goes on saying "you're wearing this"
+        // about a look that never went on.
         rememberCharacter(null);
         return;
       }
@@ -1225,8 +661,7 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private feet(): { x: number; y: number } {
-    const body = this.player.sprite.body as Phaser.Physics.Arcade.Body;
-    return { x: body.center.x, y: body.center.y };
+    return feetOf(this.player, this.feetAt);
   }
 
   /** Route to a point and walk it, acting on whatever is there on arrival. */
@@ -1238,7 +673,7 @@ export class OfficeScene extends Phaser.Scene {
     if (!path || path.length === 0) return;
 
     // Whatever is at the end gets the same treatment as pressing E there,
-    // so tapping a desk, the cauldron or a board does the obvious thing
+    // so tapping a board or a machine does the obvious thing
     this.navigator.follow(path, () => {
       this.virtualInteract = true;
     });
@@ -1263,7 +698,7 @@ export class OfficeScene extends Phaser.Scene {
 
   /** The pad's push on the character; nothing while a dialog has the screen. */
   private padVelocity() {
-    return dialogOpen() ? { vx: 0, vy: 0 } : this.gamepad.velocity(this.player.speed);
+    return padVelocity(this.player, this.gamepad);
   }
 
   update(_time: number, delta: number) {
@@ -1290,13 +725,7 @@ export class OfficeScene extends Phaser.Scene {
         this.player.drive(this.arrival.allow(wanted));
         this.doorManager.updateDoors();
       }
-      gameEvents.emit("player-moved", {
-        x: this.player.sprite.x,
-        y: this.player.sprite.y,
-        facing: this.player.direction,
-        moving: this.player.isMoving(),
-      });
-      this.workerManager.updateAll();
+      this.reportPosition();
       return;
     }
 
@@ -1309,7 +738,6 @@ export class OfficeScene extends Phaser.Scene {
       dialogOpen() ||
       typingInAField()
     ) {
-      this.workerManager.updateAll();
       this.doorManager.updateDoors();
       return;
     }
@@ -1332,16 +760,10 @@ export class OfficeScene extends Phaser.Scene {
 
     this.player.update(steering ?? padVelocity);
 
-    gameEvents.emit("player-moved", {
-      x: this.player.sprite.x,
-      y: this.player.sprite.y,
-      facing: this.player.direction,
-      moving: this.player.isMoving(),
-    });
+    this.reportPosition();
     if (!this.cameraController.cameraFollowing && this.player.isMoving()) {
       this.cameraController.resumeCameraFollow();
     }
-    this.workerManager.updateAll();
     this.doorManager.updateDoors();
 
     // E on the keyboard, or confirm on the pad
@@ -1360,5 +782,15 @@ export class OfficeScene extends Phaser.Scene {
     // with Doc beside them is within reach of both, and one press of E is
     // one thing opened.
     this.talk?.update(this.player.sprite, interactPressed && !took);
+  }
+
+  /** Where we are, for the room socket to pass on to everyone else in the room. */
+  private reportPosition() {
+    gameEvents.emit("player-moved", {
+      x: this.player.sprite.x,
+      y: this.player.sprite.y,
+      facing: this.player.direction,
+      moving: this.player.isMoving(),
+    });
   }
 }

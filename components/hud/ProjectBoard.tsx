@@ -1,14 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { CheckSquare, Clock, MessageSquare, Paperclip, RefreshCw, Text, X } from "lucide-react";
 import FullscreenButton, { useFullscreen } from "./FullscreenButton";
 import { usePanel } from "@/lib/hooks/usePanel";
-import { createLogger } from "@/lib/logger";
+import { usePolledJson } from "@/lib/hooks/usePolledJson";
+import PanelOverlay from "./PanelOverlay";
+import { boardTrouble } from "./BoardTrouble";
 import { currentRoom } from "@/lib/room-client";
 import type { BoardCard, BoardSummary, BoardView } from "@/lib/trello/board";
-
-const log = createLogger("ProjectBoard");
 
 /** Matches the server's hold on the board, so a refresh is never wasted. */
 const REFRESH_MS = 30_000;
@@ -112,46 +112,17 @@ function Card({ card }: { card: BoardCard }) {
  * people reading it is one request.
  */
 export default function ProjectBoard() {
-  const [answer, setAnswer] = useState<Answer | null>(null);
-  const [loading, setLoading] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
+  /** Showing the list of boards to hang, over the one that is up. */
+  const [picking, setPicking] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const fullscreen = useFullscreen(overlayRef);
-
-  /**
-   * Read a board: the one hanging in a given room of this floor, or the one
-   * picked in this browser.
-   *
-   * A slot wins, and it is not a preference — it is which wall was walked
-   * up to. A building running three boards runs them one to a room, so the
-   * room is the question and there is nothing for a picker to pick; the
-   * remembered choice is for a building that hangs one board and offers the
-   * list on it.
-   */
-  const load = useCallback(async (slot: string | null, boardId: string | null) => {
-    setLoading(true);
-    try {
-      const query = slot
-        ? `?room=${encodeURIComponent(currentRoom())}&slot=${encodeURIComponent(slot)}`
-        : boardId
-          ? `?board=${encodeURIComponent(boardId)}`
-          : "";
-      const response = await fetch(`/api/trello${query}`, { cache: "no-store" });
-      const body = (await response.json()) as Answer;
-      setAnswer(body);
-    } catch (err) {
-      log.warn("could not read the board:", (err as Error).message);
-      setAnswer({ configured: true, error: "The board could not be reached." });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   // Which board hangs here is remembered per browser, so it is read as the
   // panel opens rather than held in state that outlives a room change. Only
   // consulted where the board walked up to names no room of its own.
   const { open, subject, close } = usePanel("project-board", {
-    onOpen: (slot) => {
+    onOpen: () => {
       let remembered: string | null = null;
       try {
         remembered = localStorage.getItem(PICKED_BOARD);
@@ -159,16 +130,32 @@ export default function ProjectBoard() {
         // Storage off: the board is picked again each time.
       }
       setPicked(remembered);
-      void load(slot, remembered);
+      setPicking(false);
     },
   });
 
+  /**
+   * Which board to read: the one hanging in a given room of this floor, or
+   * the one picked in this browser.
+   *
+   * A slot wins, and it is not a preference — it is which wall was walked
+   * up to. A building running three boards runs them one to a room, so the
+   * room is the question and there is nothing for a picker to pick; the
+   * remembered choice is for a building that hangs one board and offers the
+   * list on it. The room is read as the panel asks rather than at mount:
+   * riding the lift changes rooms without rebuilding the HUD.
+   */
+  const query = subject
+    ? `?room=${encodeURIComponent(currentRoom())}&slot=${encodeURIComponent(subject)}`
+    : picked
+      ? `?board=${encodeURIComponent(picked)}`
+      : "";
   // While it is on the wall, keep it current.
-  useEffect(() => {
-    if (!open) return;
-    const timer = setInterval(() => void load(subject, picked), REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [open, subject, picked, load]);
+  const read = usePolledJson<Answer>(open ? `/api/trello${query}` : null, {
+    open,
+    every: REFRESH_MS,
+  });
+  const answer = read.data;
 
   const choose = (id: string) => {
     try {
@@ -177,31 +164,28 @@ export default function ProjectBoard() {
       // As above.
     }
     setPicked(id);
-    // Tell the office too: the agents have no browser to remember it in.
+    setPicking(false);
+    // And tell the office: its pick is what a wall with no board of its own
+    // is drawn from for everybody else.
     void fetch("/api/trello", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ board: id }),
     }).catch(() => {});
-    void load(null, id);
   };
 
   if (!open) return null;
 
   const board = answer?.board;
   const boards = answer?.boards ?? [];
+  const trouble = boardTrouble(read, "The board");
 
   return (
-    <div
+    <PanelOverlay
       ref={overlayRef}
       className="pinball-overlay board-overlay"
-      onClick={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (window.matchMedia("(pointer: coarse)").matches) return;
-        close();
-      }}
-      role="dialog"
-      aria-label="Project board"
+      label="Project board"
+      onClose={close}
     >
       <div className="pixel-panel board-panel">
         <div className="pinball-head arcade-head">
@@ -216,11 +200,11 @@ export default function ProjectBoard() {
               type="button"
               className="pixel-icon-btn"
               style={{ width: 26, height: 26 }}
-              onClick={() => void load(subject, picked)}
+              onClick={read.refresh}
               title="Read the board again"
               aria-label="Refresh the board"
             >
-              <RefreshCw size={12} className={loading ? "board-spin" : undefined} />
+              <RefreshCw size={12} className={read.loading ? "board-spin" : undefined} />
             </button>
             <FullscreenButton control={fullscreen} what="the board" />
             <button
@@ -237,7 +221,9 @@ export default function ProjectBoard() {
         </div>
 
         <div className="board-body">
-          {answer?.configured === false ? (
+          {trouble ? (
+            trouble
+          ) : answer?.configured === false ? (
             <div className="board-note">
               <p className="board-note__lead">No Trello board is connected yet.</p>
               <p>
@@ -254,15 +240,11 @@ export default function ProjectBoard() {
           ) : answer?.error ? (
             <div className="board-note">
               <p className="board-note__lead">{answer.error}</p>
-              <button
-                type="button"
-                className="pixel-button"
-                onClick={() => void load(subject, picked)}
-              >
+              <button type="button" className="pixel-button" onClick={read.refresh}>
                 Try again
               </button>
             </div>
-          ) : board ? (
+          ) : board && !picking ? (
             <div className="board-columns">
               {board.columns.length === 0 ? (
                 <div className="board-note">
@@ -308,7 +290,7 @@ export default function ProjectBoard() {
           ) : (
             <div className="board-note">
               <p className="board-note__lead">
-                {loading ? "Reading the board…" : "No boards found."}
+                {read.loading ? "Reading the board…" : "No boards found."}
               </p>
             </div>
           )}
@@ -316,17 +298,13 @@ export default function ProjectBoard() {
 
         <div className="board-foot">
           <span>Read-only · nothing here changes Trello</span>
-          {boards.length > 1 && board && !subject && (
-            <button
-              type="button"
-              className="board-foot__switch"
-              onClick={() => setAnswer({ configured: true, boards })}
-            >
+          {boards.length > 1 && board && !subject && !picking && (
+            <button type="button" className="board-foot__switch" onClick={() => setPicking(true)}>
               Another board
             </button>
           )}
         </div>
       </div>
-    </div>
+    </PanelOverlay>
   );
 }

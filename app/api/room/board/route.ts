@@ -6,9 +6,9 @@
  * already on the board, in the order they were drawn.
  */
 
-import { NextResponse } from "next/server";
 import { getRoomStore } from "@/lib/server/room-store";
 import { SHARED_BOARD } from "@/lib/whiteboard";
+import { guarded } from "@/lib/server/route";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("BoardAPI");
@@ -16,10 +16,9 @@ const log = createLogger("BoardAPI");
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  try {
-    return NextResponse.json({ strokes: getRoomStore().listStrokes(SHARED_BOARD) });
-  } catch (err) {
-    log.error("could not read the board:", (err as Error).message);
-    return NextResponse.json({ error: "Failed to read the board" }, { status: 500 });
-  }
+  return guarded(
+    "read the board",
+    () => Response.json({ strokes: getRoomStore().listStrokes(SHARED_BOARD) }),
+    log,
+  );
 }

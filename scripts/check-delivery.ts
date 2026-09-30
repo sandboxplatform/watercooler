@@ -1,7 +1,7 @@
 /**
  * Measures a delivered sheet before it is installed.
  *
- *   pnpm tsx scripts/check-delivery.ts public/characters/examples/Hunter_sprite.png
+ *   pnpm tsx scripts/check-delivery.ts art/characters/Hunter_sprite.png
  *
  * `pnpm check:sheets` reads the installed cast, which is one step too late:
  * the whole point of measuring is to catch four pixels of drift while the

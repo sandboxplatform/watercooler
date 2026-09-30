@@ -86,6 +86,9 @@ describe("the cast", () => {
     for (const member of CAST) {
       if (!member.art) continue;
       expect(member.art.startsWith("/characters/examples/")).toBe(true);
+      expect(member.art.endsWith(".webp"), `${member.id}: ${member.art} is not the WebP`).toBe(
+        true,
+      );
       const file = join(process.cwd(), "public", member.art.replace(/^\//, ""));
       expect(existsSync(file), `${member.id}: ${member.art} is not there`).toBe(true);
     }

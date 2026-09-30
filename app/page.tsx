@@ -1,8 +1,16 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { StudioProvider } from "@/lib/store";
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GameErrorBoundary } from "@/components/game/GameErrorBoundary";
 import GameHud from "@/components/hud/GameHud";
@@ -10,16 +18,21 @@ import Sidebar, { type SidebarTab } from "@/components/hud/Sidebar";
 import Profile from "@/components/hud/Profile";
 import EggCard from "@/components/hud/EggCard";
 import BadgeCard from "@/components/hud/BadgeCard";
-import CharacterStudio from "@/components/hud/CharacterStudio";
 import { loadSidebarWidth } from "@/lib/persistence";
 import { useBackToClose } from "@/lib/hooks/useBackToClose";
 import { dialogOpen, typingInAField } from "@/lib/gamepad/dialogs";
 import { togglesSidebar } from "@/lib/sidebar-key";
 import { SIDEBAR_DEFAULT_WIDTH } from "@/lib/constants";
+import { usePresence } from "@/lib/hooks/usePresence";
+import { useWorldSync } from "@/lib/hooks/useWorldSync";
+import { watchRoomHistory } from "@/lib/room-travel";
 
 const PhaserGame = dynamic(() => import("@/components/game/PhaserGame"), {
   ssr: false,
 });
+
+// Fetched the first time somebody opens it, which a persona never does.
+const CharacterStudio = lazy(() => import("@/components/hud/CharacterStudio"));
 
 /** The stored width is a client-only fact, so the server must not read it. */
 const subscribeToNothing = () => () => {};
@@ -29,9 +42,27 @@ const subscribeToNothing = () => () => {};
  * beside it — and a drawer has no business being open before it is asked for.
  */
 const SIDEBAR_FITS_AT = 900;
-const readWideEnough = () => window.innerWidth >= SIDEBAR_FITS_AT;
+const WIDE_QUERY = `(min-width: ${SIDEBAR_FITS_AT}px)`;
+const readWideEnough = () => window.matchMedia(WIDE_QUERY).matches;
+/**
+ * Followed rather than read once: a phone turned on its side, or a window
+ * dragged narrower, moves the column between a drawer and a column, and a
+ * value read at load said whichever it was then for the rest of the visit.
+ */
+const subscribeToWidth = (listener: () => void) => {
+  const query = window.matchMedia(WIDE_QUERY);
+  query.addEventListener("change", listener);
+  return () => query.removeEventListener("change", listener);
+};
 
 export default function Page() {
+  // The room socket and what it says, kept for as long as the page is up.
+  // These were the whole of what the studio provider still did once the
+  // seats had gone, and a provider with no state in it is a wrapper.
+  usePresence();
+  useWorldSync();
+  useEffect(() => watchRoomHistory(), []);
+
   const storedWidth = useSyncExternalStore(
     subscribeToNothing,
     loadSidebarWidth,
@@ -69,7 +100,7 @@ export default function Page() {
    * neither the column's nor the HUD's and sits above them both.
    */
   const [characterOpen, setCharacterOpen] = useState(false);
-  const wideEnough = useSyncExternalStore(subscribeToNothing, readWideEnough, () => true);
+  const wideEnough = useSyncExternalStore(subscribeToWidth, readWideEnough, () => true);
 
   // Closing the column takes the slider with it: it lives in there.
   const closeSidebar = useCallback(() => {
@@ -85,14 +116,22 @@ export default function Page() {
    * Showing another tab counts as closed — the pill counts People, so it has
    * to land there rather than shut a column somebody is reading Badges in.
    */
+  const peopleShowing = sidebarOpen && sidebarTab === "people";
+  // Read at the press rather than closed over, so the callback is the same
+  // one for the life of the page and the HUD it is handed to need not
+  // re-render when the column opens.
+  const peopleShowingRef = useRef(peopleShowing);
+  useLayoutEffect(() => {
+    peopleShowingRef.current = peopleShowing;
+  });
   const togglePeople = useCallback(() => {
-    if (sidebarOpen && sidebarTab === "people") {
+    if (peopleShowingRef.current) {
       closeSidebar();
       return;
     }
     setSidebarTab("people");
     setSidebarOpen(true);
-  }, [sidebarOpen, sidebarTab, closeSidebar]);
+  }, [closeSidebar]);
   const toggleMusic = useCallback(() => setMusicOpen((open) => !open), []);
   const toggleCharacter = useCallback(() => setCharacterOpen((open) => !open), []);
   const closeCharacter = useCallback(() => setCharacterOpen(false), []);
@@ -134,39 +173,38 @@ export default function Page() {
 
   return (
     <ErrorBoundary>
-      <StudioProvider>
-        {/* The office on the left, who is in it on the right */}
-        <main className="app-shell">
-          <div className="app-stage">
-            <GameErrorBoundary>
-              <PhaserGame />
-            </GameErrorBoundary>
+      {/* The office on the left, who is in it on the right */}
+      <main className="app-shell">
+        <div className="app-stage">
+          <GameErrorBoundary>
+            <PhaserGame />
+          </GameErrorBoundary>
 
-            {/* HUD overlay — floating UI over the office only */}
-            <div className="app-hud">
-              <GameHud
-                peopleOpen={sidebarOpen && sidebarTab === "people"}
-                onTogglePeople={togglePeople}
-                onShowMusic={showMusic}
-                onCloseMusic={closeMusic}
-              />
-            </div>
+          {/* HUD overlay — floating UI over the office only */}
+          <div className="app-hud">
+            <GameHud
+              peopleOpen={peopleShowing}
+              onTogglePeople={togglePeople}
+              onShowMusic={showMusic}
+              onCloseMusic={closeMusic}
+            />
           </div>
+        </div>
 
-          <Sidebar
-            open={sidebarOpen}
-            tab={sidebarTab}
-            onTabChange={setSidebarTab}
-            width={width ?? storedWidth}
-            onWidthChange={setWidth}
-            onClose={closeSidebar}
-            musicOpen={musicOpen}
-            onToggleMusic={toggleMusic}
-            characterOpen={characterOpen}
-            onToggleCharacter={toggleCharacter}
-          />
+        <Sidebar
+          open={sidebarOpen}
+          tab={sidebarTab}
+          onTabChange={setSidebarTab}
+          width={width ?? storedWidth}
+          onWidthChange={setWidth}
+          onClose={closeSidebar}
+          musicOpen={musicOpen}
+          onToggleMusic={toggleMusic}
+          characterOpen={characterOpen}
+          onToggleCharacter={toggleCharacter}
+        />
 
-          {/*
+        {/*
             A profile is over the *whole* app, column included, which is why
             it is here and not in the HUD with the other windows.
 
@@ -177,33 +215,36 @@ export default function Page() {
             room you are standing in; wrong for this, which is opened *from*
             the column and leads with a picture too big to read behind one.
           */}
-          <Profile />
+        <Profile />
 
-          {/*
+        {/*
             And one kind of egg, big enough to be worth collecting. Opened
             from the Eggs panel in the column, so it belongs here with the
             profile rather than in the HUD behind it — and it opens profiles
             of its own, off the same bus.
           */}
-          <EggCard />
+        <EggCard />
 
-          {/*
+        {/*
             And one badge: what it is, the line saying how to get it, and
             who has it. Here for the reason the two above are, with one
             caller neither of them has — the toast over the office, which
             is the only thing that ever told anybody a badge existed and
             took six seconds about it.
           */}
-          <BadgeCard />
+        <BadgeCard />
 
-          {/*
+        {/*
             The character picker, for the same reason and opened from the same
             place: its button is at the foot of the column, so the window is
             the page's rather than the HUD's.
           */}
-          <CharacterStudio open={characterOpen} onClose={closeCharacter} />
-        </main>
-      </StudioProvider>
+        {characterOpen && (
+          <Suspense fallback={null}>
+            <CharacterStudio onClose={closeCharacter} />
+          </Suspense>
+        )}
+      </main>
     </ErrorBoundary>
   );
 }

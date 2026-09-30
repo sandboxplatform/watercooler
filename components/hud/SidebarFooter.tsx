@@ -62,7 +62,7 @@ export default function SidebarFooter({
       {!ownLookOnly && (
         <button
           type="button"
-          data-dock-id="workers"
+          data-dock-id="character"
           className={`topbar-tool-btn ${characterOpen ? "topbar-tool-btn--active" : ""}`}
           onClick={onToggleCharacter}
           title="Character"

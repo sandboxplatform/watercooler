@@ -1,15 +1,15 @@
 /**
- * Room store — the server-side source of truth for a world.
+ * Room store — what the world keeps once the people in it have gone home.
  *
  * Backed by SQLite through node's built-in driver, so there is no native
  * dependency and no service to run locally. All SQL lives in this module: the
  * move to Postgres in the hosting phase should be a swap here, not a change at
- * every call site.
+ * every call site. What the tables are, and how an older file is brought up
+ * to them, is `room-schema.ts`.
  *
- * Rows keep real columns for the things the server will need to reason about
- * later (room, seat, status, who asked, when) and a JSON `data` column for the
- * full client object. That gets the world onto the server without freezing the
- * client's model while it is still moving.
+ * Badges, eggs, high scores, the whiteboard, accounts and a handful of
+ * settings. Who is where right now is not here: that is presence, and it is
+ * the socket's, in memory.
  */
 
 import { DatabaseSync, type StatementSync } from "node:sqlite";
@@ -19,19 +19,25 @@ import { createLogger } from "../logger";
 import { normaliseEmail, type Account, type AccountProfile, type SignedIn } from "../accounts";
 import { isGuestHolder } from "../badges";
 import { personIdForEmail } from "./person-id";
+import { MIGRATIONS } from "./room-schema";
 
 const log = createLogger("RoomStore");
 
 /** Single-player still means one room; multiplayer gives it a real slug. */
 export const DEFAULT_ROOM = process.env.ROOM_SLUG ?? "local";
 
-/** Placeholder until players have identities of their own. */
-export const LOCAL_PLAYER = "local";
-
 const DB_PATH = process.env.ROOM_DB_PATH ?? join(process.cwd(), ".data", "watercooler.sqlite");
 
 /** How many strokes one board keeps before the oldest are dropped. */
 const BOARD_STROKE_LIMIT = 2000;
+
+/**
+ * How long a write waits on a lock held by another connection before it
+ * fails. Without it SQLite answers "database is locked" at once, and the
+ * one process that holds this file is not the only thing that can open it —
+ * a backup, a second server during a deploy's overlap, a test run.
+ */
+const BUSY_TIMEOUT_MS = 5000;
 
 /** How many names the cauldron remembers. */
 export const PINBALL_HIGH_SCORES = 3;
@@ -41,263 +47,6 @@ export interface PinballScore {
   score: number;
   scored_at: string;
 }
-
-export interface RoomSnapshot {
-  seats: unknown[];
-}
-
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS rooms (
-  slug       TEXT PRIMARY KEY,
-  created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS players (
-  id           TEXT NOT NULL,
-  room         TEXT NOT NULL,
-  display_name TEXT NOT NULL,
-  sprite_key   TEXT,
-  last_seen    TEXT NOT NULL,
-  PRIMARY KEY (room, id)
-);
-
-CREATE TABLE IF NOT EXISTS seats (
-  room       TEXT NOT NULL,
-  seat_id    TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  data       TEXT NOT NULL,
-  PRIMARY KEY (room, seat_id)
-);
-
-CREATE TABLE IF NOT EXISTS badges (
-  person    TEXT NOT NULL,
-  code      TEXT NOT NULL,
-  name      TEXT NOT NULL,
-  earned_at TEXT NOT NULL,
-  PRIMARY KEY (person, code)
-);
-CREATE INDEX IF NOT EXISTS badges_by_time ON badges (earned_at);
-
-CREATE TABLE IF NOT EXISTS badge_marks (
-  person TEXT NOT NULL,
-  mark   TEXT NOT NULL,
-  PRIMARY KEY (person, mark)
-);
-
-CREATE TABLE IF NOT EXISTS eggs (
-  id       TEXT PRIMARY KEY,
-  person   TEXT NOT NULL,
-  name     TEXT NOT NULL,
-  tier     TEXT NOT NULL,
-  found_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS eggs_by_person ON eggs (person, tier);
-
-CREATE TABLE IF NOT EXISTS board_strokes (
-  room       TEXT NOT NULL,
-  stroke_id  TEXT NOT NULL,
-  position   INTEGER NOT NULL,
-  data       TEXT NOT NULL,
-  PRIMARY KEY (room, stroke_id)
-);
-
-CREATE TABLE IF NOT EXISTS pinball_scores (
-  room       TEXT NOT NULL,
-  player     TEXT NOT NULL,
-  score      INTEGER NOT NULL,
-  scored_at  TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS pinball_by_room ON pinball_scores (room, score DESC);
-
-CREATE TABLE IF NOT EXISTS arcade_scores (
-  room       TEXT NOT NULL,
-  game       TEXT NOT NULL,
-  player     TEXT NOT NULL,
-  score      INTEGER NOT NULL,
-  scored_at  TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS arcade_by_game ON arcade_scores (room, game, score DESC);
-CREATE INDEX IF NOT EXISTS strokes_by_room ON board_strokes (room, position);
-
-CREATE TABLE IF NOT EXISTS settings (
-  key        TEXT PRIMARY KEY,
-  value      TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS accounts (
-  email          TEXT PRIMARY KEY,
-  display_name   TEXT,
-  image          TEXT,
-  name           TEXT,
-  home           TEXT,
-  character_key  TEXT,
-  character_path TEXT,
-  visits         INTEGER NOT NULL DEFAULT 0,
-  stats          TEXT NOT NULL DEFAULT '{}',
-  created_at     TEXT NOT NULL,
-  updated_at     TEXT NOT NULL,
-  last_seen_at   TEXT NOT NULL
-);
-`;
-
-interface Migration {
-  /** What it does, for the log and for reading the ladder. */
-  name: string;
-  up(db: DatabaseSync): void;
-}
-
-/**
- * Every change to the shape of the database, in order.
- *
- * The index is the version a migration brings the database *to*:
- * `MIGRATIONS[0]` takes it from 0 to 1. `PRAGMA user_version` records how
- * far it has climbed, so each one runs exactly once and there is a place to
- * put a change that is not simply another column — a rename, a backfill, an
- * index that has to be rebuilt. There was nowhere for one of those before,
- * because nothing recorded what shape a database was in.
- *
- * A migration may be run against a database that already has what it is
- * adding: everything before the ladder existed sits at version 0 with the
- * tables and, depending on its age, some of the columns. So the baseline
- * asks before it adds. From version 2 on, the version is the answer and a
- * migration can assume the one before it ran.
- */
-const MIGRATIONS: readonly Migration[] = [
-  {
-    name: "baseline",
-    up: (db) => {
-      db.exec(SCHEMA);
-    },
-  },
-  {
-    name: "drop the activity log",
-    up: (db) => {
-      // The panel that read it is gone, and nothing else ever did. A log
-      // with no reader is rows a room goes on paying to write.
-      db.exec("DROP INDEX IF EXISTS activity_by_room");
-      db.exec("DROP TABLE IF EXISTS activity");
-    },
-  },
-  {
-    name: "drop tasks and sessions",
-    up: (db) => {
-      // Agent dispatch is gone, and these held nothing else: a task, the
-      // conversation it belonged to, and what the room had spent running
-      // them. The rooms table keeps its two columns rather than being
-      // rebuilt — SQLite drops a column by copying the table, and an
-      // unused column costs a room nothing.
-      db.exec("DROP INDEX IF EXISTS tasks_by_room");
-      db.exec("DROP INDEX IF EXISTS sessions_by_room");
-      db.exec("DROP TABLE IF EXISTS tasks");
-      db.exec("DROP TABLE IF EXISTS sessions");
-    },
-  },
-  {
-    name: "drop the chat log",
-    up: (db) => {
-      // Chat is gone, and nothing reads this back or writes to it. What
-      // people say to each other is Global Chat, which is audio between
-      // browsers and was never kept anywhere; what a resident says is a
-      // bubble that fades. The rows were the agents' transcript, and
-      // latterly remarks typed into a window beside the office.
-      db.exec("DROP INDEX IF EXISTS messages_by_room");
-      db.exec("DROP TABLE IF EXISTS messages");
-    },
-  },
-  {
-    name: "rebuild the badges",
-    up: (db) => {
-      // The old catalogue is gone and nothing here is worth carrying over.
-      // Its rows were filed under a *room* — so the same person earned
-      // Walked In again on every floor they rode to — and half of them were
-      // an agent's, from back when the world ran agents. There is nothing to
-      // migrate: a badge names a deed, and neither the deeds nor the shape
-      // survived. Everyone starts with an empty shelf, which is the honest
-      // state for a set of badges nobody has yet had the chance to earn.
-      db.exec("DROP TABLE IF EXISTS achievements");
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS badges (
-          person    TEXT NOT NULL,
-          code      TEXT NOT NULL,
-          name      TEXT NOT NULL,
-          earned_at TEXT NOT NULL,
-          PRIMARY KEY (person, code)
-        );
-        CREATE INDEX IF NOT EXISTS badges_by_time ON badges (earned_at);
-
-        CREATE TABLE IF NOT EXISTS badge_marks (
-          person TEXT NOT NULL,
-          mark   TEXT NOT NULL,
-          PRIMARY KEY (person, mark)
-        );
-      `);
-    },
-  },
-  {
-    name: "the egg basket",
-    up: (db) => {
-      // What somebody picked up out of the grass, which unlike the eggs
-      // lying about in it is kept: the field is in memory beside the
-      // basketball and a restart has tidied it, and a basket is a person's
-      // and outlives every server there will ever be.
-      //
-      // A row per egg rather than a count per tier, because an egg is a
-      // thing that happened at a time — the row is what lets a basket say
-      // when the rainbow turned up. Everything anybody asks of it is a
-      // tally over these rows, which is bounded by people times the ladder
-      // where the rows are bounded by nothing.
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS eggs (
-          id       TEXT PRIMARY KEY,
-          person   TEXT NOT NULL,
-          name     TEXT NOT NULL,
-          tier     TEXT NOT NULL,
-          found_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS eggs_by_person ON eggs (person, tier);
-      `);
-    },
-  },
-  {
-    name: "drop the register",
-    up: (db) => {
-      // A desk is the cast's now, not a browser's. This held one row per
-      // browser profile that ever walked in — a name, a building, and an id
-      // minted into that browser's own localStorage — and Floor 1 stood a
-      // desk for each. A code names exactly one person, so the id was the
-      // one thing about them that did not hold: a private window, a
-      // sign-out, a cleared profile and every new machine was another row
-      // and another desk with the same name on it. Sandbox ERP's floor had
-      // seventeen Coops on it.
-      //
-      // Nothing is carried over, because there is nothing a row knows that
-      // `CAST` does not: who works where is written down, and who is at a
-      // keyboard right now is presence rather than a register.
-      db.exec("DROP INDEX IF EXISTS people_home");
-      db.exec("DROP TABLE IF EXISTS people");
-    },
-  },
-  {
-    name: "forget the guests",
-    up: (db) => {
-      // A guest keeps nothing now — no badge, no mark, no egg — and what
-      // they kept before goes with the rule rather than lingering under it.
-      // Every row here was filed under a name somebody typed on the shared
-      // code, so two people called Guest shared one shelf and nothing in a
-      // row can say whose it was. Left in, they would go on being listed
-      // against every badge and every kind of egg in the world: a record,
-      // kept for good, of people the world has decided not to remember.
-      //
-      // Deleted rather than carried anywhere, for the reason migration 5
-      // kept nothing: there is nobody to give them back to.
-      db.exec("DELETE FROM badges WHERE person LIKE 'guest:%'");
-      db.exec("DELETE FROM badge_marks WHERE person LIKE 'guest:%'");
-      db.exec("DELETE FROM eggs WHERE person LIKE 'guest:%'");
-    },
-  },
-];
 
 /** The shape this build expects. */
 export const SCHEMA_VERSION = MIGRATIONS.length;
@@ -331,10 +80,6 @@ function parseRows(rows: DataRow[]): unknown[] {
   return out;
 }
 
-function asString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
 export class RoomStore {
   private db: DatabaseSync;
 
@@ -342,8 +87,7 @@ export class RoomStore {
    * Compiled statements, kept by their SQL.
    *
    * `prepare` parses and plans the statement every time it is called, and
-   * every method here called it afresh — including `ensureRoom`, which runs
-   * ahead of nearly every other one. The SQL is a fixed set of literals, so
+   * every method here called it afresh. The SQL is a fixed set of literals, so
    * it compiles once and is reused for the life of the process, which is
    * what a prepared statement is for.
    */
@@ -360,6 +104,10 @@ export class RoomStore {
     this.db = new DatabaseSync(path);
     try {
       this.db.exec("PRAGMA journal_mode = WAL");
+      // Durable under WAL all the same: a commit can be lost to a power cut,
+      // never corrupted, and a stroke or a badge is not worth an fsync each.
+      this.db.exec("PRAGMA synchronous = NORMAL");
+      this.db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
       this.db.exec("PRAGMA foreign_keys = ON");
       this.migrate();
     } catch (err) {
@@ -374,15 +122,21 @@ export class RoomStore {
   /**
    * Let the file go.
    *
-   * The server never calls this — the store is one handle for the life of
-   * the process — but a test that opens a database on disk cannot delete it
-   * afterwards while something still holds it, which on Windows is an error
-   * rather than a nicety.
+   * The store is one handle for the life of the process, and the server
+   * lets it go on the way down (`closeRoomStore`), so the WAL is folded back
+   * into the file rather than left for the next boot. A test that opens a
+   * database on disk needs it too: it cannot delete the file afterwards
+   * while something still holds it, which on Windows is an error.
    */
   close() {
     // The compiled statements hold the file too, so they go first.
     this.statements.clear();
     this.db.close();
+  }
+
+  /** Whether the database answers at all. What the health probe asks. */
+  ping(): boolean {
+    return (this.stmt("SELECT 1 AS ok").get() as { ok: number } | undefined)?.ok === 1;
   }
 
   private get version(): number {
@@ -500,19 +254,6 @@ export class RoomStore {
     return this.getAccount(email)!;
   }
 
-  /** Count something about a person: a game played, a score, a task handed out. */
-  bumpAccountStat(email: string, stat: string, by = 1): Account | null {
-    const account = this.getAccount(normaliseEmail(email));
-    if (!account) return null;
-    const stats = { ...account.stats, [stat]: (account.stats[stat] ?? 0) + by };
-    this.stmt("UPDATE accounts SET stats = ?, updated_at = ? WHERE email = ?").run(
-      JSON.stringify(stats),
-      new Date().toISOString(),
-      account.email,
-    );
-    return { ...account, stats };
-  }
-
   getAccount(email: string): Account | null {
     const row = this.stmt(
       `SELECT email, display_name, image, name, home, character_key, character_path, visits, stats
@@ -524,7 +265,7 @@ export class RoomStore {
     try {
       stats = JSON.parse(row.stats) as Record<string, number>;
     } catch {
-      // A damaged blob counts for nothing; the next bump starts it afresh.
+      // A damaged blob counts for nothing.
     }
     return {
       email: row.email,
@@ -546,35 +287,42 @@ export class RoomStore {
   // ── Whiteboard ────────────────────────────────────────
 
   /**
-   * Add or update a stroke. Updates matter: a stroke is streamed while it is
-   * being drawn, so the same id arrives repeatedly with more points, and a
-   * refresh mid-drawing should show what has been drawn so far.
+   * Add a stroke, or replace the one already kept under its id — a stroke
+   * sent twice is one stroke, and it keeps its place in the drawing order.
+   *
+   * One transaction, so the edge read and the insert after it cannot be
+   * split by another write; and the board is trimmed only when a row was
+   * added, since an update cannot have made it any longer. It used to trim
+   * on every call, and a stroke streamed while it was drawn was a call a
+   * frame.
    */
   addStroke(room: string, strokeId: string, data: unknown) {
-    this.ensureRoom(room);
-    const row = this.stmt("SELECT MAX(position) AS edge FROM board_strokes WHERE room = ?").get(
-      room,
-    ) as { edge: number | null };
+    const json = JSON.stringify(data);
+    this.transaction(() => {
+      const updated = this.stmt(
+        "UPDATE board_strokes SET data = ? WHERE room = ? AND stroke_id = ?",
+      ).run(json, room, strokeId);
+      if (updated.changes > 0) return;
 
-    this.stmt(
-      `INSERT INTO board_strokes (room, stroke_id, position, data) VALUES (?, ?, ?, ?)
-         ON CONFLICT (room, stroke_id) DO UPDATE SET data = excluded.data`,
-    ).run(room, strokeId, (row?.edge ?? 0) + 1, JSON.stringify(data));
-
-    this.trimStrokes(room);
+      const row = this.stmt("SELECT MAX(position) AS edge FROM board_strokes WHERE room = ?").get(
+        room,
+      ) as { edge: number | null };
+      this.stmt(
+        "INSERT INTO board_strokes (room, stroke_id, position, data) VALUES (?, ?, ?, ?)",
+      ).run(room, strokeId, (row?.edge ?? 0) + 1, json);
+      this.trimStrokes(room);
+    });
   }
 
   listStrokes(room: string): unknown[] {
-    this.ensureRoom(room);
     return parseRows(
       this.stmt("SELECT data FROM board_strokes WHERE room = ? ORDER BY position").all(
         room,
-      ) as DataRow[],
+      ) as unknown as DataRow[],
     );
   }
 
   clearBoard(room: string) {
-    this.ensureRoom(room);
     this.stmt("DELETE FROM board_strokes WHERE room = ?").run(room);
   }
 
@@ -597,7 +345,6 @@ export class RoomStore {
    * is still there, and "who has played" stays answerable.
    */
   recordPinballScore(room: string, player: string, score: number): PinballScore[] {
-    this.ensureRoom(room);
     this.stmt(
       "INSERT INTO pinball_scores (room, player, score, scored_at) VALUES (?, ?, ?, ?)",
     ).run(room, player.slice(0, 16), Math.max(0, Math.round(score)), new Date().toISOString());
@@ -607,7 +354,6 @@ export class RoomStore {
 
   /** The high score table: the best games in this room, best first. */
   topPinballScores(room: string, limit = PINBALL_HIGH_SCORES): PinballScore[] {
-    this.ensureRoom(room);
     return this.stmt(
       `SELECT player, score, scored_at FROM pinball_scores
          WHERE room = ? ORDER BY score DESC, scored_at ASC LIMIT ?`,
@@ -618,7 +364,6 @@ export class RoomStore {
 
   /** Like the cauldron's board, one per game in the cabinet. */
   recordArcadeScore(room: string, game: string, player: string, score: number): PinballScore[] {
-    this.ensureRoom(room);
     this.stmt(
       "INSERT INTO arcade_scores (room, game, player, score, scored_at) VALUES (?, ?, ?, ?, ?)",
     ).run(
@@ -632,7 +377,6 @@ export class RoomStore {
   }
 
   topArcadeScores(room: string, game: string, limit = PINBALL_HIGH_SCORES): PinballScore[] {
-    this.ensureRoom(room);
     return this.stmt(
       `SELECT player, score, scored_at FROM arcade_scores
          WHERE room = ? AND game = ? ORDER BY score DESC, scored_at ASC LIMIT ?`,
@@ -762,60 +506,6 @@ export class RoomStore {
     }>;
   }
 
-  ensureRoom(room: string) {
-    this.stmt("INSERT OR IGNORE INTO rooms (slug, created_at) VALUES (?, ?)").run(
-      room,
-      new Date().toISOString(),
-    );
-  }
-
-  getSnapshot(room: string): RoomSnapshot {
-    this.ensureRoom(room);
-
-    return {
-      seats: parseRows(
-        this.stmt("SELECT data FROM seats WHERE room = ? ORDER BY seat_id").all(room) as DataRow[],
-      ),
-    };
-  }
-
-  /**
-   * The client owns ordering and trimming of these collections today, so a
-   * write replaces the room's whole slice inside one transaction. Per-entity
-   * events arrive with the shared-world phase.
-   */
-  replaceSeats(room: string, seats: Record<string, unknown>[]) {
-    this.ensureRoom(room);
-    this.transaction(() => {
-      this.stmt("DELETE FROM seats WHERE room = ?").run(room);
-      const insert = this.stmt(
-        "INSERT INTO seats (room, seat_id, updated_at, data) VALUES (?, ?, ?, ?)",
-      );
-      const now = new Date().toISOString();
-      for (const seat of seats) {
-        const id = asString(seat.seatId);
-        if (!id) continue;
-        insert.run(room, id, now, JSON.stringify(seat));
-      }
-    });
-  }
-
-  // ── Per-entity writes ─────────────────────────────────
-  // A shared room cannot use whole-slice writes: two people acting at once
-  // would each send a list that omits the other's work, and the later write
-  // would erase it. These apply one change at a time.
-
-  upsertSeat(room: string, seat: Record<string, unknown>) {
-    this.ensureRoom(room);
-    const id = asString(seat.seatId);
-    if (!id) return;
-
-    this.stmt(
-      `INSERT INTO seats (room, seat_id, updated_at, data) VALUES (?, ?, ?, ?)
-         ON CONFLICT (room, seat_id) DO UPDATE SET updated_at = excluded.updated_at, data = excluded.data`,
-    ).run(room, id, new Date().toISOString(), JSON.stringify(seat));
-  }
-
   private transaction(fn: () => void) {
     this.db.exec("BEGIN");
     try {
@@ -839,4 +529,15 @@ export function getRoomStore(): RoomStore {
     globalForStore.__roomStore = new RoomStore(DB_PATH);
   }
   return globalForStore.__roomStore;
+}
+
+/**
+ * Let the shared handle go, if one was ever opened. For shutdown: opening
+ * the database only to close it would be a migration run on the way out.
+ */
+export function closeRoomStore(): void {
+  const store = globalForStore.__roomStore;
+  if (!store) return;
+  globalForStore.__roomStore = undefined;
+  store.close();
 }

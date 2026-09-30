@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { PIXEL_FONT } from "../config/drawing";
 import {
   NET_HEADING,
   PULSE_METRICS,
@@ -63,7 +64,31 @@ const ROWS: readonly (readonly CountBay[])[] = ["standing", "today"].map((bank) 
  * null — and both things that draw them show that as a dash rather than as
  * a zero, since a quiet desk and no desk at all must not look alike.
  */
-async function readDesk(): Promise<Pulse | null> {
+/**
+ * One read for both of them, which is `systems/room-flow`'s arrangement.
+ *
+ * The plate inside Support and the weeks in the corridor are the same desk
+ * on two timers started in the same tick, so each minute they asked the
+ * room's server the same question a few milliseconds apart. The second
+ * asker joins the first's request, or takes an answer that is younger than
+ * the gap between two timers — not a second opinion about how fresh the
+ * wall is.
+ */
+const SHARE_MS = 2_000;
+let heldDesk: { at: number; pulse: Pulse | null } | null = null;
+let readingDesk: Promise<Pulse | null> | null = null;
+
+function readDesk(): Promise<Pulse | null> {
+  if (heldDesk && Date.now() - heldDesk.at < SHARE_MS) return Promise.resolve(heldDesk.pulse);
+  readingDesk ??= fetchDesk().then((pulse) => {
+    heldDesk = { at: Date.now(), pulse };
+    readingDesk = null;
+    return pulse;
+  });
+  return readingDesk;
+}
+
+async function fetchDesk(): Promise<Pulse | null> {
   try {
     const response = await fetch("/api/zoho/pulse", { cache: "no-store" });
     const answer = (await response.json()) as { configured?: boolean; pulse?: Pulse };
@@ -181,7 +206,6 @@ const NET = {
 const NO_FIGURE = "—";
 
 /** The wall's own lettering: the name's colour, and the line under it. */
-const FONT = '"Press Start 2P", monospace';
 const INK = "#3a3a50";
 const LABEL = "#565972";
 
@@ -252,7 +276,11 @@ export class DeskWeek {
     ];
 
     const title = this.scene.add
-      .text(at.net * tile, 0, TITLES[bank], { fontFamily: FONT, fontSize: "16px", color: INK })
+      .text(at.net * tile, 0, TITLES[bank], {
+        fontFamily: PIXEL_FONT,
+        fontSize: "16px",
+        color: INK,
+      })
       .setResolution(2);
     const headings: Phaser.GameObjects.Text[] = [];
     const figures: Phaser.GameObjects.Text[] = [];
@@ -260,11 +288,11 @@ export class DeskWeek {
       const x = column.tx * tile;
       headings.push(
         this.scene.add
-          .text(x, 0, column.short, { fontFamily: FONT, fontSize: "12px", color: LABEL })
+          .text(x, 0, column.short, { fontFamily: PIXEL_FONT, fontSize: "12px", color: LABEL })
           .setResolution(2),
       );
       const figure = this.scene.add
-        .text(x, 0, NO_FIGURE, { fontFamily: FONT, fontSize: "22px", color: INK })
+        .text(x, 0, NO_FIGURE, { fontFamily: PIXEL_FONT, fontSize: "22px", color: INK })
         .setResolution(2);
       figures.push(figure);
       this.figures.set(column.id, figure);

@@ -16,9 +16,9 @@
  * nothing and a bubble nobody could work out look the same from across the
  * road.
  *
- * The record it is written from is `public/characters/examples/
- * customer_domains.json`, and `customers.test.ts` holds the two to agreeing
- * rather than leaving a hand-copied table to drift.
+ * The record it is written from is `data/customer_domains.json` — out of
+ * public/, since it names real accounts — and `customers.test.ts` holds the
+ * two to agreeing rather than leaving a hand-copied table to drift.
  */
 
 import { CUSTOMER_ORGS } from "../world/mailboxes";

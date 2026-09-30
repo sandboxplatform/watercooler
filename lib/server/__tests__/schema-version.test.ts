@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { RoomStore, SCHEMA_VERSION } from "../room-store";
+import { MIGRATIONS } from "../room-schema";
 
 /**
  * How the database gets from the shape an older build left to the shape this
@@ -74,8 +75,9 @@ function tablesOf(file: string): string[] {
 }
 
 /**
- * A database as an older build left it: the agents' tables and the room's
- * log, at version 0, with a room and one line of chat already in them.
+ * A database as an older build left it: the agents' tables, the room's log
+ * and the three tables nothing reads any more, at version 0 — with a room, a
+ * seat, one line of chat and one setting already in them.
  */
 function olderBuild(file: string) {
   const db = new DatabaseSync(file);
@@ -116,6 +118,26 @@ function olderBuild(file: string) {
       data        TEXT NOT NULL,
       PRIMARY KEY (room, session_key)
     );
+    CREATE TABLE players (
+      id           TEXT NOT NULL,
+      room         TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      sprite_key   TEXT,
+      last_seen    TEXT NOT NULL,
+      PRIMARY KEY (room, id)
+    );
+    CREATE TABLE seats (
+      room       TEXT NOT NULL,
+      seat_id    TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      data       TEXT NOT NULL,
+      PRIMARY KEY (room, seat_id)
+    );
+    CREATE TABLE settings (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE activity (
       room     TEXT NOT NULL,
       position INTEGER NOT NULL,
@@ -129,6 +151,17 @@ function olderBuild(file: string) {
   `);
   db.prepare("INSERT INTO rooms (slug, created_at) VALUES (?, ?)").run(
     ROOM,
+    "2026-01-01T00:00:00.000Z",
+  );
+  db.prepare("INSERT INTO seats (room, seat_id, updated_at, data) VALUES (?, ?, ?, ?)").run(
+    ROOM,
+    "seat-0",
+    "2026-01-01T00:00:00.000Z",
+    JSON.stringify({ seatId: "seat-0", label: "Alice" }),
+  );
+  db.prepare("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)").run(
+    "trello-board",
+    "abc123",
     "2026-01-01T00:00:00.000Z",
   );
   db.prepare(
@@ -167,6 +200,9 @@ describe("a database this build has just made", () => {
     expect(tables).not.toContain("sessions");
     expect(tables).not.toContain("activity");
     expect(tables).not.toContain("messages");
+    expect(tables).not.toContain("rooms");
+    expect(tables).not.toContain("players");
+    expect(tables).not.toContain("seats");
   });
 });
 
@@ -209,23 +245,39 @@ describe("a database an older build left behind", () => {
     expect(columnsOf(path, "arcade_scores")).toContain("game");
   });
 
-  it("keeps what was already in it", () => {
+  /**
+   * Written on every read and read by nothing, never written at all, and
+   * describing desks no map has: none of the three had anything left to
+   * say, and nothing in the database refers to a row of any of them.
+   */
+  it("loses the rooms, the players and the seats", () => {
     olderBuild(path);
+    expect(tablesOf(path)).toContain("seats");
 
     open();
 
-    // The room itself outlives every feature that has been taken out of it.
-    expect(rowsIn(path, "rooms")).toBe(1);
+    const tables = tablesOf(path);
+    expect(tables).not.toContain("rooms");
+    expect(tables).not.toContain("players");
+    expect(tables).not.toContain("seats");
+  });
+
+  it("keeps what was already in it", () => {
+    olderBuild(path);
+
+    const store = open();
+
+    // A setting outlives every feature that has been taken out around it.
+    expect(rowsIn(path, "settings")).toBe(1);
+    expect(store.getSetting("trello-board")).toBe("abc123");
   });
 
   it("is usable the moment it is up", () => {
     olderBuild(path);
     const store = open();
 
-    store.upsertSeat(ROOM, { seatId: "seat-0", label: "Alice", assigned: true });
-    expect(store.getSnapshot(ROOM).seats).toEqual([
-      { seatId: "seat-0", label: "Alice", assigned: true },
-    ]);
+    store.addStroke(ROOM, "s1", { id: "s1" });
+    expect(store.listStrokes(ROOM)).toEqual([{ id: "s1" }]);
   });
 });
 
@@ -235,9 +287,12 @@ describe("a database an older build left behind", () => {
  * people the world has decided not to remember.
  */
 describe("a database holding what guests earned before they kept nothing", () => {
+  /** The version just below the migration under test, found by its name. */
+  const FORGET_THE_GUESTS = MIGRATIONS.findIndex((m) => m.name === "forget the guests");
+
   it("forgets the guests' badges, marks and eggs, and nobody else's", () => {
-    // Everything up to the version before, then the rows, then back down a
-    // step so the next open climbs the last rung with them in it.
+    // Everything up to the current version, then the rows, then back down to
+    // the rung before this one so the next open climbs it with them in.
     const before = new RoomStore(path);
     before.awardBadge("coop", "walked-in", "Coop");
     before.mark("coop", "org:mettara");
@@ -250,7 +305,7 @@ describe("a database holding what guests earned before they kept nothing", () =>
       INSERT INTO badge_marks (person, mark) VALUES ('guest:ann', 'org:mettara');
       INSERT INTO eggs (id, person, name, tier, found_at)
         VALUES ('anns-egg', 'guest:ann', 'Ann', 'rainbow', '2026-01-01T00:00:00.000Z');
-      PRAGMA user_version = ${SCHEMA_VERSION - 1};
+      PRAGMA user_version = ${FORGET_THE_GUESTS};
     `);
     db.close();
 

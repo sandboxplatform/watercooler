@@ -14,7 +14,7 @@ import {
   volcanoPlace,
   type VolcanoPlace,
 } from "@/lib/world/volcano";
-import { solidGround } from "@/lib/world/scenery";
+import { solidGround } from "@/lib/world/ground";
 import { BlobHop } from "../systems/BlobHop";
 import { Eruption } from "../systems/Eruption";
 import { confirmLabel } from "../systems/GamepadInput";

@@ -65,7 +65,30 @@ export const SCORED_MACHINES: readonly string[] = [
 const SMALL_HOURS = 5;
 
 /** How many people on mic at once makes it a round table rather than a call. */
-const ROUND_TABLE = 4;
+export const ROUND_TABLE = 4;
+
+/**
+ * The badges the socket settles once per run before the store is asked.
+ *
+ * Each fires off something that happens far oftener than the badge is new —
+ * a rally is a message a frame, a move twenty a second — so the socket keeps
+ * a set of the ones already settled. The codes are named here, once, so the
+ * rule that grants one and the socket that skips it cannot come to disagree
+ * about how it is spelt.
+ */
+export const CHATTY = {
+  holdingTheFort: "holding-the-fort",
+  onMic: "on-mic",
+  roundTable: "round-table",
+  leftAMark: "left-a-mark",
+  volley: "volley",
+  intoTheWoods: "into-the-woods",
+  outInTheWild: "out-in-the-wild",
+  rightOfWay: "right-of-way",
+  seeingStars: "seeing-stars",
+} as const;
+
+export type ChattyCode = (typeof CHATTY)[keyof typeof CHATTY];
 
 function grant(holder: Holder, code: string, into: EarnedBadge[]): void {
   const badge = badgeFor(code);
@@ -153,7 +176,7 @@ export function onArrival(holder: Holder, room: string, at: Date = new Date()): 
  */
 export function onAlone(holder: Holder): EarnedBadge[] {
   const earned: EarnedBadge[] = [];
-  grant(holder, "holding-the-fort", earned);
+  grant(holder, CHATTY.holdingTheFort, earned);
   return earned;
 }
 
@@ -164,20 +187,25 @@ export function onRoomFull(holders: readonly Holder[]): EarnedBadge[] {
   return earned;
 }
 
-/**
- * A microphone went on.
- *
- * `onMic` is everybody in Global Chat *after* the change, the newcomer
- * included — the count is what decides Round Table, and it is awarded to
- * all of them rather than to whoever happened to arrive last. Being in a
- * conversation with three others is the same fact for each of the four.
- */
-export function onMicOn(who: Holder, onMic: readonly Holder[]): EarnedBadge[] {
+/** A microphone went on, which is joining Global Chat. */
+export function onMicOn(who: Holder): EarnedBadge[] {
   const earned: EarnedBadge[] = [];
-  grant(who, "on-mic", earned);
-  if (onMic.length >= ROUND_TABLE) {
-    for (const holder of onMic) grant(holder, "round-table", earned);
-  }
+  grant(who, CHATTY.onMic, earned);
+  return earned;
+}
+
+/**
+ * Somebody is in Global Chat with `onMic` people in it, themselves included.
+ *
+ * Asked of every one of them on every microphone that goes on, rather than
+ * once with the list: being in a conversation with three others is the same
+ * fact for each of the four, and the socket settles each person's once. It
+ * used to ride on the first microphone anybody switched on, so a person who
+ * had been on mic before three others joined was never asked again.
+ */
+export function onRoundTable(holder: Holder, onMic: number): EarnedBadge[] {
+  const earned: EarnedBadge[] = [];
+  if (onMic >= ROUND_TABLE) grant(holder, CHATTY.roundTable, earned);
   return earned;
 }
 
@@ -199,14 +227,14 @@ export function onMeetingJoined(holder: Holder): EarnedBadge[] {
 /** A finished stroke on a room's whiteboard. */
 export function onWhiteboard(holder: Holder): EarnedBadge[] {
   const earned: EarnedBadge[] = [];
-  grant(holder, "left-a-mark", earned);
+  grant(holder, CHATTY.leftAMark, earned);
   return earned;
 }
 
 /** A ping pong move crossed between two people; both of them are playing. */
 export function onPingPong(holders: readonly Holder[]): EarnedBadge[] {
   const earned: EarnedBadge[] = [];
-  for (const holder of holders) grant(holder, "volley", earned);
+  for (const holder of holders) grant(holder, CHATTY.volley, earned);
   return earned;
 }
 
@@ -270,9 +298,9 @@ export function onScore(holder: Holder, machine: string, first: boolean): Earned
  */
 export type Outdoors = "wood" | "wilderness";
 
-const OUTDOOR_BADGE: Record<Outdoors, string> = {
-  wood: "into-the-woods",
-  wilderness: "out-in-the-wild",
+export const OUTDOOR_BADGE: Record<Outdoors, ChattyCode> = {
+  wood: CHATTY.intoTheWoods,
+  wilderness: CHATTY.outInTheWild,
 };
 
 export function onOutdoors(holder: Holder, where: Outdoors): EarnedBadge[] {
@@ -292,7 +320,7 @@ export function onOutdoors(holder: Holder, where: Outdoors): EarnedBadge[] {
  */
 export function onRunThrough(holder: Holder): EarnedBadge[] {
   const earned: EarnedBadge[] = [];
-  grant(holder, "right-of-way", earned);
+  grant(holder, CHATTY.rightOfWay, earned);
   return earned;
 }
 
@@ -307,7 +335,7 @@ export function onRunThrough(holder: Holder): EarnedBadge[] {
  */
 export function onPunch(holder: Holder): EarnedBadge[] {
   const earned: EarnedBadge[] = [];
-  grant(holder, "seeing-stars", earned);
+  grant(holder, CHATTY.seeingStars, earned);
   return earned;
 }
 

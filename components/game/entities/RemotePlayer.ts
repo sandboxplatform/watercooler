@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { SPRITE_KEY, FRAME_HEIGHT } from "../config/animations";
+import { PIXEL_FONT } from "../config/drawing";
 import { ensureAnims } from "../utils/sheets";
 import { ChatBubble } from "./ChatBubble";
 import { keepLegible, legible } from "../systems/legible";
@@ -80,7 +81,7 @@ export class RemotePlayer {
 
     this.nameTag = scene.add
       .text(player.x, player.y + FRAME_HEIGHT / 2 + 2, player.name, {
-        fontFamily: '"Press Start 2P", monospace',
+        fontFamily: PIXEL_FONT,
         fontSize: "8px",
         color: "#ffe9a8",
         backgroundColor: "rgba(0,0,0,0.7)",
@@ -229,13 +230,20 @@ export class RemotePlayer {
     this.settle();
   }
 
-  /** Whoever's feet are lower stands in front, the way the props do. */
+  /**
+   * Whoever's feet are lower stands in front, the way the props do.
+   *
+   * Only when the feet moved. Phaser re-sorts the whole display list on
+   * every depth set, even to the value already there, and this runs for
+   * everybody on screen every frame — three sorts apiece of a world map
+   * with thousands of things on it, for people standing still.
+   */
   private settle() {
     if (!this.sortByY) return;
     const feet = this.sprite.y + FRAME_HEIGHT / 2;
-    this.sprite.setDepth(feet);
-    this.nameTag.setDepth(feet + 1);
-    this.voiceMark?.setDepth(feet + 2);
+    if (this.sprite.depth !== feet) this.sprite.setDepth(feet);
+    if (this.nameTag.depth !== feet + 1) this.nameTag.setDepth(feet + 1);
+    if (this.voiceMark && this.voiceMark.depth !== feet + 2) this.voiceMark.setDepth(feet + 2);
   }
 
   /**

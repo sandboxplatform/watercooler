@@ -11,7 +11,7 @@ const pressStart2P = Press_Start_2P({
 
 export const metadata: Metadata = {
   title: "WaterCooler",
-  description: "A pixel office where AI agents work",
+  description: "A pixel office you walk around with other people",
 };
 
 /**

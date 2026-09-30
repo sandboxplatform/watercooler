@@ -37,6 +37,15 @@ if (!existsSync(standalone)) {
 
 console.log("Preparing standalone package...\n");
 
+/**
+ * A package's files, with every link in it followed to what it points at.
+ *
+ * It was `cp -rL` through a shell, which Windows does not have — the same
+ * trap `pnpm start` fell into. `dereference` is the `-L`: pnpm's tree is
+ * links into its store, and a tarball of links is a tarball of nothing.
+ */
+const copyResolved = (src, dest) => cpSync(src, dest, { recursive: true, dereference: true });
+
 // --- 1. Flatten pnpm node_modules ---
 const nm = resolve(standalone, "node_modules");
 const pnpmDir = resolve(nm, ".pnpm");
@@ -61,14 +70,12 @@ if (existsSync(pnpmDir)) {
           const scopedDest = resolve(flatNm, pkg, scopedPkg);
           if (!existsSync(scopedDest)) {
             mkdirSync(resolve(flatNm, pkg), { recursive: true });
-            execSync(`cp -rL "${scopedSrc}" "${scopedDest}"`);
+            copyResolved(scopedSrc, scopedDest);
           }
         }
       } else {
         const dest = resolve(flatNm, pkg);
-        if (!existsSync(dest)) {
-          execSync(`cp -rL "${src}" "${dest}"`);
-        }
+        if (!existsSync(dest)) copyResolved(src, dest);
       }
     }
   }

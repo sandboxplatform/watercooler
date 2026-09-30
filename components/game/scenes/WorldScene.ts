@@ -13,7 +13,8 @@ import {
   spawnFor,
   type Building,
 } from "@/lib/world/tenants";
-import { SCENERY, WORLD_SIGNS, groundTiles, worldSolids } from "@/lib/world/scenery";
+import { SCENERY, WORLD_SIGNS, groundTiles, worldSolids, worldWater } from "@/lib/world/scenery";
+import { riverBanks } from "@/lib/world/wood";
 import { HIGHWAY_PX } from "@/lib/world/wilderness";
 import { asset } from "@/lib/assets";
 import { COURT_PX } from "@/lib/world/basketball";
@@ -74,9 +75,9 @@ export interface WorldSceneData {
  * The world map is the space between businesses: three screens of green
  * with the two head offices and a plaza in the middle, the building supply
  * stores to the west and the campus gate to the east, and a path to each
- * door. Walking into a lobby's door moves you to that tenant's room, which
- * is a new page — every room carries its own people, agents and
- * conversation, so the boundary between businesses is the room boundary.
+ * door. Walking into a lobby's door moves you to that tenant's room — a room
+ * of its own on the same socket, never a page load — so the boundary
+ * between businesses is the room boundary.
  * Walking through a campus gate goes onto its yard, another scene here.
  *
  * Everything it has in common with a campus — walking, presence, doorways,
@@ -114,10 +115,13 @@ export class WorldScene extends OutdoorScene<WorldSceneData> {
     const doors = BUILDINGS.map((b) => this.putUp(b, walls));
     for (const prop of SCENERY) placeProp(this, prop, walls);
     for (const sign of WORLD_SIGNS) placeSign(this, sign, walls);
-    // The buildings and props are already walls of their own; the sea is
-    // solid too, so nobody walks off the dock.
+    // The buildings, props and signs have put up walls of their own. What
+    // `worldSolids()` has besides is the water and the strip along the river
+    // nobody may stand on, so those go up here — named rather than sliced
+    // off the end of that list, which counted on every prop having a
+    // footprint and put the two signs' walls up a second time.
+    for (const water of [...worldWater(), ...riverBanks()]) addSolid(walls, water);
     const solids = worldSolids();
-    for (const water of solids.slice(BUILDINGS.length + SCENERY.length)) addSolid(walls, water);
 
     const at = spawnFor(data?.from);
     const left = buildingFrom(data?.from);

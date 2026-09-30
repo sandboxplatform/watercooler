@@ -52,6 +52,9 @@ export function useFullscreen(target: RefObject<HTMLElement | null>): Fullscreen
     return () => {
       document.removeEventListener("fullscreenchange", onChange);
       document.removeEventListener("webkitfullscreenchange", onChange);
+      // Whichever element holds the class when the button goes, which is the
+      // point: a panel body that loaded late is still the one to put back.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       target.current?.classList.remove(FILL_CLASS);
     };
   }, [target]);

@@ -72,7 +72,18 @@ export default function Welcome() {
   // The looks this person may wear: the shared cast, or — for somebody whose
   // own code names their sheet — that sheet on its own, which is what the
   // effect below writes straight in without asking.
-  const { wearable: characters, error } = useCharacterRoster();
+  //
+  // Asked for only when something here will use it: the screen below, or a
+  // code whose name, office or look is not yet written in. Somebody already
+  // through the door is neither, and was costing a request on every load.
+  const writtenIn =
+    !!persona &&
+    !!profile &&
+    profile.name === persona.name &&
+    profile.home === (persona.home ?? profile.home) &&
+    (!persona.characterKey || profile.character?.key === persona.characterKey);
+  const needsRoster = !!me && !!profile && (!done || (!!persona && !writtenIn));
+  const { wearable: characters, error } = useCharacterRoster(needsRoster);
 
   /** Said once. An arrival that announces itself twice restarts its own card. */
   const announced = useRef(false);

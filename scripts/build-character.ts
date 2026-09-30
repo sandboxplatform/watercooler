@@ -1,10 +1,19 @@
 /**
  * Installs a delivered character sheet into the game.
  *
- *   pnpm tsx scripts/build-character.ts <Name> [--source file.png]
+ *   pnpm tsx scripts/build-character.ts <Name> [--source file.png] [--concept file.png]
  *
- * Reads  public/characters/examples/<Name>_sprite.png, or --source
+ * Reads  art/characters/<Name>_sprite.png, or --source
  * Writes public/characters/<Name>_48x48.png — then add it to WORKER_SPRITES.
+ *
+ * And the concept sheet, if there is one: art/characters/<Name>.png, or
+ * --concept, written out as public/characters/examples/<Name>.webp for the
+ * profile card. That one *is* re-encoded, and on purpose: it is a painting
+ * at 1536x1024, served whole to every card that opens, and as a PNG it was
+ * a megabyte and a half apiece — sixteen of them were half of everything
+ * public/ held. WebP at the quality below is a tenth of that and looks the
+ * same at the size the card shows it. Nothing reads the PNG afterwards, so
+ * it need not be kept once the WebP is written.
  *
  * **The file you deliver is the file the game loads.** A sheet in the format
  * is *copied*, not decoded and written back, so the installed file is the one
@@ -34,14 +43,17 @@
  * interpreted instead of redrawn. The fix for art that comes out badly is
  * better art, not a longer pipeline.
  *
- * Two files per character live in examples/: `<Name>.png` is the profile
- * picture, `<Name>_sprite.png` is the sheet this reads. Taking the sheet by
- * name matters — the profile picture is a portrait on a backdrop, and it
- * would be refused here with a confusing set of measurements.
+ * Two files per character are delivered into art/characters/: `<Name>.png`
+ * is the profile picture, `<Name>_sprite.png` is the sheet this installs.
+ * Taking the sheet by name matters — the profile picture is a portrait on a
+ * backdrop, and it would be refused as a sheet with a confusing set of
+ * measurements. Neither is served from there: art/ is the delivery, and
+ * public/ is what the browser fetches.
  */
 
-import { copyFileSync, readFileSync } from "fs";
+import { copyFileSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
+import sharp from "sharp";
 import { decodePng } from "../lib/pixel/png";
 import {
   ANIMATED_FRAMES,
@@ -59,11 +71,13 @@ const option = (flag: string, fallback: string) => {
 const name = args.find((a, i) => !a.startsWith("--") && !(i > 0 && args[i - 1].startsWith("--")));
 if (!name) throw new Error("usage: build-character.ts <Name> [--source file.png]");
 
-const SOURCE = option(
-  "--source",
-  join(process.cwd(), "public/characters/examples", `${name}_sprite.png`),
-);
+const SOURCE = option("--source", join(process.cwd(), "art/characters", `${name}_sprite.png`));
 const OUTPUT = join(process.cwd(), "public/characters", `${name}_48x48.png`);
+const CONCEPT = option("--concept", join(process.cwd(), "art/characters", `${name}.png`));
+const CONCEPT_OUTPUT = join(process.cwd(), "public/characters/examples", `${name}.webp`);
+
+/** Lossy, at a quality nobody can tell from the PNG at a profile card's size. */
+const CONCEPT_QUALITY = 85;
 
 const raw = decodePng(readFileSync(SOURCE));
 console.log(`${name}: ${raw.width}x${raw.height}`);
@@ -99,3 +113,19 @@ if (missing.length) {
 // that was handed over.
 copyFileSync(SOURCE, OUTPUT);
 console.log(`wrote ${OUTPUT}`);
+
+// No concept sheet is not a failure: a likeness can arrive before the
+// painting does, and the profile card says so rather than breaking. But
+// lib/world/cast.ts names the WebP, and cast.test.ts looks for it on disk.
+if (existsSync(CONCEPT)) {
+  sharp(CONCEPT)
+    .webp({ quality: CONCEPT_QUALITY, effort: 6 })
+    .toFile(CONCEPT_OUTPUT)
+    .then(({ size }) => console.log(`wrote ${CONCEPT_OUTPUT} (${Math.round(size / 1024)}KB)`))
+    .catch((err: Error) => {
+      console.error(`could not write ${CONCEPT_OUTPUT}: ${err.message}`);
+      process.exit(1);
+    });
+} else {
+  console.log(`no concept sheet at ${CONCEPT}, so no profile picture written`);
+}

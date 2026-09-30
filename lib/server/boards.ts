@@ -1,11 +1,16 @@
 /**
  * The boards on an Operations floor, read once for everyone.
  *
- * Three callers want the same thing: the HUD panels, and the agents through
- * their MCP tools. Each fetch is held briefly here rather than in any one
- * of them, so a floor of people and a room of agents reading the board at
- * the same moment is still one request to Trello and one to Zoho — both of
- * which count what you ask of them.
+ * Every browser on a floor asks on its own timer, and Trello and Zoho both
+ * count what they are asked. So each read is held here rather than in any
+ * one route — `cachedFetch` shares a load already on its way and holds a
+ * failure for a moment too — and a floor of people reading the board at the
+ * same moment is still one request to Trello and one to Zoho.
+ *
+ * And who may read what. These boards hang on private floors, so what is on
+ * them is as private as the floor: the routes ask the functions at the foot
+ * of this file before they answer, for the reason the socket refuses the
+ * room rather than trusting the lift.
  *
  * Server-only. The credentials are read here and never travel further.
  * Read-only, like everything downstream of it.
@@ -13,17 +18,21 @@
 
 import {
   BOARD_CACHE_MS,
+  BOARD_LIST_CACHE_MS,
   TrelloError,
   fetchBoard,
   fetchBoards,
   readTrelloConfig,
+  type TrelloConfig,
 } from "../trello/client";
 import type { BoardSummary, BoardView } from "../trello/board";
 import { toFlow, type Flow } from "../trello/flow";
-import { tenantInRoom } from "../world/floors";
-import { projectBoardAt } from "../world/tenants";
+import { mayRideLift, tenantInRoom } from "../world/floors";
+import { TENANTS, operationsBoards, projectBoardAt, projectBoards } from "../world/tenants";
+import type { AccessIdentity } from "../identity";
 import {
   CUSTOMERS_CACHE_MS,
+  DEPARTMENTS_CACHE_MS,
   DESK_CACHE_MS,
   PULSE_CACHE_MS,
   ZohoError,
@@ -37,18 +46,22 @@ import { tallyCustomers } from "./customers";
 import type { DeskView } from "../zoho/tickets";
 import type { Pulse } from "../zoho/pulse";
 import { getRoomStore } from "./room-store";
+import { cachedFetch, forgetCached } from "./outbound";
 import { createLogger } from "../logger";
 
 const log = createLogger("Boards");
 
 /**
- * Which board the office is looking at.
+ * Which board the office is looking at, where a wall offers a choice.
  *
- * Whoever picks one on the wall picks it for everyone, agents included:
- * an agent has no browser, so a choice kept only in someone's localStorage
- * is a choice it can never see. TRELLO_BOARD_ID still wins when set.
+ * Whoever picks one on that wall picks it for everyone, so it is kept here
+ * rather than in somebody's localStorage. TRELLO_BOARD_ID still wins when
+ * set, and a room that names its own board ignores both.
  */
 const BOARD_SETTING = "trello-board";
+
+/** The longest board name or id anybody may pick. Trello's ids are 24. */
+export const BOARD_NAME_LIMIT = 128;
 
 export function officeBoard(): string | null {
   try {
@@ -60,7 +73,7 @@ export function officeBoard(): string | null {
 
 export function setOfficeBoard(boardId: string): void {
   try {
-    getRoomStore().setSetting(BOARD_SETTING, boardId);
+    getRoomStore().setSetting(BOARD_SETTING, boardId.slice(0, BOARD_NAME_LIMIT));
   } catch (err) {
     log.warn("could not remember the board:", (err as Error).message);
   }
@@ -123,38 +136,51 @@ export interface CustomersAnswer {
   fetchedAt?: number;
 }
 
-const boards = new Map<string, { at: number; board: BoardView }>();
-let boardList: { at: number; boards: BoardSummary[] } | null = null;
-let desk: { at: number; view: DeskView; departments: { id: string; name: string }[] } | null = null;
-let pulse: { at: number; view: Pulse } | null = null;
-let customers: { at: number; open: Record<string, number>; capped: boolean } | null = null;
+/** Every open board the token can see, held for an hour. */
+function boardList(config: TrelloConfig): Promise<BoardSummary[]> {
+  return cachedFetch("trello:boards", BOARD_LIST_CACHE_MS, () => fetchBoards(config)).then(
+    (held) => held.value,
+  );
+}
+
+/** A failure from either service, in the shape every answer here takes. */
+function failed(err: unknown, what: string, said: string): { error: string; status: number } {
+  if (err instanceof TrelloError || err instanceof ZohoError) {
+    return { error: err.message, status: err.status };
+  }
+  log.error(`could not ${what}:`, (err as Error)?.message ?? err);
+  return { error: said, status: 500 };
+}
 
 /**
- * The project board. With no board named and none configured, the answer
- * is the list to choose from rather than a failure.
+ * A project board, by id or by the name somebody would say out loud.
+ *
+ * `list` is whether the answer carries every board the token can see — the
+ * picker's list, and so only for a wall that has a picker on it. With no
+ * board named and none configured, a caller given the list gets it to
+ * choose from rather than a failure; one without it is told the wall is
+ * empty.
  */
-export async function readBoard(asked?: string | null): Promise<BoardAnswer> {
+export async function readBoard(
+  asked?: string | null,
+  { list = false }: { list?: boolean } = {},
+): Promise<BoardAnswer> {
   const config = readTrelloConfig();
   if (!config) return { configured: false };
 
   const wanted = asked?.trim() || config.boardId || officeBoard();
-  const now = Date.now();
 
   try {
     // A person names a board the way they say it out loud — "Sandbox ERP" —
     // so a name is resolved to its id before anything else.
     let boardId = wanted;
     if (wanted && !/^[a-f0-9]{8,}$/i.test(wanted)) {
-      if (!boardList || now - boardList.at > BOARD_CACHE_MS) {
-        boardList = { at: now, boards: await fetchBoards(config) };
-      }
-      const found = boardList.boards.find(
-        (b) => b.name.trim().toLowerCase() === wanted.toLowerCase(),
-      );
+      const boards = await boardList(config);
+      const found = boards.find((b) => b.name.trim().toLowerCase() === wanted.toLowerCase());
       if (!found) {
         return {
           configured: true,
-          boards: boardList.boards,
+          ...(list ? { boards } : {}),
           error: `No board here is called "${wanted}".`,
         };
       }
@@ -162,32 +188,20 @@ export async function readBoard(asked?: string | null): Promise<BoardAnswer> {
     }
 
     if (!boardId) {
-      if (!boardList || now - boardList.at > BOARD_CACHE_MS) {
-        boardList = { at: now, boards: await fetchBoards(config) };
-      }
-      return { configured: true, boards: boardList.boards };
+      if (!list) return { configured: true, error: "No board is on the wall yet." };
+      return { configured: true, boards: await boardList(config) };
     }
 
-    const held = boards.get(boardId);
-    if (held && now - held.at < BOARD_CACHE_MS) {
-      return { configured: true, board: held.board, boards: boardList?.boards, fetchedAt: held.at };
-    }
-
-    const board = await fetchBoard(config, boardId);
-    boards.set(boardId, { at: now, board });
-    if (!boardList || now - boardList.at > BOARD_CACHE_MS) {
-      boardList = {
-        at: now,
-        boards: await fetchBoards(config).catch(() => boardList?.boards ?? []),
-      };
-    }
-    return { configured: true, board, boards: boardList.boards, fetchedAt: now };
+    const id = boardId;
+    const held = await cachedFetch(`trello:board:${id}`, BOARD_CACHE_MS, () =>
+      fetchBoard(config, id),
+    );
+    // The list is a nicety beside a board, so a failure to read it is not
+    // a failure to read the board.
+    const boards = list ? await boardList(config).catch(() => undefined) : undefined;
+    return { configured: true, board: held.value, boards, fetchedAt: held.at };
   } catch (err) {
-    if (err instanceof TrelloError) {
-      return { configured: true, error: err.message, status: err.status };
-    }
-    log.error("could not read the board:", (err as Error).message);
-    return { configured: true, error: "The board could not be read.", status: 500 };
+    return { configured: true, ...failed(err, "read the board", "The board could not be read.") };
   }
 }
 
@@ -203,14 +217,18 @@ export async function readBoard(asked?: string | null): Promise<BoardAnswer> {
  * over anything picked, and the pick is only consulted where the building
  * names nothing — which is a building with one board and a picker on it.
  *
- * Null where this room holds no board: a slot past the end, a room on a
- * floor with none. A stale link asks for exactly that.
+ * `undefined` where this room holds no board at all: a slot past the end, a
+ * room on a floor with none, a stale link. `picker` is whether this wall is
+ * the one with a choice on it.
  */
-function boardInRoom(room: string | null | undefined, slot: number): string | null {
+function boardInRoom(
+  room: string | null | undefined,
+  slot: number,
+): { board: string | null; picker: boolean } | undefined {
   const spec = projectBoardAt(tenantInRoom(room), slot);
-  if (!spec) return null;
-  if (spec.board) return spec.board;
-  return readTrelloConfig()?.boardId ?? officeBoard();
+  if (!spec) return undefined;
+  if (spec.board) return { board: spec.board, picker: false };
+  return { board: readTrelloConfig()?.boardId ?? officeBoard(), picker: true };
 }
 
 /**
@@ -225,19 +243,22 @@ export async function readBoardIn(
   room: string | null | undefined,
   slot: number,
 ): Promise<BoardAnswer> {
-  const wanted = boardInRoom(room, slot);
-  // No board declared and nothing picked: the wall offers the list, which
-  // is what `readBoard` answers when it is asked for nothing.
-  return readBoard(wanted);
+  const wall = boardInRoom(room, slot);
+  if (!wall) {
+    return { configured: readTrelloConfig() !== null, error: "No board hangs here.", status: 404 };
+  }
+  // A wall with a picker offers the list, which is what `readBoard` answers
+  // when nothing has been picked yet; a named wall shows its board alone.
+  return readBoard(wall.board, { list: wall.picker });
 }
 
 /**
  * The stage counts on the wall beside a room's project board.
  *
- * No fetch and no cache of its own: it counts the board `readBoard` already
- * holds, which is the board hanging beside it on the same wall. So the
- * numbers and the cards cannot disagree about what is on it, and a floor of
- * people reading both is still one request to Trello.
+ * No fetch of its own: it counts the board `readBoard` already holds, which
+ * is the board hanging beside it on the same wall. So the numbers and the
+ * cards cannot disagree about what is on it, and a floor of people reading
+ * both is still one request to Trello.
  *
  * Which board, and which lanes, are the room's — see `boardInRoom`.
  */
@@ -247,7 +268,7 @@ export async function readFlow(room: string | null | undefined, slot = 1): Promi
   if (!spec || spec.lanes.length === 0) return { configured: config !== null, counts: false };
   if (!config) return { configured: false, counts: true };
 
-  const answer = await readBoard(boardInRoom(room, slot));
+  const answer = await readBoard(boardInRoom(room, slot)?.board);
   if (!answer.board) {
     return {
       configured: true,
@@ -264,32 +285,29 @@ export async function readFlow(room: string | null | undefined, slot = 1): Promi
   };
 }
 
-/** The support queue. */
+/** The support queue, and the desk's departments beside it. */
 export async function readDesk(): Promise<DeskAnswer> {
   const config = readZohoConfig();
   if (!config) return { configured: false };
 
-  const now = Date.now();
-  if (desk && now - desk.at < DESK_CACHE_MS) {
-    return { configured: true, desk: desk.view, departments: desk.departments, fetchedAt: desk.at };
-  }
-
   try {
-    const view = await fetchTickets(config);
-    const departments = await fetchDepartments(config).catch(() => desk?.departments ?? []);
-    desk = { at: now, view, departments };
-    return { configured: true, desk: view, departments, fetchedAt: now };
+    const held = await cachedFetch("zoho:desk", DESK_CACHE_MS, () => fetchTickets(config));
+    // Held for an hour, and a nicety: a desk whose departments cannot be
+    // read is still a desk.
+    const departments = await cachedFetch("zoho:departments", DEPARTMENTS_CACHE_MS, () =>
+      fetchDepartments(config),
+    ).then(
+      (d) => d.value,
+      () => [],
+    );
+    return { configured: true, desk: held.value, departments, fetchedAt: held.at };
   } catch (err) {
-    if (err instanceof ZohoError) {
-      return { configured: true, error: err.message, status: err.status };
-    }
-    log.error("could not read the desk:", (err as Error).message);
-    return { configured: true, error: "The desk could not be read.", status: 500 };
+    return { configured: true, ...failed(err, "read the desk", "The desk could not be read.") };
   }
 }
 
 /**
- * The five counts on the Support room's wall.
+ * The counts on the Support room's wall.
  *
  * Held separately from the queue and for longer: it costs three sweeps
  * rather than one page, and everybody in the room is looking at the same
@@ -300,21 +318,13 @@ export async function readPulse(): Promise<PulseAnswer> {
   const config = readZohoConfig();
   if (!config) return { configured: false };
 
-  const now = Date.now();
-  if (pulse && now - pulse.at < PULSE_CACHE_MS) {
-    return { configured: true, pulse: pulse.view, fetchedAt: pulse.at };
-  }
-
   try {
-    const view = await fetchPulse(config, now);
-    pulse = { at: now, view };
-    return { configured: true, pulse: view, fetchedAt: now };
+    const held = await cachedFetch("zoho:pulse", PULSE_CACHE_MS, () =>
+      fetchPulse(config, Date.now()),
+    );
+    return { configured: true, pulse: held.value, fetchedAt: held.at };
   } catch (err) {
-    if (err instanceof ZohoError) {
-      return { configured: true, error: err.message, status: err.status };
-    }
-    log.error("could not count the desk:", (err as Error).message);
-    return { configured: true, error: "The desk could not be counted.", status: 500 };
+    return { configured: true, ...failed(err, "count the desk", "The desk could not be counted.") };
   }
 }
 
@@ -334,46 +344,85 @@ export async function readPulse(): Promise<PulseAnswer> {
  * the two are allowed to mean different things — `ZOHO_OPEN_STATUSES`
  * against the wall's three bays — so sharing the read would be sharing that
  * decision with it.
+ *
+ * What comes back is numbers by building and nothing else, which is why it
+ * is the one read here nobody is asked the lift about: the boxes stand on
+ * the public map.
  */
 export async function readCustomers(): Promise<CustomersAnswer> {
   const config = readZohoConfig();
   if (!config) return { configured: false };
 
-  const now = Date.now();
-  if (customers && now - customers.at < CUSTOMERS_CACHE_MS) {
+  try {
+    const held = await cachedFetch("zoho:customers", CUSTOMERS_CACHE_MS, async () => {
+      const { parties, capped } = await fetchOpenParties(config);
+      const { open, unattributed } = tallyCustomers(parties);
+      // Worth a line in the log and nothing more: a desk serves people who
+      // are not on the record, so this is only ever evidence that the
+      // record may be short — never that anything has failed.
+      if (unattributed > 0) {
+        log.info(`${unattributed} open tickets belong to nobody on the customer record`);
+      }
+      return { open, capped };
+    });
     return {
       configured: true,
-      open: customers.open,
-      capped: customers.capped,
-      fetchedAt: customers.at,
+      open: held.value.open,
+      capped: held.value.capped,
+      fetchedAt: held.at,
     };
-  }
-
-  try {
-    const { parties, capped } = await fetchOpenParties(config);
-    const { open, unattributed } = tallyCustomers(parties);
-    // Worth a line in the log and nothing more: a desk serves people who are
-    // not on the record, so this is only ever evidence that the record may be
-    // short — never that anything has failed.
-    if (unattributed > 0) {
-      log.info(`${unattributed} open tickets belong to nobody on the customer record`);
-    }
-    customers = { at: now, open, capped };
-    return { configured: true, open, capped, fetchedAt: now };
   } catch (err) {
-    if (err instanceof ZohoError) {
-      return { configured: true, error: err.message, status: err.status };
-    }
-    log.error("could not count the customers:", (err as Error).message);
-    return { configured: true, error: "The customers could not be counted.", status: 500 };
+    return {
+      configured: true,
+      ...failed(err, "count the customers", "The customers could not be counted."),
+    };
   }
 }
 
 /** Test seam: forget what is held, so the next read goes out again. */
 export function forgetBoards() {
-  boards.clear();
-  boardList = null;
-  desk = null;
-  pulse = null;
-  customers = null;
+  forgetCached();
+}
+
+// ── Who may read what ─────────────────────────────────────
+
+/**
+ * Whether somebody may read the boards hanging in this room.
+ *
+ * The same question the lift asks, of the building the room is in: the
+ * boards are on its Operations floor, and a floor you may not ride to is a
+ * floor whose walls you may not read by asking the server instead. A room
+ * that is no building's hangs no board, so there is nothing to refuse.
+ */
+export function mayReadRoomBoards(room: string | null | undefined, who: AccessIdentity): boolean {
+  const tenant = tenantInRoom(room);
+  return tenant ? mayRideLift(tenant.slug, who) : true;
+}
+
+/**
+ * Whether somebody may read the support desk.
+ *
+ * Asked of whichever buildings run one — read off the tenants rather than
+ * written down, so a second desk is a line there and nothing here. Today
+ * that is Sandbox ERP alone.
+ */
+export function mayReadDesk(who: AccessIdentity): boolean {
+  return TENANTS.some(
+    (tenant) => operationsBoards(tenant).includes("zoho") && mayRideLift(tenant.slug, who),
+  );
+}
+
+/**
+ * Whether somebody may name a board, see every board, or choose one for the
+ * office: `?board=`, the full list, and the POST.
+ *
+ * Those are the picker's, and a picker hangs only on a wall whose building
+ * names no board of its own — Castle Atlantic. Everybody else's walls say
+ * which board they carry, so a request naming one is a request for a board
+ * that hangs on no wall of theirs.
+ */
+export function mayPickBoards(who: AccessIdentity): boolean {
+  return TENANTS.some(
+    (tenant) => projectBoards(tenant).some((spec) => !spec.board) && mayRideLift(tenant.slug, who),
+  );
 }

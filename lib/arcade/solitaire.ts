@@ -9,7 +9,7 @@
  * what was scored, a finished one with a bonus.
  */
 
-import { FONT, SCREEN, type ArcadeGame, type ArcadeInput } from "./types";
+import { ARCADE_TITLES, FONT, SCREEN, type ArcadeGame, type ArcadeInput } from "./types";
 
 export type Suit = "S" | "H" | "D" | "C";
 export interface Card {
@@ -503,7 +503,7 @@ export function drawSolitaire(ctx: CanvasRenderingContext2D, state: SolitaireSta
 
 export const solitaire: ArcadeGame<SolitaireState> = {
   id: "solitaire",
-  title: "Solitaire",
+  title: ARCADE_TITLES.solitaire,
   blurb: "Klondike, one card at a time.",
   keys: "Arrows walk the piles · Space picks up and puts down",
   touch: "Tap a card, then tap where it goes",

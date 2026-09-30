@@ -1,20 +1,25 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import type { IncomingMessage } from "http";
 import {
   ACCESS_COOKIE,
   accessCookieHeader,
   clearFailures,
   clearedAccessCookieHeader,
+  clientIp,
   codeFromUrl,
   codeMatches,
+  cookieFrom,
   gateEnabled,
   identityForCode,
   identityOf,
+  isAuthorized,
   isOpenPath,
   misconfiguredCodes,
   mintToken,
   personaFor,
   rateLimited,
   recordFailure,
+  sweepAttempts,
   urlWithoutCode,
   verifyToken,
 } from "../access";
@@ -219,6 +224,25 @@ describe("what a cookie entitles someone to", () => {
     expect(identityOf("something=else")).toBe("visitor");
   });
 
+  /**
+   * One header used to leave a request hanging: `decodeURIComponent` threw
+   * on a lone `%`, from inside the gate and the socket upgrade, and neither
+   * was waiting for a throw.
+   */
+  it("reads a cookie that is not valid percent-encoding as no cookie, without throwing", () => {
+    expect(() => cookieFrom("wc_access=%", ACCESS_COOKIE)).not.toThrow();
+    expect(cookieFrom("wc_access=%", ACCESS_COOKIE)).toBeUndefined();
+    expect(cookieFrom("wc_access=%E0%A4%A", ACCESS_COOKIE)).toBeUndefined();
+    expect(identityOf("wc_access=%")).toBe("visitor");
+    const req = { headers: { cookie: "wc_access=%" } } as unknown as IncomingMessage;
+    expect(() => isAuthorized(req)).not.toThrow();
+    expect(isAuthorized(req)).toBe(false);
+  });
+
+  it("still decodes a cookie that is percent-encoded properly", () => {
+    expect(cookieFrom("a=1; wc_access=x%2Ey", ACCESS_COOKIE)).toBe("x.y");
+  });
+
   it("gives Coop and Rob their name, their look and Sandbox ERP", () => {
     for (const identity of ["coop", "rob"] as const) {
       const persona = personaFor(identity)!;
@@ -333,7 +357,8 @@ describe("which paths answer before anyone has a cookie", () => {
     expect(isOpenPath("/")).toBe(false);
     expect(isOpenPath("/world")).toBe(false);
     expect(isOpenPath("/r/somewhere")).toBe(false);
-    expect(isOpenPath("/api/room/state")).toBe(false);
+    expect(isOpenPath("/api/room/board")).toBe(false);
+    expect(isOpenPath("/api/zoho")).toBe(false);
     expect(isOpenPath("/api/gateway")).toBe(false);
     expect(isOpenPath("/api/room/socket")).toBe(false);
   });
@@ -408,5 +433,43 @@ describe("guessing the code", () => {
     for (let i = 0; i < 10; i += 1) recordFailure(ip);
     clearFailures(ip);
     expect(rateLimited(ip)).toBe(false);
+  });
+
+  it("forgets an address whose window has closed, even one that never came back", () => {
+    const now = Date.now();
+    const later = now + 16 * 60 * 1000;
+    sweepAttempts(later);
+    recordFailure("192.0.2.200");
+    expect(sweepAttempts(now)).toBeGreaterThan(0);
+    // Past the fifteen minutes, nothing of it is left to hold.
+    expect(sweepAttempts(later)).toBe(0);
+    expect(rateLimited("192.0.2.200")).toBe(false);
+  });
+});
+
+describe("whose address a request is from", () => {
+  const request = (forwarded: string | string[] | undefined, remote = "10.0.0.1") =>
+    ({
+      headers: forwarded === undefined ? {} : { "x-forwarded-for": forwarded },
+      socket: { remoteAddress: remote },
+    }) as unknown as IncomingMessage;
+
+  /**
+   * The first entry is whatever the client sent; the last is what the
+   * proxy appended from the connection it received. Keyed on the first, a
+   * guesser got a fresh quota by changing one header.
+   */
+  it("takes the address the proxy appended, not one the client wrote in front of it", () => {
+    expect(clientIp(request("203.0.113.1, 198.51.100.7"))).toBe("198.51.100.7");
+    expect(clientIp(request("spoofed, also-spoofed,  198.51.100.7 "))).toBe("198.51.100.7");
+  });
+
+  it("reads a header sent more than once as one list", () => {
+    expect(clientIp(request(["203.0.113.1", "198.51.100.7"]))).toBe("198.51.100.7");
+  });
+
+  it("falls back to the socket when no proxy said anything", () => {
+    expect(clientIp(request(undefined, "192.0.2.5"))).toBe("192.0.2.5");
+    expect(clientIp(request("", "192.0.2.5"))).toBe("192.0.2.5");
   });
 });

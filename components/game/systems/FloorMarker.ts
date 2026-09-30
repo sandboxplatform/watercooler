@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { PIXEL_FONT, fitFontSize } from "../config/drawing";
 import { PULSE_REFRESH_MS } from "@/lib/constants";
 import type { Flow } from "@/lib/trello/flow";
 import { readRoomFlow } from "./room-flow";
@@ -7,20 +8,19 @@ import { readRoomFlow } from "./room-flow";
  * A thing standing on a project room's floor with a figure on a plate over
  * it.
  *
- * There are four of them in every project room and they are one object.
- * Three stand in a row across the middle of the floor, in the order those
- * things happen to work: the machine making it, the roadblock it stops at,
- * the crates it goes out in. The fourth is the incident beacon, off the
- * line in the near corner, because nothing on the board happens to it.
+ * There are six of them in every project room and they are one object.
+ * Five stand in a row across the middle of the floor, in the order those
+ * things happen to work: the rack of refined work waiting, the machine
+ * making it, the roadblock it stops at, the rig checking it, the crates it
+ * goes out in. The sixth is the incident beacon, off the line in the near
+ * corner, because nothing on the board happens to it.
  *
- * All four are on the floor rather than on the wall, and three of them for
- * one reason: the five bays are the stages work is spread over, so a stuck
- * card is still standing in one, a shipped card has left all five, and an
- * incident was never in any — none of the three could be a sixth bay
- * without reading as a sixth stage. The machine is the exception and the
- * only one repeating a number the wall already has: a bar can say how much
- * work is in hand and cannot say that anything is being done to it, which
- * is what a thing that moves says by moving.
+ * Three of them could never have been a bay: a stuck card is still standing
+ * in a stage, a shipped card has left them all, and an incident was never in
+ * any. The other three — the rack, the machine and the rig — are stages,
+ * and stand here instead of on the wall because a bar can say how much work
+ * is in hand and cannot say that anything is being done to it, which is
+ * what a thing that moves says by moving (see `wallLanes`).
  *
  * What they share is everything except the picture: the plate, the figure
  * and the sizes it falls back through, the read on a timer, the beat when
@@ -113,7 +113,7 @@ export class FloorMarker {
 
     this.figure = this.scene.add
       .text(0, top + PLATE / 2, "", {
-        fontFamily: '"Press Start 2P", monospace',
+        fontFamily: PIXEL_FONT,
         fontSize: `${this.sizes()[0]}px`,
         color: ink(this.spec.ink),
       })
@@ -155,7 +155,7 @@ export class FloorMarker {
     }
 
     const text = String(count);
-    figure.setFontSize(sizeFor(text, this.sizes())).setText(text);
+    figure.setFontSize(fitFontSize(text, PLATE - 10, this.sizes())).setText(text);
     container.setVisible(true);
     // A number that moved says so once, the way a count on the wall does —
     // and a marker that has just gone up is the same news.
@@ -192,16 +192,4 @@ export class FloorMarker {
 /** A colour written once, as a number for Phaser and a string for text. */
 export function ink(colour: number): string {
   return `#${colour.toString(16).padStart(6, "0")}`;
-}
-
-/**
- * The largest size the figure fits the plate at.
- *
- * Monospace, so the width is the character count times the size — a board
- * with a hundred of something is a smaller number rather than one drawn
- * over its own frame.
- */
-function sizeFor(text: string, sizes: readonly number[]): number {
-  const room = PLATE - 10;
-  return sizes.find((size) => text.length * size <= room) ?? sizes[sizes.length - 1];
 }

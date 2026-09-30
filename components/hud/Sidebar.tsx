@@ -35,6 +35,15 @@ import { useOnline } from "@/lib/presence-online";
 
 export type SidebarTab = "people" | "badges" | "eggs";
 
+/**
+ * How wide the column is with its edge at `clientX`. Measured from the right
+ * edge of the window, so the handle stays under the pointer however the
+ * window is sized.
+ */
+function widthAt(clientX: number): number {
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, window.innerWidth - clientX));
+}
+
 interface SidebarProps {
   open: boolean;
   /**
@@ -123,33 +132,27 @@ export default function Sidebar({
   const onDrag = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (!draggingRef.current) return;
-      // Measured from the right edge of the window, so the handle stays under
-      // the pointer however the window is sized
-      const next = Math.min(
-        SIDEBAR_MAX_WIDTH,
-        Math.max(SIDEBAR_MIN_WIDTH, window.innerWidth - event.clientX),
-      );
-      onWidthChange(next);
+      onWidthChange(widthAt(event.clientX));
     },
     [onWidthChange],
   );
 
-  const endDrag = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!draggingRef.current) return;
-      draggingRef.current = false;
-      setDragging(false);
-      // Remember the width first: releasing the capture can throw, and the
-      // width the reader just chose is the thing worth keeping
-      saveSidebarWidth(width);
-      try {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      } catch {
-        // Nothing to release
-      }
-    },
-    [width],
-  );
+  const endDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    setDragging(false);
+    // Remember the width first: releasing the capture can throw, and the
+    // width the reader just chose is the thing worth keeping. Worked out
+    // from where the pointer let go rather than read off the prop, which
+    // is the width of the last render — a move or two behind the hand, and
+    // a new callback on every one of them.
+    saveSidebarWidth(widthAt(event.clientX));
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Nothing to release
+    }
+  }, []);
 
   // Double-click the handle to go back to a sensible width
   const resetWidth = useCallback(() => {

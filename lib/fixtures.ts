@@ -33,7 +33,7 @@ import {
 } from "./constants";
 import { TILE } from "./map/office";
 import { residentPresenceId } from "./presence-types";
-import { arcadeGame } from "./arcade";
+import { ARCADE_TITLES } from "./arcade/types";
 import { arcadeGameIn } from "./world/tenants";
 
 /**
@@ -45,7 +45,7 @@ import { arcadeGameIn } from "./world/tenants";
  */
 function arcadeTitleIn(room: string | null): string | null {
   const id = arcadeGameIn(room);
-  return id ? (arcadeGame(id)?.title ?? null) : null;
+  return id ? ARCADE_TITLES[id] : null;
 }
 
 /** The fixtures a room can carry. The id is the registry's key. */

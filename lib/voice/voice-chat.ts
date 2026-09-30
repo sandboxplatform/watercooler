@@ -14,210 +14,58 @@
  * spans rooms: a floor above has coordinates of its own, so the same
  * numbers mean something different in every place, and a person you can
  * hear at all is a person you should hear properly. The fade is gone with
- * it; `proximity.ts` says what it was, for whenever it comes back.
+ * it; `offers.ts` says what it was, for whenever it comes back.
  *
  * Who is on the server, rather than who is in this room, is `presence-online`:
  * the same list the People panel shows, which the server sends to everybody
  * whenever anyone arrives, leaves or walks somewhere else.
+ *
+ * This file is the conductor, and the parts are beside it:
+ *
+ *   view.ts        what the HUD shows, and telling it
+ *   microphone.ts  asking for the microphone, listening to it, letting go
+ *   peers.ts       the connections and the handshake that makes them
+ *   sweep.ts       what to do about connections that are not working
+ *   playback.ts    playing somebody's voice, and hearing who is talking
  *
  * One instance per browser. It listens to the room socket for as long as
  * the HUD is mounted, and does nothing at all until the microphone is
  * switched on.
  */
 
-import { gameEvents } from "../events";
 import { createLogger } from "../logger";
 import { onRoomMessage, sendRoom } from "../room-socket";
 import { onlinePeople, subscribeOnline } from "../presence-online";
 import { getSelfId } from "../presence-self";
 import type { OnlinePerson, VoiceSignal } from "../presence-types";
-import { STUN_URL, TURN_URL } from "./ice";
-import { offers } from "./proximity";
+import { askForMicrophone, cannotAsk, LocalMicrophone } from "./microphone";
+import { Peers } from "./peers";
+import { LEVEL_POLL_MS, Meter } from "./playback";
 import { rememberVoice, voiceWasOn } from "./remember";
-import { refusalReason, unsupportedReason, type MicError } from "./refusal";
+import { SWEEP_MS, sweepPlan, type Greeting } from "./sweep";
+import { VoiceStore, type VoiceView } from "./view";
+
+export type { VoiceStatus, VoiceView } from "./view";
 
 const log = createLogger("Voice");
 
-/** How long to wait on the permission lookup before explaining without it. */
-const PERMISSION_WAIT_MS = 1_000;
-
-/**
- * What the browser says this site may do with a microphone, where it will
- * say. Firefox throws on the name, and a web view may not answer at all —
- * which is why it is raced: a lookup that never settles would leave the
- * pill saying "Asking for the microphone…" over a refusal already made.
- */
-async function microphonePermission(): Promise<PermissionState | null> {
-  try {
-    const query = navigator.permissions?.query({ name: "microphone" as PermissionName });
-    if (!query) return null;
-    const status = await Promise.race([
-      query,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), PERMISSION_WAIT_MS)),
-    ]);
-    return status?.state ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/** For a retry whose failure the counts already report. */
-const noted = () => {};
-
-export type VoiceStatus = "off" | "requesting" | "on" | "denied" | "unsupported";
-
-/** What the HUD shows. */
-export interface VoiceView {
-  status: VoiceStatus;
-  /** People whose voice is connected. */
-  peers: number;
-  /** People on the server with a microphone on, counting this browser's. */
-  withMic: number;
-  /** People on the server, counting this browser's. */
-  online: number;
-  /** People still being connected to. */
-  connecting: number;
-  /** People in the chat this browser has given up reaching, as things stand. */
-  failed: number;
-  /** People connected whose audio this browser is not actually playing. */
-  silent: number;
-  /** Whether this browser's own microphone is picking up speech. */
-  speaking: boolean;
-  /** Why the microphone could not be used, when it could not. */
-  reason: string | null;
-}
-
-/**
- * Voice in the wild: STUN to find a route, and a TURN relay if one is given.
- *
- * The addresses come from `./ice`, which `next.config.ts` reads too — the
- * Content-Security-Policy has to name every one of them or the browser drops
- * it without saying so.
- */
-function iceServers(): RTCIceServer[] {
-  const servers: RTCIceServer[] = [{ urls: STUN_URL }];
-  if (TURN_URL) {
-    servers.push({
-      urls: TURN_URL,
-      username: process.env.NEXT_PUBLIC_TURN_USERNAME,
-      credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
-    });
-  }
-  return servers;
-}
-
-/** Louder than this, as RMS of the signal, counts as talking. */
-const SPEAKING_RMS = 0.02;
-const LEVEL_POLL_MS = 120;
-
-/**
- * How long a connection may sit unfinished before it is started again.
- *
- * Long enough for a slow network to finish the ICE exchange, short enough
- * that a handshake nobody is going to answer is not mistaken for one in
- * progress. `disconnected` is inside it too: WebRTC drops through that
- * state on an ordinary hiccup and usually comes back on its own.
- */
-const NEGOTIATE_GRACE_MS = 8_000;
-
-/** The least time between two hellos to the same person. */
-const GREET_RETRY_MS = 5_000;
-
-/** The most, once it is clear the two networks cannot reach each other. */
-const GREET_MAX_MS = 60_000;
-
-/** How often the connections are looked over while the microphone is on. */
-const SWEEP_MS = 4_000;
-
-/**
- * How long somebody may be missing from the server's list before their voice
- * is let go of.
- *
- * Gone from the list is the only way this browser learns that somebody has
- * left, and it used to be acted on the instant it happened — which is right
- * for a closed tab and wrong for every gap that is not one. A list is a
- * snapshot taken between two things happening, and a person walking through
- * a door is out of one room before they are into the next.
- *
- * The server no longer publishes that particular gap, and this is the other
- * half of the same argument: a reconnected socket, a dropped frame or any
- * later gap nobody has thought of yet must not cost a working conversation
- * either. Long enough that no blink reaches the audio, short enough that
- * somebody who has really gone stops being counted as connected.
- */
-const GONE_GRACE_MS = 10_000;
-
-/**
- * How long to leave it before saying hello again, after so many tries.
- *
- * Two people whose networks have no route between them — no relay, and a
- * NAT that will not be traversed — never connect however often they are
- * introduced, and a hello every five seconds for the length of a session
- * is noise on the socket for nothing. It backs off to a minute and stays
- * there, so the retry still happens the moment the network allows it.
- */
-function backoff(tries: number): number {
-  return Math.min(GREET_RETRY_MS * 2 ** Math.min(tries, 4), GREET_MAX_MS);
-}
-
-interface Peer {
-  pc: RTCPeerConnection;
-  /** Keeps Chrome decoding the stream; Web Audio does the actual playing. */
-  sink: HTMLAudioElement | null;
-  source: MediaStreamAudioSourceNode | null;
-  analyser: AnalyserNode | null;
-  /** ICE that arrived before the remote description did. */
-  earlyIce: RTCIceCandidateInit[];
-  speaking: boolean;
-  /** Negotiation, one step at a time: two at once wedge the connection. */
-  work: Promise<void>;
-  /** When the connection last changed state, for telling stalled from slow. */
-  changedAt: number;
-  /**
-   * When ICE was last restarted on this connection, 0 for never.
-   *
-   * One restart per connection, cleared when it connects. Mending is worth
-   * trying before rebuilding and is not worth trying twice: a second one
-   * that fails the same way is a minute of silence spent on the wrong
-   * remedy, and starting again from hello is the remedy that is left.
-   */
-  restartedAt: number;
-  /**
-   * Whether this connection has ever been up.
-   *
-   * What separates the two remedies. A route that was working and stopped
-   * is worth asking to be found again; a handshake that never completed is
-   * more likely wedged than misrouted, and no amount of fresh candidates
-   * mends a connection whose description went wrong. That one is rebuilt.
-   */
-  everConnected: boolean;
-  /** Whether their audio is actually coming out of this browser. */
-  playing: boolean;
-}
-
-/** When somebody was last said hello to, and how many times running. */
-interface Greeting {
-  at: number;
-  tries: number;
-}
-
 class VoiceChat {
-  private view: VoiceView = {
-    status: "off",
-    peers: 0,
-    withMic: 0,
-    online: 1,
-    connecting: 0,
-    failed: 0,
-    silent: 0,
-    speaking: false,
-    reason: null,
-  };
-  private listeners = new Set<() => void>();
-  private local: MediaStream | null = null;
+  private store = new VoiceStore();
+  private mic: LocalMicrophone | null = null;
   private context: AudioContext | null = null;
-  private localAnalyser: AnalyserNode | null = null;
-  private peers = new Map<string, Peer>();
+  private meter = new Meter();
+  private peers = new Peers({
+    send: (to, signal) => this.send(to, signal),
+    local: () => this.mic?.stream ?? null,
+    context: () => this.context,
+    changed: () => this.count(),
+    failed: (id) => this.unreachable.add(id),
+    connected: (id) => {
+      const greeting = this.greetedAt.get(id);
+      if (greeting) greeting.tries = 0;
+      this.unreachable.delete(id);
+    },
+  });
   private unsubs: (() => void)[] = [];
   private attached = 0;
   private levelTimer: ReturnType<typeof setInterval> | null = null;
@@ -247,7 +95,6 @@ class VoiceChat {
    * they are back, which for a room change is the very next list.
    */
   private missingSince = new Map<string, number>();
-  private levels = new Float32Array(1024);
   /**
    * Which switching-on this is, so one that was called off can tell.
    *
@@ -262,26 +109,15 @@ class VoiceChat {
   // ── For the HUD ────────────────────────────────────────
 
   snapshot(): VoiceView {
-    return this.view;
+    return this.store.snapshot();
   }
 
   subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return this.store.subscribe(listener);
   }
 
-  private publish(patch: Partial<VoiceView>) {
-    const before = this.view;
-    this.view = { ...this.view, ...patch };
-    for (const listener of this.listeners) listener();
-    // The scene hangs a mark over this browser's own character and holds no
-    // React, so the bus is where the two layers meet. Only on a change: the
-    // level is polled several times a second and most polls say nothing new.
-    const was = before.status === "on";
-    const now = this.view.status === "on";
-    if (was !== now || before.speaking !== this.view.speaking) {
-      gameEvents.emit("voice-self", now, this.view.speaking);
-    }
+  private get status() {
+    return this.store.snapshot().status;
   }
 
   // ── Lifecycle ──────────────────────────────────────────
@@ -304,7 +140,7 @@ class VoiceChat {
             // is on until told. Who to say hello to again is the sweep's
             // question, not this one — it used to forget everybody here,
             // which re-greeted people already being heard perfectly well.
-            if (this.view.status === "on") sendRoom({ type: "mic", on: true });
+            if (this.status === "on") sendRoom({ type: "mic", on: true });
             this.sweep();
           }
         }),
@@ -313,7 +149,7 @@ class VoiceChat {
         subscribeOnline(() => this.sweep()),
       ];
       // The microphone was on when the last page was left: on again here.
-      if (voiceWasOn() && this.view.status === "off") void this.enable();
+      if (voiceWasOn() && this.status === "off") void this.enable();
     }
     return () => {
       this.attached = Math.max(0, this.attached - 1);
@@ -327,7 +163,7 @@ class VoiceChat {
   }
 
   async toggle() {
-    if (this.view.status === "on" || this.view.status === "requesting") await this.disable();
+    if (this.status === "on" || this.status === "requesting") await this.disable();
     else await this.enable();
   }
 
@@ -337,35 +173,20 @@ class VoiceChat {
    * which lasts only as long as the button.
    */
   async enable({ remember = true }: { remember?: boolean } = {}) {
-    if (this.view.status === "on" || this.view.status === "requesting") return;
-    const unsupported = unsupportedReason({
-      secure: typeof window === "undefined" || window.isSecureContext !== false,
-      hasApi: typeof RTCPeerConnection !== "undefined" && !!navigator.mediaDevices?.getUserMedia,
-    });
+    if (this.status === "on" || this.status === "requesting") return;
+    const unsupported = cannotAsk();
     if (unsupported) {
-      this.publish({ status: "unsupported", reason: unsupported });
+      this.store.publish({ status: "unsupported", reason: unsupported });
       return;
     }
-    this.publish({ status: "requesting", reason: null });
+    this.store.publish({ status: "requesting", reason: null });
     const turn = ++this.turn;
-    const askedAt = Date.now();
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-    } catch (err) {
-      // Timed before the permission is looked up, which is its own await.
-      const elapsedMs = Date.now() - askedAt;
-      const reason = refusalReason(err as MicError, {
-        permission: await microphonePermission(),
-        elapsedMs,
-      });
-      log.warn(`${reason} (${(err as Error)?.name}: ${(err as Error)?.message}, ${elapsedMs}ms)`);
+    const answer = await askForMicrophone();
+    if ("refused" in answer) {
       // Only if this is still the switching-on in progress: a refusal that
       // arrives after the person already gave up must not overwrite "off"
       // with a red error they did not ask to see.
-      if (turn === this.turn) this.publish({ status: "denied", reason });
+      if (turn === this.turn) this.store.publish({ status: "denied", reason: answer.refused });
       return;
     }
 
@@ -373,37 +194,27 @@ class VoiceChat {
      * Switched off while the permission prompt was up.
      *
      * `disable` could do nothing about a stream that did not exist yet — it
-     * stopped no tracks, because `this.local` was still null — and this side
-     * went on to publish "on", greet every peer and start sending audio. The
-     * HUD said off, the person believed off, and the microphone was live.
+     * stopped no tracks, because there was no microphone held yet — and this
+     * side went on to publish "on", greet every peer and start sending audio.
+     * The HUD said off, the person believed off, and the microphone was live.
      * So the stream is stopped here instead, by whoever actually has it.
      */
     if (turn !== this.turn) {
       log.info("microphone was switched off while it was being asked for");
-      stream.getTracks().forEach((track) => track.stop());
+      answer.stream.getTracks().forEach((track) => track.stop());
       return;
-    }
-    this.local = stream;
-    // A device can be taken away after it is given: the OS hands it to
-    // another app, or somebody unplugs it. Nothing downstream would ever
-    // notice — the pill stays green, every connection stays up, and the
-    // person goes on believing they are in the conversation while sending
-    // silence at it. This is the only warning a browser gives.
-    for (const track of stream.getTracks()) {
-      track.onended = () =>
-        this.lost("The microphone stopped — another app may have taken it, or it was unplugged.");
     }
 
     // A click got us here, so the context may start; if it was made
     // earlier and suspended, wake it.
     this.context ??= new AudioContext();
     if (this.context.state === "suspended") void this.context.resume();
-    this.localAnalyser = this.context.createAnalyser();
-    this.localAnalyser.fftSize = 1024;
-    this.context.createMediaStreamSource(this.local).connect(this.localAnalyser);
+    this.mic = new LocalMicrophone(answer.stream, this.context, () =>
+      this.lost("The microphone stopped — another app may have taken it, or it was unplugged."),
+    );
     this.levelTimer = setInterval(() => this.pollLevels(), LEVEL_POLL_MS);
     this.unreachable.clear();
-    this.publish({ status: "on" });
+    this.store.publish({ status: "on" });
     if (remember) rememberVoice(true);
     log.info("microphone on");
     // The room counts who is on voice; then tell everyone here, and
@@ -427,21 +238,20 @@ class VoiceChat {
     // Before the early return, so switching off always calls off whatever
     // switching-on is in flight — even when the view already reads "off".
     this.turn += 1;
-    if (this.view.status === "off") return;
+    if (this.status === "off") return;
     for (const player of this.everyoneElse()) this.send(player.id, { kind: "bye" });
-    for (const id of [...this.peers.keys()]) this.drop(id);
+    for (const id of this.peers.ids()) this.peers.drop(id);
     if (this.levelTimer) clearInterval(this.levelTimer);
     this.levelTimer = null;
     if (this.sweepTimer) clearInterval(this.sweepTimer);
     this.sweepTimer = null;
-    this.local?.getTracks().forEach((track) => track.stop());
-    this.local = null;
-    this.localAnalyser = null;
+    this.mic?.release();
+    this.mic = null;
     sendRoom({ type: "mic", on: false });
     this.greetedAt.clear();
     this.missingSince.clear();
     this.unreachable.clear();
-    this.publish({
+    this.store.publish({
       status: "off",
       peers: 0,
       connecting: 0,
@@ -461,9 +271,9 @@ class VoiceChat {
    * they are in a conversation they cannot speak into.
    */
   private lost(reason: string) {
-    if (this.view.status !== "on" && this.view.status !== "requesting") return;
+    if (this.status !== "on" && this.status !== "requesting") return;
     log.warn(reason);
-    void this.disable().then(() => this.publish({ status: "denied", reason }));
+    void this.disable().then(() => this.store.publish({ status: "denied", reason }));
   }
 
   // ── The handshake ──────────────────────────────────────
@@ -486,409 +296,74 @@ class VoiceChat {
     sendRoom({ type: "voice", to, signal });
   }
 
-  private async handle(from: string, signal: VoiceSignal) {
-    if (this.view.status !== "on") return;
+  private handle(from: string, signal: VoiceSignal): Promise<void> | undefined {
+    if (this.status !== "on") return;
     const me = getSelfId();
     if (!me) return;
-    switch (signal.kind) {
-      /**
-       * They have just switched on, or given up on us and started again.
-       * Either way what they were holding is gone, so whatever we hold for
-       * them is half a connection: throw it away and begin.
-       *
-       * It used to be ignored outright when a connection to them already
-       * existed, which is what made one lost handshake permanent. Every way
-       * of dropping a peer is one-sided — a `failed` is noticed by whichever
-       * side noticed it — so the side that dropped said hello and the side
-       * that had not said nothing at all, for the rest of the session.
-       */
-      case "hello":
-        this.drop(from);
-        this.send(from, { kind: "hi" });
-        if (offers(me, from)) await this.offerTo(from);
-        return;
-      // The answer to ours. Deliberately not a second `hello`: that would be
-      // answered in turn, and two sides that each start again on one never
-      // finish starting again.
-      case "hi":
-        // A connection already under way is the offer this would make.
-        if (this.peers.has(from)) return;
-        if (offers(me, from)) await this.offerTo(from);
-        return;
-      case "bye":
-        this.drop(from);
-        return;
-      case "offer": {
-        const peer = this.peer(from);
-        await this.negotiate(from, peer, async () => {
-          // Both sides offered. Only the lower id does, so this is two
-          // restarts crossing rather than the ordinary case — give way,
-          // since ours is about to be answered in any event. Without the
-          // rollback this throws, and a throw here leaves the connection
-          // half-described with nothing to notice it.
-          if (peer.pc.signalingState === "have-local-offer") {
-            await peer.pc.setLocalDescription({ type: "rollback" });
-          }
-          await peer.pc.setRemoteDescription({ type: "offer", sdp: signal.sdp });
-          await this.flushIce(peer);
-          const answer = await peer.pc.createAnswer();
-          await peer.pc.setLocalDescription(answer);
-          this.send(from, { kind: "answer", sdp: answer.sdp ?? "" });
-        });
-        return;
-      }
-      case "answer": {
-        const peer = this.peers.get(from);
-        if (!peer) return;
-        await this.negotiate(from, peer, async () => {
-          // An answer to an offer that has since been superseded. Taking it
-          // throws, and the connection it would wedge is the live one.
-          if (peer.pc.signalingState !== "have-local-offer") return;
-          await peer.pc.setRemoteDescription({ type: "answer", sdp: signal.sdp });
-          await this.flushIce(peer);
-        });
-        return;
-      }
-      case "ice": {
-        const peer = this.peers.get(from);
-        if (!peer) return;
-        const candidate = signal.candidate as RTCIceCandidateInit;
-        await this.negotiate(from, peer, async () => {
-          if (peer.pc.remoteDescription) await peer.pc.addIceCandidate(candidate).catch(() => {});
-          else peer.earlyIce.push(candidate);
-        });
-        return;
-      }
-    }
+    return this.peers.handle(from, me, signal);
   }
 
-  /**
-   * One step at a time, per connection, and never thrown away.
-   *
-   * Signals were handled as they arrived, which with two greetings crossing
-   * means two negotiations on one `RTCPeerConnection` at once: the second
-   * throws `InvalidStateError`, the throw lands in a promise nobody holds,
-   * and the connection is left half-described for the rest of the session.
-   * Queued, and a failure is logged rather than lost.
-   */
-  private negotiate(id: string, peer: Peer, step: () => Promise<void>): Promise<void> {
-    const next = peer.work
-      .then(() => {
-        // Dropped while this waited its turn: every one of these throws on
-        // a closed connection, and the result is not wanted in any case.
-        if (this.peers.get(id) !== peer) return;
-        return step();
-      })
-      .catch((err: Error) => log.warn(`voice handshake with ${id} failed:`, err.message));
-    peer.work = next;
-    return next;
-  }
-
-  private async flushIce(peer: Peer) {
-    for (const candidate of peer.earlyIce) await peer.pc.addIceCandidate(candidate).catch(() => {});
-    peer.earlyIce = [];
-  }
-
-  private async offerTo(id: string) {
-    const peer = this.peer(id);
-    await this.negotiate(id, peer, async () => {
-      const offer = await peer.pc.createOffer();
-      await peer.pc.setLocalDescription(offer);
-      this.send(id, { kind: "offer", sdp: offer.sdp ?? "" });
-    });
-  }
-
-  /** The connection to one person, made on first use. */
-  private peer(id: string): Peer {
-    const existing = this.peers.get(id);
-    if (existing) return existing;
-    const pc = new RTCPeerConnection({ iceServers: iceServers() });
-    const peer: Peer = {
-      pc,
-      sink: null,
-      source: null,
-      analyser: null,
-      earlyIce: [],
-      speaking: false,
-      work: Promise.resolve(),
-      changedAt: Date.now(),
-      restartedAt: 0,
-      everConnected: false,
-      playing: true,
-    };
-    this.peers.set(id, peer);
-    for (const track of this.local?.getTracks() ?? []) pc.addTrack(track, this.local!);
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        this.send(id, { kind: "ice", candidate: { ...event.candidate.toJSON() } });
-      }
-    };
-    pc.ontrack = (event) => this.hear(id, peer, event.streams[0] ?? new MediaStream([event.track]));
-    pc.onconnectionstatechange = () => {
-      peer.changedAt = Date.now();
-      if (pc.connectionState === "failed") {
-        // Kept rather than closed, which is the whole of the change: a
-        // failed connection is exactly what `restartIce` is for, and
-        // throwing it away left the sweep nothing to mend and a whole
-        // handshake to run in its place — over a socket, through the other
-        // browser, and only if that browser agrees. The route is what went;
-        // the connection is still good for asking for another one.
-        this.unreachable.add(id);
-        log.warn(`voice lost the route to ${id}; the sweep will try to mend it`);
-      } else if (pc.connectionState === "closed") this.drop(id);
-      else if (pc.connectionState === "connected") {
-        // It worked, so the next thing to go wrong is worth trying hard at,
-        // and worth trying to mend before it is rebuilt.
-        const greeting = this.greetedAt.get(id);
-        if (greeting) greeting.tries = 0;
-        peer.restartedAt = 0;
-        peer.everConnected = true;
-        this.unreachable.delete(id);
-        log.info(`voice connected to ${id}`);
-      }
-      this.count();
-    };
-    return peer;
-  }
-
-  /**
-   * Ask for a fresh route without taking the connection down.
-   *
-   * What fails mid-conversation is almost never the connection: it is the
-   * path through the network — a wifi handover, a NAT rebinding, a relay
-   * that dropped the pair. `restartIce` gathers candidates again and keeps
-   * everything else, so nothing is renegotiated but the route, and the
-   * audio is back in about the time one exchange takes rather than the
-   * time a whole handshake takes.
-   *
-   * Only the side that opens the line may do it, because a restart is an
-   * offer and two crossing offers are the thing `offers` exists to
-   * prevent. The other side needs no new code at all: a restart arrives as
-   * an ordinary offer and is answered as one.
-   */
-  private restart(id: string, peer: Peer): Promise<void> {
-    return this.negotiate(id, peer, async () => {
-      peer.pc.restartIce();
-      const offer = await peer.pc.createOffer();
-      await peer.pc.setLocalDescription(offer);
-      this.send(id, { kind: "offer", sdp: offer.sdp ?? "" });
-    });
-  }
-
-  /** Whether there is a connection here worth mending, and a mend left to try. */
-  private mendable(peer: Peer | undefined): peer is Peer {
-    return (
-      !!peer &&
-      peer.everConnected &&
-      peer.restartedAt === 0 &&
-      typeof peer.pc.restartIce === "function"
-    );
-  }
-
-  /** Their voice arrives: play it. */
-  private hear(id: string, peer: Peer, stream: MediaStream) {
-    // A second track on this connection, or one renegotiated: whatever was
-    // playing is not this stream, and leaving it attached leaves a node in
-    // the graph reading a source that has gone.
-    peer.source?.disconnect();
-    if (peer.sink) peer.sink.srcObject = null;
-    // The element is what plays, and it needs no audio context, which a
-    // browser may keep suspended. The context only listens, to see when
-    // they are talking.
-    const sink = new Audio();
-    sink.srcObject = stream;
-    sink.autoplay = true;
-    sink.volume = 1;
-    peer.sink = sink;
-    peer.playing = true;
-    void sink.play().catch((err: Error) => {
-      // Connected, and not a sound. A browser that will not start playback
-      // is the one failure on this side of the connection that looks
-      // exactly like success from every angle the app had: the peer is up,
-      // the mark over their head goes green as they talk, and nothing
-      // comes out. The sweep asks again; the pill stops counting them in
-      // the meantime, because they are not in this conversation.
-      peer.playing = false;
-      this.count();
-      log.warn(`could not play ${id}:`, err.message);
-    });
-    if (this.context) {
-      if (this.context.state === "suspended") void this.context.resume();
-      peer.source = this.context.createMediaStreamSource(stream);
-      peer.analyser = this.context.createAnalyser();
-      peer.analyser.fftSize = 1024;
-      peer.source.connect(peer.analyser);
-    }
-    this.count();
-    log.info(`hearing ${id}`);
-  }
-
-  private drop(id: string) {
-    const peer = this.peers.get(id);
-    if (!peer) return;
-    this.peers.delete(id);
-    if (peer.speaking) gameEvents.emit("voice-speaking", id, false);
-    peer.source?.disconnect();
-    if (peer.sink) peer.sink.srcObject = null;
-    peer.pc.onicecandidate = null;
-    peer.pc.ontrack = null;
-    peer.pc.onconnectionstatechange = null;
-    peer.pc.close();
-    this.count();
-  }
-
-  /**
-   * Look the connections over: forget anyone gone from the server, and say
-   * hello again to anyone we ought to be able to hear and cannot.
-   *
-   * This is the retry, and until it existed there was none — a handshake
-   * that did not complete stayed uncompleted until somebody switched their
-   * microphone off and on. Run on a timer while the microphone is on, on
-   * every change to the server's list, and on arriving in a new room.
-   */
+  /** Carry out what `sweepPlan` decided. See `sweep.ts` for why each is what it is. */
   private sweep() {
     this.census();
-    if (this.view.status !== "on") return;
+    if (this.status !== "on") return;
+    const me = getSelfId();
+    if (!me) return;
     const now = Date.now();
-    const others = this.everyoneElse();
-    const online = new Set(others.map((p) => p.id));
-    // Gone, and gone for long enough to be believed — see GONE_GRACE_MS.
-    // Anyone back before then keeps the connection they already had, which
-    // is the whole point: walking through a door is not leaving.
-    for (const id of new Set([...this.peers.keys(), ...this.greetedAt.keys()])) {
-      if (online.has(id)) {
-        this.missingSince.delete(id);
-        continue;
-      }
-      const since = this.missingSince.get(id) ?? now;
-      this.missingSince.set(id, since);
-      if (now - since < GONE_GRACE_MS) continue;
-      this.drop(id);
+    const plan = sweepPlan(this.peers.facts(), this.everyoneElse(), now, {
+      me,
+      greeted: this.greetedAt,
+      missing: this.missingSince,
+    });
+    this.missingSince = plan.missing;
+    for (const id of plan.forget) {
+      this.peers.drop(id);
       this.greetedAt.delete(id);
-      this.missingSince.delete(id);
       this.unreachable.delete(id);
     }
-    // A sink that never started playing. Asking again costs nothing and is
-    // what a context that has since been woken needs to hear.
-    for (const [id, peer] of this.peers) {
-      if (peer.playing || !peer.sink) continue;
-      if (this.context?.state === "suspended") void this.context.resume();
-      void peer.sink.play().then(() => {
-        peer.playing = true;
-        log.info(`hearing ${id} after all`);
-        this.count();
-      }, noted);
+    // Asking again costs nothing and is what a context that has since been
+    // woken needs to hear.
+    for (const id of plan.replay) this.peers.replay(id);
+    // Not in the chat, so nobody to report as unreachable.
+    for (const id of plan.quiet) this.unreachable.delete(id);
+    for (const { id, tries } of plan.mend) {
+      this.greetedAt.set(id, { at: now, tries });
+      log.info(`asking for a new route to ${id}`);
+      void this.peers.restart(id, now);
     }
-
-    const me = getSelfId();
-    for (const person of others) {
-      // Somebody with their microphone off has nothing to answer with, and
-      // when they switch it on theirs is the hello that starts this. They
-      // are also nobody to report as unreachable: they are not in the chat.
-      if (!person.mic) {
-        this.unreachable.delete(person.id);
-        continue;
-      }
-      const peer = this.peers.get(person.id);
-      if (this.settled(peer, now)) continue;
-      const greeting = this.greetedAt.get(person.id) ?? { at: 0, tries: 0 };
-      if (now - greeting.at < backoff(greeting.tries)) continue;
-      this.greetedAt.set(person.id, { at: now, tries: greeting.tries + 1 });
-      // Mend what is there before building another one: an ICE restart
-      // keeps the connection, its tracks and its DTLS and asks only for a
-      // fresh route, which is the thing that actually goes. One try, and
-      // then the handshake below, which is what a connection beyond
-      // mending needs.
-      if (me && offers(me, person.id) && this.mendable(peer)) {
-        peer.restartedAt = now;
-        log.info(`asking for a new route to ${person.id}`);
-        void this.restart(person.id, peer);
-        continue;
-      }
+    for (const { id, tries } of plan.greet) {
+      this.greetedAt.set(id, { at: now, tries });
       // A hello tells them to throw away what they hold for us; ours has to
       // go the same way, or their offer arrives at a connection that has
       // already moved on and is refused by its own state.
-      this.drop(person.id);
-      this.send(person.id, { kind: "hello" });
+      this.peers.drop(id);
+      this.send(id, { kind: "hello" });
     }
     this.count();
-  }
-
-  /** Connected, or on the way there and not yet out of time. */
-  private settled(peer: Peer | undefined, now: number): boolean {
-    if (!peer) return false;
-    const state = peer.pc.connectionState;
-    if (state === "connected") return true;
-    // `disconnected` is in here on purpose: WebRTC passes through it on an
-    // ordinary hiccup and usually comes back without being asked. What it
-    // must not do is stay there, which is what the grace period decides.
-    if (state === "new" || state === "connecting" || state === "disconnected") {
-      return now - peer.changedAt < NEGOTIATE_GRACE_MS;
-    }
-    return false;
   }
 
   /** How many are on the server, and how many of them are on voice — this browser included. */
   private census() {
     const others = this.everyoneElse();
-    const on = this.view.status === "on";
-    const patch = {
+    const on = this.status === "on";
+    this.store.update({
       online: others.length + 1,
       withMic: others.filter((p) => p.mic).length + (on ? 1 : 0),
-    };
-    if (patch.online !== this.view.online || patch.withMic !== this.view.withMic) {
-      this.publish(patch);
-    }
+    });
   }
 
   private count() {
-    const all = [...this.peers.values()];
-    const connected = all.filter((p) => p.pc.connectionState === "connected");
-    const patch = {
-      peers: connected.length,
-      // `disconnected` belongs with these rather than with nothing: it is a
-      // connection that may well come back, and the sweep restarts it if it
-      // does not. Left out, the pill read "0" over audio still flowing.
-      connecting: all.filter((p) =>
-        ["new", "connecting", "disconnected"].includes(p.pc.connectionState),
-      ).length,
-      failed: this.unreachable.size,
-      // Connected and inaudible, which is not being in the conversation
-      // however good the connection looks from here.
-      silent: connected.filter((p) => !p.playing).length,
-    };
-    if (
-      patch.peers !== this.view.peers ||
-      patch.connecting !== this.view.connecting ||
-      patch.failed !== this.view.failed ||
-      patch.silent !== this.view.silent
-    ) {
-      this.publish(patch);
-    }
+    this.store.update({ ...this.peers.counts(), failed: this.unreachable.size });
   }
 
   // ── Who is talking ─────────────────────────────────────
 
-  private loudness(analyser: AnalyserNode): number {
-    analyser.getFloatTimeDomainData(this.levels);
-    let sum = 0;
-    for (let i = 0; i < analyser.fftSize; i++) sum += this.levels[i] * this.levels[i];
-    return Math.sqrt(sum / analyser.fftSize);
-  }
-
   private pollLevels() {
-    if (this.localAnalyser) {
-      const speaking = this.loudness(this.localAnalyser) > SPEAKING_RMS;
-      if (speaking !== this.view.speaking) this.publish({ speaking });
+    if (this.mic) {
+      const speaking = this.meter.speaking(this.mic.analyser);
+      if (speaking !== this.store.snapshot().speaking) this.store.publish({ speaking });
     }
-    for (const [id, peer] of this.peers) {
-      if (!peer.analyser) continue;
-      const speaking = this.loudness(peer.analyser) > SPEAKING_RMS;
-      if (speaking !== peer.speaking) {
-        peer.speaking = speaking;
-        gameEvents.emit("voice-speaking", id, speaking);
-      }
-    }
+    this.peers.meter(this.meter);
   }
 }
 

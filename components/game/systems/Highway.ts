@@ -38,7 +38,14 @@ export class Highway {
 
   update(deltaMs: number) {
     if (this.cars.length === 0) return;
-    this.cars = this.cars.map((car) => drive(car, deltaMs)).filter((car) => !goneBy(car));
+    // In place: this runs every frame, and a fresh list and a filtered copy
+    // of it sixty times a second is garbage for three cars at most.
+    let kept = 0;
+    for (const car of this.cars) {
+      const moved = drive(car, deltaMs);
+      if (!goneBy(moved)) this.cars[kept++] = moved;
+    }
+    this.cars.length = kept;
     this.paint();
   }
 
@@ -52,9 +59,7 @@ export class Highway {
    * matters against the verge.
    */
   private paint() {
-    const here = new Set<string>();
     for (const car of this.cars) {
-      here.add(car.id);
       let image = this.drawn.get(car.id);
       if (!image) {
         image = this.scene.add
@@ -64,8 +69,11 @@ export class Highway {
       }
       image.setPosition(laneX(car), car.y).setDepth(car.y + CAR.height / 2);
     }
+    // Every car has a picture by now, so the same count means no picture is
+    // left over — the ordinary frame, with nothing to look for.
+    if (this.drawn.size === this.cars.length) return;
     for (const [id, image] of this.drawn) {
-      if (here.has(id)) continue;
+      if (this.cars.some((car) => car.id === id)) continue;
       image.destroy();
       this.drawn.delete(id);
     }

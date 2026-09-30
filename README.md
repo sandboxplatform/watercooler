@@ -45,6 +45,11 @@ npx @geezerrrr/watercooler
 
 Open [http://localhost:3000](http://localhost:3000). Nothing else to install.
 
+That is the world with you in it and nobody else: the npm package runs a
+server with no presence socket, so there are no other people, no residents
+walking about and no voice chat. For the shared world, clone the repository
+and run `pnpm start` (below), which is what the hosted deployment runs.
+
 Custom port:
 
 ```bash
@@ -161,8 +166,9 @@ For that, configure sign-in (below) — it layers on top.
 > **`npx` runs ungated.** `ACCESS_CODE` gates `pnpm start` and the Docker image.
 > The published package has its own entry point (`server.prod.mjs`) with no gate
 > at all, so it serves everything to whoever can reach the port. That is fine for
-> `npx` on your own machine, which is what it is for; do not put it on an address
-> other people can reach. It says so on startup.
+> `npx` on your own machine, which is what it is for, and it listens on
+> `127.0.0.1` unless you set `HOSTNAME`; do not point it at an address other
+> people can reach. It says so on startup.
 
 ## Key features
 
@@ -209,11 +215,9 @@ The office scene uses pixel tilesets and sprite sheets authored in Tiled. If run
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md). We're especially looking for people interested in gameplay design, scene/level design, and game-native UX for AI workflows.
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md). We're especially looking for people interested in gameplay design, scene/level design, and spatial, game-native UX. The design notes behind each part of the world are in [`docs/`](./docs).
 
-## License
-
-[MIT](./LICENSE)
+## The tour
 
 ### One game to a building
 
@@ -852,7 +856,10 @@ Then put the keys in `.env.local` (gitignored; never commit them):
 A provider is offered on the welcome screen when both of its keys are
 present; with none present, sign-in is off and profiles stay in the browser.
 Accounts live in the `accounts` table of the room database: the provider's
-display name and picture, the profile chosen here, a visit count, and a
-`stats` map any feature can count into with `bumpAccountStat`. A signed-in
-person's desk and presence go under an id derived from their email, so they
-keep the same desk from every device.
+display name and picture, the profile chosen here, and a visit count. A
+signed-in person's desk and presence go under an id derived from their email,
+so they keep the same desk from every device.
+
+## License
+
+[MIT](./LICENSE)

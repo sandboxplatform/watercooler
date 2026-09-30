@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { OVER_EVERYTHING, pressPrompt } from "../config/drawing";
 import { blobClock, onBlob, punchBlob, type BlobNews } from "@/lib/blob-client";
 import { getSelfId } from "@/lib/presence-self";
 import { landed, leapAt, withinPunch, type Leap } from "@/lib/world/blob";
@@ -25,8 +26,6 @@ import { keepLegible, legible } from "./legible";
  * prompt then says.
  */
 
-/** Over everything out of doors, as the basketball's prompt is — see there. */
-const OVER_EVERYTHING = 10_000;
 /** How big it is drawn: the picture is 44 by 36. */
 const BLOB_H = 36;
 /** The squash on landing, and how long it takes to spring back. */
@@ -64,13 +63,7 @@ export class BlobHop {
     this.shadow = scene.add.ellipse(0, 0, 40, 12, 0x14121a, SHADOW_ALPHA).setVisible(false);
     this.body = scene.add.image(0, 0, PROPS_KEY, "blob").setVisible(false);
     this.stars = scene.add.graphics().setVisible(false);
-    this.prompt = scene.add
-      .text(0, 0, "Press E to punch", PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
-      .setResolution(window.devicePixelRatio * 2)
-      .setOrigin(0.5, 1)
-      .setDepth(OVER_EVERYTHING)
-      .setVisible(false);
-    this.prompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    this.prompt = pressPrompt(scene, "Press E to punch");
     keepLegible(scene, this.prompt);
     this.unsub = onBlob((news, at) => this.receive(news, at));
   }

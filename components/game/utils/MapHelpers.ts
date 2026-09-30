@@ -2,14 +2,7 @@ import * as Phaser from "phaser";
 import type { DoorZone } from "@/lib/doors";
 import { FRAME_WIDTH, FRAME_HEIGHT, SHEET_COLUMNS, type Direction } from "../config/animations";
 import { exteriorRects } from "@/lib/map-perimeter";
-
-export interface SeatDef {
-  seatId: string;
-  x: number;
-  y: number;
-  facing: Direction;
-  index: number;
-}
+import { addSolid } from "./solids";
 
 export interface POIDef {
   name: string;
@@ -51,6 +44,14 @@ export function buildSpriteFrames(scene: Phaser.Scene, key: string) {
   }
 }
 
+/**
+ * Where the character starts: the map's `boss` spawn, or failing a name the
+ * right-most spawn, or failing any the middle of the map.
+ *
+ * There used to be a seat for every other spawn, one per worker. Every map
+ * this world generates has exactly one, so that list was always empty and
+ * went with the workers.
+ */
 export function parseSpawns(map: Phaser.Tilemaps.Tilemap) {
   const spawnsLayer = map.getObjectLayer("spawns");
   const fallback: { x: number; y: number; facing: Direction } = {
@@ -59,38 +60,14 @@ export function parseSpawns(map: Phaser.Tilemaps.Tilemap) {
     facing: "down",
   };
 
-  if (!spawnsLayer || spawnsLayer.objects.length === 0) {
-    return { bossSpawn: fallback, workerSpawns: [] as SeatDef[] };
-  }
+  const bossObj =
+    spawnsLayer?.objects.find((o) => o.name === "boss") ??
+    [...(spawnsLayer?.objects ?? [])].sort((a, b) => a.x! - b.x!).pop();
+  if (!bossObj) return { bossSpawn: fallback };
 
-  const getFacing = (obj: Phaser.Types.Tilemaps.TiledObject): Direction => {
-    const props = obj.properties as Array<{ name: string; value: string }> | undefined;
-    const fp = props?.find((p) => p.name === "facing");
-    return (fp?.value as Direction) ?? "down";
-  };
-
-  let bossObj = spawnsLayer.objects.find((o) => o.name === "boss");
-  if (!bossObj) {
-    const sorted = [...spawnsLayer.objects].sort((a, b) => a.x! - b.x!);
-    bossObj = sorted.pop();
-    if (!bossObj) {
-      return { bossSpawn: fallback, workerSpawns: [] as SeatDef[] };
-    }
-  }
-
-  const bossSpawn = { x: bossObj.x!, y: bossObj.y!, facing: getFacing(bossObj) };
-
-  const workerSpawns: SeatDef[] = spawnsLayer.objects
-    .filter((obj) => obj !== bossObj)
-    .map((obj, index) => ({
-      seatId: obj.name && obj.name !== "boss" ? obj.name : `seat-${index}`,
-      x: obj.x!,
-      y: obj.y!,
-      facing: getFacing(obj),
-      index,
-    }));
-
-  return { bossSpawn, workerSpawns };
+  const props = bossObj.properties as Array<{ name: string; value: string }> | undefined;
+  const facing = (props?.find((p) => p.name === "facing")?.value as Direction) ?? "down";
+  return { bossSpawn: { x: bossObj.x!, y: bossObj.y!, facing } };
 }
 
 export function parsePOIs(map: Phaser.Tilemaps.Tilemap): POIDef[] {
@@ -172,18 +149,7 @@ export function buildCollisionRects(
       const oh = obj.height ?? 0;
       if (ow === 0 || oh === 0) continue;
 
-      const rect = collisionGroup.create(
-        ox + ow / 2,
-        oy + oh / 2,
-        undefined,
-        undefined,
-        false,
-      ) as Phaser.Physics.Arcade.Sprite;
-      rect.body!.setSize(ow, oh);
-      rect.setVisible(false);
-      rect.setActive(true);
-      (rect.body as Phaser.Physics.Arcade.StaticBody).enable = true;
-
+      addSolid(collisionGroup, { x: ox, y: oy, width: ow, height: oh });
       collisionRects.push({ x: ox, y: oy, width: ow, height: oh });
     }
   }
@@ -196,33 +162,11 @@ export function buildCollisionRects(
   // to have. Now the exterior is worked out from the map and made solid for
   // everyone, physics included.
   for (const rect of exteriorRects(floorGrid(map), map.tileWidth)) {
-    const body = collisionGroup.create(
-      rect.x + rect.width / 2,
-      rect.y + rect.height / 2,
-      undefined,
-      undefined,
-      false,
-    ) as Phaser.Physics.Arcade.Sprite;
-    body.body!.setSize(rect.width, rect.height);
-    body.setVisible(false);
-    body.setActive(true);
-    (body.body as Phaser.Physics.Arcade.StaticBody).enable = true;
-
+    addSolid(collisionGroup, rect);
     collisionRects.push(rect);
   }
 
   return collisionRects;
-}
-
-export interface AnimatedProp {
-  tilesetName: string;
-  anchorLocalId: number;
-  skipLocalIds: Set<number>;
-  spriteKey: string;
-  frameWidth: number;
-  frameHeight: number;
-  endFrame: number;
-  frameRate: number;
 }
 
 export function renderTileObjectLayer(
@@ -231,7 +175,6 @@ export function renderTileObjectLayer(
   layerName: string,
   tilesets: Phaser.Tilemaps.Tileset[],
   depth: number,
-  animatedProps?: AnimatedProp[],
 ) {
   const objectLayer = map.getObjectLayer(layerName);
   if (!objectLayer) return;
@@ -250,44 +193,16 @@ export function renderTileObjectLayer(
 
     const localId = obj.gid - tileset.firstgid;
 
-    const anim = animatedProps?.find(
-      (a) => a.tilesetName === tileset!.name && a.skipLocalIds.has(localId),
-    );
-
-    if (anim) {
-      if (localId === anim.anchorLocalId) {
-        const animKey = `${anim.spriteKey}-anim`;
-        if (!scene.anims.exists(animKey)) {
-          scene.anims.create({
-            key: animKey,
-            frames: scene.anims.generateFrameNumbers(anim.spriteKey, {
-              start: 0,
-              end: anim.endFrame,
-            }),
-            frameRate: anim.frameRate,
-            repeat: -1,
-          });
-        }
-        const tileH = tileset.tileHeight;
-        scene.add
-          .sprite(obj.x!, obj.y! - anim.frameHeight + tileH, anim.spriteKey)
-          .setOrigin(0, 0)
-          .setDepth(depth)
-          .play(animKey);
-      }
-      continue;
-    }
-
     const tileW = tileset.tileWidth;
     const tileH = tileset.tileHeight;
     const srcX = (localId % tileset.columns) * tileW;
     const srcY = Math.floor(localId / tileset.columns) * tileH;
 
-    const frameKey = `${tileset.name}_${localId}`;
-    if (!scene.textures.exists(frameKey)) {
-      const baseTexture = scene.textures.get(tileset.name);
-      baseTexture.add(localId, 0, srcX, srcY, tileW, tileH);
-    }
+    // Cut the tile out of its sheet the first time it is used. This asked
+    // whether a texture named after the frame existed, which none ever does,
+    // so every object on the layer asked the sheet to add the frame again.
+    const baseTexture = scene.textures.get(tileset.name);
+    if (!baseTexture.has(String(localId))) baseTexture.add(localId, 0, srcX, srcY, tileW, tileH);
 
     scene.add
       .image(obj.x!, obj.y! - tileH, tileset.name, localId)

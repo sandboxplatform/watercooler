@@ -1,8 +1,8 @@
 import * as Phaser from "phaser";
+import { OVER_EVERYTHING, pressPrompt } from "../config/drawing";
 import { onBall, takeBall, throwBall, type Ball, type Basket } from "@/lib/basketball-client";
 import { getSelfId } from "@/lib/presence-self";
 import { BALL_RADIUS, HOOPS, REACH_PX, REACH_Z, carriedAt } from "@/lib/world/basketball";
-import { PRESS_E_STYLE } from "@/lib/constants";
 import type { Facing } from "@/lib/presence-types";
 import { PROPS_KEY } from "../scenes/outdoors";
 import { keepLegible, legible } from "./legible";
@@ -40,17 +40,6 @@ const METER_ABOVE = 46;
  * behind whoever is holding it.
  */
 const BALL_DEPTH_LIFT = 12;
-
-/**
- * Over everything, which out of doors is a bigger number than it looks.
- *
- * A room stacks its people at a flat 5, so the fixtures' prompts sit at 20
- * and clear them. Out here everything sorts by the bottom of its own
- * picture — a person on the south road is at some fourteen hundred — so 20
- * is *under* the character it is about, and the prompt to pick the ball up
- * was drawn behind the person standing over it.
- */
-const OVER_EVERYTHING = 10_000;
 
 /** How long "BASKET!" hangs over the hoop it went through. */
 const BASKET_MS = 1_600;
@@ -125,29 +114,17 @@ export class BasketballCourt {
     this.ball = scene.add.image(0, 0, PROPS_KEY, "ball");
     this.ball.setDepth(0).setVisible(false);
 
-    this.prompt = scene.add
-      .text(0, 0, "Press E", PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
-      .setResolution(window.devicePixelRatio * 2)
-      .setOrigin(0.5, 1)
-      .setDepth(OVER_EVERYTHING)
-      .setVisible(false);
-    this.prompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    this.prompt = pressPrompt(scene, "Press E");
 
     this.meter = scene.add
       .graphics()
       .setDepth(OVER_EVERYTHING + 1)
       .setVisible(false);
 
-    this.cheer = scene.add
-      .text(0, 0, "BASKET!", {
-        ...(PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle),
-        color: "#e0b870",
-      })
-      .setResolution(window.devicePixelRatio * 2)
-      .setOrigin(0.5, 1)
-      .setDepth(OVER_EVERYTHING + 2)
-      .setVisible(false);
-    this.cheer.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    this.cheer = pressPrompt(scene, "BASKET!", {
+      depth: OVER_EVERYTHING + 2,
+      style: { color: "#e0b870" },
+    });
 
     // The prompt and the shout are labels floating over the world, so they
     // keep the size they were written however far out the camera stands.

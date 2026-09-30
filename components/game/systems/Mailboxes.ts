@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { OVER_EVERYTHING, PIXEL_FONT } from "../config/drawing";
 import { MAILBOX_REFRESH_MS } from "@/lib/constants";
 import { createLogger } from "@/lib/logger";
 import { BUBBLE_ABOVE, MAILBOXES } from "@/lib/world/mailboxes";
@@ -38,9 +39,6 @@ const log = createLogger("Mailboxes");
  *   is still one sweep of the desk every couple of minutes.
  */
 
-/** Over the buildings, under the prompts that say you can press something. */
-const OVER_EVERYTHING = 10_000;
-
 /** Paper and ink, which is what a thing with a number written on it is. */
 const PAPER = 0xf2ece0;
 const INK = 0x1b1b2a;
@@ -53,7 +51,7 @@ const PAD_X = 7;
 const MIN_WIDTH = 26;
 
 const FIGURE: Phaser.Types.GameObjects.Text.TextStyle = {
-  fontFamily: '"Press Start 2P", monospace',
+  fontFamily: PIXEL_FONT,
   fontSize: "12px",
   color: "#1b1b2a",
   align: "center",

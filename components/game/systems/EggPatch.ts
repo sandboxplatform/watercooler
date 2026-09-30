@@ -1,8 +1,8 @@
 import * as Phaser from "phaser";
+import { OVER_EVERYTHING, pressPrompt } from "../config/drawing";
 import { onEggs, selfPerson, takeEgg, type EggNews, type EggTaken } from "@/lib/eggs-client";
 import { GUEST_EGG_PROMPT, eggKind, eggWithinReach, type LaidEgg } from "@/lib/world/eggs";
 import { isGuestHolder } from "@/lib/badges";
-import { PRESS_E_STYLE } from "@/lib/constants";
 import type { Facing } from "@/lib/presence-types";
 import { PROPS_KEY } from "../scenes/outdoors";
 import { keepLegible, legible } from "./legible";
@@ -40,9 +40,6 @@ import { burstAt, type EggBurst } from "../utils/egg-burst";
  * carrying it is the whole list and a browser walking onto the map is sent
  * the same list — see `EggNews`.
  */
-
-/** Over everything, which out of doors is a bigger number than it looks. */
-const OVER_EVERYTHING = 10_000;
 
 /** How long the shout hangs over an egg somebody has just pocketed. */
 const FOUND_MS = 2_200;
@@ -85,24 +82,12 @@ export class EggPatch {
   private unsub: () => void;
 
   constructor(private scene: Phaser.Scene) {
-    this.prompt = scene.add
-      .text(0, 0, "Press E", PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle)
-      .setResolution(window.devicePixelRatio * 2)
-      .setOrigin(0.5, 1)
-      .setDepth(OVER_EVERYTHING)
-      .setVisible(false);
-    this.prompt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    this.prompt = pressPrompt(scene, "Press E");
 
-    this.shout = scene.add
-      .text(0, 0, "", {
-        ...(PRESS_E_STYLE as Phaser.Types.GameObjects.Text.TextStyle),
-        color: "#e0b870",
-      })
-      .setResolution(window.devicePixelRatio * 2)
-      .setOrigin(0.5, 1)
-      .setDepth(OVER_EVERYTHING + 2)
-      .setVisible(false);
-    this.shout.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    this.shout = pressPrompt(scene, "", {
+      depth: OVER_EVERYTHING + 2,
+      style: { color: "#e0b870" },
+    });
 
     // Both are labels floating over the world, so they keep the size they
     // were written however far out the camera stands.

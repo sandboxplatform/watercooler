@@ -1,4 +1,5 @@
 import { ink, MARKER_DARK, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMarker";
+import { PANEL_DARK, PIXEL_FONT } from "../config/drawing";
 
 /**
  * The inspection gantry standing between a project room's barrier and its
@@ -56,7 +57,7 @@ const CHECKING = 0xf5cd47;
  * panel and the probe — the two things that say what the station is for.
  */
 const SHELL = MARKER_EDGE;
-const FRAME = 0x2a2a3e;
+const FRAME = PANEL_DARK;
 
 /** The picture, measured up from the floor it stands on. */
 const BODY = 56;
@@ -209,7 +210,7 @@ export const TESTING: FloorMarkerSpec = {
     into.add(
       scene.add
         .text(0, BAND_TOP + BAND_H / 2, WORD, {
-          fontFamily: '"Press Start 2P", monospace',
+          fontFamily: PIXEL_FONT,
           fontSize: "8px",
           color: ink(CHECKING),
         })

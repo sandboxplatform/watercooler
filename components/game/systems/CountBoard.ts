@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { PANEL_DARK, PIXEL_FONT, fitFontSize } from "../config/drawing";
 import { WALL_FACE } from "@/lib/map/office";
 import { createLogger } from "@/lib/logger";
 
@@ -33,7 +34,7 @@ const DEPTH = 4;
 /** The plate, in the HUD's own colours: this is a screen on a wall. */
 const PLATE = 0x1b1b2a;
 const EDGE = 0x3a3a50;
-const TRACK = 0x2a2a3e;
+const TRACK = PANEL_DARK;
 const LABEL = "#8f8aa8";
 const DEAD = "#5c5f7a";
 
@@ -113,17 +114,6 @@ interface Bay {
   width: number;
 }
 
-/**
- * The largest size at which a string fits the room it has.
- *
- * Press Start 2P is monospace and advances by its own size, so the width is
- * the character count times the size — no measuring needed, and a three
- * digit count shrinks rather than running over the bay next to it.
- */
-function sizeFor(text: string, room: number, sizes: readonly number[]): number {
-  return sizes.find((size) => text.length * size <= room) ?? sizes[sizes.length - 1];
-}
-
 export class CountBoard {
   private container: Phaser.GameObjects.Container | null = null;
   private bays = new Map<string, Bay>();
@@ -196,8 +186,8 @@ export class CountBoard {
     const centre = x + width / 2;
     const heading = this.scene.add
       .text(centre, y + 2, bay.short, {
-        fontFamily: '"Press Start 2P", monospace',
-        fontSize: `${sizeFor(bay.short, width - 4, HEADING_SIZES)}px`,
+        fontFamily: PIXEL_FONT,
+        fontSize: `${fitFontSize(bay.short, width - 4, HEADING_SIZES)}px`,
         color: LABEL,
       })
       .setOrigin(0.5, 0)
@@ -205,7 +195,7 @@ export class CountBoard {
 
     const figure = this.scene.add
       .text(centre, y + height - BAR_H - 6, NO_FIGURE, {
-        fontFamily: '"Press Start 2P", monospace',
+        fontFamily: PIXEL_FONT,
         fontSize: `${FIGURE_SIZES[0]}px`,
         color: DEAD,
       })
@@ -246,7 +236,7 @@ export class CountBoard {
         continue;
       }
       bay.figure
-        .setFontSize(sizeFor(value.figure, bay.width, FIGURE_SIZES))
+        .setFontSize(fitFontSize(value.figure, bay.width, FIGURE_SIZES))
         .setText(value.figure)
         .setColor(bay.bay.colour);
       bay.bar.setFillStyle(Phaser.Display.Color.HexStringToColor(bay.bay.colour).color);

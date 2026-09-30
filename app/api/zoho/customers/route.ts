@@ -9,17 +9,18 @@
  * **What comes back is numbers by building and nothing else.** Which Zoho
  * account a customer is, and which domains their people write in from, are
  * how a ticket is attributed — and both stay in `lib/server/customers.ts`,
- * for the reason the id of Doc's Mettara conversation does.
+ * for the reason the id of Doc's Mettara conversation does. That is also
+ * why this is the one read of the desk nobody is asked the lift about: the
+ * boxes stand on the public map, and a count is all a box says.
  *
  *   GET /api/zoho/customers → the open count outside each building
  */
 
-import { NextResponse } from "next/server";
 import { readCustomers } from "@/lib/server/boards";
+import { answerWith } from "@/lib/server/route";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const { status, ...answer } = await readCustomers();
-  return NextResponse.json(answer, status ? { status } : undefined);
+  return answerWith(await readCustomers());
 }

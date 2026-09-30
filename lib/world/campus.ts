@@ -11,7 +11,7 @@
  */
 
 import { TILE, tenantFor, tenantsOf, type BuildingKind, type Rect, type Tenant } from "./tenants";
-import type { PlacedProp, Sign } from "./scenery";
+import type { PlacedProp, Sign } from "./ground";
 
 export type DoorSide = "bottom" | "left" | "right";
 

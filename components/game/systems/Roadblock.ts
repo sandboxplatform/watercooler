@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { PIXEL_FONT } from "../config/drawing";
 import { ink, MARKER_DARK, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMarker";
 
 /**
@@ -70,7 +71,7 @@ export const ROADBLOCK: FloorMarkerSpec = {
     into.add(
       scene.add
         .text(0, BAND_TOP + BAND_H / 2, WORD, {
-          fontFamily: '"Press Start 2P", monospace',
+          fontFamily: PIXEL_FONT,
           fontSize: "8px",
           color: ink(HAZARD),
         })

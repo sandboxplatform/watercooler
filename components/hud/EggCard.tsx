@@ -1,20 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
-import {
-  EGG_KINDS,
-  eggKind,
-  isEggTier,
-  oneIn,
-  shareOf,
-  type EggTally,
-  type EggTier,
-} from "@/lib/world/eggs";
+import { useMemo } from "react";
+import { EGG_KINDS, eggKind, isEggTier, oneIn, shareOf, type EggTier } from "@/lib/world/eggs";
 import { basketOf, useEggTallies, useSelfPerson } from "@/lib/eggs-client";
-import { castMember } from "@/lib/world/cast";
 import { isGuestHolder } from "@/lib/badges";
-import { gameEvents } from "@/lib/events";
+import { useBusWindow } from "@/lib/hooks/useBusWindow";
+import CardWindow from "./CardWindow";
+import Holders from "./Holders";
 import EggMark from "./EggMark";
 
 /**
@@ -43,55 +35,13 @@ import EggMark from "./EggMark";
  * for — and this is opened *from* the column.
  */
 
-function Holders({ tallies, onPick }: { tallies: readonly EggTally[]; onPick: () => void }) {
-  if (tallies.length === 0) {
-    return (
-      <p className="entry-card__none">
-        Nobody in this world has found one. Go and startle the chicken.
-      </p>
-    );
-  }
-  return (
-    <div className="badges__holders">
-      {tallies.map((tally) => (
-        <button
-          key={tally.person}
-          type="button"
-          className="badges__holder"
-          onClick={() => {
-            // This one shuts on the way: a profile is the same kind of
-            // window over the same whole app, and two of them stacked is a
-            // card behind a card with no way of telling which is which.
-            onPick();
-            gameEvents.emit("open-profile", tally.person);
-          }}
-          title={`${castMember(tally.person)?.name ?? tally.name} — ${tally.count}`}
-        >
-          {castMember(tally.person)?.name ?? tally.name}
-          {tally.count > 1 && <span className="eggs__many">×{tally.count}</span>}
-        </button>
-      ))}
-    </div>
-  );
-}
+/** A kind on the ladder, or nothing: a stale tier opens no card. */
+const tierIn = (next: string | null): EggTier | null => (isEggTier(next) ? next : null);
 
 export default function EggCard() {
-  const [tier, setTier] = useState<EggTier | null>(null);
+  const { value: tier, show: setTier, close } = useBusWindow("open-egg", tierIn);
   const all = useEggTallies();
   const me = useSelfPerson();
-
-  useEffect(() => gameEvents.on("open-egg", (next) => setTier(isEggTier(next) ? next : null)), []);
-
-  const close = useCallback(() => setTier(null), []);
-
-  useEffect(() => {
-    if (!tier) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [tier, close]);
 
   const holders = useMemo(
     () =>
@@ -117,76 +67,82 @@ export default function EggCard() {
   const others = EGG_KINDS.filter((other) => other.id !== kind.id);
 
   return (
-    <div className="entry-card" role="dialog" aria-label={kind.name}>
-      <div className="entry-card__scrim" onClick={close} />
-      <div className="pixel-panel entry-card__panel">
-        <button type="button" className="profile__close" onClick={close} aria-label="Close">
-          <X size={14} />
-        </button>
-
-        {/* The egg itself, on the one dark field in the app that is nothing
+    <CardWindow kind="entry-card" label={kind.name} onClose={close}>
+      {/* The egg itself, on the one dark field in the app that is nothing
             but a backdrop for it — the same job the concept sheet does at
             the top of a profile. */}
-        <div className="entry-card__plinth">
-          <div className="entry-card__object">
-            <EggMark kind={kind} size={196} />
+      <div className="entry-card__plinth">
+        <div className="entry-card__object">
+          <EggMark kind={kind} size={196} />
+        </div>
+      </div>
+
+      <div className="entry-card__body">
+        <div className="entry-card__head">
+          <div className="entry-card__name">{kind.name}</div>
+          <div className="entry-card__chips">
+            <span className="entry-card__chip entry-card__chip--key">1 in {oneIn(kind.id)}</span>
+            <span className="entry-card__chip">
+              {at} of {EGG_KINDS.length} on the ladder
+            </span>
+            <span className="entry-card__chip">
+              {/* The share to a whole number of per cent, which is the only
+                    precision anybody wants of it. */}
+              {Math.round(shareOf(kind.id) * 100)}% of every egg laid
+            </span>
           </div>
         </div>
 
-        <div className="entry-card__body">
-          <div className="entry-card__head">
-            <div className="entry-card__name">{kind.name}</div>
-            <div className="entry-card__chips">
-              <span className="entry-card__chip entry-card__chip--key">1 in {oneIn(kind.id)}</span>
-              <span className="entry-card__chip">
-                {at} of {EGG_KINDS.length} on the ladder
-              </span>
-              <span className="entry-card__chip">
-                {/* The share to a whole number of per cent, which is the only
-                    precision anybody wants of it. */}
-                {Math.round(shareOf(kind.id) * 100)}% of every egg laid
-              </span>
-            </div>
-          </div>
+        <p className="entry-card__note">{kind.note}.</p>
+        <p className="entry-card__lore">{kind.lore}</p>
 
-          <p className="entry-card__note">{kind.note}.</p>
-          <p className="entry-card__lore">{kind.lore}</p>
+        <div className="entry-card__yours">
+          {guest
+            ? "Guests keep no basket."
+            : mine === 0
+              ? "None in your basket."
+              : `${mine} in your basket${mine > 1 ? " — you have a small pile" : ""}.`}
+          <span className="entry-card__world">
+            {found === 0 ? "none found anywhere" : `${found} found in this world`}
+          </span>
+        </div>
 
-          <div className="entry-card__yours">
-            {guest
-              ? "Guests keep no basket."
-              : mine === 0
-                ? "None in your basket."
-                : `${mine} in your basket${mine > 1 ? " — you have a small pile" : ""}.`}
-            <span className="entry-card__world">
-              {found === 0 ? "none found anywhere" : `${found} found in this world`}
-            </span>
-          </div>
+        <div className="entry-card__shelf">
+          <div className="profile__shelf-name">Who has one</div>
+          <Holders
+            holders={holders.map((t) => ({
+              person: t.person,
+              name: t.name,
+              note: String(t.count),
+              count: t.count,
+            }))}
+            onPick={close}
+            empty={
+              <p className="entry-card__none">
+                Nobody in this world has found one. Go and startle the chicken.
+              </p>
+            }
+          />
+        </div>
 
-          <div className="entry-card__shelf">
-            <div className="profile__shelf-name">Who has one</div>
-            <Holders tallies={holders} onPick={close} />
-          </div>
-
-          <div className="entry-card__shelf">
-            <div className="profile__shelf-name">The rest of the ladder</div>
-            <div className="entry-card__row">
-              {others.map((other) => (
-                <button
-                  key={other.id}
-                  type="button"
-                  className="entry-card__rung"
-                  onClick={() => setTier(other.id)}
-                  title={`${other.name} — 1 in ${oneIn(other.id)}`}
-                >
-                  <EggMark kind={other} size={30} />
-                  <span className="entry-card__rung-note">1 in {oneIn(other.id)}</span>
-                </button>
-              ))}
-            </div>
+        <div className="entry-card__shelf">
+          <div className="profile__shelf-name">The rest of the ladder</div>
+          <div className="entry-card__row">
+            {others.map((other) => (
+              <button
+                key={other.id}
+                type="button"
+                className="entry-card__rung"
+                onClick={() => setTier(other.id)}
+                title={`${other.name} — 1 in ${oneIn(other.id)}`}
+              >
+                <EggMark kind={other} size={30} />
+                <span className="entry-card__rung-note">1 in {oneIn(other.id)}</span>
+              </button>
+            ))}
           </div>
         </div>
       </div>
-    </div>
+    </CardWindow>
   );
 }

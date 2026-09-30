@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Users, X } from "lucide-react";
 import { usePanel } from "@/lib/hooks/usePanel";
+import PanelOverlay from "./PanelOverlay";
 import { currentRoom } from "@/lib/room-client";
 import { meetingFor, meetingIn, setMeeting, useMeetings } from "@/lib/meeting";
 import { useOnline } from "@/lib/presence-online";
@@ -49,16 +50,7 @@ export default function Boardroom() {
   const elsewhere = meetings.filter((m) => m.room !== room);
 
   return (
-    <div
-      className="pinball-overlay board-overlay"
-      onClick={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (window.matchMedia("(pointer: coarse)").matches) return;
-        close();
-      }}
-      role="dialog"
-      aria-label="Boardroom"
-    >
+    <PanelOverlay className="pinball-overlay board-overlay" label="Boardroom" onClose={close}>
       <div className="pixel-panel board-panel meeting-panel">
         <div className="pinball-head arcade-head">
           <span className="arcade-head__title">
@@ -122,6 +114,6 @@ export default function Boardroom() {
           )}
         </div>
       </div>
-    </div>
+    </PanelOverlay>
   );
 }

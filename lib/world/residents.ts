@@ -1,5 +1,5 @@
 /**
- * Residents: the AI agents who live in the buildings.
+ * Residents: the characters who live in the buildings, and where they go.
  *
  * A resident belongs to one organisation. Those with a home lobby have a
  * desk on the agents' floor above it; a store's resident has no desk and
@@ -8,11 +8,15 @@
  * their haunts — the desk, the organisation's rooms, its campus yard, and
  * the green between the buildings — and everyone who is there sees them.
  *
+ * Who they are is `roster.ts`, re-exported here so the server can go on
+ * asking one module. What is here is the geometry of their day, which is
+ * read off the world map — so this module pulls the planting in with it,
+ * and anything that only wants a name should import the roster instead.
+ *
  * Nothing here touches Phaser, the DOM or the server; the server's
- * simulation and the scenes both read from this.
+ * simulation reads from this.
  */
 
-import type { Facing } from "../presence-types";
 import { campusRoomSlug, floorRoomSlug, WORLD_ROOM_SLUG } from "../rooms";
 import {
   BUILDINGS,
@@ -25,9 +29,8 @@ import {
   hasCampus,
   hasFloors,
   tenantsOf,
-  operationsRoomCount,
-  tenantFor,
   type BuildingKind,
+  type Rect,
 } from "./tenants";
 import {
   CENTRE_AVENUE,
@@ -45,209 +48,23 @@ import {
 import { WILD_FROM } from "./wilderness";
 import { coversPoint } from "./route";
 import { TILE, WIDTH as LOBBY_COLS } from "../map/office";
-import { opsSupportPost } from "../map/floor";
-import { standingSpot } from "./desks";
 import { CAMPUSES } from "./campus";
 import { WOOD_WANDER_SPOTS } from "./wood";
+import { AGENTS_LEVEL, RESIDENTS, type Resident } from "./roster";
 
-export interface Resident {
-  /** Stable id; also the second half of their office's URL segment. */
-  id: string;
-  name: string;
-  title: string;
-  /** Slug of the organisation they work for; null for someone who works nowhere. */
-  org: string | null;
-  /** The lobby whose agents' floor holds their desk; null for someone with no desk. */
-  home: string | null;
-  /** A library sheet key (see WORKER_SPRITES). */
-  spriteKey: string;
-  /**
-   * Wandering mode: they keep to the world map and never go indoors.
-   *
-   * A mode rather than a kind of character, so anyone here can be put into
-   * it — give them `wanders: true` and their whole routine becomes the one
-   * haunt, the road outside. Somebody who wanders has no office and no desk,
-   * so `org` and `home` are both null.
-   */
-  wanders?: boolean;
-  /**
-   * A post they work from: somewhere they stand still, in a room, rather
-   * than a desk on the agents' floor.
-   *
-   * It is the counter in a lobby, and having one is a whole routine: someone
-   * posted at one is either at it or out wandering the world map, and goes
-   * nowhere else. `home` stays null, so they take no desk upstairs.
-   */
-  station?: Station;
-  /**
-   * What they remark on arriving somewhere, if they are the remarking kind.
-   *
-   * Two lines, because a station is a two-place routine: `onDuty` at the
-   * post, `away` anywhere else. Most residents have neither and say nothing,
-   * which is the right amount for somebody walking past.
-   */
-  lines?: { onDuty: string; away: string };
-  /**
-   * What they say when somebody walks up to them.
-   *
-   * Not one of `lines`: those are remarks on arriving somewhere, which is a
-   * thing the resident does, and this is an answer to somebody else turning
-   * up. The simulation is what decides how near is near and how often it
-   * bears saying.
-   */
-  greeting?: string;
-  /**
-   * Whether a fright now and then leaves an egg behind.
-   *
-   * A mode like `wanders`, rather than a check for a particular id: what
-   * lays eggs is a chicken, and the day a second one turns up the rule
-   * should already be written. It only ever fires alongside a `greeting`,
-   * since the egg comes of the fright and the fright comes of the cluck —
-   * see `EGG_CHANCE` in lib/world/eggs.ts for how often.
-   */
-  lays?: boolean;
-}
-
-/** A post in a room, by the sprite's centre, and the way they face at it. */
-export interface Station {
-  room: string;
-  x: number;
-  y: number;
-  facing: Facing;
-  /**
-   * The floor they pace while they are on duty, as bounds for the sprite's
-   * centre; without it they stand at the post and do not move.
-   *
-   * It has to be a patch a random point of which is never solid and never
-   * behind the furniture, exactly as WANDER_AREAS is — which is what lets the
-   * pacing be the same code that walks a resident round a lobby.
-   */
-  paces?: Rect;
-}
-
-/** The Operations floor, where Support is. */
-export const OPERATIONS_LEVEL = 3;
-
-/**
- * Doc's post, read off the floor he stands on rather than written out here.
- *
- * Sandbox ERP's corridor is as long as its project count, so the room moves
- * when that changes; asking the floor for the spot is what keeps him inside
- * the walls when it does.
- */
-const SUPPORT_POST = opsSupportPost(operationsRoomCount(tenantFor("sandbox-erp")));
-
-export const RESIDENTS: readonly Resident[] = [
-  {
-    id: "yoshi",
-    name: "Yoshi",
-    title: "Data Scientist",
-    org: "castle-atlantic",
-    home: "castle-atlantic",
-    spriteKey: "character_data_scientist",
-  },
-  // Sara is not here: she holds a code of her own and walks in as herself,
-  // at a keyboard rather than on a routine (`PERSONAS` in
-  // lib/server/access.ts). Which is also what frees her sheet — `RESERVED`
-  // in lib/characters/library.ts is built from this list, and a reserved
-  // look is out of the library `looksFor` searches, so a persona named
-  // after a resident could not have been dressed in their own face.
-  {
-    id: "spud",
-    name: "Bud",
-    title: "Support",
-    org: "sandbox-erp",
-    home: "sandbox-erp",
-    spriteKey: "character_spud",
-  },
-  {
-    id: "yash",
-    name: "Yash",
-    title: "Research",
-    org: "mettara",
-    home: "mettara",
-    spriteKey: "character_yash",
-  },
-  {
-    id: "steve",
-    name: "Steve",
-    title: "Store Manager",
-    org: "chester",
-    home: null,
-    spriteKey: "character_steve",
-  },
-  {
-    id: "mark",
-    name: "Mark",
-    title: "Sales",
-    org: "homestar",
-    home: "homestar-sales",
-    spriteKey: "character_mark",
-  },
-  // In Support on Sandbox ERP's Operations floor, or out on the map. No desk
-  // on the agents' floor: the room with the support queue in it is his work.
-  {
-    id: "doc",
-    name: "Doc",
-    title: "Help Desk",
-    org: "sandbox-erp",
-    home: null,
-    spriteKey: "character_doc",
-    // Support, on the Operations floor, rather than the lobby counter he was
-    // built for. The counter is still down there; nobody works it now.
-    station: {
-      room: floorRoomSlug("sandbox-erp", OPERATIONS_LEVEL),
-      x: SUPPORT_POST.post.x,
-      y: SUPPORT_POST.post.y,
-      facing: "down",
-      paces: SUPPORT_POST.paces,
-    },
-    lines: {
-      onDuty: "I'm about to be hooked up to Mettara!",
-      away: "I just needed some fresh air!",
-    },
-  },
-  // Works nowhere and goes indoors never: he is out on the road, always.
-  {
-    id: "michael",
-    name: "Michael",
-    title: "Wanderer",
-    org: null,
-    home: null,
-    spriteKey: "character_michael",
-    wanders: true,
-    greeting: "Cluck!",
-    lays: true,
-  },
-];
-
-/** Everyone who works for an organisation. */
-export function residentsOf(orgSlug: string): Resident[] {
-  return RESIDENTS.filter((r) => r.org === orgSlug);
-}
-
-/** Everyone with a desk above a lobby, in desk order. */
-export function residentsAt(lobbySlug: string): Resident[] {
-  return RESIDENTS.filter((r) => r.home === lobbySlug);
-}
-
-export function residentById(id: string): Resident | null {
-  return RESIDENTS.find((r) => r.id === id) ?? null;
-}
-
-/** The floor the agents' desks are on. */
-export const AGENTS_LEVEL = 2;
-
-/** Which desk slot a resident has on their building's agents' floor; -1 without one. */
-export function deskOf(resident: Resident): number {
-  if (!resident.home) return -1;
-  return residentsAt(resident.home).findIndex((r) => r.id === resident.id);
-}
-
-/** Where a resident stands when at their desk: the sprite's centre. */
-export function deskSpot(resident: Resident): { x: number; y: number } {
-  return standingSpot(Math.max(0, deskOf(resident)));
-}
+export {
+  AGENTS_LEVEL,
+  OPERATIONS_LEVEL,
+  RESIDENTS,
+  deskOf,
+  deskSpot,
+  residentById,
+  residentsAt,
+  residentsOf,
+  type Resident,
+  type Station,
+} from "./roster";
+export type { Rect } from "./tenants";
 
 // ── Haunts ──────────────────────────────────────────────
 
@@ -329,13 +146,6 @@ export function roomForHaunt(resident: Resident, haunt: Haunt): string | null {
   return WORLD_ROOM_SLUG;
 }
 
-export interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 // ── Elbow room ──────────────────────────────────────────
 
 /**
@@ -363,12 +173,6 @@ export function roomToStand(
   return taken.every((other) => Math.hypot(at.x - other.x, at.y - other.y) >= space);
 }
 
-/**
- * Where a resident may wander in a room, as bounds for the sprite's centre.
- * They are drawn, not simulated, so they must simply never be sent
- * anywhere solid: each is the open floor of its kind of room, clear of
- * the furniture and the lift.
- */
 /**
  * Where residents stand when they are outside: in front of the fountain, by
  * the feet, with the row running right from here.
@@ -521,8 +325,6 @@ const LATTICE_PX = 6 * WORLD_TILE;
  * cast.
  */
 function roamingSpots(): { x: number; y: number }[] {
-  const bounds = { width: WORLD_WIDTH, height: WORLD_HEIGHT };
-  const { cols, seen } = reachedFrom(bounds, worldSolids(), WORLD_SPAWN, REACH_CELL);
   const room = standingRoom();
   const kept: { x: number; y: number }[] = [...PLACES];
   const found: { x: number; y: number }[] = [];
@@ -535,12 +337,7 @@ function roamingSpots(): { x: number; y: number }[] {
   // bucketed, kept against the list it was built from, which is what the
   // basketball already does with the same lists for the same reason.
   const standable = (at: { x: number; y: number }) =>
-    at.x > 0 &&
-    at.y > 0 &&
-    at.x < WORLD_WIDTH &&
-    at.y < WORLD_HEIGHT &&
-    seen.has(Math.floor(at.y / REACH_CELL) * cols + Math.floor(at.x / REACH_CELL)) &&
-    !coversPoint(room, at.x, at.y);
+    at.x > 0 && at.y > 0 && reachable(at) && !coversPoint(room, at.x, at.y);
 
   for (let y = LATTICE_PX; y < WORLD_HEIGHT; y += LATTICE_PX) {
     for (let x = LATTICE_PX; x < WORLD_WIDTH; x += LATTICE_PX) {
@@ -571,6 +368,30 @@ const NUDGES: readonly { x: number; y: number }[] = [
 /** The cell the reachability flood walks on; `allReachable`'s own default. */
 const REACH_CELL = 24;
 
+let fromSpawn: ReturnType<typeof reachedFrom> | null = null;
+
+/**
+ * Whether somebody could walk here from the spawn: the flood the sweep above
+ * is held to, run once and kept.
+ *
+ * Open ground is not the same question. The far bank of the Gold River is
+ * open ground from end to end and nobody can get there, so a bolt that only
+ * asked whether its landing was clear picked spots over the water, flooded
+ * the whole map looking for a way to them, and left the chicken standing
+ * still in the middle of his own fright. Off the map is not reachable either.
+ */
+export function reachable(at: { x: number; y: number }): boolean {
+  if (at.x < 0 || at.y < 0 || at.x >= WORLD_WIDTH || at.y >= WORLD_HEIGHT) return false;
+  fromSpawn ??= reachedFrom(
+    { width: WORLD_WIDTH, height: WORLD_HEIGHT },
+    worldSolids(),
+    WORLD_SPAWN,
+    REACH_CELL,
+  );
+  const { cols, seen } = fromSpawn;
+  return seen[Math.floor(at.y / REACH_CELL) * cols + Math.floor(at.x / REACH_CELL)] === 1;
+}
+
 let everywhere: readonly { x: number; y: number }[] | null = null;
 
 /**
@@ -586,9 +407,15 @@ let everywhere: readonly { x: number; y: number }[] | null = null;
  * kept, so the simulation, which asks on every wander, pays for it once.
  */
 export function worldWanderSpots(): readonly { x: number; y: number }[] {
-  return (everywhere ??= [...PLACES, ...roamingSpots()]);
+  return (everywhere ??= Object.freeze([...PLACES, ...roamingSpots()]));
 }
 
+/**
+ * Where a resident may wander in a room, as bounds for the sprite's centre.
+ * They are drawn, not simulated, so they must simply never be sent
+ * anywhere solid: each is the open floor of its kind of room, clear of
+ * the furniture and the lift.
+ */
 export const WANDER_AREAS: Record<Exclude<Area, "world">, Rect> = {
   // The wide part of the lobby: inside the walls with a margin, below the
   // top wall's furniture, and clear of the lift in the bottom corner.
@@ -702,6 +529,9 @@ function placeInRow(index: number): { x: number; y: number } {
   return { x: OUTSIDE_SPOT.x, y: OUTSIDE_SPOT.y };
 }
 
+/** Worked out once a resident: the row is walked a step at a time, and the map does not move. */
+const outside = new Map<string, readonly { x: number; y: number }[]>();
+
 /**
  * Where a resident may stand on the world map: their own place by the
  * fountain, or beside the path to their building's door.
@@ -713,7 +543,9 @@ function placeInRow(index: number): { x: number; y: number } {
  * the doorstep of Sandbox ERP, and before the rule below they stood in each
  * other.
  */
-export function outsideSpots(resident: Resident): { x: number; y: number }[] {
+export function outsideSpots(resident: Resident): readonly { x: number; y: number }[] {
+  const kept = outside.get(resident.id);
+  if (kept) return kept;
   const index = Math.max(
     0,
     RESIDENTS.findIndex((r) => r.id === resident.id),
@@ -724,7 +556,9 @@ export function outsideSpots(resident: Resident): { x: number; y: number }[] {
   // door on the map has a lamp standing beside it, and the doorstep itself
   // is where somebody coming out is put down.
   if (doorstep) spots.push({ x: doorstep.x + 60, y: doorstep.y + 43 });
-  return spots;
+  const frozen = Object.freeze(spots);
+  outside.set(resident.id, frozen);
+  return frozen;
 }
 
 /**
@@ -756,22 +590,4 @@ export function doorstepOf(resident: Resident): { x: number; y: number } | null 
  */
 export function doorwayFor(resident: Resident, haunt: Haunt): { x: number; y: number } | null {
   return haunt.kind === "outside" ? doorstepOf(resident) : null;
-}
-
-/** What the server tells the scenes about a resident right now. */
-export interface Whereabouts {
-  id: string;
-  name: string;
-  title: string;
-  spriteKey: string;
-  /** Null for someone who works nowhere, such as a wanderer. */
-  org: string | null;
-  place: PlaceKind;
-  /** The presence room they are in — every haunt has one, so this is where they are. */
-  room: string | null;
-  /** The yard they are on, for a campus. */
-  campus: string | null;
-  /** Where they are standing in that room, in its own pixels. */
-  spot: { x: number; y: number } | null;
-  since: number;
 }

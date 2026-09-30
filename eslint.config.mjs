@@ -12,8 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // The vendored Mettara SDK is not ours to lint.
-    "vendor/**",
+    // Git worktrees made by tooling live under .claude/, each a whole copy of
+    // the repository; vitest.config.ts leaves them out for the same reason.
+    ".claude/**",
   ]),
 ]);
 

@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
-import { ink, MARKER_DARK, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMarker";
+import { PANEL_DARK, PIXEL_FONT } from "../config/drawing";
+import { ink, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMarker";
 
 /**
  * The machine second along a project room's production line: work in
@@ -73,7 +74,7 @@ const WORKING = 0xa78bfa;
  * the rollers — the moving bits, which is where it says what it is.
  */
 const SHELL = MARKER_EDGE;
-const FRAME = 0x2a2a3e;
+const FRAME = PANEL_DARK;
 
 /**
  * The picture, measured up from the floor it stands on.
@@ -134,7 +135,6 @@ const VENT_UP = 10;
  */
 const HOPPER = [30, 22, 14] as const;
 const HOPPER_COURSE = 3;
-const HOPPER_H = HOPPER.length * HOPPER_COURSE;
 
 /**
  * The press portal over the belt: two uprights and the beam across them.
@@ -260,7 +260,7 @@ export const MACHINE: FloorMarkerSpec = {
     into.add(
       scene.add
         .text(HOUSE_X, HOUSE_TOP + WORD_UP, WORD, {
-          fontFamily: '"Press Start 2P", monospace',
+          fontFamily: PIXEL_FONT,
           fontSize: "8px",
           color: ink(WORKING),
         })

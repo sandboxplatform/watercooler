@@ -15,12 +15,14 @@ const OFF: VoiceView = {
   reason: null,
 };
 
+// Written once rather than inline: a subscribe function that is new every
+// render is one React unsubscribes and subscribes again on every render.
+const subscribe = (listener: () => void) => voiceChat.subscribe(listener);
+const snapshot = () => voiceChat.snapshot();
+const offOnTheServer = () => OFF;
+
 /** Keep voice chat listening to the room while mounted, and read its state. */
 export function useVoice(): VoiceView {
   useEffect(() => voiceChat.attach(), []);
-  return useSyncExternalStore(
-    (listener) => voiceChat.subscribe(listener),
-    () => voiceChat.snapshot(),
-    () => OFF,
-  );
+  return useSyncExternalStore(subscribe, snapshot, offOnTheServer);
 }

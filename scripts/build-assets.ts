@@ -4,7 +4,9 @@
  *
  *   pnpm assets
  *
- * Runs as `prebuild`, so a production build always ships a current one.
+ * `pnpm build` runs it before `next build` — chained in the script rather
+ * than as `prebuild`, which pnpm skips by default — so a production build
+ * always ships a current one.
  *
  * The problem it solves: these files are rewritten **in place**. `build:map`
  * regenerates public/maps/*.json, `build-character.ts` overwrites

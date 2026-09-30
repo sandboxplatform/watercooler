@@ -23,10 +23,24 @@ import { MOVE_SEND_MS, type Facing, type PresencePlayer } from "../presence-type
 const log = createLogger("Presence");
 
 /**
+ * The longest a browser standing still goes without saying where it is.
+ *
+ * Not what keeps it in the room — the heartbeat's pongs do that — but a
+ * frame lost on the way is otherwise never corrected while nobody moves.
+ */
+export const MOVE_KEEPALIVE_MS = 5_000;
+
+type Stance = { x: number; y: number; facing: Facing; moving: boolean };
+
+function sameStance(a: Stance, b: Stance | null): boolean {
+  return !!b && a.x === b.x && a.y === b.y && a.facing === b.facing && a.moving === b.moving;
+}
+
+/**
  * Keeps this browser's character on the room socket.
  *
- * Outbound: the scene reports where our character is every frame; we forward a
- * sample of that at the tick rate. Inbound: the roster goes to the scene, which
+ * Outbound: the scene reports where our character is every frame; we forward
+ * what changed, no faster than the tick rate. Inbound: the roster goes to the scene, which
  * owns how other people are drawn.
  *
  * Presence is best-effort. If the socket is down the office still works — you
@@ -34,9 +48,9 @@ const log = createLogger("Presence");
  */
 export function usePresence() {
   const selfIdRef = useRef<string | null>(null);
-  // Only the welcome carries the cap; presence frames do not repeat it
-  const capacityRef = useRef(0);
-  const latestRef = useRef<{ x: number; y: number; facing: Facing; moving: boolean } | null>(null);
+  const latestRef = useRef<Stance | null>(null);
+  /** What the room was last told, and when — so a frame that says nothing new is not sent. */
+  const sentRef = useRef<Stance | null>(null);
   const sentAtRef = useRef(0);
   const joinedRef = useRef(false);
   // The look this browser last claimed, to compare against the one it got.
@@ -50,9 +64,6 @@ export function usePresence() {
       const others = players.filter((player) => player.id !== selfIdRef.current);
       rememberPlayers(others);
       gameEvents.emit("presence-updated", others);
-      // Residents are drawn like anyone else but are not people in the room.
-      const humans = players.filter((player) => !player.resident).length;
-      gameEvents.emit("presence-count", humans, capacityRef.current);
     };
 
     /** Walk into the place the address bar names, standing where the scene put us. */
@@ -125,8 +136,10 @@ export function usePresence() {
         case "welcome":
           selfIdRef.current = message.you;
           rememberSelfId(message.you);
-          capacityRef.current = message.capacity;
           joinedRef.current = true;
+          // A welcome is a fresh place in a room, so the next frame is news
+          // to it whatever the last room was last told.
+          sentRef.current = null;
           log.info(`joined as ${message.you} (${message.players.length}/${message.capacity})`);
           publish(message.players);
           wearWhatWeWereGiven(message.players, message.you);
@@ -149,9 +162,7 @@ export function usePresence() {
             log.warn("that floor is not ours to be on");
             break;
           }
-          capacityRef.current = message.capacity ?? capacityRef.current;
-          log.warn(`room is full (${message.capacity} humans)`);
-          gameEvents.emit("presence-count", capacityRef.current, capacityRef.current);
+          log.warn(`room is full (${message.capacity ?? "?"} humans)`);
           break;
         case "presence":
           publish(message.players);
@@ -165,22 +176,47 @@ export function usePresence() {
       }
     });
 
+    /**
+     * Tell the room where we stand, if that is news or it has been a while.
+     *
+     * The scene reports every frame whether or not anything moved, and this
+     * used to forward one of those every `MOVE_SEND_MS` regardless — twenty
+     * messages a second from somebody standing still. Now a frame that says
+     * what the room was last told is not sent, and the keepalive is the
+     * only thing a stationary browser says. Being quiet costs nothing on the
+     * server's side: the heartbeat's pongs are what keep a player from the
+     * idle sweep, and the move clamp budgets over a capped window, so the
+     * first step after a long stand is paid for like any other.
+     */
+    let trailing: ReturnType<typeof setTimeout> | null = null;
+    const sendLatest = () => {
+      trailing = null;
+      const latest = latestRef.current;
+      if (!joinedRef.current || !latest) return;
+      const now = Date.now();
+      const since = now - sentAtRef.current;
+      const news = !sameStance(latest, sentRef.current);
+      if (!news && since < MOVE_KEEPALIVE_MS) return;
+      if (since < MOVE_SEND_MS) {
+        // The tick rate still holds. What was held back goes out when it
+        // allows, or somebody who stops inside the window is drawn
+        // walking on the spot until they next move.
+        trailing ??= setTimeout(sendLatest, MOVE_SEND_MS - since);
+        return;
+      }
+      sentAtRef.current = now;
+      sentRef.current = latest;
+      sendRoom({ type: "move", ...latest });
+    };
+
     const unsubscribeMove = gameEvents.on("player-moved", (position) => {
-      const next = {
+      latestRef.current = {
         x: position.x,
         y: position.y,
         facing: position.facing as Facing,
         moving: position.moving,
       };
-      latestRef.current = next;
-      if (!joinedRef.current) return;
-
-      // The scene reports every frame; the room only needs the tick rate
-      const now = Date.now();
-      if (now - sentAtRef.current < MOVE_SEND_MS) return;
-      sentAtRef.current = now;
-
-      sendRoom({ type: "move", ...next });
+      sendLatest();
     });
 
     // Into the lift, or out through a door: they have gone out of sight,
@@ -221,6 +257,7 @@ export function usePresence() {
     });
 
     return () => {
+      if (trailing) clearTimeout(trailing);
       unsubOpen();
       unsubProfile();
       unsubBoarded();

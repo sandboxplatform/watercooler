@@ -1,5 +1,3 @@
-import type { SeatState } from "@/types/game";
-import type { SeatDef } from "@/components/game/utils/MapHelpers";
 import type { PresencePlayer } from "./presence-types";
 import { createLogger } from "./logger";
 
@@ -27,9 +25,11 @@ export interface RoomArrival {
 }
 
 export interface GameEventMap {
-  "seats-discovered": [seats: SeatDef[]];
-  "seat-configs-updated": [seats: SeatState[]];
-  /** Gamepad shoulder buttons cycle HUD panels; Back closes the open one. */
+  /**
+   * A shoulder button turns to the music at the foot of the column, and Back
+   * puts it away. It used to turn between two panels, and the other — the
+   * seats — went with them, so either shoulder lands on the music.
+   */
   "hud-cycle-panel": [direction: -1 | 1];
   "hud-close-panel": [];
   /** Where this browser's own character is, for the room socket to send on. */
@@ -54,8 +54,6 @@ export interface GameEventMap {
   "presence-updated": [players: PresencePlayer[]];
   /** A remote player disconnected and should be removed immediately. */
   "presence-left": [id: string];
-  /** How many humans are in the room, for the HUD. */
-  "presence-count": [count: number, capacity: number];
   /**
    * The door was shut on this browser, and it is not trying again.
    *

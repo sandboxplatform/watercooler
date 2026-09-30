@@ -6,5 +6,7 @@ node_modules
 .claude
 *.log
 .env*.local
-vendor/mettara-lib/*.nupkg
-vendor/mettara-lib/*.tar.gz
+# Delivered art and the documents beside it: build inputs for scripts run on
+# a machine, never read by the server or the build.
+art
+docs

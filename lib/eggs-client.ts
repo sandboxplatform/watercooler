@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { onRoomMessage, sendRoom } from "./room-socket";
-import { createLogger } from "./logger";
+import { createSocketStore, useSocketStore } from "./socket-store";
 import { getSelfId } from "./presence-self";
 import { onlinePeople, subscribeOnline } from "./presence-online";
 import type { EggsBroadcast } from "./presence-types";
@@ -23,8 +23,6 @@ import type { EggTally, LaidEgg } from "./world/eggs";
  *   then topped up off the `egg-found` message the server sends to
  *   everybody.
  */
-
-const log = createLogger("Eggs");
 
 // ── The field ─────────────────────────────────────────
 
@@ -62,9 +60,23 @@ const NO_NEWS: EggNews = { taken: null, laid: null };
 type FieldListener = (eggs: readonly LaidEgg[], news: EggNews) => void;
 const watchers = new Set<FieldListener>();
 
+let watchingField = false;
+
+/** The field's own socket handler: the `eggs` message, which is a fact about the world map. */
+function watchField() {
+  if (watchingField) return;
+  watchingField = true;
+  onRoomMessage((message) => {
+    if (message.type !== "eggs") return;
+    field = message.eggs;
+    const news: EggNews = { taken: message.taken ?? null, laid: message.laid ?? null };
+    for (const watcher of watchers) watcher(field, news);
+  });
+}
+
 /** Follow the field. What is lying there now, if anything, arrives at once. */
 export function onEggs(listener: FieldListener): () => void {
-  listen();
+  watchField();
   watchers.add(listener);
   listener(field, NO_NEWS);
   return () => {
@@ -85,45 +97,29 @@ export function takeEgg(): void {
 
 // ── The baskets ───────────────────────────────────────
 
-let tallies: EggTally[] = [];
-let loaded = false;
-let fetching = false;
-const listeners = new Set<() => void>();
-let listening = false;
-
-function changed() {
-  for (const listener of listeners) listener();
-}
+const NONE: EggTally[] = [];
+const keyOf = (t: EggTally) => `${t.person}:${t.tier}`;
 
 /**
- * One socket handler for both halves.
- *
- * The two messages are deliberately different shapes — the field is a fact
- * about the world map and goes to that room, a basket is a fact about a
- * person and goes to everybody — and this is the one place either of them
- * is read.
+ * Every basket in the world: fetched once, then kept current off the
+ * `egg-found` message the server sends to everybody — a fact about a person
+ * rather than about the map, which is why it is not the field's handler.
  */
-function listen() {
-  if (listening) return;
-  listening = true;
-  onRoomMessage((message) => {
-    if (message.type === "eggs") {
-      field = message.eggs;
-      const news: EggNews = { taken: message.taken ?? null, laid: message.laid ?? null };
-      for (const watcher of watchers) watcher(field, news);
-      return;
-    }
-    if (message.type !== "egg-found") return;
+const tallies = createSocketStore<EggTally[]>({
+  name: "baskets",
+  initial: NONE,
+  reduce: (all, message) => {
+    if (message.type !== "egg-found") return all;
     // A tally rather than a row, so an egg of a kind somebody already has
-    // is an increment. Rebuilt rather than mutated, because the store is
-    // read through `useSyncExternalStore` and that wants a new identity.
-    const found = tallies.find((t) => t.person === message.person && t.tier === message.tier);
-    tallies = found
-      ? tallies.map((t) =>
+    // is an increment. Rebuilt rather than mutated, because a new identity
+    // is what tells a reader it changed.
+    const found = all.find((t) => t.person === message.person && t.tier === message.tier);
+    return found
+      ? all.map((t) =>
           t === found ? { ...t, count: t.count + 1, name: message.name, latest: message.at } : t,
         )
       : [
-          ...tallies,
+          ...all,
           {
             person: message.person,
             name: message.name,
@@ -132,37 +128,28 @@ function listen() {
             latest: message.at,
           },
         ];
-    changed();
-  });
-}
-
-async function load() {
-  if (fetching) return;
-  fetching = true;
-  listen();
-  try {
+  },
+  load: async () => {
     const response = await fetch("/api/eggs");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const body = (await response.json()) as { eggs?: EggTally[] };
     // Anything that arrived over the socket while this was in flight is
     // already counted, and the server's answer predates it — so the
     // greater of the two counts is the true one for a pair that overlap.
-    const fresh = new Map(tallies.map((t) => [`${t.person}:${t.tier}`, t]));
-    tallies = (body.eggs ?? []).map((t) => {
-      const seen = fresh.get(`${t.person}:${t.tier}`);
-      fresh.delete(`${t.person}:${t.tier}`);
-      return seen && seen.count > t.count ? seen : t;
-    });
-    tallies = [...tallies, ...fresh.values()];
-  } catch (err) {
-    log.warn("could not read the baskets:", (err as Error).message);
-  } finally {
-    loaded = true;
-    changed();
-  }
-}
+    return (heard) => {
+      const fresh = new Map(heard.map((t) => [keyOf(t), t]));
+      const merged = (body.eggs ?? []).map((t) => {
+        const seen = fresh.get(keyOf(t));
+        fresh.delete(keyOf(t));
+        return seen && seen.count > t.count ? seen : t;
+      });
+      return [...merged, ...fresh.values()];
+    };
+  },
+});
 
 export function allEggs(): EggTally[] {
-  return tallies;
+  return tallies.get();
 }
 
 /**
@@ -175,32 +162,15 @@ export function allEggs(): EggTally[] {
  * does rather than standing an empty shelf for ever.
  */
 export function onBaskets(listener: (eggs: readonly EggTally[]) => void): () => void {
-  const relay = () => listener(tallies);
-  const stop = subscribe(relay);
+  const relay = () => listener(tallies.get());
+  const stop = tallies.subscribe(relay);
   relay();
   return stop;
 }
 
-export function eggsLoaded(): boolean {
-  return loaded;
-}
-
-function subscribe(listener: () => void): () => void {
-  void load();
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-const NONE: EggTally[] = [];
-
 /** Every basket in the world, kept current. */
 export function useEggTallies(): EggTally[] {
-  useEffect(() => {
-    void load();
-  }, []);
-  return useSyncExternalStore(subscribe, allEggs, () => NONE);
+  return useSocketStore(tallies, (all) => all, NONE);
 }
 
 /**
@@ -249,9 +219,6 @@ export function selfPerson(): string | null {
 /** Test seam: forget what the socket has said between cases. */
 export function resetEggs(): void {
   field = [];
-  tallies = [];
-  loaded = false;
-  fetching = false;
   watchers.clear();
-  listeners.clear();
+  tallies.reset();
 }

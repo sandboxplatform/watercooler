@@ -9,7 +9,7 @@
  *   badges, and the People panel lists them offline as well as on, because
  *   "who is about?" is only half of "who is there?".
  * - **`resident`** — a character the server walks about on a routine
- *   (`RESIDENTS` in lib/world/residents.ts). They are always in the world
+ *   (`RESIDENTS` in lib/world/roster.ts). They are always in the world
  *   somewhere and they earn nothing: a resident is how a badge is *got*,
  *   not somebody who gets one.
  *
@@ -56,7 +56,7 @@ export interface CastMember {
   backstory: string;
 }
 
-const art = (name: string) => `/characters/examples/${name}.png`;
+const art = (name: string) => `/characters/examples/${name}.webp`;
 
 export const CAST: readonly CastMember[] = [
   // ── People: they hold a code, they come and go, they earn badges ──

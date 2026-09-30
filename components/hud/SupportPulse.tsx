@@ -1,14 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { Activity, RefreshCw, X } from "lucide-react";
 import FullscreenButton, { useFullscreen } from "./FullscreenButton";
 import { usePanel } from "@/lib/hooks/usePanel";
-import { createLogger } from "@/lib/logger";
+import { usePolledJson } from "@/lib/hooks/usePolledJson";
+import PanelOverlay from "./PanelOverlay";
+import { boardTrouble } from "./BoardTrouble";
 import { PULSE_METRICS, pulseBars, pulseFigure, type Pulse } from "@/lib/zoho/pulse";
 import { PULSE_REFRESH_MS } from "@/lib/constants";
-
-const log = createLogger("SupportPulse");
 
 interface Answer {
   configured?: boolean;
@@ -123,50 +123,31 @@ function sinceLabel(iso: string, timeZone: string | null): string {
  * A window onto the desk and only that. Nothing here answers a ticket.
  */
 export default function SupportPulse() {
-  const [answer, setAnswer] = useState<Answer | null>(null);
-  const [loading, setLoading] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const fullscreen = useFullscreen(overlayRef);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetch("/api/zoho/pulse", { cache: "no-store" });
-      setAnswer((await response.json()) as Answer);
-    } catch (err) {
-      log.warn("could not count the desk:", (err as Error).message);
-      setAnswer({ configured: true, error: "The desk could not be reached." });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const { open, close } = usePanel("support-pulse", { onOpen: () => void load() });
+  const { open, close } = usePanel("support-pulse");
 
   // While it is up, keep the counts current — on the same beat the wall
   // behind it uses, which is the beat the server holds them for.
-  useEffect(() => {
-    if (!open) return;
-    const timer = setInterval(() => void load(), PULSE_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [open, load]);
+  const read = usePolledJson<Answer>(open ? "/api/zoho/pulse" : null, {
+    open,
+    every: PULSE_REFRESH_MS,
+  });
+  const answer = read.data;
 
   if (!open) return null;
+  const trouble = boardTrouble(read, "The desk");
 
   const pulse = answer?.pulse;
   const bars = pulse ? pulseBars(pulse.counts) : null;
 
   return (
-    <div
+    <PanelOverlay
       ref={overlayRef}
       className="pinball-overlay board-overlay"
-      onClick={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (window.matchMedia("(pointer: coarse)").matches) return;
-        close();
-      }}
-      role="dialog"
-      aria-label="Support numbers"
+      label="Support numbers"
+      onClose={close}
     >
       <div className="pixel-panel board-panel pulse-panel">
         <div className="pinball-head arcade-head">
@@ -178,11 +159,11 @@ export default function SupportPulse() {
               type="button"
               className="pixel-icon-btn"
               style={{ width: 26, height: 26 }}
-              onClick={() => void load()}
+              onClick={read.refresh}
               title="Count the desk again"
               aria-label="Refresh the counts"
             >
-              <RefreshCw size={12} className={loading ? "board-spin" : undefined} />
+              <RefreshCw size={12} className={read.loading ? "board-spin" : undefined} />
             </button>
             <FullscreenButton control={fullscreen} what="the numbers" />
             <button
@@ -199,7 +180,9 @@ export default function SupportPulse() {
         </div>
 
         <div className="board-body pulse-body">
-          {answer?.configured === false ? (
+          {trouble ? (
+            trouble
+          ) : answer?.configured === false ? (
             <div className="board-note">
               <p className="board-note__lead">No Zoho Desk is connected yet.</p>
               <p>
@@ -211,7 +194,7 @@ export default function SupportPulse() {
           ) : answer?.error ? (
             <div className="board-note">
               <p className="board-note__lead">{answer.error}</p>
-              <button type="button" className="pixel-button" onClick={() => void load()}>
+              <button type="button" className="pixel-button" onClick={read.refresh}>
                 Try again
               </button>
             </div>
@@ -265,7 +248,7 @@ export default function SupportPulse() {
           ) : (
             <div className="board-note">
               <p className="board-note__lead">
-                {loading ? "Counting the desk…" : "Nothing counted yet."}
+                {read.loading ? "Counting the desk…" : "Nothing counted yet."}
               </p>
             </div>
           )}
@@ -275,6 +258,6 @@ export default function SupportPulse() {
           <span>Read-only · nothing here answers or changes a ticket</span>
         </div>
       </div>
-    </div>
+    </PanelOverlay>
   );
 }

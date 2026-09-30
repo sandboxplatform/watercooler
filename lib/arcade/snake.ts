@@ -3,7 +3,7 @@
  * Walls and your own tail end it. It speeds up a little as it grows.
  */
 
-import { FONT, SCREEN, type ArcadeGame, type ArcadeInput } from "./types";
+import { ARCADE_TITLES, FONT, SCREEN, type ArcadeGame, type ArcadeInput } from "./types";
 
 export const CELL = 16;
 export const COLS = SCREEN.width / CELL;
@@ -158,7 +158,7 @@ export function drawSnake(ctx: CanvasRenderingContext2D, state: SnakeState) {
 
 export const snake: ArcadeGame<SnakeState> = {
   id: "snake",
-  title: "Snake",
+  title: ARCADE_TITLES.snake,
   blurb: "Eat apples, grow long, avoid yourself.",
   keys: "Arrows or WASD to turn",
   touch: "Tap left or right of the screen to turn",

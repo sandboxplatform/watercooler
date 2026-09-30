@@ -11,6 +11,7 @@
  */
 
 import { createLogger } from "../logger";
+import { outboundSignal } from "../server/outbound";
 import { toDeskView, type DeskView } from "./tickets";
 import {
   CLOSED_STATUS,
@@ -30,6 +31,13 @@ const log = createLogger("Zoho");
 
 /** Long enough to spare Zoho's API credits, short enough to feel live. */
 export const DESK_CACHE_MS = 30_000;
+
+/**
+ * How long the desk's departments are held. They are a list of names that
+ * changes when somebody reorganises the desk, which is not a thing that
+ * happens between one read of the queue and the next.
+ */
+export const DEPARTMENTS_CACHE_MS = 60 * 60 * 1000;
 
 /** The most tickets to hang on the wall. Zoho's own ceiling per page is 100. */
 export const TICKET_LIMIT = 100;
@@ -115,9 +123,27 @@ async function reasonFrom(response: Response): Promise<string | undefined> {
 /** The access token in hand, and when it goes stale. */
 let token: { value: string; until: number } | null = null;
 
+/**
+ * The refresh already on its way, which every caller who finds the token
+ * stale waits on. The three sweeps behind the wall start together, and
+ * without this each traded the refresh token for a token of its own — three
+ * refreshes for one read, against an endpoint Zoho limits far harder than
+ * the desk.
+ */
+let refreshing: Promise<string> | null = null;
+
 /** Test seam, and a way to force a fresh token after the keys change. */
 export function forgetZohoToken() {
   token = null;
+}
+
+/** The access token, fetching one when the one in hand is stale. */
+async function accessToken(config: ZohoConfig): Promise<string> {
+  if (token && token.until > Date.now()) return token.value;
+  refreshing ??= refreshAccessToken(config).finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
 }
 
 /**
@@ -125,10 +151,8 @@ export function forgetZohoToken() {
  * nearly expired. The refresh token itself is sent in the body, never in
  * a URL, and neither is ever logged.
  */
-async function accessToken(config: ZohoConfig): Promise<string> {
+async function refreshAccessToken(config: ZohoConfig): Promise<string> {
   const now = Date.now();
-  if (token && token.until > now) return token.value;
-
   const body = new URLSearchParams({
     refresh_token: config.refreshToken,
     client_id: config.clientId,
@@ -143,6 +167,7 @@ async function accessToken(config: ZohoConfig): Promise<string> {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
       cache: "no-store",
+      signal: outboundSignal(),
     });
   } catch (err) {
     log.warn("could not reach Zoho for a token:", (err as Error).message);
@@ -181,6 +206,7 @@ async function get(path: string, params: Record<string, string>, config: ZohoCon
         Accept: "application/json",
       },
       cache: "no-store",
+      signal: outboundSignal(),
     });
   } catch (err) {
     log.warn(`could not reach Zoho Desk for ${path}:`, (err as Error).message);
@@ -396,22 +422,22 @@ export async function fetchPulse(config: ZohoConfig, now: number = Date.now()): 
     ? { departmentId: config.departmentId }
     : {};
 
-  const standing = await sweep(config, {
-    ...scope,
-    status: statuses.join(","),
-    sortBy: "-modifiedTime",
-  });
+  // Together: the three are separate questions and none waits on another's
+  // answer, so one after the other was three sweeps' worth of waiting for
+  // one wall. They share the token refresh rather than racing for three.
+  //
   // `readableBefore` rather than `!atOrAfter`: a sweep stops on the claim
   // that everything past here is older, and a ticket whose stamp is missing
   // or unreadable is no grounds for it. See the note on that function.
-  const opened = await sweep(config, { ...scope, sortBy: "-createdTime" }, (ticket) =>
-    readableBefore(ticket.createdTime as string | undefined, lastWeekFrom),
-  );
-  const closed = await sweep(
-    config,
-    { ...scope, status: CLOSED_STATUS, sortBy: "-closedTime" },
-    (ticket) => readableBefore(ticket.closedTime as string | undefined, lastWeekFrom),
-  );
+  const [standing, opened, closed] = await Promise.all([
+    sweep(config, { ...scope, status: statuses.join(","), sortBy: "-modifiedTime" }),
+    sweep(config, { ...scope, sortBy: "-createdTime" }, (ticket) =>
+      readableBefore(ticket.createdTime as string | undefined, lastWeekFrom),
+    ),
+    sweep(config, { ...scope, status: CLOSED_STATUS, sortBy: "-closedTime" }, (ticket) =>
+      readableBefore(ticket.closedTime as string | undefined, lastWeekFrom),
+    ),
+  ]);
 
   // A capped standing sweep leaves all three of its counters a floor: the
   // pages it did not read could have held any of the three statuses.

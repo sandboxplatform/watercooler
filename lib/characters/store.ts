@@ -7,11 +7,11 @@
  * The sheets are served back by a route handler instead of the static server.
  */
 
-import { mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { join } from "path";
 import { createLogger } from "../logger";
-import type { CharacterColours } from "../pixel/character";
-import { librarySheetPath } from "./library";
+import { LIBRARY_PREFIX, librarySheetPath } from "./library";
 
 const log = createLogger("Characters");
 
@@ -20,7 +20,7 @@ export const CHARACTER_DIR =
 
 const MANIFEST = "index.json";
 
-export interface StoredCharacter extends Partial<CharacterColours> {
+export interface StoredCharacter {
   id: string;
   name: string;
   notes: string;
@@ -28,7 +28,9 @@ export interface StoredCharacter extends Partial<CharacterColours> {
   /**
    * "photo": built by re-skinning the library sheet with colours read from a
    * picture. "sheet": a whole character sheet, uploaded in the game's format
-   * and stored as it arrived. The four colours exist only for the first kind.
+   * and stored as it arrived. Neither is made any more — the generate and
+   * ingest routes are gone — but characters made both ways are still on disk,
+   * and the colours a photo was read into still sit in their JSON unread.
    */
   source: "photo" | "sheet";
   /**
@@ -48,35 +50,6 @@ export function isCharacterId(value: string): boolean {
   return /^[a-z0-9_-]{4,64}$/.test(value);
 }
 
-/**
- * A display name from an uploaded filename.
- *
- * Drops the extension, the separators, and any "48x48"-style size token —
- * a sheet named for its format is not named for its character. Trimmed
- * *after* the length cut, so a cut cannot leave a trailing space behind.
- */
-export function nameFromFile(raw: unknown): string {
-  if (typeof raw !== "string") return "";
-  return raw
-    .replace(/\.[^.]+$/, "")
-    .split(/[_\-\s]+/)
-    .filter((part) => part && !/^\d+x\d+$/i.test(part))
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ")
-    .slice(0, 24)
-    .trim();
-}
-
-export function makeCharacterId(name: string, now: number): string {
-  const slug =
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 24) || "character";
-  return `${slug}-${now.toString(36)}`;
-}
-
 function ensureDir() {
   mkdirSync(CHARACTER_DIR, { recursive: true });
 }
@@ -85,8 +58,19 @@ export function sheetPath(id: string): string {
   return join(CHARACTER_DIR, `${id}.png`);
 }
 
-export function portraitPath(id: string): string {
-  return join(CHARACTER_DIR, `${id}.portrait.png`);
+/**
+ * A sheet's content hash: the same eight hex characters of SHA-256 that
+ * `pnpm assets` writes into the manifest, so a library portrait's `?v=` and
+ * the file it was cut into name the same bytes.
+ */
+export const SHEET_VERSION_LENGTH = 8;
+export function sheetVersion(sheet: Buffer): string {
+  return createHash("sha256").update(sheet).digest("hex").slice(0, SHEET_VERSION_LENGTH);
+}
+
+/** Where the face cut from one version of a sheet is kept. */
+export function portraitPath(id: string, version: string): string {
+  return join(CHARACTER_DIR, `${id}.${version}.portrait.png`);
 }
 
 /**
@@ -94,19 +78,27 @@ export function portraitPath(id: string): string {
  *
  * Made lazily rather than at save time so sheets written before portraits
  * existed get one too, and so a failed cut never stops a character saving.
+ *
+ * Kept under the sheet's own hash. It was kept under the id alone, and a
+ * library sheet is redrawn in place under the same id — so the face cut from
+ * yesterday's sheet was served for ever, immutable, as today's. Reading the
+ * sheet to hash it costs a file read per request, which the year-long cache
+ * in front of this makes rare.
  */
 export function readPortrait(id: string, cut: (sheet: Buffer) => Buffer): Buffer | null {
   if (!isCharacterId(id)) return null;
+  const sheet = readSheet(id);
+  if (!sheet) return null;
+  const file = portraitPath(id, sheetVersion(sheet));
   try {
-    return readFileSync(portraitPath(id));
+    return readFileSync(file);
   } catch {
     // fall through to cutting one
   }
-  const sheet = readSheet(id);
-  if (!sheet) return null;
   const portrait = cut(sheet);
   try {
-    writeFileSync(portraitPath(id), portrait);
+    ensureDir();
+    writeFileSync(file, portrait);
   } catch (err) {
     log.warn(`could not keep portrait for ${id}: ${(err as Error).message}`);
   }
@@ -159,71 +151,23 @@ export function saveCharacter(character: StoredCharacter, sheet: Buffer): Stored
   return character;
 }
 
-/**
- * Changes a character's name.
- *
- * Names come from the model or from a filename, and neither is the person's
- * choice. This is. Returns the updated character, or null if there is none.
- */
-export function renameCharacter(id: string, name: string): StoredCharacter | null {
-  const clean = name.trim().slice(0, 24);
-  if (!isCharacterId(id) || !clean) return null;
-  const all = listCharacters();
-  const target = all.find((c) => c.id === id);
-  if (!target) return null;
-  const updated = { ...target, name: clean };
-  const next = all.map((c) => (c.id === id ? updated : c));
-  const tmp = join(CHARACTER_DIR, `${MANIFEST}.tmp`);
-  writeFileSync(tmp, JSON.stringify(next, null, 2));
-  renameSync(tmp, join(CHARACTER_DIR, MANIFEST));
-  log.info(`renamed ${id} to "${clean}"`);
-  return updated;
-}
+// ── How long a browser may keep one ─────────────────────
+
+/** A year, for a response whose URL cannot outlive its bytes. */
+export const IMMUTABLE = "public, max-age=31536000, immutable";
+/** An hour, for one that can: the tier `next.config.ts` gives unversioned art. */
+export const UNVERSIONED = "public, max-age=3600";
 
 /**
- * Removes a character: its sheet, its portrait, and its line in the manifest.
+ * How long a character's sheet or face may be kept.
  *
- * Library characters are not stored here and cannot be removed this way —
- * they are files in the repository, and taking one away is a code change.
- * The manifest is rewritten first, so a crash between the two steps leaves
- * an orphaned file (which orphanedSheets reports) rather than a listed
- * character with no sheet behind it.
+ * An uploaded character never changes — a new one is a new id — so it is
+ * held for ever. A library one is a file in `public/` that is redrawn in
+ * place under the same id, so it is only held for ever when the URL carries
+ * its content hash (`?v=`, as the roster's portrait URLs do); asked for bare,
+ * it gets the hour the rest of the unversioned art gets.
  */
-export function deleteCharacter(id: string): boolean {
-  if (!isCharacterId(id)) return false;
-  const all = listCharacters();
-  if (!all.some((c) => c.id === id)) return false;
-
-  const next = all.filter((c) => c.id !== id);
-  const tmp = join(CHARACTER_DIR, `${MANIFEST}.tmp`);
-  writeFileSync(tmp, JSON.stringify(next, null, 2));
-  renameSync(tmp, join(CHARACTER_DIR, MANIFEST));
-
-  for (const file of [sheetPath(id), portraitPath(id)]) {
-    try {
-      unlinkSync(file);
-    } catch {
-      // Already gone, or never made (a portrait is cut lazily).
-    }
-  }
-  log.info(`removed character ${id}`);
-  return true;
-}
-
-/** A filename that carries a name, as opposed to a camera's serial number. */
-export function isMeaningfulName(name: string): boolean {
-  return /[a-z]{2,}/i.test(name);
-}
-
-/** Rebuilds the manifest from the sheets on disk, for a manifest gone missing. */
-export function orphanedSheets(): string[] {
-  try {
-    const known = new Set(listCharacters().map((c) => c.id));
-    return readdirSync(CHARACTER_DIR)
-      .filter((f) => f.endsWith(".png"))
-      .map((f) => f.replace(/\.png$/, ""))
-      .filter((id) => !known.has(id));
-  } catch {
-    return [];
-  }
+export function characterCache(id: string, request: Request): string {
+  if (!id.startsWith(LIBRARY_PREFIX)) return IMMUTABLE;
+  return new URL(request.url).searchParams.has("v") ? IMMUTABLE : UNVERSIONED;
 }

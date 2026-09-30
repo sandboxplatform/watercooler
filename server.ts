@@ -1,16 +1,18 @@
 /**
- * Custom Next.js dev server.
+ * The custom Next.js server, in dev and in production alike.
  *
- * Attaches the presence socket, so everyone in a room sees everyone else.
+ * Attaches the presence socket, so everyone in a room sees everyone else,
+ * and holds the door in front of all of it.
  */
 
-import { createServer, type IncomingMessage, type ServerResponse } from "http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "http";
+import type { Duplex } from "stream";
 import { loadEnvConfig } from "@next/env";
 import next from "next";
 import { createLogger } from "./lib/logger";
 import { describeBuild } from "./lib/server/build-info";
 import { attachPresenceSocket } from "./lib/server/presence-socket";
-import { ERP_DB_PATH, isEmpty, openErpDb, seedErpDatabase } from "./lib/erp/db";
+import { closeRoomStore } from "./lib/server/room-store";
 import {
   accessCookieHeader,
   clearedAccessCookieHeader,
@@ -38,10 +40,91 @@ const log = createLogger("Server");
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT ?? "3000", 10);
 // Next loads .env files during app.prepare(), long after the settings below
-// are read. Without this, AGENT_PROVIDER in .env.local was silently ignored
-// while every lazily-read key in the same file worked — so the app would boot
-// on the wrong provider and say so in the HUD with no hint why.
+// are read — the access codes among them. Without this, a code set only in
+// .env.local would be invisible to the gate that decides whether there is a
+// door at all, while every key read lazily from the same file worked.
 loadEnvConfig(process.cwd(), dev);
+
+/**
+ * Something threw and nothing caught it, or a promise failed and nobody was
+ * waiting on it. Said out loud here rather than left to whatever Next does
+ * or does not install for a custom server.
+ *
+ * The two are not the same. An exception that reached the top may have left
+ * any state it was half way through changing, so the process goes down —
+ * gracefully if it can, see `stopServer` — and the host starts a fresh one.
+ * A rejection nobody awaited has left no half-done synchronous work behind
+ * it, so it is logged and the world stays up for everyone in it.
+ */
+let stopServer: ((why: string, code: number) => void) | null = null;
+process.on("uncaughtException", (err) => {
+  log.error("uncaught exception:", err instanceof Error ? (err.stack ?? err.message) : err);
+  if (stopServer) stopServer("uncaught exception", 1);
+  else process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  log.error(
+    "unhandled rejection:",
+    reason instanceof Error ? (reason.stack ?? reason.message) : reason,
+  );
+});
+
+/** How long a shutdown may take before the process is ended anyway. */
+const SHUTDOWN_GRACE_MS = 10_000;
+
+/**
+ * Close down on SIGTERM or SIGINT rather than being cut off.
+ *
+ * A deploy sends SIGTERM and waits a while before it kills, and dying on
+ * the signal threw away what that wait is for: requests in flight answered,
+ * the room store's WAL folded back into its file. So the server stops taking
+ * connections and lets the HTTP ones finish, ends the presence sockets —
+ * which are upgraded connections and would otherwise hold `close` open for
+ * as long as anybody stays in the world, and whose own `close` handler is
+ * what stops the socket's timers — and lets the database go. A shutdown
+ * that has not finished in `SHUTDOWN_GRACE_MS` exits anyway.
+ */
+function stopOnSignals(server: Server, app: { close(): Promise<void> } | null) {
+  const upgraded = new Set<Duplex>();
+  server.on("upgrade", (_req: IncomingMessage, socket: Duplex) => {
+    upgraded.add(socket);
+    socket.once("close", () => upgraded.delete(socket));
+  });
+
+  let stopping = false;
+  const stop = (why: string, code: number) => {
+    if (stopping) return;
+    stopping = true;
+    log.info(`${why}: closing down`);
+    setTimeout(() => {
+      log.warn(`still closing after ${SHUTDOWN_GRACE_MS}ms; exiting anyway`);
+      process.exit(code || 1);
+    }, SHUTDOWN_GRACE_MS).unref();
+
+    server.close(() => {
+      void (app?.close() ?? Promise.resolve())
+        .catch((err) => log.warn("Next did not close cleanly:", (err as Error)?.message ?? err))
+        .finally(() => {
+          try {
+            closeRoomStore();
+          } catch (err) {
+            log.warn("the room store did not close cleanly:", (err as Error)?.message ?? err);
+          }
+          process.exit(code);
+        });
+    });
+    server.closeIdleConnections();
+    for (const socket of upgraded) socket.destroy();
+  };
+
+  stopServer = stop;
+  // `on` rather than `once`: Ctrl+C in a terminal reaches this process twice —
+  // once from the terminal and once forwarded by scripts/start.mjs — and a
+  // second signal with no listener left is Node's default, which kills the
+  // process in the middle of closing down. `stopping` makes repeats harmless.
+  process.on("SIGTERM", () => stop("SIGTERM", 0));
+  process.on("SIGINT", () => stop("SIGINT", 0));
+}
 
 /**
  * Production with no code configured: serve nothing, but say so.
@@ -232,9 +315,9 @@ async function handleUnlock(req: IncomingMessage, res: ServerResponse) {
  * A GET as well as a POST, and that is a decision. `SameSite=Lax` carries
  * the cookie on a cross-site navigation, so a link on another page can sign
  * somebody out — and the answer to that is to sign back in, which is one
- * link away. Against it: this is the only way out, the address bar is how
- * anybody will reach it while nothing in the HUD offers it, and a way out
- * that needs a button somebody has to build first is no way out at all.
+ * link away. Against it: the HUD's lock button navigates here rather than
+ * posting, the address bar is what somebody locked out of the HUD has left,
+ * and a way out that needs a script to work is no way out at all.
  */
 function handleLock(req: IncomingMessage, res: ServerResponse) {
   const header = clearedAccessCookieHeader(!dev);
@@ -407,47 +490,20 @@ function sentOutside(req: IncomingMessage, res: ServerResponse): boolean {
   return true;
 }
 
-/**
- * Build the company on first boot.
- *
- * A fresh deployment gets an empty volume, and agents told they have an ERP
- * would find nothing in it. Seeding here is idempotent — an existing database
- * is left exactly as it is, including anything agents have since written.
- */
-function ensureErpData() {
-  try {
-    const db = openErpDb(ERP_DB_PATH);
-    const empty = isEmpty(db);
-    db.close();
-
-    if (!empty) {
-      log.info(`ERP ready at ${ERP_DB_PATH}`);
-      return;
-    }
-
-    log.info("No company data found — creating Brightwater Supply Co.");
-    const { db: seeded, counts } = seedErpDatabase(ERP_DB_PATH);
-    seeded.close();
-    log.info(`ERP seeded: ${counts.customers} customers, ${counts.invoices} invoices`);
-  } catch (err) {
-    // The office still works without it; agents will say the data is unreachable
-    log.error("Could not prepare the ERP:", (err as Error).message);
-  }
-}
-
 if (unconfigured) {
-  // Nothing is prepared and nothing is attached: no Next, no presence socket,
-  // no agent bridge. isAuthorized() waves everything through when no code is
+  // Nothing is prepared and nothing is attached: no Next and no presence
+  // socket. isAuthorized() waves everything through when no code is
   // configured, so a running server with the sockets on would have been open
   // to anyone — the surface here is one function that answers and stops.
-  createServer(answerUnconfigured).listen(port, () => {
+  const server = createServer(answerUnconfigured);
+  stopOnSignals(server, null);
+  server.listen(port, () => {
     log.error(`Serving nothing on http://localhost:${port} until ACCESS_CODE is set.`);
   });
 } else {
   app
     .prepare()
     .then(() => {
-      ensureErpData();
       const server = createServer((req, res) => {
         // The door is answered before Next sees anything: it authenticates
         // itself, and the two ways in and out of the world are the only
@@ -472,6 +528,7 @@ if (unconfigured) {
       // The one socket the world needs: who is in a room, where they are
       // standing, and what they said.
       attachPresenceSocket(server);
+      stopOnSignals(server, app);
 
       log.info(`Ready on http://localhost:${port}`);
       // Printed at start-up as well as served from /api/health, so a deploy's

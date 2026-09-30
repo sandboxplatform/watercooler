@@ -13,6 +13,7 @@ import {
   sheetPathFor,
   textureKeyFor,
 } from "../library";
+import { asset } from "../../assets";
 import { BOSS_SPRITE_KEY, BOSS_SPRITE_PATH } from "../sprites";
 import { RESIDENTS } from "../../world/residents";
 
@@ -32,7 +33,11 @@ describe("the library roster", () => {
       expect(c.id.startsWith(LIBRARY_PREFIX)).toBe(true);
       expect(c.source).toBe("library");
       expect(c.sheetUrl).toMatch(/^\/characters\/.+\.png$/);
-      expect(c.portraitUrl).toBe(`/api/characters/${c.id}/portrait`);
+      // The sheet's own hash rides on the face, so a redrawn sheet is a new URL.
+      const [path, query] = c.portraitUrl.split("?");
+      expect(path).toBe(`/api/characters/${c.id}/portrait`);
+      expect(query).toBe(`v=${new URLSearchParams(asset(c.sheetUrl).split("?")[1]).get("v")}`);
+      expect(query).toMatch(/^v=[0-9a-f]{8}$/);
     }
   });
 

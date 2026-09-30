@@ -11,11 +11,6 @@
  * pixel-art tool writes when asked for an "8-bit PNG", so refusing it sent
  * the artist back to re-export for no reason — expanding a palette is exact
  * and loses nothing.
- *
- * Note what is *not* decoded here: the picture a person uploads. That is
- * passed to the vision model as base64 and never opened locally, which is why
- * a user can upload a JPEG, a WebP or a screenshot without any of that
- * mattering to this file.
  */
 
 import { deflateSync, inflateSync } from "zlib";
@@ -41,6 +36,20 @@ export interface Bitmap {
 
 const SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const BYTES_PER_PIXEL = 4;
+
+/**
+ * The largest image this will decode, by side and by area.
+ *
+ * A PNG's header says how big it is and its image data is deflated, so a
+ * file of a few kilobytes can claim a hundred thousand pixels a side and
+ * inflate to gigabytes — decoded without asking, that is the server's heap
+ * gone on one upload. The biggest honest image here is a tileset
+ * (`Room_Builder_48x48.png`, 3648x5424, about twenty million pixels, which
+ * `preview:map` reads), so these sit a little above it rather than at the
+ * sheet size: a character sheet is 2688x1968 at the most.
+ */
+export const PNG_MAX_SIDE = 8192;
+export const PNG_MAX_PIXELS = 24 * 1024 * 1024;
 
 let crcTable: Int32Array | null = null;
 
@@ -69,12 +78,23 @@ function paeth(a: number, b: number, c: number): number {
 }
 
 export function decodePng(file: Buffer): Bitmap {
+  // The signature and a whole IHDR, which is where every field below is read.
+  if (file.length < 33) throw new Error("Not a PNG file");
   for (let i = 0; i < SIGNATURE.length; i++) {
     if (file[i] !== SIGNATURE[i]) throw new Error("Not a PNG file");
   }
 
   const width = file.readUInt32BE(16);
   const height = file.readUInt32BE(20);
+  // Before a byte is inflated: the header is the only honest thing a
+  // decompression bomb carries, so it is what is asked.
+  if (width === 0 || height === 0) throw new Error("PNG has no pixels");
+  if (width > PNG_MAX_SIDE || height > PNG_MAX_SIDE || width * height > PNG_MAX_PIXELS) {
+    throw new Error(
+      `PNG is ${width}x${height}, which is larger than this reads ` +
+        `(${PNG_MAX_SIDE} a side, ${PNG_MAX_PIXELS} pixels in all).`,
+    );
+  }
   const bitDepth = file[24];
   const colourType = file[25];
   const interlace = file[28];
@@ -109,9 +129,22 @@ export function decodePng(file: Buffer): Bitmap {
   if (idat.length === 0) throw new Error("PNG has no image data");
   if (colourType === INDEXED && !palette) throw new Error("Indexed PNG has no palette");
 
-  const raw = inflateSync(Buffer.concat(idat));
   const bitsPerPixel = channels * bitDepth;
   const stride = Math.ceil((width * bitsPerPixel) / 8);
+  // Exactly what the header's size needs — a filter byte and a scanline per
+  // row — and never more, so image data that inflates past its own header
+  // stops inflating rather than going on until the heap is gone.
+  const expected = height * (stride + 1);
+  let raw: Buffer;
+  try {
+    raw = inflateSync(Buffer.concat(idat), { maxOutputLength: expected });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE") {
+      throw new Error("PNG image data is larger than its header says");
+    }
+    throw err;
+  }
+  if (raw.length < expected) throw new Error("PNG image data is truncated");
   /**
    * What the filter means by "the pixel to the left": whole bytes, and never
    * fewer than one. That floor is what makes a packed scanline work — at four

@@ -28,6 +28,14 @@ describe("the board", () => {
     expect(store.listStrokes("room-a")).toHaveLength(1);
   });
 
+  it("keeps a stroke sent again in its place, with what it was sent with last", () => {
+    for (const id of ["a", "b", "c"]) store.addStroke("room-a", id, stroke(id));
+    store.addStroke("room-a", "a", { ...stroke("a"), color: "#f00" });
+    const strokes = store.listStrokes("room-a") as { id: string; color: string }[];
+    expect(strokes.map((s) => s.id)).toEqual(["a", "b", "c"]);
+    expect(strokes[0].color).toBe("#f00");
+  });
+
   it("gives each room its own board", () => {
     store.addStroke("room-a", "a", stroke("a"));
     store.addStroke("room-b", "b", stroke("b"));

@@ -72,6 +72,17 @@ export class Legible {
   }
 
   /**
+   * Let go of everything, for a scene shutting down. The scene object is
+   * reused for the next visit, so without this the registry went on holding
+   * every destroyed label from every room it had ever been, until a change
+   * of zoom happened to prune them.
+   */
+  clear() {
+    this.objects.clear();
+    this.applied = 0;
+  }
+
+  /**
    * Call from the scene's `update`.
    *
    * Polled rather than subscribed, because the zoom is moved from four
@@ -126,7 +137,11 @@ export function legible(scene: Phaser.Scene | null | undefined): Legible {
   const found = scene ? registries.get(scene) : undefined;
   if (found) return found;
   const made = new Legible(scene ?? null);
-  if (scene) registries.set(scene, made);
+  if (scene) {
+    registries.set(scene, made);
+    // Once per scene for its whole life, since the registry lives as long.
+    scene.events?.on(Phaser.Scenes.Events.SHUTDOWN, () => made.clear());
+  }
   return made;
 }
 

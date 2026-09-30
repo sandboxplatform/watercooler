@@ -1,117 +1,17 @@
 "use client";
 
 /**
- * Client side of the room state API.
+ * Which room this browser is in.
  *
- * The server owns the world; this module fetches it and writes changes back.
- * Writes are coalesced and debounced, because the store persists whole
- * collections on every reducer change and a burst of edits should not be a
- * request apiece.
+ * Read off the address bar at call time rather than held anywhere, because a
+ * room change is a pushed URL and nothing else: riding the lift changes rooms
+ * without rebuilding the HUD, so a slug captured at mount is the floor below's.
  */
 
-import type { PersistedSeatConfig } from "./persistence";
-import { createLogger } from "./logger";
-
-const log = createLogger("Room");
-
 import { DEFAULT_ROOM_SLUG, roomFromLocation } from "./rooms";
-
-const ENDPOINT = "/api/room/state";
 
 /** The room this browser is in, from the URL. */
 export function currentRoom(): string {
   if (typeof window === "undefined") return DEFAULT_ROOM_SLUG;
   return roomFromLocation(window.location);
-}
-
-function endpointForRoom(): string {
-  return `${ENDPOINT}?room=${encodeURIComponent(currentRoom())}`;
-}
-
-/** Long enough to batch a burst of reducer updates, short enough to survive a refresh. */
-export const WRITE_DEBOUNCE_MS = 400;
-
-export interface RoomSnapshot {
-  seats: PersistedSeatConfig[];
-}
-
-export interface RoomPatch {
-  seats?: PersistedSeatConfig[];
-}
-
-const EMPTY: RoomSnapshot = {
-  seats: [],
-};
-
-/**
- * Read the world. A failure yields an empty room rather than throwing: the app
- * should still open if the server is unreachable, just with nothing in it.
- */
-export async function fetchRoomSnapshot(): Promise<RoomSnapshot> {
-  try {
-    const response = await fetch(endpointForRoom(), { cache: "no-store" });
-    if (!response.ok) {
-      log.warn(`snapshot request failed: ${response.status}`);
-      return EMPTY;
-    }
-    const raw = (await response.json()) as Partial<RoomSnapshot>;
-    return {
-      seats: raw.seats ?? [],
-    };
-  } catch (err) {
-    log.warn("snapshot failed:", (err as Error).message);
-    return EMPTY;
-  }
-}
-
-let pending: RoomPatch = {};
-let timer: ReturnType<typeof setTimeout> | null = null;
-let inFlight: Promise<void> | null = null;
-
-async function flush(): Promise<void> {
-  timer = null;
-  const body = pending;
-  pending = {};
-  if (Object.keys(body).length === 0) return;
-
-  try {
-    const response = await fetch(endpointForRoom(), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) log.warn(`write failed: ${response.status}`);
-  } catch (err) {
-    log.warn("write failed:", (err as Error).message);
-  }
-}
-
-/**
- * Queue a slice of world state to be written. Later values for the same slice
- * replace earlier ones, so a burst collapses into one request.
- */
-export function saveRoomPatch(patch: RoomPatch) {
-  pending = { ...pending, ...patch };
-  if (timer) clearTimeout(timer);
-  timer = setTimeout(() => {
-    inFlight = flush();
-  }, WRITE_DEBOUNCE_MS);
-}
-
-/** Write anything queued right now — used when the page is going away. */
-export function flushRoomWrites(): Promise<void> {
-  if (timer) {
-    clearTimeout(timer);
-    timer = null;
-  }
-  inFlight = flush();
-  return inFlight;
-}
-
-/** Test seam: drop anything queued without writing it. */
-export function resetRoomWrites() {
-  if (timer) clearTimeout(timer);
-  timer = null;
-  pending = {};
-  inFlight = null;
 }

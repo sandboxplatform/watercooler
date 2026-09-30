@@ -1,4 +1,5 @@
 import { ink, MARKER_DARK, MARKER_EDGE, type FloorMarkerSpec } from "./FloorMarker";
+import { PANEL_DARK, PIXEL_FONT } from "../config/drawing";
 
 /**
  * The rack of blanks at the head of a project room's production line: work
@@ -65,7 +66,7 @@ const READY = 0x579dff;
  * reads as the plate's pedestal rather than as a thing the plate is about.
  */
 const SHELL = MARKER_EDGE;
-const FRAME = 0x2a2a3e;
+const FRAME = PANEL_DARK;
 
 /** How wide the picture is, and the feet and band under the rack. */
 const WIDTH = 96;
@@ -171,7 +172,7 @@ export const REFINED: FloorMarkerSpec = {
     into.add(
       scene.add
         .text(0, BAND_TOP + BAND_H / 2, WORD, {
-          fontFamily: '"Press Start 2P", monospace',
+          fontFamily: PIXEL_FONT,
           fontSize: "8px",
           color: ink(READY),
         })

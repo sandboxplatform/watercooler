@@ -2,9 +2,9 @@
  * Liveness check for the host's health probe, and which build answered it.
  *
  * Deliberately shallow: it reports that the process is up and can reach its
- * database, and nothing about agents. A failing API key or an exhausted budget
- * are not reasons to restart the server — recycling the container would drop
- * everyone out of their room without fixing either.
+ * database, and nothing else. A board that cannot be read or a desk that is
+ * rate limiting us is not a reason to restart the server — recycling the
+ * container would drop everyone out of their room without fixing either.
  *
  * The build is here because this is the one route the access gate leaves open
  * (see lib/server/access.ts), which makes it the only way to ask a running
@@ -15,15 +15,19 @@
  * That is a deliberate disclosure of the running version to anyone who can
  * reach the port. It costs nothing here — the app is published to npm, so
  * every commit is public already, and a sha only says which public commit is
- * running.
+ * running. What the database said when it failed is **not** disclosed: that
+ * names paths and SQL, and it goes to the log, where whoever can act on it
+ * reads it.
  *
  * It is reported on the failure path too. A 503 is exactly when knowing which
  * build is broken matters most.
  */
 
-import { NextResponse } from "next/server";
 import { getRoomStore } from "@/lib/server/room-store";
 import { STARTED_AT, buildInfo } from "@/lib/server/build-info";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("Health");
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +36,17 @@ export async function GET() {
   const build = { version, commit, sha, branch, source, startedAt: STARTED_AT };
   try {
     // Touch the store so a database that will not open is a failed probe.
-    getRoomStore().ensureRoom("health-probe");
-    return NextResponse.json({ ok: true, at: new Date().toISOString(), ...build });
+    if (!getRoomStore().ping()) throw new Error("the database did not answer");
+    return Response.json({ ok: true, at: new Date().toISOString(), ...build });
   } catch (err) {
-    return NextResponse.json(
-      { ok: false, error: (err as Error).message, at: new Date().toISOString(), ...build },
+    log.error("health probe failed:", (err as Error)?.message ?? err);
+    return Response.json(
+      {
+        ok: false,
+        error: "The database could not be reached.",
+        at: new Date().toISOString(),
+        ...build,
+      },
       { status: 503 },
     );
   }

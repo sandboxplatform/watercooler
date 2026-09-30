@@ -53,6 +53,8 @@ export function insideZone(zone: DoorZone, p: Point): boolean {
   return p.x >= zone.x && p.x < zone.x + zone.width && p.y >= zone.y && p.y < zone.y + zone.height;
 }
 
+const NONE_ENTERED: readonly DoorZone[] = Object.freeze([]);
+
 /**
  * Fires once per entry, not once per frame.
  *
@@ -62,26 +64,31 @@ export function insideZone(zone: DoorZone, p: Point): boolean {
  */
 export class DoorLatch {
   private inside = new Set<string>();
+  /** The other half of a double buffer, so a frame allocates no set of its own. */
+  private next = new Set<string>();
 
   /**
-   * Returns the zones just entered this frame.
+   * Returns the zones just entered this frame — almost always none, which is
+   * one shared empty list rather than a fresh one sixty times a second.
    *
    * Passing every zone each call, rather than one at a time, is what lets a
    * player leave one doorway and enter another in the same frame without the
    * first staying latched.
    */
-  step(zones: DoorZone[], player: Point): DoorZone[] {
-    const entered: DoorZone[] = [];
-    const stillInside = new Set<string>();
+  step(zones: readonly DoorZone[], player: Point): readonly DoorZone[] {
+    let entered: DoorZone[] | null = null;
+    this.next.clear();
 
     for (const zone of zones) {
       if (!insideZone(zone, player)) continue;
-      stillInside.add(zone.name);
-      if (!this.inside.has(zone.name)) entered.push(zone);
+      this.next.add(zone.name);
+      if (!this.inside.has(zone.name)) (entered ??= []).push(zone);
     }
 
-    this.inside = stillInside;
-    return entered;
+    const was = this.inside;
+    this.inside = this.next;
+    this.next = was;
+    return entered ?? NONE_ENTERED;
   }
 
   /** Forget where the player was, so re-entry fires again. Used after a scene change. */

@@ -33,10 +33,22 @@ export default function LockButton() {
 
   useEffect(() => () => clearTimeout(timer.current ?? undefined), []);
 
+  /**
+   * Back to being a button, and its timer with it. Arming, blurring and
+   * arming again used to leave the first timer running, so the second arm
+   * disarmed itself early — a Sure? that vanished under the finger.
+   */
+  const disarm = () => {
+    clearTimeout(timer.current ?? undefined);
+    timer.current = null;
+    setArmed(false);
+  };
+
   const press = () => {
     if (!armed) {
+      clearTimeout(timer.current ?? undefined);
       setArmed(true);
-      timer.current = setTimeout(() => setArmed(false), ARMED_MS);
+      timer.current = setTimeout(disarm, ARMED_MS);
       return;
     }
     // The name and look go with the cookie: this is the button somebody
@@ -55,7 +67,7 @@ export default function LockButton() {
       type="button"
       className={`topbar-tool-btn topbar-lock${armed ? " topbar-lock--armed" : ""}`}
       onClick={press}
-      onBlur={() => setArmed(false)}
+      onBlur={disarm}
       title={
         armed
           ? "Press again to sign out — you will need the access code to come back."

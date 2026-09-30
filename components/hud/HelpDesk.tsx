@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { Clock, Headset, RefreshCw, User, X } from "lucide-react";
 import FullscreenButton, { useFullscreen } from "./FullscreenButton";
 import { usePanel } from "@/lib/hooks/usePanel";
-import { createLogger } from "@/lib/logger";
+import { usePolledJson } from "@/lib/hooks/usePolledJson";
+import PanelOverlay from "./PanelOverlay";
+import { boardTrouble } from "./BoardTrouble";
 import { PRIORITY_COLOURS, type DeskTicket, type DeskView } from "@/lib/zoho/tickets";
-
-const log = createLogger("HelpDesk");
 
 /** Matches the server's hold on the queue, so a refresh is never wasted. */
 const REFRESH_MS = 30_000;
@@ -85,48 +85,26 @@ function Ticket({ ticket }: { ticket: DeskTicket }) {
  * a minute, so a floor full of people reading it is one request.
  */
 export default function HelpDesk() {
-  const [answer, setAnswer] = useState<Answer | null>(null);
-  const [loading, setLoading] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const fullscreen = useFullscreen(overlayRef);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetch("/api/zoho", { cache: "no-store" });
-      setAnswer((await response.json()) as Answer);
-    } catch (err) {
-      log.warn("could not read the desk:", (err as Error).message);
-      setAnswer({ configured: true, error: "The desk could not be reached." });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const { open, close } = usePanel("help-desk", { onOpen: () => void load() });
+  const { open, close } = usePanel("help-desk");
 
   // While it is on the wall, keep the queue current.
-  useEffect(() => {
-    if (!open) return;
-    const timer = setInterval(() => void load(), REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [open, load]);
+  const read = usePolledJson<Answer>(open ? "/api/zoho" : null, { open, every: REFRESH_MS });
+  const answer = read.data;
 
   if (!open) return null;
 
   const desk = answer?.desk;
+  const trouble = boardTrouble(read, "The desk");
 
   return (
-    <div
+    <PanelOverlay
       ref={overlayRef}
       className="pinball-overlay board-overlay"
-      onClick={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (window.matchMedia("(pointer: coarse)").matches) return;
-        close();
-      }}
-      role="dialog"
-      aria-label="Help desk"
+      label="Help desk"
+      onClose={close}
     >
       <div className="pixel-panel board-panel">
         <div className="pinball-head arcade-head">
@@ -146,11 +124,11 @@ export default function HelpDesk() {
               type="button"
               className="pixel-icon-btn"
               style={{ width: 26, height: 26 }}
-              onClick={() => void load()}
+              onClick={read.refresh}
               title="Read the queue again"
               aria-label="Refresh the queue"
             >
-              <RefreshCw size={12} className={loading ? "board-spin" : undefined} />
+              <RefreshCw size={12} className={read.loading ? "board-spin" : undefined} />
             </button>
             <FullscreenButton control={fullscreen} what="the help desk" />
             <button
@@ -167,7 +145,9 @@ export default function HelpDesk() {
         </div>
 
         <div className="board-body">
-          {answer?.configured === false ? (
+          {trouble ? (
+            trouble
+          ) : answer?.configured === false ? (
             <div className="board-note">
               <p className="board-note__lead">No Zoho Desk is connected yet.</p>
               <p>
@@ -188,7 +168,7 @@ export default function HelpDesk() {
           ) : answer?.error ? (
             <div className="board-note">
               <p className="board-note__lead">{answer.error}</p>
-              <button type="button" className="pixel-button" onClick={() => void load()}>
+              <button type="button" className="pixel-button" onClick={read.refresh}>
                 Try again
               </button>
             </div>
@@ -217,7 +197,9 @@ export default function HelpDesk() {
             )
           ) : (
             <div className="board-note">
-              <p className="board-note__lead">{loading ? "Reading the queue…" : "No queue yet."}</p>
+              <p className="board-note__lead">
+                {read.loading ? "Reading the queue…" : "No queue yet."}
+              </p>
             </div>
           )}
         </div>
@@ -238,6 +220,6 @@ export default function HelpDesk() {
           )}
         </div>
       </div>
-    </div>
+    </PanelOverlay>
   );
 }

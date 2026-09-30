@@ -46,7 +46,7 @@ import {
   type PlaceKind,
   type Rect,
   type Resident,
-  type Whereabouts,
+  reachable,
 } from "../world/residents";
 import { EGG_CHANCE } from "../world/eggs";
 import { WORLD_ROOM_SLUG } from "../rooms";
@@ -247,6 +247,19 @@ export interface ResidentHost {
   caught?(residentId: string, connectionId: string): void;
 }
 
+/** A resident as the simulation sees them this tick: see `whereabouts`. */
+export interface Whereabouts {
+  id: string;
+  name: string;
+  place: PlaceKind;
+  /** The presence room they are in — every haunt has one, so this is where they are. */
+  room: string | null;
+  /** The yard they are on, for a campus. */
+  campus: string | null;
+  /** Where they are standing in that room, in its own pixels. */
+  spot: { x: number; y: number };
+}
+
 export interface ResidentOptions {
   now?: () => number;
   random?: () => number;
@@ -413,22 +426,23 @@ export class ResidentSimulation {
     };
   }
 
+  /**
+   * Where everybody is by the simulation's own reckoning, for the tests.
+   *
+   * Nothing in the app reads this — the rooms' hubs are what everybody else
+   * sees — but a hub clamps every reported move and rounds it for the wire,
+   * which is exactly what hides a resident who jumped. So the tests that hold
+   * the walking to its pace ask here rather than of a hub.
+   */
   whereabouts(): Whereabouts[] {
-    return [...this.states.values()].map((state) => {
-      const { resident, haunt } = state;
-      return {
-        id: resident.id,
-        name: resident.name,
-        title: resident.title,
-        spriteKey: resident.spriteKey,
-        org: resident.org,
-        place: haunt.kind,
-        room: state.room,
-        campus: haunt.kind === "campus" ? haunt.campus : null,
-        spot: { x: state.x, y: state.y },
-        since: state.since,
-      };
-    });
+    return [...this.states.values()].map((state) => ({
+      id: state.resident.id,
+      name: state.resident.name,
+      place: state.haunt.kind,
+      room: state.room,
+      campus: state.haunt.kind === "campus" ? state.haunt.campus : null,
+      spot: { x: state.x, y: state.y },
+    }));
   }
 
   /** One step of everyone's day. */
@@ -694,7 +708,7 @@ export class ResidentSimulation {
   }
 
   /**
-   * The one thing a fright leaves behind, three times in a hundred.
+   * The one thing a fright leaves behind, `EGG_CHANCE` of the time.
    *
    * Odds rather than a count: the draw below is fresh on every cluck and
    * nothing counts them, so thirty frights may pass with nothing to show
@@ -900,12 +914,15 @@ export class ResidentSimulation {
    * The world map is the one place that has to be gone round rather than
    * through, and the only one with its solids to hand; a room's bounds and a
    * campus's paving are open floor, where the destination is the whole route.
+   *
+   * Whether a way was found, so a bolt can try another direction rather than
+   * standing still; `quietly` is for exactly that, where a miss is expected.
    */
-  private setCourse(state: State, to: Point) {
+  private setCourse(state: State, to: Point, quietly = false): boolean {
     if (state.room !== WORLD_ROOM_SLUG) {
       state.legs = [];
       state.target = to;
-      return;
+      return true;
     }
     // `worldSolids` keeps its own list and hands back the same array every
     // time — which is also what lets the route planner keep its grid against
@@ -918,13 +935,16 @@ export class ResidentSimulation {
       to,
     );
     if (!route) {
-      log.warn(`${state.resident.name} could not get to ${Math.round(to.x)},${Math.round(to.y)}`);
+      if (!quietly) {
+        log.warn(`${state.resident.name} could not get to ${Math.round(to.x)},${Math.round(to.y)}`);
+      }
       state.legs = [];
       state.target = null;
-      return;
+      return false;
     }
     state.legs = route.slice(1);
     state.target = route[0];
+    return true;
   }
 
   /**
@@ -965,7 +985,7 @@ export class ResidentSimulation {
    *
    * Nothing collides a resident, so somewhere they could have wandered to
    * anyway is the other half of the rule: inside the bounds where a room is
-   * what they have, and on the map's own open ground where they are
+   * what they have, and on open ground somebody could walk to where they are
    * outside. A dash nobody checked is a chicken through a wall. Where a
    * haunt offers neither — a desk — there is nothing to bolt across and
    * they sit tight, which is what `aim` does there too.
@@ -990,8 +1010,9 @@ export class ResidentSimulation {
       const reach = SPOOK_DASH_PX[0] + this.random() * (SPOOK_DASH_PX[1] - SPOOK_DASH_PX[0]);
       const to = { x: state.x + Math.cos(angle) * reach, y: state.y + Math.sin(angle) * reach };
       if (!this.standable(state, to)) continue;
-      this.setCourse(state, to);
-      return;
+      // A way that cannot be planned is the next direction, not the end of
+      // the bolt: giving up here left him frozen in the middle of a fright.
+      if (this.setCourse(state, to, true)) return;
     }
   }
 
@@ -1139,10 +1160,18 @@ export class ResidentSimulation {
    * where a room is what they have, and on the map's own open ground where
    * they are outside. Nothing collides a resident, so this is the only thing
    * between one and a wall.
+   *
+   * Outside, open is not enough: the far bank of the river is open ground
+   * from end to end, and a dash picked over the water was a spot with no way
+   * to it — a search of the whole map to find that out, a warning in the log,
+   * and a chicken standing still in the middle of his own fright. So it has
+   * to be ground somebody can walk to as well, which is one array read.
    */
   private standable(state: State, at: Point): boolean {
     if (state.room === WORLD_ROOM_SLUG) {
-      return openGround({ width: WORLD_WIDTH, height: WORLD_HEIGHT }, worldSolids(), at);
+      return (
+        openGround({ width: WORLD_WIDTH, height: WORLD_HEIGHT }, worldSolids(), at) && reachable(at)
+      );
     }
     const area = wanderArea(state.haunt, state.resident);
     return !area || inside(area, at);

@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
-import { onRoomMessage } from "./room-socket";
-import { createLogger } from "./logger";
+import { createSocketStore, useSocketStore } from "./socket-store";
 import type { EarnedBadge } from "./badges";
 
 /**
@@ -15,83 +13,44 @@ import type { EarnedBadge } from "./badges";
  * socket, which announces every badge to everybody for exactly this reason.
  *
  * The same shape as the module beside it, `presence-online`, and for the
- * same reason: a plain snapshot with subscribers, so a component reads it
- * through `useSyncExternalStore` and nothing has to be a provider.
+ * same reason: a plain snapshot with subscribers (`socket-store`), so a
+ * component reads it through a hook and nothing has to be a provider.
  */
 
-const log = createLogger("Badges");
+const NONE: EarnedBadge[] = [];
+const keyOf = (b: EarnedBadge) => `${b.person}:${b.code}`;
 
-let badges: EarnedBadge[] = [];
-let loaded = false;
-let fetching = false;
-const listeners = new Set<() => void>();
-
-function changed() {
-  for (const listener of listeners) listener();
-}
-
-function listen() {
-  onRoomMessage((message) => {
-    if (message.type !== "badge") return;
-    if (badges.some((b) => b.code === message.code && b.person === message.person)) return;
-    badges = [
-      ...badges,
+const badges = createSocketStore<EarnedBadge[]>({
+  name: "badges",
+  initial: NONE,
+  reduce: (all, message) => {
+    if (message.type !== "badge") return all;
+    if (all.some((b) => b.code === message.code && b.person === message.person)) return all;
+    return [
+      ...all,
       { person: message.person, name: message.name, code: message.code, earnedAt: message.at },
     ];
-    changed();
-  });
-}
-
-async function load() {
-  if (fetching) return;
-  fetching = true;
-  listen();
-  try {
+  },
+  load: async () => {
     const response = await fetch("/api/badges");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const body = (await response.json()) as { badges?: EarnedBadge[] };
-    // Anything that arrived over the socket while this was in flight is
-    // already in the list, and the server's answer may predate it.
-    const known = new Set(badges.map((b) => `${b.person}:${b.code}`));
-    badges = [...(body.badges ?? []), ...badges.filter((b) => known.has(`${b.person}:${b.code}`))];
-    const seen = new Set<string>();
-    badges = badges.filter((b) => {
-      const key = `${b.person}:${b.code}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  } catch (err) {
-    log.warn("could not read the badges:", (err as Error).message);
-  } finally {
-    loaded = true;
-    changed();
-  }
-}
-
-export function allBadges(): EarnedBadge[] {
-  return badges;
-}
-
-export function badgesLoaded(): boolean {
-  return loaded;
-}
-
-function subscribe(listener: () => void): () => void {
-  void load();
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-const NONE: EarnedBadge[] = [];
+    // The server's answer first, then anything the socket announced while
+    // it was in flight, which the answer may predate — once each.
+    return (heard) => {
+      const seen = new Set<string>();
+      return [...(body.badges ?? []), ...heard].filter((b) => {
+        if (seen.has(keyOf(b))) return false;
+        seen.add(keyOf(b));
+        return true;
+      });
+    };
+  },
+});
 
 /** Every badge anybody holds, kept current. */
 export function useBadges(): EarnedBadge[] {
-  useEffect(() => {
-    void load();
-  }, []);
-  return useSyncExternalStore(subscribe, allBadges, () => NONE);
+  return useSocketStore(badges, (all) => all, NONE);
 }
 
 /** One person's, newest first — the order a shelf reads in. */

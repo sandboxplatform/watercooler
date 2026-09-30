@@ -45,9 +45,5 @@ next-env.d.ts
 # gone. Kept so an existing checkout's leftovers stay out of `git status`.
 .agent-workspaces/
 
+# The room database and anything else written at run time
 .data/
-
-# Generated company data
-.data/
-
-# Mettara SDK: only the Node library is used; the C# packages beside it stay local

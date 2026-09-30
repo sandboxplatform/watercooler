@@ -40,12 +40,8 @@ describe("an account", () => {
     expect(account.personId).toBe(personIdForEmail("robert@example.com"));
   });
 
-  it("keeps whatever is counted about it", () => {
-    store.visitAccount(ROBERT);
-    store.bumpAccountStat(ROBERT.email, "pinball-games");
-    const account = store.bumpAccountStat("robert@example.com", "pinball-games", 2);
-    expect(account?.stats).toEqual({ "pinball-games": 3 });
-    expect(store.bumpAccountStat("nobody@example.com", "x")).toBeNull();
+  it("starts with nothing counted about it", () => {
+    expect(store.visitAccount(ROBERT).stats).toEqual({});
   });
 });
 

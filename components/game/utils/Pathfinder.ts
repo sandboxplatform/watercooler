@@ -1,71 +1,68 @@
-import { PF_CELL_SIZE, PF_MAX_ITER } from "@/lib/constants";
+import { PF_CELL_SIZE, PF_MIN_ITER } from "@/lib/constants";
 
 export interface PathPoint {
   x: number;
   y: number;
 }
 
-interface AStarNode {
-  r: number;
-  c: number;
-  g: number;
-  h: number;
-  parent: AStarNode | null;
-}
-
 const CELL_SIZE = PF_CELL_SIZE;
 
-class MinHeap<T> {
-  private data: T[] = [];
-  constructor(private score: (item: T) => number) {}
+/** The eight steps, straight ones first — the order the search tries them in. */
+const DIRS: readonly [number, number][] = [
+  [-1, 0],
+  [1, 0],
+  [0, -1],
+  [0, 1],
+  [-1, -1],
+  [-1, 1],
+  [1, -1],
+  [1, 1],
+];
 
-  get length() {
-    return this.data.length;
-  }
-
-  push(item: T) {
-    this.data.push(item);
-    this.bubbleUp(this.data.length - 1);
-  }
-
-  pop(): T | undefined {
-    const top = this.data[0];
-    const last = this.data.pop();
-    if (this.data.length > 0 && last !== undefined) {
-      this.data[0] = last;
-      this.sinkDown(0);
-    }
-    return top;
-  }
-
-  private bubbleUp(i: number) {
-    while (i > 0) {
-      const parent = (i - 1) >> 1;
-      if (this.score(this.data[i]) >= this.score(this.data[parent])) break;
-      [this.data[i], this.data[parent]] = [this.data[parent], this.data[i]];
-      i = parent;
-    }
-  }
-
-  private sinkDown(i: number) {
-    const n = this.data.length;
-    while (true) {
-      let smallest = i;
-      const l = 2 * i + 1;
-      const r = 2 * i + 2;
-      if (l < n && this.score(this.data[l]) < this.score(this.data[smallest])) smallest = l;
-      if (r < n && this.score(this.data[r]) < this.score(this.data[smallest])) smallest = r;
-      if (smallest === i) break;
-      [this.data[i], this.data[smallest]] = [this.data[smallest], this.data[i]];
-      i = smallest;
-    }
-  }
-}
-
+/**
+ * A route across a room or a place out of doors, on a grid of 16px cells.
+ *
+ * **The grid is painted, not tested.** A cell is blocked when any part of it
+ * overlaps any solid, inflated by `padding` — and that used to be asked of
+ * every cell against every solid. Indoors that is a few thousand cells and a
+ * few dozen boxes; on the world map it is some hundred and fifteen thousand
+ * cells against two and a half thousand trees, buildings and stretches of
+ * water, which took two seconds of every arrival out there. Painting each
+ * rectangle into the cells it covers is the same answer for the work of the
+ * cells actually covered.
+ *
+ * **And the search is on typed arrays.** A node is an index into a handful of
+ * parallel arrays rather than an object, the open list is a binary heap of
+ * those indices, and "seen in this search" is a stamp rather than a Map that
+ * is cleared — so a long route across the map is a few milliseconds rather
+ * than a pile of garbage. The heap is the one it replaced, operation for
+ * operation, so the same route comes back for the same ask.
+ *
+ * The iteration cap scales with the grid. It was a flat twenty thousand,
+ * which is a sixth of the world map's cells: a third of the walks between
+ * the places a resident is sent to ran out of it, and the fallback walked
+ * the player straight into the trees.
+ */
 export class Pathfinder {
-  private grid: boolean[][];
+  /** 1 where a cell is blocked. */
+  private blocked: Uint8Array;
   private cols: number;
   private rows: number;
+  private maxIter: number;
+
+  // Per-cell search state, reused between searches and told apart by stamp.
+  private bestG: Float64Array;
+  private seen: Uint32Array;
+  private stamp = 0;
+
+  // The nodes of the search in progress, grown as needed.
+  private nodeCell = new Int32Array(1024);
+  private nodeG = new Float64Array(1024);
+  private nodeF = new Float64Array(1024);
+  private nodeParent = new Int32Array(1024);
+  private nodeCount = 0;
+  private heap = new Int32Array(1024);
+  private heapSize = 0;
 
   /**
    * @param padding  Extra clearance around collision rects (half of the
@@ -74,51 +71,41 @@ export class Pathfinder {
   constructor(
     mapWidthPx: number,
     mapHeightPx: number,
-    collisionRects: { x: number; y: number; width: number; height: number }[],
+    collisionRects: readonly { x: number; y: number; width: number; height: number }[],
     padding = 0,
   ) {
     this.cols = Math.ceil(mapWidthPx / CELL_SIZE);
     this.rows = Math.ceil(mapHeightPx / CELL_SIZE);
-    this.grid = [];
+    const cells = this.cols * this.rows;
+    this.blocked = new Uint8Array(cells);
+    this.bestG = new Float64Array(cells);
+    this.seen = new Uint32Array(cells);
+    // Room to cross the whole grid twice over: a route that has not been
+    // found in that many steps is not there to be found.
+    this.maxIter = Math.max(PF_MIN_ITER, cells * 2);
 
-    // Inflate collision rects by `padding` (half-body-width) so that paths
-    // keep the sprite body clear of obstacles.
-    const inflated = collisionRects
-      .filter((r) => r.width > 0 && r.height > 0)
-      .map((r) => ({
-        left: r.x - padding,
-        top: r.y - padding,
-        right: r.x + r.width + padding,
-        bottom: r.y + r.height + padding,
-      }));
-
-    // Mark a cell as blocked when ANY part of the cell rectangle overlaps
-    // ANY inflated collision rect.  This is much more accurate than a
-    // centre-point check, especially for thin/small collision shapes that
-    // don't align to the grid.
-    for (let r = 0; r < this.rows; r++) {
-      this.grid[r] = [];
-      for (let c = 0; c < this.cols; c++) {
-        const cellLeft = c * CELL_SIZE;
-        const cellTop = r * CELL_SIZE;
-        const cellRight = cellLeft + CELL_SIZE;
-        const cellBottom = cellTop + CELL_SIZE;
-
-        let walkable = true;
-        for (const rect of inflated) {
-          if (
-            cellRight > rect.left &&
-            cellLeft < rect.right &&
-            cellBottom > rect.top &&
-            cellTop < rect.bottom
-          ) {
-            walkable = false;
-            break;
-          }
-        }
-        this.grid[r][c] = walkable;
+    // A cell is blocked when ANY part of it overlaps ANY inflated rect — the
+    // strict overlap a per-cell test asks, so a rect whose edge lands exactly
+    // on a cell boundary does not block the cell beyond it.
+    for (const r of collisionRects) {
+      if (!(r.width > 0 && r.height > 0)) continue;
+      const left = r.x - padding;
+      const top = r.y - padding;
+      const right = r.x + r.width + padding;
+      const bottom = r.y + r.height + padding;
+      const c0 = Math.max(0, Math.floor(left / CELL_SIZE));
+      const c1 = Math.min(this.cols - 1, Math.ceil(right / CELL_SIZE) - 1);
+      const r0 = Math.max(0, Math.floor(top / CELL_SIZE));
+      const r1 = Math.min(this.rows - 1, Math.ceil(bottom / CELL_SIZE) - 1);
+      for (let row = r0; row <= r1; row++) {
+        this.blocked.fill(1, row * this.cols + c0, row * this.cols + c1 + 1);
       }
     }
+  }
+
+  /** Whether the cell at this row and column can be walked; off the grid is not. */
+  walkable(r: number, c: number): boolean {
+    return this.valid(r, c) && this.blocked[r * this.cols + c] === 0;
   }
 
   findPath(sx: number, sy: number, ex: number, ey: number): PathPoint[] | null {
@@ -130,14 +117,14 @@ export class Pathfinder {
 
     if (!this.valid(sr, sc)) return null;
 
-    if (!this.grid[sr]?.[sc]) {
+    if (!this.walkable(sr, sc)) {
       const ns = this.nearestWalkableCell(sr, sc);
       if (!ns) return null;
       sr = ns.r;
       sc = ns.c;
     }
 
-    if (!this.valid(er, ec) || !this.grid[er]?.[ec]) {
+    if (!this.walkable(er, ec)) {
       const nearest = this.nearestWalkableCell(er, ec);
       if (!nearest) return null;
       er = nearest.r;
@@ -152,27 +139,32 @@ export class Pathfinder {
       ];
     }
 
-    const open = new MinHeap<AStarNode>((n) => n.g + n.h);
-    open.push({ r: sr, c: sc, g: 0, h: this.h(sr, sc, er, ec), parent: null });
-    const best = new Map<number, number>();
-    const DIRS: [number, number][] = [
-      [-1, 0],
-      [1, 0],
-      [0, -1],
-      [0, 1],
-      [-1, -1],
-      [-1, 1],
-      [1, -1],
-      [1, 1],
-    ];
+    const cols = this.cols;
+    const blocked = this.blocked;
+    const bestG = this.bestG;
+    const seen = this.seen;
+    // A fresh stamp marks every cell unseen at once. On the rare wrap, the
+    // stamps really are cleared, or a cell from four billion searches ago
+    // would read as seen.
+    if (++this.stamp === 0xffffffff) {
+      seen.fill(0);
+      this.stamp = 1;
+    }
+    const stamp = this.stamp;
+    const goal = er * cols + ec;
+
+    this.nodeCount = 0;
+    this.heapSize = 0;
+    this.push(sr * cols + sc, 0, this.h(sr, sc, er, ec), -1);
 
     let iterations = 0;
+    while (this.heapSize > 0 && iterations++ < this.maxIter) {
+      const node = this.pop();
+      const cell = this.nodeCell[node];
+      const g = this.nodeG[node];
 
-    while (open.length > 0 && iterations++ < PF_MAX_ITER) {
-      const cur = open.pop()!;
-
-      if (cur.r === er && cur.c === ec) {
-        const path = this.reconstruct(cur);
+      if (cell === goal) {
+        const path = this.reconstruct(node);
         if (path.length > 0) {
           if (endSnapped) {
             path[path.length - 1] = {
@@ -186,26 +178,27 @@ export class Pathfinder {
         return path;
       }
 
-      const key = cur.r * this.cols + cur.c;
-      const prev = best.get(key);
-      if (prev !== undefined && prev <= cur.g) continue;
-      best.set(key, cur.g);
+      if (seen[cell] === stamp && bestG[cell] <= g) continue;
+      seen[cell] = stamp;
+      bestG[cell] = g;
 
+      const r = (cell / cols) | 0;
+      const c = cell - r * cols;
       for (const [dr, dc] of DIRS) {
-        const nr = cur.r + dr;
-        const nc = cur.c + dc;
-        if (!this.valid(nr, nc) || !this.grid[nr][nc]) continue;
+        const nr = r + dr;
+        const nc = c + dc;
+        if (!this.valid(nr, nc)) continue;
+        const next = nr * cols + nc;
+        if (blocked[next]) continue;
 
-        if (dr !== 0 && dc !== 0) {
-          if (!this.grid[cur.r + dr][cur.c] || !this.grid[cur.r][cur.c + dc]) continue;
-        }
+        const diagonal = dr !== 0 && dc !== 0;
+        // No cutting a corner: both of the cells beside a diagonal step
+        // have to be open, or the body would clip the one that is not.
+        if (diagonal && (blocked[(r + dr) * cols + c] || blocked[r * cols + c + dc])) continue;
 
-        const cost = dr !== 0 && dc !== 0 ? 1.414 : 1;
-        const g = cur.g + cost;
-        const nkey = nr * this.cols + nc;
-        const prevBest = best.get(nkey);
-        if (prevBest !== undefined && prevBest <= g) continue;
-        open.push({ r: nr, c: nc, g, h: this.h(nr, nc, er, ec), parent: cur });
+        const ng = g + (diagonal ? 1.414 : 1);
+        if (seen[next] === stamp && bestG[next] <= ng) continue;
+        this.push(next, ng, ng + this.h(nr, nc, er, ec), node);
       }
     }
 
@@ -227,6 +220,80 @@ export class Pathfinder {
     return Math.max(dr, dc) + (Math.SQRT2 - 1) * Math.min(dr, dc);
   }
 
+  // ── The open list ──────────────────────────────────────
+  //
+  // A min-heap on f = g + h, over node indices. The comparisons are the ones
+  // the object heap made (`>=` going up, `<` going down), so ties break the
+  // same way and so does the route.
+
+  private push(cell: number, g: number, f: number, parent: number) {
+    if (this.nodeCount === this.nodeCell.length) this.growNodes();
+    const node = this.nodeCount++;
+    this.nodeCell[node] = cell;
+    this.nodeG[node] = g;
+    this.nodeF[node] = f;
+    this.nodeParent[node] = parent;
+
+    if (this.heapSize === this.heap.length) {
+      const grown = new Int32Array(this.heap.length * 2);
+      grown.set(this.heap);
+      this.heap = grown;
+    }
+    const heap = this.heap;
+    const score = this.nodeF;
+    let i = this.heapSize++;
+    heap[i] = node;
+    while (i > 0) {
+      const parentAt = (i - 1) >> 1;
+      if (score[heap[i]] >= score[heap[parentAt]]) break;
+      const swap = heap[i];
+      heap[i] = heap[parentAt];
+      heap[parentAt] = swap;
+      i = parentAt;
+    }
+  }
+
+  private pop(): number {
+    const heap = this.heap;
+    const score = this.nodeF;
+    const top = heap[0];
+    const last = heap[--this.heapSize];
+    const n = this.heapSize;
+    if (n > 0) {
+      heap[0] = last;
+      let i = 0;
+      while (true) {
+        let smallest = i;
+        const l = 2 * i + 1;
+        const r = 2 * i + 2;
+        if (l < n && score[heap[l]] < score[heap[smallest]]) smallest = l;
+        if (r < n && score[heap[r]] < score[heap[smallest]]) smallest = r;
+        if (smallest === i) break;
+        const swap = heap[i];
+        heap[i] = heap[smallest];
+        heap[smallest] = swap;
+        i = smallest;
+      }
+    }
+    return top;
+  }
+
+  private growNodes() {
+    const size = this.nodeCell.length * 2;
+    const cell = new Int32Array(size);
+    const g = new Float64Array(size);
+    const f = new Float64Array(size);
+    const parent = new Int32Array(size);
+    cell.set(this.nodeCell);
+    g.set(this.nodeG);
+    f.set(this.nodeF);
+    parent.set(this.nodeParent);
+    this.nodeCell = cell;
+    this.nodeG = g;
+    this.nodeF = f;
+    this.nodeParent = parent;
+  }
+
   private nearestWalkableCell(r: number, c: number): { r: number; c: number } | null {
     for (let d = 1; d <= 12; d++) {
       let bestDist = Infinity;
@@ -236,7 +303,7 @@ export class Pathfinder {
           if (Math.abs(dr) < d && Math.abs(dc) < d) continue;
           const nr = r + dr;
           const nc = c + dc;
-          if (this.valid(nr, nc) && this.grid[nr][nc]) {
+          if (this.walkable(nr, nc)) {
             const dist = dr * dr + dc * dc;
             if (dist < bestDist) {
               bestDist = dist;
@@ -250,16 +317,15 @@ export class Pathfinder {
     return null;
   }
 
-  private reconstruct(node: AStarNode): PathPoint[] {
+  private reconstruct(node: number): PathPoint[] {
     const raw: PathPoint[] = [];
-    let cur: AStarNode | null = node;
-    while (cur) {
-      raw.unshift({
-        x: cur.c * CELL_SIZE + CELL_SIZE / 2,
-        y: cur.r * CELL_SIZE + CELL_SIZE / 2,
-      });
-      cur = cur.parent;
+    for (let at = node; at !== -1; at = this.nodeParent[at]) {
+      const cell = this.nodeCell[at];
+      const r = (cell / this.cols) | 0;
+      const c = cell - r * this.cols;
+      raw.push({ x: c * CELL_SIZE + CELL_SIZE / 2, y: r * CELL_SIZE + CELL_SIZE / 2 });
     }
+    raw.reverse();
     return this.simplify(raw);
   }
 

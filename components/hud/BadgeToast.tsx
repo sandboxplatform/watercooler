@@ -48,7 +48,9 @@ export default function BadgeToast() {
 
   useEffect(() => {
     let nextId = 0;
-    return gameEvents.on("badge-earned", (earned) => {
+    // Kept, so a toast still showing when the HUD goes is not set on after it.
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const unsubscribe = gameEvents.on("badge-earned", (earned) => {
       const badge = badgeFor(earned.code);
       if (!badge) return;
       if (earned.room !== currentRoom()) return;
@@ -61,10 +63,16 @@ export default function BadgeToast() {
         description: badge.description,
       };
       setToasts((current) => [...current, toast]);
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        timers.delete(timer);
         setToasts((current) => current.filter((t) => t.id !== toast.id));
       }, VISIBLE_MS);
+      timers.add(timer);
     });
+    return () => {
+      unsubscribe();
+      for (const timer of timers) clearTimeout(timer);
+    };
   }, []);
 
   if (toasts.length === 0) return null;

@@ -241,14 +241,35 @@ function toSegment(px: number, py: number, a: Bend, b: Bend): number {
   return Math.hypot(px - (a.x + dx * t), py - (a.y + dy * t));
 }
 
-/** Whether the middle of this tile is in the water. */
-function inRiver(column: number, row: number): boolean {
-  const x = column + 0.5;
-  const y = row + 0.5;
+/**
+ * Which tiles of the wood have their middle in the water, one byte a tile.
+ *
+ * Each segment of the line is asked only of the tiles inside its own box,
+ * grown by the river's half width — a tile outside that is further than half
+ * a river from the segment by construction. Asking every segment of every
+ * tile of the wood was thirty-odd distances a tile over five and a half
+ * thousand tiles, for an answer most of them could see from the box.
+ */
+function wetTiles(): Uint8Array {
+  const wet = new Uint8Array(WOOD_ROWS * WORLD_COLUMNS);
   for (let i = 1; i < RIVER.length; i++) {
-    if (toSegment(x, y, RIVER[i - 1], RIVER[i]) <= RIVER_HALF) return true;
+    const a = RIVER[i - 1];
+    const b = RIVER[i];
+    // Tile middles are at column + 0.5, so the range is the box less a half —
+    // rounded outwards, since the distance below is what decides and a tile
+    // lost to a rounding at the edge would be a notch in the bank.
+    const c0 = Math.max(0, Math.floor(Math.min(a.x, b.x) - RIVER_HALF - 0.5));
+    const c1 = Math.min(WORLD_COLUMNS - 1, Math.ceil(Math.max(a.x, b.x) + RIVER_HALF - 0.5));
+    const r0 = Math.max(0, Math.floor(Math.min(a.y, b.y) - RIVER_HALF - 0.5));
+    const r1 = Math.min(WOOD_ROWS - 1, Math.ceil(Math.max(a.y, b.y) + RIVER_HALF - 0.5));
+    for (let row = r0; row <= r1; row++) {
+      for (let column = c0; column <= c1; column++) {
+        const at = row * WORLD_COLUMNS + column;
+        if (wet[at] === 0 && toSegment(column + 0.5, row + 0.5, a, b) <= RIVER_HALF) wet[at] = 1;
+      }
+    }
   }
-  return false;
+  return wet;
 }
 
 let drawn: Rect[] | null = null;
@@ -270,11 +291,12 @@ let drawn: Rect[] | null = null;
  */
 function drawnBed(): Rect[] {
   if (drawn) return drawn;
+  const tiles = wetTiles();
   const rows: Rect[] = [];
   for (let row = 0; row < WOOD_ROWS; row++) {
     let start = -1;
     for (let column = 0; column <= WORLD_COLUMNS; column++) {
-      const wet = column < WORLD_COLUMNS && inRiver(column, row);
+      const wet = column < WORLD_COLUMNS && tiles[row * WORLD_COLUMNS + column] === 1;
       if (wet && start < 0) start = column;
       if (!wet && start >= 0) {
         rows.push({ x: start, y: row, width: column - start, height: 1 });
@@ -282,7 +304,7 @@ function drawnBed(): Rect[] {
       }
     }
   }
-  drawn = rows;
+  drawn = Object.freeze(rows) as Rect[];
   return drawn;
 }
 
@@ -313,7 +335,7 @@ export function riverBed(): Rect[] {
       }
     }
   }
-  bed = rows;
+  bed = Object.freeze(rows) as Rect[];
   return bed;
 }
 
@@ -379,12 +401,14 @@ let banks: Rect[] | null = null;
  * standing in it.
  */
 export function riverBanks(): Rect[] {
-  return (banks ??= riverBed().map((r) => ({
-    x: r.x * TILE - FIGURE.half,
-    y: r.y * TILE - FIGURE.below,
-    width: r.width * TILE + FIGURE.half * 2,
-    height: r.height * TILE + FIGURE.below + FIGURE.above,
-  })));
+  return (banks ??= Object.freeze(
+    riverBed().map((r) => ({
+      x: r.x * TILE - FIGURE.half,
+      y: r.y * TILE - FIGURE.below,
+      width: r.width * TILE + FIGURE.half * 2,
+      height: r.height * TILE + FIGURE.below + FIGURE.above,
+    })),
+  ) as Rect[]);
 }
 
 /**

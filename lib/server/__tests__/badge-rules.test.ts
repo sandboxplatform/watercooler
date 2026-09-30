@@ -239,12 +239,21 @@ describe("getting about, out of doors", () => {
 });
 
 describe("together", () => {
+  it("gives On Mic for switching a microphone on, and nothing else", () => {
+    expect(codes(rules.onMicOn(coop))).toEqual(["on-mic"]);
+    expect(codes(rules.onMicOn(coop))).toEqual([]);
+  });
+
   it("gives Round Table only once four people are in Global Chat", () => {
-    const three = [coop, andrew, { person: "rob", name: "Rob" }];
-    expect(codes(rules.onMicOn(coop, three))).toEqual(["on-mic"]);
-    const four = [...three, { person: "sara", name: "Sara" }];
-    const earned = codes(rules.onMicOn({ person: "sara", name: "Sara" }, four));
-    expect(earned.filter((code) => code === "round-table")).toHaveLength(4);
+    expect(codes(rules.onRoundTable(coop, 3))).toEqual([]);
+    expect(codes(rules.onRoundTable(coop, rules.ROUND_TABLE))).toEqual(["round-table"]);
+    // Asked of each of the four: somebody who was on first is not left out.
+    expect(codes(rules.onRoundTable(andrew, rules.ROUND_TABLE))).toEqual(["round-table"]);
+    expect(codes(rules.onRoundTable(coop, rules.ROUND_TABLE))).toEqual([]);
+  });
+
+  it("spells every chatty code the way the catalogue does", () => {
+    for (const code of Object.values(rules.CHATTY)) expect(badgeFor(code)).toBeDefined();
   });
 
   it("gives the host Called to Order and everyone else at the table a seat", () => {
@@ -348,7 +357,8 @@ describe("the catalogue", () => {
     take(rules.onArrival(someone, VOLCANO_ROOM_SLUG, at(2)));
     take(rules.onAlone(someone));
     take(rules.onRoomFull([someone]));
-    take(rules.onMicOn(someone, [someone, someone, someone, someone]));
+    take(rules.onMicOn(someone));
+    take(rules.onRoundTable(someone, rules.ROUND_TABLE));
     take(rules.onMeetingCalled(someone, []));
     take(rules.onMeetingJoined(someone));
     take(rules.onWhiteboard(someone));

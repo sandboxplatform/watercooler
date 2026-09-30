@@ -38,6 +38,9 @@ const SLOW = [
   // time, so the walk into the wood has to be taken at a walk.
   "**/lib/server/__tests__/place-badges.test.ts",
   "**/lib/pinball/__tests__/stuck.test.ts",
+  // Real sockets against a real server: the payload cap, the relay rebuild,
+  // the open-air cap and the clear budget, each of which needs a round trip.
+  "**/lib/server/__tests__/socket-hardening.test.ts",
 ];
 
 export default defineConfig({
@@ -53,7 +56,7 @@ export default defineConfig({
      *
      * A real server opens the room store, and left to itself that is the one
      * in `.data/` the developer has been playing in — so the suite ran
-     * against somebody's actual rooms, achievements and board scribbles, and
+     * against somebody's actual rooms, badges and board scribbles, and
      * wrote to them. `vitest.setup.ts` points `ROOM_DB_PATH` at the OS temp
      * directory instead, one file per *test file*: it used to be one per run
      * and the files that start real servers raced each other for it. The
@@ -62,10 +65,10 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     exclude: NEVER,
     /**
-     * Threads rather than the default forks: same 1,065 tests, about a fifth
+     * Threads rather than the default forks: the same tests, about a fifth
      * off the wall clock, because the cost here is starting workers and
-     * transforming 85 files rather than anything the tests do. Measured at
-     * ~26s against ~32s. Nothing in the suite needs process isolation — the
+     * transforming files rather than anything the tests do. Measured at
+     * ~26s against ~32s when it was chosen. Nothing in the suite needs process isolation — the
      * few that touch process.env set their own keys and clean up after
      * themselves.
      */

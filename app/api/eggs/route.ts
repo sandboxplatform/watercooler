@@ -9,11 +9,11 @@
  * A tally rather than the rows behind it. One row per egg is what the
  * store keeps — an egg is a thing that happened at a time — but the rows
  * grow for as long as the world runs, and every question anybody asks of
- * a basket is answered by people times the six rungs of the ladder.
+ * a basket is answered by people times the rungs of the ladder.
  */
 
-import { NextResponse } from "next/server";
 import { getRoomStore } from "@/lib/server/room-store";
+import { guarded } from "@/lib/server/route";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("EggsAPI");
@@ -21,10 +21,9 @@ const log = createLogger("EggsAPI");
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  try {
-    return NextResponse.json({ eggs: getRoomStore().eggTallies() });
-  } catch (err) {
-    log.error("could not read the baskets:", (err as Error).message);
-    return NextResponse.json({ error: "Failed to read the baskets" }, { status: 500 });
-  }
+  return guarded(
+    "read the baskets",
+    () => Response.json({ eggs: getRoomStore().eggTallies() }),
+    log,
+  );
 }
