@@ -123,8 +123,10 @@ exists and answers null for somebody hidden or not here.
 
 **Whose conversation it is is the server's answer, and it is the whole of
 the prompt.** `docConversationFor` (`lib/server/mettara.ts`) hands back a
-URL or null, `/api/mettara` is the one reading of it, and a browser given
-null shows no prompt at all: Doc says his line and that is that.
+URL or null, `GET /api/mettara` is the one reading of it, and a browser
+given null shows no prompt at all: Doc says his line and that is that. The
+conversation is the Customer Success group chat, which already exists on
+Mettara; nothing here makes one.
 
 `MAY_TALK` is who — Coop, Rob and Andrew today — and it is a list rather
 than a name because the question is "is this person on it", so somebody
@@ -141,10 +143,50 @@ Two things follow, and the second is the more interesting:
   is a fact about Doc — and it would also ship in the bundle to every
   visitor who ever loads the world, since the scenes read the cast out of
   that module.
-- **What this settles is the world, not a secret.** It is a link: anybody
-  holding it can open it in their own browser, and Mettara decides for
-  itself who may read it. What the gate decides is who finds that Doc has
-  anything to say.
+- **What the URL settles is the world, not a secret.** It is a link:
+  anybody holding it can open it in their own browser, and Mettara decides
+  for itself who may read it. What the gate decides is who finds that Doc
+  has anything to say.
+
+**The frame signs in with a token, not a cookie.** It was Mettara's own
+conversation page at first, signed in as whoever was signed in to Mettara —
+and a browser withholds another site's cookies from a frame, so for most
+people that was a sign-in page in a window. It is Mettara's **embed** now,
+`/embed/convo/<id>?eid=watercooler-doc`, which signs in from a token handed
+to it in the URL's fragment (`#token=…`; a fragment is never sent, and the
+embed wipes it off its address on load).
+
+The token is the server's to get, because getting one takes the platform's
+secret. `POST /api/mettara` → `docTokenFor` signs a request to
+`api.mettara.ai/api/v1/embed/token` — every field sorted by name, RFC 3986
+encoded, `key=value&…`, HMAC-SHA256 in hex — and hands back only the token,
+which lasts four hours and is good for nothing but the embed. It is asked
+for **when the panel opens**, not when the page loads: each request is a
+signed timestamp Mettara accepts once, and somebody walking past Doc has
+not asked for anything. A few minutes before a token runs out the embed
+posts `architech:token-refresh-needed` to its parent, and `DocChat` answers
+with `architech:token-refresh` and a new one — by message rather than a new
+`src`, which would reload the conversation under whoever is reading it.
+
+What the request says about somebody:
+
+| Field                                   | What it is                                                                              |
+| --------------------------------------- | --------------------------------------------------------------------------------------- |
+| `source_user_id`                        | Their email: what each of them has recorded as their id in Mettara's Watercooler system |
+| `email`                                 | `METTARA_EMAIL_<IDENTITY>` — links them to the account they already have                |
+| `source_group_id` / `source_group_name` | `DOC_TEAM`: the Mettara team the group chat is in                                       |
+
+`DOC_TEAM` is two facts about Mettara, and both are wrong **on Mettara's
+side** rather than here when they drift. The id must be recorded against
+the team in Mettara's dev portal before the first token is asked for — an
+id it has never seen is a new team, made on the spot and empty. The name
+must be the team's own: Mettara renames the team to whatever is sent.
+
+Doc is hooked up for somebody only when all of it is there —
+`METTARA_WORKSPACE_ID`, `METTARA_API_SECRET` and their email — so a
+half-configured server is no prompt rather than a prompt that opens onto a
+refusal. The emails are variables rather than written in because the
+server's build ships to npm.
 
 **Framing somebody else's site is two policies agreeing.** `frame-src` in
 `next.config.ts` names `METTARA_ORIGIN`, read from `lib/mettara.ts` so the
@@ -152,9 +194,10 @@ policy and the URL cannot stop naming the same host — a frame the policy
 does not name is not refused loudly, it comes up blank with a line in the
 console. The far end has the other half and the last word: a site says who
 may embed it with `X-Frame-Options` and `frame-ancestors`, and nothing set
-here overrides a refusal. Mettara has to send `frame-ancestors` naming this
-host and no `X-Frame-Options: DENY`; the day it stops, the window is white
-and nothing in this app will be able to say why.
+here overrides a refusal. Mettara's embed sends `frame-ancestors 'self'
+https: http://localhost:* http://127.0.0.1:*` — any https site, and local
+development; the day that stops naming this host, the window is white and
+nothing in this app will be able to say why.
 
 `METTARA_DOC_CONVO` moves the conversation without a deploy. **The id
 only, never a URL** — a URL out of the environment could name a host the
@@ -164,5 +207,5 @@ being broken.
 **The frame goes when the panel goes.** Closed, it is unmounted rather than
 hidden, so a third party's page is not left running and connected behind
 the office for the rest of the session. Pressing E again loads the
-conversation afresh, which is the right way round: a page nobody is looking
-at should not be a page still open.
+conversation afresh, with a fresh token, which is the right way round: a
+page nobody is looking at should not be a page still open.

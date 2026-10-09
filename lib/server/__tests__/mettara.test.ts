@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { createHmac } from "node:crypto";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { METTARA_ORIGIN } from "../../mettara";
-import { docConversationFor } from "../mettara";
+import { docConversationFor, docTokenFor, signMettara } from "../mettara";
 import type { AccessIdentity } from "../../identity";
 
 const EVERYBODY: readonly AccessIdentity[] = [
@@ -19,11 +20,22 @@ const EVERYBODY: readonly AccessIdentity[] = [
 /** Who is in the group chat. The rest of the cast is held to being out of it. */
 const ON_IT: readonly AccessIdentity[] = ["coop", "rob", "andrew"];
 
-const original = process.env.METTARA_DOC_CONVO;
+const SECRET = "platform-secret";
+
+beforeEach(() => {
+  vi.stubEnv("METTARA_WORKSPACE_ID", "platform-uuid");
+  vi.stubEnv("METTARA_API_SECRET", SECRET);
+  vi.stubEnv("METTARA_DOC_CONVO", "");
+  // An address for everybody, so it is the list that keeps the rest out
+  // rather than a missing variable.
+  for (const identity of EVERYBODY) {
+    vi.stubEnv(`METTARA_EMAIL_${identity.toUpperCase()}`, `${identity}@example.com`);
+  }
+});
 
 afterEach(() => {
-  if (original === undefined) delete process.env.METTARA_DOC_CONVO;
-  else process.env.METTARA_DOC_CONVO = original;
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("the conversation Doc is hooked up to", () => {
@@ -47,28 +59,148 @@ describe("the conversation Doc is hooked up to", () => {
     expect(urls.size).toBe(1);
   });
 
-  it("points at Mettara, which is the origin the CSP names", () => {
+  it("opens in Mettara's embed, on the origin the CSP names", () => {
     // `next.config.ts` puts this same constant in `frame-src`. A URL built
-    // off any other origin is a frame the browser drops without a word.
-    expect(docConversationFor("coop")!.startsWith(`${METTARA_ORIGIN}/`)).toBe(true);
+    // off any other origin is a frame the browser drops without a word, and
+    // the conversation's own page would sign in by a cookie a frame is not
+    // given.
+    expect(docConversationFor("coop")!.startsWith(`${METTARA_ORIGIN}/embed/convo/`)).toBe(true);
   });
 
   it("takes the conversation from the environment when one is set", () => {
-    process.env.METTARA_DOC_CONVO = "0000aaaa-1111-2222-3333-444455556666";
-    expect(docConversationFor("coop")).toBe(
-      `${METTARA_ORIGIN}/convo/0000aaaa-1111-2222-3333-444455556666`,
+    vi.stubEnv("METTARA_DOC_CONVO", "0000aaaa-1111-2222-3333-444455556666");
+    expect(docConversationFor("coop")).toContain(
+      `${METTARA_ORIGIN}/embed/convo/0000aaaa-1111-2222-3333-444455556666?`,
     );
   });
 
   it("reads a blank override as no override, not as a conversation with no id", () => {
     const written = docConversationFor("coop");
-    process.env.METTARA_DOC_CONVO = "   ";
+    vi.stubEnv("METTARA_DOC_CONVO", "   ");
     expect(docConversationFor("coop")).toBe(written);
   });
 
   it("does not hand the environment a way past the gate", () => {
     // The override is the conversation, never who may open it.
-    process.env.METTARA_DOC_CONVO = "0000aaaa-1111-2222-3333-444455556666";
+    vi.stubEnv("METTARA_DOC_CONVO", "0000aaaa-1111-2222-3333-444455556666");
     expect(docConversationFor("visitor")).toBeNull();
+  });
+
+  it("is nobody's until the platform's credentials are set", () => {
+    // A prompt over Doc that opened onto a refusal would be worse than none.
+    vi.stubEnv("METTARA_API_SECRET", "");
+    for (const identity of ON_IT) expect(docConversationFor(identity), identity).toBeNull();
+  });
+
+  it("is not somebody's whose address Mettara would not know them by", () => {
+    vi.stubEnv("METTARA_EMAIL_ROB", "");
+    expect(docConversationFor("rob")).toBeNull();
+    expect(docConversationFor("coop")).toBeTruthy();
+  });
+});
+
+describe("a token request's signature", () => {
+  it("is the one Mettara's documentation works through", () => {
+    // Their worked example, character for character: sorted keys, RFC 3986
+    // values, `&` between, HMAC-SHA256 in hex.
+    const params = {
+      platform_id: "your-platform-uuid",
+      source_user_id: "user_123",
+      source_group_id: "org_456",
+      source_group_name: "Acme Co",
+      name: "Jane Smith",
+      email: "jane@acme.com",
+      t: "2024-01-15T12:00:00.000Z",
+    };
+    const canonical =
+      "email=jane%40acme.com&name=Jane%20Smith&platform_id=your-platform-uuid" +
+      "&source_group_id=org_456&source_group_name=Acme%20Co&source_user_id=user_123" +
+      "&t=2024-01-15T12%3A00%3A00.000Z";
+    expect(signMettara(params, SECRET)).toBe(
+      createHmac("sha256", SECRET).update(canonical).digest("hex"),
+    );
+  });
+
+  it("encodes the five characters encodeURIComponent leaves alone", () => {
+    // RFC 3986 reserves `!'()*` and `encodeURIComponent` does not escape
+    // them, so a name with an apostrophe would sign as a string Mettara
+    // never builds.
+    const canonical = "name=O%27Brien%20%28Ops%29%21%2A";
+    expect(signMettara({ name: "O'Brien (Ops)!*" }, SECRET)).toBe(
+      createHmac("sha256", SECRET).update(canonical).digest("hex"),
+    );
+  });
+});
+
+describe("a token for Doc's frame", () => {
+  /** What was sent to Mettara, and where. */
+  let sent: { url: string; body: Record<string, string> }[];
+
+  function mettaraAnswers(response: () => Response) {
+    sent = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        sent.push({ url: String(input), body: JSON.parse(String(init?.body)) });
+        return response();
+      }),
+    );
+  }
+
+  it("is asked of Mettara with a signed request, and only the token comes back", async () => {
+    mettaraAnswers(() =>
+      Response.json({ status: "success", result: { access_token: "jwt", expires_at: 1 } }),
+    );
+    expect(await docTokenFor("coop")).toBe("jwt");
+
+    expect(sent).toHaveLength(1);
+    const [{ url, body }] = sent;
+    expect(url).toBe("https://api.mettara.ai/api/v1/embed/token");
+    expect(body).toMatchObject({
+      platform_id: "platform-uuid",
+      source_user_id: "coop@example.com",
+      name: "Coop",
+      email: "coop@example.com",
+    });
+    // The signature covers every field but itself and the namespace, which
+    // says which system the ids are recorded under; the secret is in none
+    // of it.
+    const { sig, namespace, ...signed } = body;
+    expect(namespace).toBe("watercooler");
+    expect(Object.keys(signed).sort()).toEqual([
+      "email",
+      "name",
+      "platform_id",
+      "source_group_id",
+      "source_group_name",
+      "source_user_id",
+      "t",
+    ]);
+    expect(sig).toBe(signMettara(signed, SECRET));
+    expect(JSON.stringify(body)).not.toContain(SECRET);
+  });
+
+  it("is one team for the three of them, so they land in the same group chat", async () => {
+    mettaraAnswers(() => Response.json({ result: { access_token: "jwt" } }));
+    for (const identity of ON_IT) await docTokenFor(identity);
+    expect(new Set(sent.map(({ body }) => body.source_group_id)).size).toBe(1);
+    expect(new Set(sent.map(({ body }) => body.source_group_name)).size).toBe(1);
+  });
+
+  it("is never asked for on behalf of somebody Doc is not hooked up for", async () => {
+    mettaraAnswers(() => Response.json({ result: { access_token: "jwt" } }));
+    expect(await docTokenFor("visitor")).toBeNull();
+    expect(await docTokenFor("hunter")).toBeNull();
+    expect(sent).toHaveLength(0);
+  });
+
+  it("fails loudly when Mettara refuses, rather than handing the frame nothing", async () => {
+    mettaraAnswers(() => new Response("Invalid request", { status: 400 }));
+    await expect(docTokenFor("coop")).rejects.toThrow(/400/);
+  });
+
+  it("fails when Mettara answers without one", async () => {
+    mettaraAnswers(() => Response.json({ status: "success", result: {} }));
+    await expect(docTokenFor("coop")).rejects.toThrow(/without a token/);
   });
 });

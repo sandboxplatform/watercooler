@@ -16,7 +16,22 @@
  */
 export const METTARA_ORIGIN = "https://app.mettara.ai";
 
-/** A conversation's page, by its id. */
-export function mettaraConvoUrl(id: string): string {
-  return `${METTARA_ORIGIN}/convo/${id}`;
+/**
+ * Which embed on the page a message from the frame is about. Mettara's
+ * embed stamps it on everything it posts and ignores anything posted to it
+ * under another, so the route that builds the URL and the panel that
+ * answers the frame have to agree on it — which is why it is here.
+ */
+export const DOC_EMBED_ID = "watercooler-doc";
+
+/**
+ * A conversation inside Mettara's embed, by its id.
+ *
+ * The embed rather than the conversation's own page, because the embed is
+ * the one that signs in from a token handed to it. The ordinary page signs
+ * in with Mettara's own cookie, and a cookie belonging to another site is
+ * exactly what a browser withholds from a frame.
+ */
+export function mettaraEmbedUrl(id: string): string {
+  return `${METTARA_ORIGIN}/embed/convo/${id}?eid=${DOC_EMBED_ID}`;
 }

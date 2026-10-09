@@ -292,6 +292,8 @@ says `// @vitest-environment jsdom` on its first line.
 | `ZOHO_OPEN_STATUSES`                                                                              | `ZOHO_PULSE_STATUSES`      | What "open" means to the mailboxes on the world map                      |
 | `ZOHO_TIMEZONE`                                                                                   | asked of the desk          | Which clock "today" runs on; otherwise the org's, else its agents'       |
 | `METTARA_DOC_CONVO`                                                                               | a written-down id          | Which Mettara conversation Doc is hooked up to; the id only, never a URL |
+| `METTARA_WORKSPACE_ID` / `METTARA_API_SECRET`                                                     | —                          | Signs Doc's embed tokens; without both, Doc has nothing to say to anyone |
+| `METTARA_EMAIL_COOP` / `_ROB` / `_ANDREW`                                                         | —                          | The address each one's Mettara account is under; Doc is mute without it  |
 | `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`                                       | —                          | Auth.js sign-in; off when absent                                         |
 | `NEXT_PUBLIC_TURN_URL` / `_USERNAME` / `_CREDENTIAL`                                              | —                          | TURN relay for voice behind strict NAT; **build time**, not run time     |
 | `CSP_CONNECT_SRC`                                                                                 | —                          | Extra `connect-src` origins                                              |

@@ -36,3 +36,22 @@ export function docConversation(): Promise<string | null> {
   })();
   return asked;
 }
+
+/**
+ * A fresh token for Doc's frame to sign in with, or null.
+ *
+ * Never kept: the server asks Mettara for a new one every time, and the
+ * frame asks again through `architech:token-refresh-needed` a few minutes
+ * before one runs out.
+ */
+export async function docToken(): Promise<string | null> {
+  try {
+    const response = await fetch("/api/mettara", { method: "POST", cache: "no-store" });
+    if (!response.ok) return null;
+    const body = (await response.json()) as { token?: string };
+    return body.token ?? null;
+  } catch (err) {
+    log.warn("could not get Doc's conversation a token:", (err as Error).message);
+    return null;
+  }
+}

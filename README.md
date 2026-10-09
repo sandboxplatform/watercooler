@@ -573,15 +573,20 @@ support queue on Sandbox ERP's third floor or out on the plaza taking the
 air.
 
 Pressing it opens the conversation he is hooked up to on
-[Mettara](https://app.mettara.ai), in a window over the room. It is
-Mettara's page, signed in as whoever is signed in to Mettara, and nothing
-in the office reads a word of it — the window is closed and the page goes
-with it, rather than being left running behind the office.
+[Mettara](https://app.mettara.ai) — the Customer Success group chat — in a
+window over the room. It is Mettara's embed, signed in as you by a token
+the server asks Mettara for, so there is no second sign-in; nothing in the
+office reads a word of it, and the window is closed and the page goes with
+it, rather than being left running behind the office.
 
 Who is in it is answered per person, by the server: today that is Coop,
 Rob and Andrew, and it is the one group chat between the three of them
 rather than a conversation each. Walk up to Doc without it and he is a
-resident like any other — he says his line and goes back to work.
+resident like any other — he says his line and goes back to work. He is
+the same for everybody until the server has Mettara's credentials,
+`METTARA_WORKSPACE_ID` and `METTARA_API_SECRET`, and for any one of
+the three until it has the address their Mettara account is under:
+`METTARA_EMAIL_COOP`, `METTARA_EMAIL_ROB`, `METTARA_EMAIL_ANDREW`.
 
 ### Playing together
 
