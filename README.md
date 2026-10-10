@@ -584,9 +584,12 @@ Rob and Andrew, and it is the one group chat between the three of them
 rather than a conversation each. Walk up to Doc without it and he is a
 resident like any other — he says his line and goes back to work. He is
 the same for everybody until the server has Mettara's credentials,
-`METTARA_WORKSPACE_ID` and `METTARA_API_SECRET`, and for any one of
-the three until it has the address their Mettara account is under:
-`METTARA_EMAIL_COOP`, `METTARA_EMAIL_ROB`, `METTARA_EMAIL_ANDREW`.
+`METTARA_WORKSPACE_ID` and `METTARA_API_SECRET`, and the conversation,
+`METTARA_DOC_CHAT_URL` (its address in Mettara's embed,
+`https://app.mettara.ai/embed/convo/<id>`) and `METTARA_DOC_EMBED_ID`;
+and for any one of the three until it has the address their Mettara
+account is under: `METTARA_EMAIL_COOP`, `METTARA_EMAIL_ROB`,
+`METTARA_EMAIL_ANDREW`.
 
 ### Playing together
 

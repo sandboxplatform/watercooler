@@ -152,8 +152,8 @@ Two things follow, and the second is the more interesting:
 conversation page at first, signed in as whoever was signed in to Mettara —
 and a browser withholds another site's cookies from a frame, so for most
 people that was a sign-in page in a window. It is Mettara's **embed** now,
-`/embed/convo/<id>?eid=watercooler-doc`, which signs in from a token handed
-to it in the URL's fragment (`#token=…`; a fragment is never sent, and the
+`/embed/convo/<id>?eid=<embed id>`, which signs in from a token handed to
+it in the URL's fragment (`#token=…`; a fragment is never sent, and the
 embed wipes it off its address on load).
 
 The token is the server's to get, because getting one takes the platform's
@@ -199,10 +199,28 @@ https: http://localhost:* http://127.0.0.1:*` — any https site, and local
 development; the day that stops naming this host, the window is white and
 nothing in this app will be able to say why.
 
-`METTARA_DOC_CONVO` moves the conversation without a deploy. **The id
-only, never a URL** — a URL out of the environment could name a host the
-policy has never heard of, and a blank frame looks exactly like the app
-being broken.
+**Which conversation is the environment's, with nothing written in.**
+`METTARA_DOC_CHAT_URL` is the conversation's address in the embed,
+`https://app.mettara.ai/embed/convo/<id>`, and `METTARA_DOC_EMBED_ID` is
+the `eid` stamped on it. Without both, Doc is hooked up for nobody — and no
+token is asked for, since a frame with nowhere to go has no use for one.
+The conversation changes when the group chat does, which is not the same
+event as a deploy.
+
+The URL is held to two things before it is framed, because the CSP is
+fixed when the app is built and the environment is not: it must be on
+`METTARA_ORIGIN`, since a host the policy has never heard of is a blank
+frame that looks exactly like the app being broken; and it must be under
+`/embed/convo/`, since the conversation's own page signs in by a cookie the
+frame will not be given. A URL that is either is refused with a line in the
+server's log — from the world, a misnamed conversation and an unconfigured
+one look the same, and only the log tells them apart.
+
+The embed id is a label of our choosing that Mettara only echoes: the embed
+stamps it on everything it posts to its parent and ignores anything posted
+to it under another. `DocChat` reads it back off the URL the server built
+rather than being told it separately, so the frame and the panel answering
+it cannot disagree.
 
 **The frame goes when the panel goes.** Closed, it is unmounted rather than
 hidden, so a third party's page is not left running and connected behind

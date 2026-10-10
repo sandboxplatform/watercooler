@@ -6,7 +6,7 @@ import { MessagesSquare, X } from "lucide-react";
 import { usePanel } from "@/lib/hooks/usePanel";
 import PanelOverlay from "./PanelOverlay";
 import { docConversation, docToken } from "@/lib/mettara-client";
-import { DOC_EMBED_ID, METTARA_ORIGIN } from "@/lib/mettara";
+import { embedIdOf, METTARA_ORIGIN } from "@/lib/mettara";
 
 import FullscreenButton, { useFullscreen } from "./FullscreenButton";
 
@@ -69,27 +69,30 @@ export default function DocChat() {
 
   // A few minutes before a token runs out the embed asks its parent for
   // another. Answered by message rather than by a new `src`, which would
-  // reload the conversation from the top under whoever is reading it.
+  // reload the conversation from the top under whoever is reading it. The
+  // embed's id is read off the URL the server built, so the frame and this
+  // side cannot have been told two different ones.
+  const embedId = url ? embedIdOf(url) : null;
   useEffect(() => {
-    if (!open) return;
+    if (!open || !embedId) return;
     const onMessage = (event: MessageEvent) => {
       const frame = frameRef.current?.contentWindow;
       if (!frame || event.source !== frame || event.origin !== METTARA_ORIGIN) return;
       const data: unknown = event.data;
       if (typeof data !== "object" || data === null) return;
-      const { type, embedId } = data as { type?: unknown; embedId?: unknown };
-      if (type !== "architech:token-refresh-needed" || embedId !== DOC_EMBED_ID) return;
+      const { type, embedId: theirs } = data as { type?: unknown; embedId?: unknown };
+      if (type !== "architech:token-refresh-needed" || theirs !== embedId) return;
       void docToken().then((fresh) => {
         if (!fresh) return;
         frame.postMessage(
-          { type: "architech:token-refresh", embedId: DOC_EMBED_ID, token: fresh },
+          { type: "architech:token-refresh", embedId, token: fresh },
           METTARA_ORIGIN,
         );
       });
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [open]);
+  }, [open, embedId]);
 
   if (!open) return null;
 

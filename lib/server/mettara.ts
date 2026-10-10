@@ -1,9 +1,12 @@
 import { createHmac } from "node:crypto";
 
 import type { AccessIdentity } from "../identity";
-import { mettaraEmbedUrl } from "../mettara";
+import { createLogger } from "../logger";
+import { METTARA_ORIGIN, mettaraEmbedUrl } from "../mettara";
 import { personaFor } from "./access";
 import { outboundSignal } from "./outbound";
+
+const log = createLogger("Mettara");
 
 /**
  * Which conversation on Mettara Doc is hooked up to, whose it is, and the
@@ -12,11 +15,11 @@ import { outboundSignal } from "./outbound";
  * The conversation is the Customer Success group chat. It already exists
  * on Mettara with these people in it; nothing here makes one.
  *
- * Its id is server-side so that it reaches only the browsers it is for.
- * Written into `lib/world/residents.ts` beside his lines it would read
- * better — it is a fact about Doc — and it would also ship in the browser
- * bundle to every visitor who ever loads the world, since the scenes read
- * the cast out of that module.
+ * It is named by the environment and read on the server, so that it
+ * reaches only the browsers it is for. Written into `lib/world/residents.ts`
+ * beside his lines it would read better — it is a fact about Doc — and it
+ * would also ship in the browser bundle to every visitor who ever loads the
+ * world, since the scenes read the cast out of that module.
  *
  * The secret is the part that matters. The frame signs in with a token,
  * not with Mettara's own cookie (a browser withholds another site's cookie
@@ -42,16 +45,29 @@ import { outboundSignal } from "./outbound";
 const MAY_TALK: readonly AccessIdentity[] = ["coop", "rob", "andrew"];
 
 /**
- * The conversation, overridable without a deploy: the id changes when the
- * conversation does, and that is not the same event as shipping a build.
+ * The conversation's URL in Mettara's embed, stamped with the embed's id,
+ * or null.
  *
- * Only the id, never a whole URL. The origin is `METTARA_ORIGIN`, which is
- * also what `next.config.ts` puts in the CSP's `frame-src` — and a URL
- * from the environment could name a host the policy has never heard of.
- * The frame would then come up blank, which looks exactly like the app
- * being broken and is nowhere near it.
+ * Both come from the environment and neither has a default: the
+ * conversation changes when the group chat does, which is not the same
+ * event as shipping a build, and the embed id is a label of our choosing
+ * that Mettara only echoes back. Unset is quiet, the way the missing
+ * credentials are; set to something that is not a conversation in the
+ * embed on `METTARA_ORIGIN` says so in the log, because the alternative is
+ * a Doc with nothing to say and no hint why.
  */
-const DOC_CONVO = "2289f3f8-1635-40f6-8bdd-cb9a958093ce";
+function docChatUrl(): string | null {
+  const chat = process.env.METTARA_DOC_CHAT_URL?.trim();
+  const embedId = process.env.METTARA_DOC_EMBED_ID?.trim();
+  if (!chat || !embedId) return null;
+  const url = mettaraEmbedUrl(chat, embedId);
+  if (!url) {
+    log.warn(
+      `METTARA_DOC_CHAT_URL is not a conversation in Mettara's embed (${METTARA_ORIGIN}/embed/convo/<id>); Doc stays quiet`,
+    );
+  }
+  return url;
+}
 
 /**
  * The Mettara team the conversation belongs to, as this world names it.
@@ -84,6 +100,7 @@ interface Hookup {
   platformId: string;
   secret: string;
   email: string;
+  chat: string;
 }
 
 /**
@@ -97,8 +114,10 @@ interface Hookup {
  * ships to npm.
  *
  * Somebody on the list without one is not hooked up, and neither is
- * anybody while the platform's credentials are missing. Both answer null
- * rather than a prompt over Doc that opens onto a refusal.
+ * anybody while the platform's credentials or the conversation are
+ * missing. All of them answer null rather than a prompt over Doc that
+ * opens onto a refusal, and no token is asked for a frame with nowhere to
+ * go.
  */
 function hookupFor(identity: AccessIdentity): Hookup | null {
   if (!MAY_TALK.includes(identity)) return null;
@@ -107,16 +126,14 @@ function hookupFor(identity: AccessIdentity): Hookup | null {
   // Lowercased the way Mettara's own library sends it, which is the form
   // Mettara keeps and verifies against.
   const email = process.env[`METTARA_EMAIL_${identity.toUpperCase()}`]?.trim().toLowerCase();
-  return platformId && secret && email ? { platformId, secret, email } : null;
+  if (!platformId || !secret || !email) return null;
+  const chat = docChatUrl();
+  return chat ? { platformId, secret, email, chat } : null;
 }
 
 /** The conversation this person may open, or null if it is not theirs. */
 export function docConversationFor(identity: AccessIdentity): string | null {
-  if (!hookupFor(identity)) return null;
-  // A blank or absent override is no override: an environment variable set
-  // to nothing is somebody having meant to unset it, not a request for a
-  // conversation with no id.
-  return mettaraEmbedUrl(process.env.METTARA_DOC_CONVO?.trim() || DOC_CONVO);
+  return hookupFor(identity)?.chat ?? null;
 }
 
 /**

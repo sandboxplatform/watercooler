@@ -1,9 +1,16 @@
 import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { METTARA_ORIGIN } from "../../mettara";
+import { embedIdOf, METTARA_ORIGIN } from "../../mettara";
 import { docConversationFor, docTokenFor, signMettara } from "../mettara";
 import type { AccessIdentity } from "../../identity";
+
+// The logger binds `console.warn` when it is made, so a spy on `console`
+// would arrive too late to see anything.
+const warned = vi.hoisted(() => vi.fn());
+vi.mock("../../logger", () => ({
+  createLogger: () => ({ debug() {}, info() {}, warn: warned, error() {} }),
+}));
 
 const EVERYBODY: readonly AccessIdentity[] = [
   "visitor",
@@ -22,10 +29,13 @@ const ON_IT: readonly AccessIdentity[] = ["coop", "rob", "andrew"];
 
 const SECRET = "platform-secret";
 
+const CHAT = `${METTARA_ORIGIN}/embed/convo/0000aaaa-1111-2222-3333-444455556666`;
+
 beforeEach(() => {
   vi.stubEnv("METTARA_WORKSPACE_ID", "platform-uuid");
   vi.stubEnv("METTARA_API_SECRET", SECRET);
-  vi.stubEnv("METTARA_DOC_CONVO", "");
+  vi.stubEnv("METTARA_DOC_CHAT_URL", CHAT);
+  vi.stubEnv("METTARA_DOC_EMBED_ID", "test-doc");
   // An address for everybody, so it is the list that keeps the rest out
   // rather than a missing variable.
   for (const identity of EVERYBODY) {
@@ -67,22 +77,50 @@ describe("the conversation Doc is hooked up to", () => {
     expect(docConversationFor("coop")!.startsWith(`${METTARA_ORIGIN}/embed/convo/`)).toBe(true);
   });
 
-  it("takes the conversation from the environment when one is set", () => {
-    vi.stubEnv("METTARA_DOC_CONVO", "0000aaaa-1111-2222-3333-444455556666");
-    expect(docConversationFor("coop")).toContain(
-      `${METTARA_ORIGIN}/embed/convo/0000aaaa-1111-2222-3333-444455556666?`,
-    );
+  it("is the conversation the environment names, carrying the embed id it names", () => {
+    // The panel reads the id back off this URL, so the frame and the panel
+    // answering it are told the same one by construction.
+    const url = docConversationFor("coop")!;
+    expect(url).toBe(`${CHAT}?eid=test-doc`);
+    expect(embedIdOf(url)).toBe("test-doc");
   });
 
-  it("reads a blank override as no override, not as a conversation with no id", () => {
-    const written = docConversationFor("coop");
-    vi.stubEnv("METTARA_DOC_CONVO", "   ");
-    expect(docConversationFor("coop")).toBe(written);
+  it("stamps its own embed id over one already in the URL, and drops a fragment", () => {
+    // The fragment is where the panel puts the token.
+    vi.stubEnv("METTARA_DOC_CHAT_URL", `${CHAT}?eid=stale#somewhere`);
+    expect(docConversationFor("coop")).toBe(`${CHAT}?eid=test-doc`);
+  });
+
+  it("is nobody's until both the conversation and the embed id are named", () => {
+    // Nothing is written in to fall back on; blank is unset.
+    for (const unset of ["METTARA_DOC_CHAT_URL", "METTARA_DOC_EMBED_ID"]) {
+      vi.stubEnv(unset, "   ");
+      for (const identity of ON_IT) expect(docConversationFor(identity), unset).toBeNull();
+      vi.stubEnv("METTARA_DOC_CHAT_URL", CHAT);
+      vi.stubEnv("METTARA_DOC_EMBED_ID", "test-doc");
+    }
+  });
+
+  it("will not frame anything the CSP does not name, or a page that signs in by cookie", () => {
+    // A host off `METTARA_ORIGIN` is a blank frame; the conversation's own
+    // page is a sign-in page in a window. Neither gets a prompt over Doc,
+    // and each says why in the log, since from the world they look alike.
+    const wrong = [
+      "https://elsewhere.example/embed/convo/0000aaaa",
+      "http://app.mettara.ai/embed/convo/0000aaaa",
+      `${METTARA_ORIGIN}/convo/0000aaaa`,
+      "0000aaaa-1111-2222-3333-444455556666",
+    ];
+    warned.mockClear();
+    for (const chat of wrong) {
+      vi.stubEnv("METTARA_DOC_CHAT_URL", chat);
+      expect(docConversationFor("coop"), chat).toBeNull();
+    }
+    expect(warned).toHaveBeenCalledTimes(wrong.length);
   });
 
   it("does not hand the environment a way past the gate", () => {
-    // The override is the conversation, never who may open it.
-    vi.stubEnv("METTARA_DOC_CONVO", "0000aaaa-1111-2222-3333-444455556666");
+    // The environment names the conversation, never who may open it.
     expect(docConversationFor("visitor")).toBeNull();
   });
 
@@ -191,6 +229,13 @@ describe("a token for Doc's frame", () => {
     mettaraAnswers(() => Response.json({ result: { access_token: "jwt" } }));
     expect(await docTokenFor("visitor")).toBeNull();
     expect(await docTokenFor("hunter")).toBeNull();
+    expect(sent).toHaveLength(0);
+  });
+
+  it("is not asked for while there is no conversation for the frame to open", async () => {
+    mettaraAnswers(() => Response.json({ result: { access_token: "jwt" } }));
+    vi.stubEnv("METTARA_DOC_CHAT_URL", "");
+    expect(await docTokenFor("coop")).toBeNull();
     expect(sent).toHaveLength(0);
   });
 

@@ -291,7 +291,8 @@ says `// @vitest-environment jsdom` on its first line.
 | `ZOHO_PULSE_STATUSES`                                                                             | `New,Queue,In Progress`    | The three standing statuses on Support's wall, in the order they hang    |
 | `ZOHO_OPEN_STATUSES`                                                                              | `ZOHO_PULSE_STATUSES`      | What "open" means to the mailboxes on the world map                      |
 | `ZOHO_TIMEZONE`                                                                                   | asked of the desk          | Which clock "today" runs on; otherwise the org's, else its agents'       |
-| `METTARA_DOC_CONVO`                                                                               | a written-down id          | Which Mettara conversation Doc is hooked up to; the id only, never a URL |
+| `METTARA_DOC_CHAT_URL`                                                                            | —                          | Doc's conversation: `https://app.mettara.ai/embed/convo/<id>`            |
+| `METTARA_DOC_EMBED_ID`                                                                            | —                          | The `eid` stamped on that URL; Doc is mute without both                  |
 | `METTARA_WORKSPACE_ID` / `METTARA_API_SECRET`                                                     | —                          | Signs Doc's embed tokens; without both, Doc has nothing to say to anyone |
 | `METTARA_EMAIL_COOP` / `_ROB` / `_ANDREW`                                                         | —                          | The address each one's Mettara account is under; Doc is mute without it  |
 | `AUTH_SECRET`, `AUTH_GOOGLE_*`, `AUTH_MICROSOFT_ENTRA_ID_*`                                       | —                          | Auth.js sign-in; off when absent                                         |
