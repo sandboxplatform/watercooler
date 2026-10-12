@@ -112,6 +112,63 @@ describe("Pathfinder", () => {
     expect(failed).toBe(0);
   });
 
+  it("walks as near as it can to a goal there is no way to", () => {
+    // A wall right across, with nothing on the far side anybody can reach:
+    // the river and its far bank, in small.
+    const finder = new Pathfinder(480, 480, [{ x: 0, y: 200, width: 480, height: 40 }], 8);
+    expect(finder.findPath(240, 400, 240, 40)).toBeNull();
+    const way = finder.findApproach(240, 400, 240, 40)!;
+    expect(way.complete).toBe(false);
+    // Every step on the near side, and the last one up against the wall.
+    for (const p of way.path) expect(p.y).toBeGreaterThan(248);
+    const last = way.path[way.path.length - 1];
+    expect(last.y).toBeLessThan(272);
+    expect(Math.abs(last.x - 240)).toBeLessThanOrEqual(16);
+  });
+
+  it("walks to the edge of a solid too deep to find open ground beside the goal", () => {
+    const finder = new Pathfinder(960, 960, [{ x: 160, y: 160, width: 640, height: 640 }]);
+    const way = finder.findApproach(80, 480, 480, 480)!;
+    expect(way.complete).toBe(false);
+    const last = way.path[way.path.length - 1];
+    expect(finder.walkable(Math.floor(last.y / 16), Math.floor(last.x / 16))).toBe(true);
+    // Up against the solid, not somewhere along the way to it.
+    const outside = Math.max(160 - last.x, last.x - 800, 160 - last.y, last.y - 800);
+    expect(outside).toBeGreaterThan(0);
+    expect(outside).toBeLessThanOrEqual(16);
+  });
+
+  it("finds a way that opens most of the grid before it gets there", () => {
+    // A serpentine: every row of wall has its gap at the other end from the
+    // one before, so the way down is the whole of every corridor. Each open
+    // cell is pushed by several neighbours, and a cap that counted those
+    // copies ran out long before the bottom.
+    const size = 160 * 16;
+    const rects = [];
+    for (let row = 4, flip = false; row < 156; row += 4, flip = !flip) {
+      rects.push({ x: flip ? 48 : 0, y: row * 16, width: size - 48, height: 16 });
+    }
+    const finder = new Pathfinder(size, size, rects);
+    const way = finder.findApproach(24, 24, 24, size - 24)!;
+    expect(way.complete).toBe(true);
+    expect(way.path[way.path.length - 1]).toEqual({ x: 24, y: size - 24 });
+  });
+
+  it("gets the player from the foot of the world map to as near the top as there is ground", () => {
+    // North of the river is open ground nobody can reach. A tap there from
+    // the bottom of the map had no route, and the walker went in a straight
+    // line through every building in between.
+    const padded = new Pathfinder(WORLD_WIDTH, WORLD_HEIGHT, worldSolids(), PF_PADDING);
+    const from = worldWanderSpots().reduce((a, b) => (b.y > a.y ? b : a));
+    for (const x of [WORLD_WIDTH * 0.25, WORLD_WIDTH * 0.5]) {
+      const way = padded.findApproach(from.x, from.y, x, 8);
+      expect(way?.complete).toBe(false);
+      const last = way!.path[way!.path.length - 1];
+      // Wherever it stops is somewhere the planner can actually walk to.
+      expect(padded.findPath(from.x, from.y, last.x, last.y)).not.toBeNull();
+    }
+  });
+
   it("returns the same route when asked twice", () => {
     const finder = new Pathfinder(WIDTH, HEIGHT, forest(), 8);
     const a = finder.findPath(100, 3000, 8000, 300);

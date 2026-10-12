@@ -5,6 +5,13 @@ export interface PathPoint {
   y: number;
 }
 
+/** A route as far toward a goal as the ground goes. */
+export interface Approach {
+  path: PathPoint[];
+  /** Whether it reaches the goal, rather than the reachable cell nearest it. */
+  complete: boolean;
+}
+
 const CELL_SIZE = PF_CELL_SIZE;
 
 /** The eight steps, straight ones first — the order the search tries them in. */
@@ -41,7 +48,12 @@ const DIRS: readonly [number, number][] = [
  * The iteration cap scales with the grid. It was a flat twenty thousand,
  * which is a sixth of the world map's cells: a third of the walks between
  * the places a resident is sent to ran out of it, and the fallback walked
- * the player straight into the trees.
+ * the player straight into the trees. It counts the cells opened, not the
+ * entries popped, for the same reason.
+ *
+ * **And a goal with no way to it still gets a walk** — `findApproach`, to
+ * the reachable cell nearest it. `findPath` is the strict one: a route that
+ * arrives, or none.
  */
 export class Pathfinder {
   /** 1 where a cell is blocked. */
@@ -108,11 +120,33 @@ export class Pathfinder {
     return this.valid(r, c) && this.blocked[r * this.cols + c] === 0;
   }
 
+  /** The way to a goal, or null when there is none. */
   findPath(sx: number, sy: number, ex: number, ey: number): PathPoint[] | null {
+    const found = this.search(sx, sy, ex, ey);
+    return found?.complete ? found.path : null;
+  }
+
+  /**
+   * The way to a goal if there is one, and otherwise the way to the cell
+   * nearest it that can be reached. Null only when the start is boxed in.
+   *
+   * A tap on ground nobody can get to — the far bank of the river, the
+   * middle of a thicket — has no route, and the walker's fallback for no
+   * route was a straight line at it, through whatever buildings were in
+   * between. Going as far as the ground goes is what was meant. It costs
+   * nothing over a search that fails: that search has already been over
+   * every cell this one could reach, and only has to remember the best.
+   */
+  findApproach(sx: number, sy: number, ex: number, ey: number): Approach | null {
+    return this.search(sx, sy, ex, ey);
+  }
+
+  private search(sx: number, sy: number, ex: number, ey: number): Approach | null {
     let sc = this.toCol(sx);
     let sr = this.toRow(sy);
-    let ec = this.toCol(ex);
-    let er = this.toRow(ey);
+    // On the grid, so an aim off its edge still has a nearest cell.
+    let ec = Math.max(0, Math.min(this.cols - 1, this.toCol(ex)));
+    let er = Math.max(0, Math.min(this.rows - 1, this.toRow(ey)));
     let endSnapped = false;
 
     if (!this.valid(sr, sc)) return null;
@@ -124,19 +158,25 @@ export class Pathfinder {
       sc = ns.c;
     }
 
+    // A goal deep inside something solid is left where it is: the search
+    // never reaches it, and comes back with the nearest it can stand to it.
     if (!this.walkable(er, ec)) {
       const nearest = this.nearestWalkableCell(er, ec);
-      if (!nearest) return null;
-      er = nearest.r;
-      ec = nearest.c;
-      endSnapped = true;
+      if (nearest) {
+        er = nearest.r;
+        ec = nearest.c;
+        endSnapped = true;
+      }
     }
 
     if (sr === er && sc === ec) {
-      return [
-        { x: sx, y: sy },
-        { x: ex, y: ey },
-      ];
+      return {
+        path: [
+          { x: sx, y: sy },
+          { x: ex, y: ey },
+        ],
+        complete: true,
+      };
     }
 
     const cols = this.cols;
@@ -157,8 +197,13 @@ export class Pathfinder {
     this.heapSize = 0;
     this.push(sr * cols + sc, 0, this.h(sr, sc, er, ec), -1);
 
-    let iterations = 0;
-    while (this.heapSize > 0 && iterations++ < this.maxIter) {
+    // The cell nearest the goal of all those reached, for when it is not.
+    let closest = -1;
+    let closestH = Infinity;
+    let closestG = Infinity;
+
+    let expanded = 0;
+    while (this.heapSize > 0) {
       const node = this.pop();
       const cell = this.nodeCell[node];
       const g = this.nodeG[node];
@@ -175,15 +220,29 @@ export class Pathfinder {
             path[path.length - 1] = { x: ex, y: ey };
           }
         }
-        return path;
+        return { path, complete: true };
       }
 
       if (seen[cell] === stamp && bestG[cell] <= g) continue;
+      // Counted here, past the stale entries: a cell is pushed once by each
+      // neighbour that reaches it before it is opened, and counting every
+      // pop spent the cap on those copies. A long walk across the world map
+      // ran out at twice the grid's cells without opening all of the ground
+      // it could reach, and came back with no route to somewhere there was.
+      if (++expanded > this.maxIter) break;
       seen[cell] = stamp;
       bestG[cell] = g;
 
       const r = (cell / cols) | 0;
       const c = cell - r * cols;
+      // Nearest by the same measure the search steers by, and the shorter
+      // walk of two that are as near.
+      const h = this.h(r, c, er, ec);
+      if (h < closestH || (h === closestH && g < closestG)) {
+        closest = node;
+        closestH = h;
+        closestG = g;
+      }
       for (const [dr, dc] of DIRS) {
         const nr = r + dr;
         const nc = c + dc;
@@ -202,7 +261,7 @@ export class Pathfinder {
       }
     }
 
-    return null;
+    return closest === -1 ? null : { path: this.reconstruct(closest), complete: false };
   }
 
   private toCol(x: number) {

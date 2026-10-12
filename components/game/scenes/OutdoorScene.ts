@@ -7,7 +7,7 @@ import { attachPresence, type ScenePresence } from "../systems/scene-presence";
 import { TalkTo } from "../systems/TalkTo";
 import { culler } from "../systems/culling";
 import { feetOf, onTap, padVelocity } from "../systems/walker";
-import { Pathfinder } from "../utils/Pathfinder";
+import { Pathfinder, type Approach } from "../utils/Pathfinder";
 import { ensureSheet } from "../utils/sheets";
 import { buildSpriteFrames } from "../utils/MapHelpers";
 import { SPRITE_KEY, SPRITE_PATH, MOVE_SPEED } from "../config/animations";
@@ -326,36 +326,49 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
     if (building) {
       const [approach, doorway] = walkInTo(building);
       // The doorway is inside the pathfinder's padding, so it is planned to
-      // the standing room and the last step is walked straight at the door.
-      const path = this.route(from, approach);
-      this.navigator.follow([...(path?.length ? path : [approach]), doorway]);
+      // the standing room and the last step is walked straight at the door —
+      // from the standing room only. Short of it, that step is a straight
+      // line at the building from wherever the ground ran out.
+      const way = this.route(from, approach);
+      if (!way) this.navigator.follow([approach, doorway]);
+      else this.navigator.follow(way.complete ? [...way.path, doorway] : way.path);
       return;
     }
-    // Around the furniture if we can; straight at it if the spot is boxed in.
-    const path = this.route(from, target);
-    this.navigator.follow(path?.length ? path : [target]);
+    // Around the furniture, as near as the ground goes; straight at it only
+    // if the character is boxed in where they stand.
+    const way = this.route(from, target);
+    this.navigator.follow(way ? way.path : [target]);
   }
 
   /**
-   * A way from one point to another, padded if there is one and bare if not.
+   * A way from one point to another, padded if there is one and bare if not,
+   * and as near as the padded grid gets if neither reaches it.
    *
    * The padded grid keeps the body clear of every trunk, and in the wood
    * that closes gaps a person fits through: a cell is shut if any of it
    * touches a solid grown by half a body, so a passage has to be a good
    * deal wider than the body to stay open. Where it shuts one, the bare
    * grid still has the way through, and walking it brushes a tree or two —
-   * which the physics slides the character along — where the fallback
-   * after it walks a straight line into the wood.
+   * which the physics slides the character along.
+   *
+   * Where neither has a way — a tap on the far bank of the river, which
+   * nobody can reach — the walk goes as near as it can rather than not at
+   * all. It used to be a straight line at the spot, which from the bottom
+   * of the map ran through every building in between.
    */
-  private route(from: { x: number; y: number }, to: { x: number; y: number }) {
-    const padded = this.pathfinder?.findPath(from.x, from.y, to.x, to.y);
-    if (padded?.length || !this.solids) return padded;
+  private route(from: { x: number; y: number }, to: { x: number; y: number }): Approach | null {
+    const padded = this.pathfinder?.findApproach(from.x, from.y, to.x, to.y) ?? null;
+    if (padded?.complete || !this.solids) return padded;
     this.barePathfinder ??= new Pathfinder(
       this.solids.width,
       this.solids.height,
       this.solids.rects,
     );
-    return this.barePathfinder.findPath(from.x, from.y, to.x, to.y);
+    const bare = this.barePathfinder.findApproach(from.x, from.y, to.x, to.y);
+    if (bare?.complete) return bare;
+    // As near as the padded grid gets, which keeps clear of the walls on
+    // the way; the bare one only if the padded one could not start at all.
+    return padded ?? bare;
   }
 
   protected feet() {

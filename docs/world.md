@@ -484,6 +484,26 @@ Two details it would be easy to get wrong, both of which look correct:
   under the wall. `__tests__/entrances.test.ts` holds every approach to
   being clear of `worldSolids()`, and every doorway to being hit.
 
+**A tap on ground nobody can reach walks as near as it can.** The strip
+north of the river is open ground with no way to it, and so is the middle
+of a thicket. A tap there had no route, and the fallback for no route was a
+straight line at the spot, and from the bottom of the map that line ran
+into whichever building was in the way. About one tap in six across the
+map from the bottom had no route.
+`Pathfinder.findApproach` hands back the way to the reachable cell nearest
+the goal instead: `OutdoorScene.route` asks the padded grid, then the bare
+one for a way all the way there, and settles for the padded grid's nearest
+approach when neither has one. A building's last straight step into its
+doorway is only taken from its standing room. Taken from wherever the
+ground ran out, it is the same straight line again.
+
+Some of those taps weren't unreachable at all. The search's step cap counted
+every entry it popped, and each cell is pushed once by every neighbour
+that reaches it before it is opened, so a long walk across the map ran out
+of steps with ground still unopened. It counts cells opened now. A tap on
+unreachable ground still searches everything it could reach on both grids
+before settling, about a third of a second on the world map.
+
 **Going through a door means going out of sight**, the same as stepping
 into the lift. Two things were wrong there: `enter` stopped the character
 with `player.update({vx:0, vy:0})`, and `update` re-reads the keyboard — so
