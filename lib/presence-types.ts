@@ -303,6 +303,21 @@ export interface MeetingMessage {
   on: boolean;
 }
 
+/**
+ * This browser has a resident's conversation open, or has shut it.
+ *
+ * One word, the resident's id, and the server takes it as a wish rather
+ * than a fact: whether the sender may talk to them at all is the door's
+ * answer, and whether they are standing beside them is the room's. While
+ * both hold, the resident stays where they are — see
+ * `lib/server/socket/features/conversations`.
+ */
+export interface TalkMessage {
+  type: "talk";
+  /** Whose conversation is open; null once it is shut. */
+  to: string | null;
+}
+
 export type ClientMessage =
   | JoinMessage
   | MoveMessage
@@ -314,7 +329,8 @@ export type ClientMessage =
   | BasketballMessage
   | EggMessage
   | BlobMessage
-  | MeetingMessage;
+  | MeetingMessage
+  | TalkMessage;
 
 // ── Server → client ────────────────────────────────────
 
@@ -639,7 +655,8 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     type === "basketball" ||
     type === "egg" ||
     type === "blob" ||
-    type === "meeting"
+    type === "meeting" ||
+    type === "talk"
   );
 }
 

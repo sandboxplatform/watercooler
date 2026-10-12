@@ -20,6 +20,7 @@ import {
   worldWanderSpots,
   deskSpot,
   doorstepOf,
+  dwell,
   doorwayFor,
   hauntsOf,
   outsideSpots,
@@ -458,6 +459,134 @@ describe("someone on a station", () => {
     }
     expect([...seen].sort()).toEqual(["room", "station"]);
     expect(awayFromLobby).toBe(true);
+  });
+});
+
+/**
+ * Somebody has Doc's conversation open beside him, so he stays where he
+ * is. Who counts is the socket's question (`socket/features/conversations`);
+ * these hand the simulation the answer and hold it to what it does with it.
+ */
+describe("someone in conversation", () => {
+  const spotOf = (sim: ResidentSimulation) => sim.whereabouts().find((w) => w.id === "doc")!;
+
+  it("stands still, turned to whoever is talking to him, and walks on when they stop", () => {
+    let clock = 0;
+    const { rooms, host } = world(() => clock);
+    let talking: Point | null = null;
+    const sim = new ResidentSimulation(
+      { ...host, talking: (id) => (id === "doc" ? talking : null) },
+      { now: () => clock, random: rolls() },
+    );
+    const onHub = () => rooms.get(doc.station!.room)!.hub.get(presenceIdFor(doc))!;
+    // Pacing first, so there is a walk for the conversation to interrupt.
+    let caught = false;
+    for (let i = 0; i < 200 && !caught; i++) {
+      clock += 120;
+      sim.tick(clock);
+      caught = onHub().moving;
+    }
+    expect(caught).toBe(true);
+
+    const at = { ...spotOf(sim).spot };
+    talking = { x: at.x - 60, y: at.y + 10 };
+    for (let i = 0; i < 400; i++) {
+      clock += 120;
+      sim.tick(clock);
+      expect(spotOf(sim).spot).toEqual(at);
+      expect(onHub().moving).toBe(false);
+      expect(onHub().facing).toBe("left");
+    }
+
+    talking = null;
+    let walked = false;
+    for (let i = 0; i < 200 && !walked; i++) {
+      clock += 120;
+      sim.tick(clock);
+      walked = onHub().moving;
+    }
+    expect(walked).toBe(true);
+  });
+
+  /**
+   * His stay is a clock, and a conversation is time that does not count
+   * against it. Scaled down so a stay is a second: without the hold he is
+   * out on the map inside ten ticks.
+   */
+  it("does not go anywhere while he is being talked to, however long it takes", () => {
+    let clock = 0;
+    const { host } = world(() => clock);
+    let held = true;
+    const sim = new ResidentSimulation(
+      {
+        ...host,
+        talking: (id, _room, at) => (held && id === "doc" ? { x: at.x, y: at.y + 40 } : null),
+      },
+      { now: () => clock, random: () => 0.5, dwellScale: 0.0001 },
+    );
+    for (let i = 0; i < 400; i++) {
+      clock += 120;
+      sim.tick(clock);
+      expect(spotOf(sim).place).toBe("station");
+    }
+    held = false;
+    let left = false;
+    for (let i = 0; i < 50 && !left; i++) {
+      clock += 120;
+      sim.tick(clock);
+      left = spotOf(sim).place === "room";
+    }
+    expect(left).toBe(true);
+  });
+
+  /**
+   * Caught on the map on the way back to their own front door, and held
+   * there for longer than `LEAVE_WALK_MS`. That is the backstop for
+   * somebody who cannot reach the door, and if it ran on through the
+   * conversation they would go indoors from wherever they had been stopped
+   * the moment the window shut — the thing the walk to the door is for.
+   *
+   * Doc has no door on the map; he is out wandering it rather than
+   * standing outside his building. So this is Yoshi, which is the point:
+   * the hold is the simulation's rule for whoever is held, and Doc is
+   * only the one anybody can talk to today.
+   */
+  it("still goes in by the front door after a long conversation on the way to it", () => {
+    let clock = 0;
+    const { host } = world(() => clock);
+    const scale = 0.05;
+    const outside = hauntsOf(yoshi).find((h) => h.kind === "outside")!;
+    const door = doorwayFor(yoshi, outside)!;
+    // A few ticks into the walk back, which starts when the stay is up.
+    const holdFrom = dwell("outside", () => 0.5) * scale + 360;
+    const holdUntil = holdFrom + LEAVE_WALK_MS + 10_000;
+    const sim = new ResidentSimulation(
+      {
+        ...host,
+        talking: (id, _room, at) =>
+          id === yoshi.id && clock >= holdFrom && clock < holdUntil
+            ? { x: at.x, y: at.y + 40 }
+            : null,
+      },
+      { now: () => clock, random: () => 0.5, dwellScale: scale, startAt: "outside" },
+    );
+    const yoshiNow = () => sim.whereabouts().find((w) => w.id === yoshi.id)!;
+
+    let heldAt: Point | null = null;
+    let last = yoshiNow().spot;
+    while (yoshiNow().place === "outside" && clock < holdUntil + LEAVE_WALK_MS) {
+      last = { ...yoshiNow().spot };
+      clock += 120;
+      sim.tick(clock);
+      if (clock >= holdFrom && !heldAt) heldAt = { ...yoshiNow().spot };
+    }
+    // Stopped somewhere that is not the door, or there is nothing to test.
+    expect(heldAt).not.toBeNull();
+    expect(Math.hypot(heldAt!.x - door.x, heldAt!.y - door.y)).toBeGreaterThan(PERSONAL_SPACE_PX);
+    expect(clock).toBeGreaterThan(holdUntil);
+    expect(yoshiNow().place).not.toBe("outside");
+    // On the doorstep when they went, by the simulation's own `ARRIVED_PX`.
+    expect(Math.hypot(last.x - door.x, last.y - door.y)).toBeLessThanOrEqual(8);
   });
 });
 

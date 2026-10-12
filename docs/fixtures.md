@@ -227,3 +227,36 @@ hidden, so a third party's page is not left running and connected behind
 the office for the rest of the session. Pressing E again loads the
 conversation afresh, with a fresh token, which is the right way round: a
 page nobody is looking at should not be a page still open.
+
+**He stands still while the window is open.** The panel holds the keys,
+so whoever opened it stands still — and he did not. He went on pacing the
+counter underneath the window, or out of the door to the map when his stay
+ran out, and somebody in the middle of talking to him closed it to find him
+at the far end of the room, or gone. Now he stops where he is and turns to
+face them for as long as it is open.
+
+The resident is the server's, so the hold is too. `DocChat` says one word
+while it is open — `talk`, with his id, through `talkingTo` in
+`lib/conversation-client.ts` — and `null` when it shuts.
+`socket/features/conversations` decides whether that counts, and the
+simulation asks it every tick (`ResidentHost.talking`):
+
+| Rule                    | Why                                                                                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hooked up to him        | `docConversationFor`, the same answer as the prompt. Anybody else would have typed it out                                                               |
+| In his room             | Rooms are separate worlds                                                                                                                               |
+| Within twice the prompt | `?doc=1` opens it from anywhere, and that is not talking to him. Twice, because the prompt is measured to where he is _drawn_, which trails where he is |
+
+**A conversation is time that does not count.** While he is held every
+deadline he has is pushed on by the tick — his stay, his pause, and the
+walk to a front door's `LEAVE_WALK_MS`. Without that his stay would run out
+under him and he would go the moment the window shut; on the way to a door,
+the backstop would expire and put him indoors from wherever he had been
+stopped. His course is kept, so afterwards he carries on to where he was
+going.
+
+**The server forgets it on a drop**, which is every room change as well as
+a reconnection, and `talkingTo` says it again on each `welcome` while the
+window is open. A network blink in the middle of a conversation would
+otherwise set him walking again with the window still up. Nothing times a
+hold out: a window left open all night is Doc at his post all night.

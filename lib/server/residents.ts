@@ -245,6 +245,20 @@ export interface ResidentHost {
    * Optional like the other two. The fright works without it.
    */
   caught?(residentId: string, connectionId: string): void;
+  /**
+   * Whether somebody here has this resident's conversation open: where
+   * they are standing if so, so he can turn to them, and null if not.
+   *
+   * Asked every tick, of every resident, and the host's to answer because
+   * it is a fact about connections — who opened what, whether they may,
+   * and whether they are standing near enough to be talking to him. `at`
+   * is where the simulation has him, which is what "near enough" is
+   * measured from.
+   *
+   * Optional: without it nobody is ever in conversation, which is every
+   * simulation in the tests that is not about this.
+   */
+  talking?(residentId: string, room: string, at: Point): Point | null;
 }
 
 /** A resident as the simulation sees them this tick: see `whereabouts`. */
@@ -453,9 +467,11 @@ export class ResidentSimulation {
       // the run, which is where the egg goes and where whoever is still
       // over them counts as having arrived again.
       this.settle(state, now);
-      if (state.leavingFor) this.goIfAtTheDoor(state, now);
+      const listener = this.listener(state);
+      if (listener) this.hold(state, now);
+      else if (state.leavingFor) this.goIfAtTheDoor(state, now);
       else if (now >= state.until) this.moveOn(state, now);
-      this.walk(state, now);
+      this.walk(state, now, listener);
       this.greet(state, now);
       this.mingle(state);
       state.lastTick = now;
@@ -464,6 +480,31 @@ export class ResidentSimulation {
 
   private stay(haunt: Haunt): number {
     return Math.max(1000, dwell(haunt.kind, this.random) * this.dwellScale);
+  }
+
+  /** Whoever has this resident's conversation open beside him, if anybody does. */
+  private listener(state: State): Point | null {
+    if (!state.room || !this.host.talking) return null;
+    return this.host.talking(state.resident.id, state.room, { x: state.x, y: state.y });
+  }
+
+  /**
+   * Somebody is talking to him: his day stops where it is.
+   *
+   * The walking is `walk`'s to hold back; this is the clock. Every deadline
+   * he has is pushed on by the tick, so a conversation is time that does
+   * not count against him. Without it his stay would run out while he
+   * stood there and he would go the moment the window shut — or, on the
+   * way to his own front door, `leaveBy` would run out under him and put
+   * him indoors from the middle of the map, which is the one thing that
+   * walk exists to prevent. And nothing here moves him on while he is
+   * held, so he cannot vanish into the next room mid-sentence.
+   */
+  private hold(state: State, now: number) {
+    const held = now - state.lastTick;
+    state.until += held;
+    state.pauseUntil += held;
+    if (state.leavingFor) state.leaveBy += held;
   }
 
   /**
@@ -1016,16 +1057,23 @@ export class ResidentSimulation {
     }
   }
 
-  private walk(state: State, now: number) {
+  private walk(state: State, now: number, listener: Point | null) {
     if (!state.room) return;
     // The room may have been closed and reopened while nobody was there.
     this.ensureInRoom(state);
     const { hub } = this.host.roomFor(state.room);
     let moving = false;
-    // A rest between two wanders is not taken while they are bolting: the
-    // pause a finished dash sets is for the walk it ended, and standing about
-    // in the middle of a fright is not fleeing.
-    if (now >= state.pauseUntil || this.spooked(state, now)) {
+    if (listener) {
+      // Not a step while somebody is talking to him, and turned to them.
+      // The course is kept rather than dropped, so when the window shuts he
+      // carries on to wherever he was going rather than picking somewhere
+      // new from the spot the conversation happened to catch him on.
+      state.facing = facingFor(listener.x - state.x, listener.y - state.y) ?? state.facing;
+    } else if (now >= state.pauseUntil || this.spooked(state, now)) {
+      // A rest between two wanders is not taken while they are bolting: the
+      // pause a finished dash sets is for the walk it ended, and standing
+      // about in the middle of a fright is not fleeing.
+      //
       // Nothing new while they are on their way out — except the way out
       // itself. `holdOn` drops a course after a few seconds behind somebody
       // who will not move, and a leaver with no course and nothing to

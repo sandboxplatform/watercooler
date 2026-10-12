@@ -358,6 +358,16 @@ corridor carries him with it. He also has `lines`, the only resident who
 does: he remarks on arriving, and which of the two depends on whether he is
 at the post or out on the map.
 
+**Somebody talking to him stops his day.** While anybody beside him has his
+conversation open, `tick` neither walks him nor moves him on, turns him to
+face them, and pushes every deadline he has on by the tick — the stay, the
+pause, and `leaveBy`, which would otherwise expire under him and put him
+indoors from the middle of the map. Who counts is the host's
+`talking`, answered by the socket; why, and the rules, are under Doc in
+[fixtures](fixtures.md). The rule is the simulation's rather than Doc's,
+so `residents.test.ts` holds Yoshi to the walk-to-the-door half of it: Doc
+has no door on the map.
+
 The help desk counter in the lobby is still there and nobody works it. Four
 tiles of counter with somebody's work all over it, down in the wide bottom
 of Sandbox ERP's lobby — the part that carries on past the bitten-out

@@ -577,7 +577,10 @@ Pressing it opens the conversation he is hooked up to on
 window over the room. It is Mettara's embed, signed in as you by a token
 the server asks Mettara for, so there is no second sign-in; nothing in the
 office reads a word of it, and the window is closed and the page goes with
-it, rather than being left running behind the office.
+it, rather than being left running behind the office. While it is open he
+stops where he is and turns to you, and he stays there until you close it —
+he does not pace off down the counter or head out to the map mid-sentence,
+and anyone else in the room can see he is busy.
 
 Who is in it is answered per person, by the server: today that is Coop,
 Rob and Andrew, and it is the one group chat between the three of them

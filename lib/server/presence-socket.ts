@@ -19,7 +19,7 @@
  * | `socket/lifecycle`     | Arriving, claiming a person, moving, sweeping, going; dispatch     |
  * | `socket/badges`        | Whose shelf, the chatty rules settled once, telling the world      |
  * | `socket/online`        | The server's list, published at most once a tick                  |
- * | `socket/features/*`    | The ball, the eggs, the road, the blob, meetings, board, relays, mic |
+ * | `socket/features/*`    | The ball, the eggs, the road, the blob, meetings, board, relays, mic, conversations |
  */
 
 import type { IncomingMessage, Server } from "http";
@@ -46,6 +46,7 @@ import { whiteboardFeature } from "./socket/features/whiteboard";
 import { micFeature } from "./socket/features/mic";
 import { relaysFeature } from "./socket/features/relays";
 import { presenceFeature } from "./socket/features/presence";
+import { conversationsFeature } from "./socket/features/conversations";
 
 const log = createLogger("Presence");
 
@@ -91,6 +92,7 @@ export function attachPresenceSocket(server: Server, path = "/api/room/socket"):
 
   const mic = micFeature(ctx);
   const eggs = eggsFeature(ctx);
+  const conversations = conversationsFeature(ctx);
   const features: Feature[] = [
     presenceFeature(ctx),
     mic,
@@ -101,6 +103,7 @@ export function attachPresenceSocket(server: Server, path = "/api/room/socket"):
     eggs,
     trafficFeature(ctx),
     blobFeature(ctx),
+    conversations,
   ];
   const lifecycle = new Lifecycle(ctx, features);
 
@@ -182,6 +185,8 @@ export function attachPresenceSocket(server: Server, path = "/api/room/socket"):
         }
       },
       laid: (residentId, room, at, startledBy) => eggs.laid(residentId, room, at, startledBy),
+      /** Somebody beside him has his conversation open, so he stays where he is. */
+      talking: (residentId, room, at) => conversations.listener(residentId, room, at),
     },
     { dwellScale },
   ).start();

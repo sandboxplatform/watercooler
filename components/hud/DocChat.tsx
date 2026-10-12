@@ -6,6 +6,7 @@ import { MessagesSquare, X } from "lucide-react";
 import { usePanel } from "@/lib/hooks/usePanel";
 import PanelOverlay from "./PanelOverlay";
 import { docConversation, docToken } from "@/lib/mettara-client";
+import { talkingTo } from "@/lib/conversation-client";
 import { embedIdOf, METTARA_ORIGIN } from "@/lib/mettara";
 
 import FullscreenButton, { useFullscreen } from "./FullscreenButton";
@@ -66,6 +67,10 @@ export default function DocChat() {
       void docToken().then((t) => mine === opening.current && setToken(t ?? "failed"));
     },
   });
+
+  // He stays where he is while this is open, rather than pacing off from
+  // under the window — the server's call, from this and where we stand.
+  useEffect(() => (open ? talkingTo("doc") : undefined), [open]);
 
   // A few minutes before a token runs out the embed asks its parent for
   // another. Answered by message rather than by a new `src`, which would
