@@ -180,7 +180,8 @@ One line each; the doc beside each says why.
   `lib/voice/ice.ts`) and Mettara (`frame-src`, from `lib/mettara.ts`). A
   server it does not name is dropped without a word.
 - **The Dockerfile's runtime stage copies a named file list.** A new runtime
-  file has to be named there; `runtime-image.test.ts` checks the list.
+  file has to be named there, and a deleted one taken out;
+  `runtime-image.test.ts` checks both.
 - **Migrations are append-only**: a new entry in `MIGRATIONS`
   (`lib/server/room-schema.ts`), never an edit to an old one. A failing
   migration stops the server; a database newer than the build is refused.

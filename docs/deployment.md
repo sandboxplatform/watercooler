@@ -20,7 +20,13 @@ ours, with no presence socket and no door on the world.
 **The image's runtime stage copies a named list of files, not the repo.** A
 new file the server needs at runtime has to be named there or the container
 comes up with nothing to run. `scripts/start.mjs` was added and the image
-went out without it once.
+went out without it once. The list has to shrink with the repo too: a COPY
+whose source is gone fails the image build, so nothing ships. `types/` was
+deleted with its line left in, and three commits built no image.
+`runtime-image.test.ts` checks both directions — what the server imports is
+copied, and what is copied exists and gets past `.dockerignore`, which keeps
+`art` and `docs` out of the build (bar `.next` and `node_modules`, which the
+image makes for itself).
 
 `pnpm start` is a launcher (`scripts/start.mjs`) rather than
 `NODE_ENV=production tsx server.ts`, which is shell syntax Windows does not

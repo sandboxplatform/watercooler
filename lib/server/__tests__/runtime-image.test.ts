@@ -31,6 +31,76 @@ function copiedPaths(): string[] {
   return paths;
 }
 
+/**
+ * The copied paths the image makes for itself rather than takes from the
+ * checkout: `node_modules`, which the `deps` stage installs, and `.next`, which
+ * `pnpm build` writes in the build stage. Neither is checked in — git and
+ * `.dockerignore` both leave them out — so a fresh clone has neither, and their
+ * absence from the repo says nothing about whether the image will build.
+ */
+const MADE_BY_THE_IMAGE = new Set(["node_modules", ".next"]);
+
+/**
+ * Whether a `.dockerignore` keeps a repo-relative path out of the build
+ * context, matched the way Docker matches it — which is not the way git does.
+ * A pattern is anchored at the root (`*.log` is `a.log`, never `lib/a.log`),
+ * `*` stops at a slash and `**` does not, a pattern that names a directory
+ * takes everything under it, and the last pattern to match wins, so a `!` line
+ * can bring back something an earlier line left out.
+ */
+function ignoredBy(dockerignore: string): (path: string) => boolean {
+  const rules = dockerignore
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith("#"))
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const pattern = line
+        .replace(/^!\s*/, "")
+        .replace(/^\.?\/+/, "")
+        .replace(/\/+$/, "");
+      return {
+        keep: line.startsWith("!"),
+        depth: pattern.split("/").length,
+        re: globToRegExp(pattern),
+      };
+    });
+  return (path) => {
+    const parts = path.split("/");
+    let ignored = false;
+    for (const rule of rules) {
+      // Against the path itself, then against its ancestor at the pattern's own
+      // depth: `art` has to reach `art/x.png` through `art`.
+      if (rule.re.test(path) || rule.re.test(parts.slice(0, rule.depth).join("/"))) {
+        ignored = !rule.keep;
+      }
+    }
+    return ignored;
+  };
+}
+
+function globToRegExp(glob: string): RegExp {
+  let re = "";
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === "*" && glob[i + 1] === "*") {
+      i++;
+      // `**/` may stand for no directories at all, so `**/x` matches `x` too.
+      if (glob[i + 1] === "/") {
+        i++;
+        re += "(?:.*/)?";
+      } else re += ".*";
+    } else if (c === "*") re += "[^/]*";
+    else if (c === "?") re += "[^/]";
+    else if (c === "[" && glob.includes("]", i)) {
+      const end = glob.indexOf("]", i);
+      re += glob.slice(i, end + 1);
+      i = end;
+    } else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`^${re}$`);
+}
+
 function resolveSpec(spec: string, fromFile: string): string | null {
   let base: string;
   if (spec.startsWith("@/")) base = join(ROOT, spec.slice(2));
@@ -82,5 +152,66 @@ describe("what the server needs at runtime", () => {
   /** The specific hop that broke it, kept as its own line so the cause is named. */
   it("keeps the server out of components/, where Phaser lives", () => {
     expect(serverImports().filter((f) => f.startsWith("components/"))).toEqual([]);
+  });
+});
+
+/**
+ * The other direction: whatever the runtime stage names has to be there to
+ * copy. A COPY whose source is gone does not leave a hole in the image — it
+ * fails the build at that line, and Railway builds on every push to `main`, so
+ * nothing ships at all while the last good deploy keeps running.
+ *
+ * That happened too. The audit (07370ab) deleted `types/` and left
+ * `COPY --from=build /app/types ./types` behind, and every image built from it
+ * failed until the line came out (fc2548b). This file passed throughout: the
+ * check above asks whether what the server imports is copied, never whether
+ * what is copied still exists.
+ */
+describe("what the Dockerfile copies", () => {
+  it("names only paths the repo still has", () => {
+    const missing = copiedPaths().filter(
+      (p) => !MADE_BY_THE_IMAGE.has(p) && !existsSync(join(ROOT, p)),
+    );
+
+    expect(missing, `copied into the image but not in the repo: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  /**
+   * Being in the repo is not the same as reaching the build. The build stage's
+   * `COPY . .` brings the build context, and the context is the repo less
+   * whatever `.dockerignore` names — `art` and `docs` are left out on purpose.
+   * A runtime COPY of either fails the image build just as the deleted
+   * `types/` did, while the check above passes, because the repo has them.
+   */
+  it("names nothing .dockerignore keeps out of the build", () => {
+    const ignored = ignoredBy(readFileSync(join(ROOT, ".dockerignore"), "utf8"));
+    const kept = copiedPaths().filter((p) => !MADE_BY_THE_IMAGE.has(p) && ignored(p));
+
+    expect(kept, `copied into the image but left out by .dockerignore: ${kept.join(", ")}`).toEqual(
+      [],
+    );
+  });
+
+  /** The matcher above is ours, not Docker's, so it is held to Docker's rules here. */
+  it("reads .dockerignore the way Docker does", () => {
+    const ignored = ignoredBy(
+      ["# art-free", "art", "/docs/", "*.log", "**/*.tmp", "dist/**", "!dist/keep"].join("\n"),
+    );
+    const cases: Record<string, boolean> = {
+      art: true,
+      "art/x.png": true, // a directory takes what is under it
+      "lib/art": false, // anchored at the root, unlike .gitignore
+      docs: true, // leading and trailing slashes change nothing
+      "a.log": true,
+      "lib/a.log": false, // `*` stops at a slash
+      "lib/deep/a.tmp": true, // `**` does not
+      "a.tmp": true, // and may stand for no directories at all
+      "dist/out.js": true,
+      "dist/keep": false, // the last pattern to match wins
+      "art-free": false, // a comment is not a pattern
+    };
+
+    const read = Object.fromEntries(Object.keys(cases).map((p) => [p, ignored(p)]));
+    expect(read).toEqual(cases);
   });
 });
