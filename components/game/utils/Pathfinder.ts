@@ -15,17 +15,21 @@ export interface Approach {
 
 const CELL_SIZE = PF_CELL_SIZE;
 
-/** The eight steps, straight ones first — the order the search tries them in. */
-const DIRS: readonly [number, number][] = [
-  [-1, 0],
-  [1, 0],
-  [0, -1],
-  [0, 1],
-  [-1, -1],
-  [-1, 1],
-  [1, -1],
-  [1, 1],
-];
+/**
+ * What a step costs: straight, and corner to corner. The grid's 1 : 1.414 in
+ * whole numbers, so that two ways of the same length cost exactly the same
+ * and the estimate below is exactly what the steps it counts would cost.
+ */
+const STRAIGHT = 1000;
+const DIAGONAL = 1414;
+
+/**
+ * The eight steps as rows and columns, straight ones first — the order the
+ * search tries them in. Two flat arrays rather than eight pairs, since a
+ * long walk takes them up to a few hundred thousand times.
+ */
+const DR = Int8Array.of(-1, 1, 0, 0, -1, -1, 1, 1);
+const DC = Int8Array.of(0, 0, -1, 1, -1, 1, -1, 1);
 
 /**
  * A route across a room or a place out of doors, on a grid of 16px cells.
@@ -43,8 +47,20 @@ const DIRS: readonly [number, number][] = [
  * parallel arrays rather than an object, the open list is a binary heap of
  * those indices, and "seen in this search" is a stamp rather than a Map that
  * is cleared — so a long route across the map is a few milliseconds rather
- * than a pile of garbage. The heap is the one it replaced, operation for
- * operation, so the same route comes back for the same ask.
+ * than a pile of garbage. The same route comes back for the same ask.
+ *
+ * **Each cell is opened once.** The longest walks on the world map — from
+ * the south-east corner round the river to the west end of the wood — took
+ * a tenth of a second and more, opening every cell several times over, for
+ * three reasons that compounded. The estimate counted a diagonal at √2
+ * while a step cost 1.414, so it promised more than the steps delivered and
+ * a cell opened at one cost was opened again at a slightly better one. The
+ * costs were fractions, so two ways of the same length came to totals a
+ * rounding apart and each looked an improvement on the other. And a cell's
+ * best was only written down when it was opened, so every neighbour that
+ * reached it before then queued it again. Costs are whole numbers now, the
+ * estimate is exactly what its steps would cost, and the best is kept from
+ * the moment a cell is queued: those walks are about ten milliseconds.
  *
  * **Nothing is searched for that is not there.** The grid's connected
  * stretches of ground are labelled once, with the residents' own
@@ -253,6 +269,7 @@ export class Pathfinder {
    */
   private walk(sr: number, sc: number, er: number, ec: number): PathPoint[] | null {
     const cols = this.cols;
+    const rows = this.rows;
     const blocked = this.blocked;
     const bestG = this.bestG;
     const seen = this.seen;
@@ -268,25 +285,28 @@ export class Pathfinder {
 
     this.nodeCount = 0;
     this.heapSize = 0;
-    this.push(sr * cols + sc, 0, this.h(sr, sc, er, ec), -1);
+    const start = sr * cols + sc;
+    seen[start] = stamp;
+    bestG[start] = 0;
+    this.push(start, 0, this.h(sr, sc, er, ec), -1);
 
     while (this.heapSize > 0) {
       const node = this.pop();
       const cell = this.nodeCell[node];
       const g = this.nodeG[node];
 
+      // A better way here was queued after this one: this one is spent.
+      if (g > bestG[cell]) continue;
       if (cell === goal) return this.reconstruct(node);
-
-      if (seen[cell] === stamp && bestG[cell] <= g) continue;
-      seen[cell] = stamp;
-      bestG[cell] = g;
 
       const r = (cell / cols) | 0;
       const c = cell - r * cols;
-      for (const [dr, dc] of DIRS) {
+      for (let d = 0; d < 8; d++) {
+        const dr = DR[d];
+        const dc = DC[d];
         const nr = r + dr;
         const nc = c + dc;
-        if (!this.valid(nr, nc)) continue;
+        if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
         const next = nr * cols + nc;
         if (blocked[next]) continue;
 
@@ -295,8 +315,13 @@ export class Pathfinder {
         // have to be open, or the body would clip the one that is not.
         if (diagonal && (blocked[(r + dr) * cols + c] || blocked[r * cols + c + dc])) continue;
 
-        const ng = g + (diagonal ? 1.414 : 1);
+        // Queued only when it is the best way to the cell so far. The best
+        // is kept from the moment it is queued, not from when it is opened,
+        // or every neighbour that reaches a cell first queues it again.
+        const ng = g + (diagonal ? DIAGONAL : STRAIGHT);
         if (seen[next] === stamp && bestG[next] <= ng) continue;
+        seen[next] = stamp;
+        bestG[next] = ng;
         this.push(next, ng, ng + this.h(nr, nc, er, ec), node);
       }
     }
@@ -316,14 +341,16 @@ export class Pathfinder {
   private h(r1: number, c1: number, r2: number, c2: number) {
     const dr = Math.abs(r1 - r2);
     const dc = Math.abs(c1 - c2);
-    return Math.max(dr, dc) + (Math.SQRT2 - 1) * Math.min(dr, dc);
+    return STRAIGHT * Math.max(dr, dc) + (DIAGONAL - STRAIGHT) * Math.min(dr, dc);
   }
 
   // ── The open list ──────────────────────────────────────
   //
-  // A min-heap on f = g + h, over node indices. The comparisons are the ones
-  // the object heap made (`>=` going up, `<` going down), so ties break the
-  // same way and so does the route.
+  // A min-heap on f = g + h, over node indices, ties left where the heap
+  // puts them. Taking the one further along first is the textbook way to
+  // break them, and out here it was slower: the long walks on the world
+  // map are detours around the river and the wood, and the one further
+  // along is as often the one heading into the dead end.
 
   private push(cell: number, g: number, f: number, parent: number) {
     if (this.nodeCount === this.nodeCell.length) this.growNodes();

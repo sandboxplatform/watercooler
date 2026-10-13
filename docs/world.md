@@ -503,14 +503,37 @@ stretches of ground once a visit, with the residents' own `regionsOf`
 search. The nearest reachable cell is then a sweep of the grid, and the
 walk there an ordinary search to somewhere it knows it can get to. Finding
 that out used to take a search of everything the start could reach, on
-both grids, up to a quarter of a second a tap. The worst is about a tenth
-now, and that is the walk itself, not the looking.
+both grids, up to a quarter of a second a tap.
 
 The search has no step cap either. It was there to give up on goals with
 no way to them, which the regions now answer up front, and it gave up on
 long walks that did have one. Even counting only cells opened, twice the
 grid was not enough for the longest walks on the bare grid, from the
 south-east corner to the west end of the wood.
+
+**Each cell is opened once.** Those same walks took a tenth of a second
+and more each, because the search opened every cell several times over.
+Three things made it do that, and each one made the others worse:
+
+- **The estimate overpromised.** It counted a diagonal at √2 while a
+  diagonal step cost 1.414. So a cell first opened at one cost was opened
+  again when a slightly cheaper way turned up.
+- **The costs were fractions.** Two ways of the same length came to totals
+  a rounding error apart, and each looked like an improvement on the other.
+- **A cell's best cost was written down only when it was opened.** So
+  every neighbour that reached it before then queued it again.
+
+The fixes are whole-number costs (1000 and 1414), an estimate that is
+exactly what its own steps would cost, and the best cost kept from the
+moment a cell is queued. The longest walks now take about ten
+milliseconds. Across a sweep of taps over the map from the shore, the
+average tap went from 14ms to under 4ms, and the slowest from 197ms to
+about 50ms.
+
+The textbook trick of breaking ties toward the goal was tried and made
+those walks slower. They are detours, and the node furthest along is as
+often the one heading into the dead end. A slightly greedy estimate was
+slower again, because it reopens cells just as the old one did.
 
 **Going through a door means going out of sight**, the same as stepping
 into the lift. Two things were wrong there: `enter` stopped the character

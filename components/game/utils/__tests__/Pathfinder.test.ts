@@ -193,6 +193,27 @@ describe("Pathfinder", () => {
     expect(spent / refused).toBeLessThan(10);
   });
 
+  it("plans the longest walks on the world map in a few milliseconds each", () => {
+    // From the east end of the shore round the river to the west end of the
+    // wood, on the bare grid. A tenth of a second or more each, when the
+    // search opened every cell several times over.
+    const bare = new Pathfinder(WORLD_WIDTH, WORLD_HEIGHT, worldSolids());
+    const from = worldWanderSpots().reduce((a, b) => (b.y > a.y ? b : a));
+    // The regions are labelled on the first ask, which is once a visit.
+    bare.findPath(from.x, from.y, from.x, from.y);
+    const ends = [
+      [8, 200],
+      [1160, 392],
+      [8, 968],
+      [392, 1160],
+      [1928, 8],
+    ];
+    const started = performance.now();
+    for (const [x, y] of ends) expect(bare.findPath(from.x, from.y, x, y)).not.toBeNull();
+    // Generous, for a slow runner: they were six hundred between them.
+    expect(performance.now() - started).toBeLessThan(300);
+  });
+
   it("returns the same route when asked twice", () => {
     const finder = new Pathfinder(WIDTH, HEIGHT, forest(), 8);
     const a = finder.findPath(100, 3000, 8000, 300);
