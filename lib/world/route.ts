@@ -325,10 +325,13 @@ function nextStamp(search: Search): number {
  * Worked out once per painted grid and kept against it, which is what lets a
  * route to somewhere unreachable be refused without a search. Numbered in the
  * order the cells are met, so the answer is the same every time.
+ *
+ * Exported for the player's tap-to-walk planner, which paints its own grid
+ * the same way (1 for blocked) and asks the same question of it.
  */
 const labelled = new WeakMap<Uint8Array, Int32Array>();
 
-function regionsOf(cells: Uint8Array, cols: number, rows: number): Int32Array {
+export function regionsOf(cells: Uint8Array, cols: number, rows: number): Int32Array {
   const kept = labelled.get(cells);
   if (kept) return kept;
   const size = cols * rows;

@@ -197,10 +197,10 @@ route is about a millisecond now, where it was fifteen.
 The player's own tap-to-walk planner (`components/game/utils/Pathfinder.ts`)
 had the same fault a step worse: it tested every 16px cell against every
 solid, two seconds on every arrival on the world map. It paints its grid now
-too, caps its search at twice the grid's cells opened, and outdoors falls back
-to an unpadded grid when the body-padded one finds no way between the trees —
-and to the nearest ground it can reach when neither does (see
-[world](world.md#outdoors)).
+too, refuses a goal out of reach with the same `regionsOf` labelling as
+`routeAcross`, and outdoors falls back to an unpadded grid when the
+body-padded one finds no way between the trees — and to the nearest ground it
+can reach when neither does (see [world](world.md#outdoors)).
 
 **The ball asks a different question of the same list, and it is bucketed
 rather than painted.** `coversPoint` is the index: a route wants to know

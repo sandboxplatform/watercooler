@@ -141,8 +141,8 @@ describe("Pathfinder", () => {
   it("finds a way that opens most of the grid before it gets there", () => {
     // A serpentine: every row of wall has its gap at the other end from the
     // one before, so the way down is the whole of every corridor. Each open
-    // cell is pushed by several neighbours, and a cap that counted those
-    // copies ran out long before the bottom.
+    // cell is pushed by several neighbours, and the cap the search used to
+    // have counted those copies and ran out long before the bottom.
     const size = 160 * 16;
     const rects = [];
     for (let row = 4, flip = false; row < 156; row += 4, flip = !flip) {
@@ -167,6 +167,30 @@ describe("Pathfinder", () => {
       // Wherever it stops is somewhere the planner can actually walk to.
       expect(padded.findPath(from.x, from.y, last.x, last.y)).not.toBeNull();
     }
+  });
+
+  it("refuses a goal out of reach without searching for it", () => {
+    // A tap on the far bank used to search everything the start could reach
+    // to find it wanting, once on each grid: a third of a second a tap. The
+    // far bank is reachable the long way round in the west on the bare grid,
+    // so only the refusals are timed.
+    const bare = new Pathfinder(WORLD_WIDTH, WORLD_HEIGHT, worldSolids());
+    const from = worldWanderSpots().reduce((a, b) => (b.y > a.y ? b : a));
+    // The regions are labelled on the first ask, which is once a visit.
+    bare.findPath(from.x, from.y, from.x, from.y);
+
+    let refused = 0;
+    let spent = 0;
+    for (let x = WORLD_WIDTH * 0.2; x < WORLD_WIDTH * 0.8; x += WORLD_WIDTH * 0.06) {
+      const started = performance.now();
+      const path = bare.findPath(from.x, from.y, x, 8);
+      if (path) continue;
+      spent += performance.now() - started;
+      refused++;
+    }
+    expect(refused).toBeGreaterThan(3);
+    // Generous, for a slow runner: one of the old searches was a hundred.
+    expect(spent / refused).toBeLessThan(10);
   });
 
   it("returns the same route when asked twice", () => {

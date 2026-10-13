@@ -1,4 +1,5 @@
-import { PF_CELL_SIZE, PF_MIN_ITER } from "@/lib/constants";
+import { PF_CELL_SIZE } from "@/lib/constants";
+import { regionsOf } from "@/lib/world/route";
 
 export interface PathPoint {
   x: number;
@@ -45,11 +46,15 @@ const DIRS: readonly [number, number][] = [
  * than a pile of garbage. The heap is the one it replaced, operation for
  * operation, so the same route comes back for the same ask.
  *
- * The iteration cap scales with the grid. It was a flat twenty thousand,
- * which is a sixth of the world map's cells: a third of the walks between
- * the places a resident is sent to ran out of it, and the fallback walked
- * the player straight into the trees. It counts the cells opened, not the
- * entries popped, for the same reason.
+ * **Nothing is searched for that is not there.** The grid's connected
+ * stretches of ground are labelled once, with the residents' own
+ * `regionsOf`, and a goal in another one is refused before any search
+ * starts. They are the stretches this search walks between: a diagonal step
+ * needs both cells beside it open, so it never joins two that straight
+ * steps do not. That is also why there is no cap on the search any more.
+ * It was there to give up on a goal with no way to it, and it gave up on
+ * long walks that had one — at a flat twenty thousand steps, and again at
+ * twice the grid once the stale entries in the heap were counted against it.
  *
  * **And a goal with no way to it still gets a walk** — `findApproach`, to
  * the reachable cell nearest it. `findPath` is the strict one: a route that
@@ -60,7 +65,6 @@ export class Pathfinder {
   private blocked: Uint8Array;
   private cols: number;
   private rows: number;
-  private maxIter: number;
 
   // Per-cell search state, reused between searches and told apart by stamp.
   private bestG: Float64Array;
@@ -92,9 +96,6 @@ export class Pathfinder {
     this.blocked = new Uint8Array(cells);
     this.bestG = new Float64Array(cells);
     this.seen = new Uint32Array(cells);
-    // Room to cross the whole grid twice over: a route that has not been
-    // found in that many steps is not there to be found.
-    this.maxIter = Math.max(PF_MIN_ITER, cells * 2);
 
     // A cell is blocked when ANY part of it overlaps ANY inflated rect — the
     // strict overlap a per-cell test asks, so a rect whose edge lands exactly
@@ -122,8 +123,7 @@ export class Pathfinder {
 
   /** The way to a goal, or null when there is none. */
   findPath(sx: number, sy: number, ex: number, ey: number): PathPoint[] | null {
-    const found = this.search(sx, sy, ex, ey);
-    return found?.complete ? found.path : null;
+    return this.search(sx, sy, ex, ey, false)?.path ?? null;
   }
 
   /**
@@ -133,20 +133,28 @@ export class Pathfinder {
    * A tap on ground nobody can get to — the far bank of the river, the
    * middle of a thicket — has no route, and the walker's fallback for no
    * route was a straight line at it, through whatever buildings were in
-   * between. Going as far as the ground goes is what was meant. It costs
-   * nothing over a search that fails: that search has already been over
-   * every cell this one could reach, and only has to remember the best.
+   * between. Going as far as the ground goes is what was meant: the
+   * reachable cell nearest the tap, and the way there.
    */
   findApproach(sx: number, sy: number, ex: number, ey: number): Approach | null {
-    return this.search(sx, sy, ex, ey);
+    return this.search(sx, sy, ex, ey, true);
   }
 
-  private search(sx: number, sy: number, ex: number, ey: number): Approach | null {
+  /** The way there, or with `approach` as near as it goes, or null. */
+  private search(
+    sx: number,
+    sy: number,
+    ex: number,
+    ey: number,
+    approach: boolean,
+  ): Approach | null {
     let sc = this.toCol(sx);
     let sr = this.toRow(sy);
     // On the grid, so an aim off its edge still has a nearest cell.
-    let ec = Math.max(0, Math.min(this.cols - 1, this.toCol(ex)));
-    let er = Math.max(0, Math.min(this.rows - 1, this.toRow(ey)));
+    const tc = Math.max(0, Math.min(this.cols - 1, this.toCol(ex)));
+    const tr = Math.max(0, Math.min(this.rows - 1, this.toRow(ey)));
+    let ec = tc;
+    let er = tr;
     let endSnapped = false;
 
     if (!this.valid(sr, sc)) return null;
@@ -158,8 +166,8 @@ export class Pathfinder {
       sc = ns.c;
     }
 
-    // A goal deep inside something solid is left where it is: the search
-    // never reaches it, and comes back with the nearest it can stand to it.
+    // A goal deep inside something solid is left where it is, and is in no
+    // region at all, which the check below takes as out of reach.
     if (!this.walkable(er, ec)) {
       const nearest = this.nearestWalkableCell(er, ec);
       if (nearest) {
@@ -167,6 +175,20 @@ export class Pathfinder {
         ec = nearest.c;
         endSnapped = true;
       }
+    }
+
+    // A goal in another stretch of ground is out of reach, and saying so is
+    // one array read — the residents' planner's own check, on this grid. It
+    // used to be a search of everything the start could reach, done twice
+    // over (the padded grid and the bare one), up to a quarter of a second
+    // on the world map for a tap on the far bank of the river.
+    const regions = regionsOf(this.blocked, this.cols, this.rows);
+    const home = regions[sr * this.cols + sc];
+    if (regions[er * this.cols + ec] !== home) {
+      if (!approach) return null;
+      const near = this.nearestIn(regions, home, tr, tc, sr, sc);
+      const path = this.walk(sr, sc, (near / this.cols) | 0, near % this.cols);
+      return path && { path, complete: false };
     }
 
     if (sr === er && sc === ec) {
@@ -179,6 +201,57 @@ export class Pathfinder {
       };
     }
 
+    const path = this.walk(sr, sc, er, ec);
+    if (!path) return null;
+    if (endSnapped) {
+      path[path.length - 1] = {
+        x: Math.max(ec * CELL_SIZE, Math.min((ec + 1) * CELL_SIZE, ex)),
+        y: Math.max(er * CELL_SIZE, Math.min((er + 1) * CELL_SIZE, ey)),
+      };
+    } else {
+      path[path.length - 1] = { x: ex, y: ey };
+    }
+    return { path, complete: true };
+  }
+
+  /**
+   * The cell of a region nearest a tapped cell, and of two as near, the one
+   * nearer the start. A sweep of the whole grid, one read a cell, which is
+   * cheap beside the search over the same cells it replaces.
+   */
+  private nearestIn(
+    regions: Int32Array,
+    region: number,
+    tr: number,
+    tc: number,
+    sr: number,
+    sc: number,
+  ): number {
+    const cols = this.cols;
+    let best = sr * cols + sc;
+    let bestD = (sr - tr) ** 2 + (sc - tc) ** 2;
+    let bestFromStart = 0;
+    for (let cell = 0; cell < regions.length; cell++) {
+      if (regions[cell] !== region) continue;
+      const r = (cell / cols) | 0;
+      const c = cell - r * cols;
+      const d = (r - tr) ** 2 + (c - tc) ** 2;
+      if (d > bestD) continue;
+      const fromStart = (r - sr) ** 2 + (c - sc) ** 2;
+      if (d < bestD || fromStart < bestFromStart) {
+        best = cell;
+        bestD = d;
+        bestFromStart = fromStart;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Cell centres from one open cell to another in the same region. Null
+   * only if the region labels and the search disagreed, which they cannot.
+   */
+  private walk(sr: number, sc: number, er: number, ec: number): PathPoint[] | null {
     const cols = this.cols;
     const blocked = this.blocked;
     const bestG = this.bestG;
@@ -197,52 +270,19 @@ export class Pathfinder {
     this.heapSize = 0;
     this.push(sr * cols + sc, 0, this.h(sr, sc, er, ec), -1);
 
-    // The cell nearest the goal of all those reached, for when it is not.
-    let closest = -1;
-    let closestH = Infinity;
-    let closestG = Infinity;
-
-    let expanded = 0;
     while (this.heapSize > 0) {
       const node = this.pop();
       const cell = this.nodeCell[node];
       const g = this.nodeG[node];
 
-      if (cell === goal) {
-        const path = this.reconstruct(node);
-        if (path.length > 0) {
-          if (endSnapped) {
-            path[path.length - 1] = {
-              x: Math.max(ec * CELL_SIZE, Math.min((ec + 1) * CELL_SIZE, ex)),
-              y: Math.max(er * CELL_SIZE, Math.min((er + 1) * CELL_SIZE, ey)),
-            };
-          } else {
-            path[path.length - 1] = { x: ex, y: ey };
-          }
-        }
-        return { path, complete: true };
-      }
+      if (cell === goal) return this.reconstruct(node);
 
       if (seen[cell] === stamp && bestG[cell] <= g) continue;
-      // Counted here, past the stale entries: a cell is pushed once by each
-      // neighbour that reaches it before it is opened, and counting every
-      // pop spent the cap on those copies. A long walk across the world map
-      // ran out at twice the grid's cells without opening all of the ground
-      // it could reach, and came back with no route to somewhere there was.
-      if (++expanded > this.maxIter) break;
       seen[cell] = stamp;
       bestG[cell] = g;
 
       const r = (cell / cols) | 0;
       const c = cell - r * cols;
-      // Nearest by the same measure the search steers by, and the shorter
-      // walk of two that are as near.
-      const h = this.h(r, c, er, ec);
-      if (h < closestH || (h === closestH && g < closestG)) {
-        closest = node;
-        closestH = h;
-        closestG = g;
-      }
       for (const [dr, dc] of DIRS) {
         const nr = r + dr;
         const nc = c + dc;
@@ -261,7 +301,7 @@ export class Pathfinder {
       }
     }
 
-    return closest === -1 ? null : { path: this.reconstruct(closest), complete: false };
+    return null;
   }
 
   private toCol(x: number) {

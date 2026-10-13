@@ -45,14 +45,6 @@ export const TABLE_INTERACT_DISTANCE = 120;
 // ── Pathfinder ───────────────────────────────────────────
 export const PF_CELL_SIZE = 16;
 export const PF_PADDING = 8;
-/**
- * The fewest steps a search is allowed before it gives up.
- *
- * The real cap is twice the grid's cells, so a search can cross the whole
- * map; this is the floor under it for a small room. It was a flat twenty
- * thousand, which on the world map is a sixth of the grid.
- */
-export const PF_MIN_ITER = 20000;
 
 // ── Persistence keys ─────────────────────────────────────
 export const LS_BGM_VOLUME = "watercooler:bgm-volume";

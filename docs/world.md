@@ -497,12 +497,20 @@ approach when neither has one. A building's last straight step into its
 doorway is only taken from its standing room. Taken from wherever the
 ground ran out, it is the same straight line again.
 
-Some of those taps weren't unreachable at all. The search's step cap counted
-every entry it popped, and each cell is pushed once by every neighbour
-that reaches it before it is opened, so a long walk across the map ran out
-of steps with ground still unopened. It counts cells opened now. A tap on
-unreachable ground still searches everything it could reach on both grids
-before settling, about a third of a second on the world map.
+**Out of reach is one array read.** The planner labels its grid's connected
+stretches of ground once a visit, with the residents' own `regionsOf`
+(`lib/world/route.ts`), and refuses a goal in another stretch before any
+search. The nearest reachable cell is then a sweep of the grid, and the
+walk there an ordinary search to somewhere it knows it can get to. Finding
+that out used to take a search of everything the start could reach, on
+both grids, up to a quarter of a second a tap. The worst is about a tenth
+now, and that is the walk itself, not the looking.
+
+The search has no step cap either. It was there to give up on goals with
+no way to them, which the regions now answer up front, and it gave up on
+long walks that did have one. Even counting only cells opened, twice the
+grid was not enough for the longest walks on the bare grid, from the
+south-east corner to the west end of the wood.
 
 **Going through a door means going out of sight**, the same as stepping
 into the lift. Two things were wrong there: `enter` stopped the character

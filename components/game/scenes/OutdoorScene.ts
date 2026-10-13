@@ -364,11 +364,11 @@ export abstract class OutdoorScene<Data> extends Phaser.Scene {
       this.solids.height,
       this.solids.rects,
     );
-    const bare = this.barePathfinder.findApproach(from.x, from.y, to.x, to.y);
-    if (bare?.complete) return bare;
+    const bare = this.barePathfinder.findPath(from.x, from.y, to.x, to.y);
+    if (bare) return { path: bare, complete: true };
     // As near as the padded grid gets, which keeps clear of the walls on
     // the way; the bare one only if the padded one could not start at all.
-    return padded ?? bare;
+    return padded ?? this.barePathfinder.findApproach(from.x, from.y, to.x, to.y);
   }
 
   protected feet() {
